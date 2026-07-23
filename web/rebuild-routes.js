@@ -247,19 +247,19 @@ function createRouter(config) {
     async function computePlan(collectionModId, resumeLogPath, onModClassified) {
         const collectionInfo = runner.resolveCollectionInfo(staging, collectionModId);
         const cached = syncStateCache.get(collectionModId);
-        let ignored, removedMods, keptMods, knownVortexModIds, otherVersionsByModId;
+        let ignored, removedMods, keptMods, knownVortexModIds, otherVersionsByModId, sharedWithCollectionsByKey;
         if (cached) {
             if (!cached.ok) throw new Error(cached.error);
-            ({ ignored, removedMods, keptMods, knownVortexModIds, otherVersionsByModId } = cached.data);
+            ({ ignored, removedMods, keptMods, knownVortexModIds, otherVersionsByModId, sharedWithCollectionsByKey } = cached.data);
         } else {
-            ({ ignored, removedMods, keptMods, knownVortexModIds, otherVersionsByModId } = await runner.loadSyncState({
-                state, collectionModId: collectionInfo.modId, collection: collectionInfo.collection,
+            ({ ignored, removedMods, keptMods, knownVortexModIds, otherVersionsByModId, sharedWithCollectionsByKey } = await runner.loadSyncState({
+                state, collectionModId: collectionInfo.modId, collection: collectionInfo.collection, stagingDir: staging,
             }));
         }
         const resumed = resumeLogPath ? runner.loadResumeLog(resumeLogPath) : new Map();
         const { modEntries, rebuildQueue } = await runner.buildPlan({
-            removedMods, keptMods, knownVortexModIds, resumed, otherVersionsByModId,
-            downloadsDir: downloads, stagingDir: staging, sevenZipExe, onModClassified,
+            removedMods, keptMods, knownVortexModIds, resumed, otherVersionsByModId, sharedWithCollectionsByKey,
+            downloadsDir: downloads, stagingDir: staging, sevenZipExe, logsDir, onModClassified,
         });
         return { collectionInfo, ignored, keptMods, knownVortexModIds, modEntries, rebuildQueue };
     }
@@ -272,6 +272,7 @@ function createRouter(config) {
             existingStagingFolder: action.existingStagingFolder,
             targetFolderName: action.targetFolderName,
             otherVersionsNote: base?.otherVersionsNote,
+            sharedWithNote: base?.sharedWithNote,
         }));
     }
 
@@ -480,16 +481,30 @@ function createRouter(config) {
         // timezone with zero extra work (no need to detect/pass timezone explicitly).
         const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString() : '');
         const badges = Object.entries(log.summary || {})
-            .map(([status, count]) => `<span class="badge badge--${status.toLowerCase()}"><span class="badge__count">${count}</span> ${esc(status)}</span>`)
-            .join('');
+            .map(([status, count]) => `<span class="badge badge--${status.toLowerCase()} badge--clickable" data-status="${esc(status)}"><span class="badge__count">${count}</span> ${esc(status)}</span>`)
+            .join('') + `<span class="badge badge--show-all" data-status="">Show all</span>`;
+        // A real collection produced a 178-character mod name (several Nexus authors concatenate
+        // multiple patch names into one) -- confirmed live this forces the (deliberately nowrap)
+        // Mod column to claim nearly the whole table width under table-layout:auto, squeezing every
+        // other row's Detail column down to ~75px and turning ordinary one-line content into
+        // 200-300px of character-by-character wrapped text. Fixed at the source: truncate the
+        // STRING itself before it reaches the DOM (not just visually via CSS) so nowrap never has an
+        // extreme value to blow the column out on. Click a truncated name to see the full one.
+        const MOD_NAME_TRUNCATE_AT = 70;
+        const modNameCell = (name) => {
+            if (name.length <= MOD_NAME_TRUNCATE_AT) return esc(name);
+            const short = esc(name.slice(0, MOD_NAME_TRUNCATE_AT - 1)) + '…';
+            return `<span class="mod-name mod-name--truncated" data-full="${esc(name)}" data-short="${short}" title="${esc(name)}">${short}</span>`;
+        };
         const modRow = (m) => {
             let detail = esc(m.detail || '');
             if (m.missing?.length) detail += `<div class="file-list">Missing: ${m.missing.map(esc).join(', ')}</div>`;
             if (m.changed?.length) detail += `<div class="file-list">Changed: ${m.changed.map(esc).join(', ')}</div>`;
             if (m.eslPreserved?.length) detail += `<div class="file-list">Marked as Light, left unchanged: ${m.eslPreserved.map(esc).join(', ')}</div>`;
             if (m.otherVersionsNote) detail += `<div class="file-list">A different version of this exact mod IS installed: ${esc(m.otherVersionsNote)}</div>`;
+            if (m.sharedWithNote) detail += `<div class="file-list">Also part of: ${esc(m.sharedWithNote)}</div>`;
             if (m.archiveName) detail += `<div class="file-list">Archive: <code>${esc(m.archiveName)}</code></div>`;
-            return `<tr><td>${esc(m.name)}</td><td><span class="status-pill status-pill--${m.status.toLowerCase()}">${esc(m.status)}</span></td><td class="detail-cell">${detail}</td></tr>`;
+            return `<tr data-status="${esc(m.status)}"><td>${modNameCell(m.name)}</td><td><span class="status-pill status-pill--${m.status.toLowerCase()}">${esc(m.status)}</span></td><td class="detail-cell">${detail}</td></tr>`;
         };
         // Ignored/optional-not-installed mods carry no action at all -- same reasoning as the live
         // plan table: put them last so the mods that actually matter aren't buried.
@@ -506,11 +521,32 @@ function createRouter(config) {
   <h1>${esc(log.collectionName)}</h1>
   <p class="muted">${esc(log.runStatus)} -- started ${esc(fmtDate(log.startedAt))}${log.finishedAt ? ', finished ' + esc(fmtDate(log.finishedAt)) : ''}${log.durationMs ? ` (${(log.durationMs / 1000).toFixed(1)}s)` : ''}</p>
 </div>
-<div class="summary-badges">${badges}</div>
+<div class="summary-badges" id="statusBadges">${badges}</div>
 <div class="plan-table-wrap"><table class="plan-table">
 <thead><tr><th>Mod</th><th>Status</th><th>Detail</th></tr></thead>
-<tbody>${rows}</tbody>
+<tbody id="logTableBody">${rows}</tbody>
 </table></div>
+<script>
+document.querySelectorAll('.mod-name--truncated').forEach((el) => {
+  el.addEventListener('click', () => {
+    const stillTruncated = el.classList.toggle('mod-name--truncated');
+    el.textContent = stillTruncated ? el.dataset.short : el.dataset.full;
+  });
+});
+document.getElementById('statusBadges').addEventListener('click', (e) => {
+  const badge = e.target.closest('.badge--clickable, .badge--show-all');
+  if (!badge) return;
+  const status = badge.dataset.status;
+  document.querySelectorAll('#statusBadges .badge').forEach((b) => b.classList.remove('badge--filter-active'));
+  const rows = document.querySelectorAll('#logTableBody tr');
+  if (!status) {
+    rows.forEach((r) => { r.style.display = ''; });
+    return;
+  }
+  badge.classList.add('badge--filter-active');
+  rows.forEach((r) => { r.style.display = r.dataset.status === status ? '' : 'none'; });
+});
+</script>
 </main></body></html>`);
     });
 

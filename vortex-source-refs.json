@@ -88,6 +88,30 @@
       "lastVerifiedDate": "2026-06-16T14:29:45Z",
       "derivedInto": "lib/state-query-worker.js (buildModVersionIndex)",
       "whatWeDerived": "ICommonModAttributes confirms version and modVersion are two genuinely separate, independently-settable fields (not a typo/duplicate) -- explains why they can diverge after a manual version switch. isPrimary is listed under 'Special mod types and flags', not the version/update section -- consistent with it being a Nexus 'main file' designation, not a local Vortex install-state concept, which is why we don't use it to determine what Vortex would deploy."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/collections/index.ts",
+      "lastVerifiedCommit": "fba98ff394cd6b75cbd021010958f7c97da747bf",
+      "lastVerifiedDate": "2026-07-23T11:38:49Z",
+      "derivedInto": "lib/state-query-worker.js (scanAllCollections)",
+      "whatWeDerived": "generateCollectionMap(): the real algorithm behind Vortex's own '+N collections' badge on the Mods page. Prefers rule.reference.id (a direct live-modKey link), falls back to findModByRef content-identity matching for a rule with no such id. CONFIRMED LIVE this session that rule.reference.id is NEVER populated for real collection-sourced rules -- only the fallback path is actually exercised for this project's data, which is why scanAllCollections mirrors findModByRef/testModReference below, not this file's primary path."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/mod_management/util/findModByRef.ts",
+      "lastVerifiedCommit": "6e6b9361db1815f8918f6471a6aace43c6963648",
+      "lastVerifiedDate": "2026-06-16T08:59:13Z",
+      "derivedInto": "lib/state-query-worker.js (scanAllCollections / ruleIdentityKeys)",
+      "whatWeDerived": "confirms the real fallback path when rule.reference.id is absent: delegates to testModReference (testRef) for content-identity matching, tried against every currently-installed mod."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/mod_management/util/testModReference.ts",
+      "lastVerifiedCommit": "3f018ff9c86e2745310c33441ec06b6036f40b38",
+      "lastVerifiedDate": "2026-07-02T06:59:29Z",
+      "derivedInto": "lib/state-query-worker.js (scanAllCollections / ruleIdentityKeys)",
+      "whatWeDerived": "testRef()'s real matching precedence: a tag MISMATCH is not immediately fatal if a stricter identifying marker (fileMD5, then repo.modId+repo.fileId) is present -- it falls through instead of refusing. Directly explains a real, confirmed-live finding: the identical file had a DIFFERENT rule.reference.tag value in each of 3 collections referencing it (tag is a deterministic-but-PER-COLLECTION value, not a stable cross-collection identity key -- see deterministicReferenceTag.ts, not separately pinned here). ruleIdentityKeys() deliberately matches by fileMD5 then repo.modId+fileId only, never tag, mirroring this real precedence rather than the naive assumption that a matching tag would be reliable."
     }
   ]
 }

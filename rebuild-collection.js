@@ -122,8 +122,8 @@ async function main() {
         process.exit(1);
     }
 
-    const { ignored, removedMods, keptMods, knownVortexModIds, otherVersionsByModId } = await runner.loadSyncState({
-        state: args.state, collectionModId: collectionInfo.modId, collection: collectionInfo.collection,
+    const { ignored, removedMods, keptMods, knownVortexModIds, otherVersionsByModId, sharedWithCollectionsByKey } = await runner.loadSyncState({
+        state: args.state, collectionModId: collectionInfo.modId, collection: collectionInfo.collection, stagingDir: args.staging,
     });
     console.log(`${ignored.length} mod(s) marked ignored in Vortex -- these are never touched.`);
     console.log(`${knownVortexModIds.size} of ${keptMods.length} kept mod(s) already have a real Vortex-tracked staging folder.`);
@@ -139,8 +139,8 @@ async function main() {
     const startedAt = new Date().toISOString();
 
     const { modEntries, rebuildQueue } = await runner.buildPlan({
-        removedMods, keptMods, knownVortexModIds, resumed, otherVersionsByModId,
-        downloadsDir: args.downloads, stagingDir: args.staging, sevenZipExe,
+        removedMods, keptMods, knownVortexModIds, resumed, otherVersionsByModId, sharedWithCollectionsByKey,
+        downloadsDir: args.downloads, stagingDir: args.staging, sevenZipExe, logsDir: path.join(__dirname, 'logs'),
     });
 
     function currentLog(runStatus) {
