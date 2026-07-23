@@ -505,6 +505,7 @@ function renderPlan(plan) {
     const status = r.existingStagingFolder ? 'REBUILD' : 'REBUILD_QUEUED';
     let detail = r.existingStagingFolder ? '' : 'No staging folder exists — will create from scratch';
     if (r.otherVersionsNote) detail += (detail ? ' — ' : '') + `a different version of this exact mod IS installed: ${r.otherVersionsNote}`;
+    if (r.sharedWithNote) detail += (detail ? ' — ' : '') + `also part of: ${r.sharedWithNote}`;
     body.appendChild(el('tr', {}, [
       el('td', {}, r.name),
       el('td', {}, statusPill(status)),
@@ -622,6 +623,7 @@ function handleRunEvent(frame) {
       if (frame.restoredMissingFiles?.length) detail = `Restored ${frame.restoredMissingFiles.length} missing file(s)`;
       if (frame.eslPreserved?.length) detail = (detail ? detail + ' — ' : '') + `Marked as Light, left unchanged: ${frame.eslPreserved.join(', ')}`;
       if (frame.otherVersionsNote) detail = (detail ? detail + ' — ' : '') + `A different version of this exact mod IS installed: ${frame.otherVersionsNote}`;
+      if (frame.sharedWithNote) detail = (detail ? detail + ' — ' : '') + `Also part of: ${frame.sharedWithNote}`;
       if (frame.archiveName && frame.status !== 'REBUILT') detail = (detail ? detail + ' — ' : '') + `Archive: ${frame.archiveName}`;
       updateProgressRow(frame.name, frame.status, detail);
       break;

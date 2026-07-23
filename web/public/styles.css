@@ -230,6 +230,19 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   align-items: center;
   gap: 7px;
 }
+/* Clickable status badges (log viewer + live plan table) -- filters the table below to just that
+   status; click the active one again (or "Show all") to clear. Border ring, not a background/color
+   change, so the badge's own status color stays legible either way. */
+.badge--clickable { cursor: pointer; border: 2px solid transparent; transition: border-color 0.15s ease; }
+.badge--clickable:hover { border-color: currentColor; }
+.badge--filter-active { border-color: currentColor; }
+.badge--show-all {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+.badge--show-all:hover { border-color: var(--text-muted); }
 .badge--rebuilt, .badge--rebuild { background: var(--success-bg); color: var(--success); }
 .badge--skip_ignored, .badge--skip_optional_not_installed { background: var(--neutral-bg); color: var(--neutral); }
 .badge--skip_no_archive, .badge--skip_open_fomod { background: var(--warning-bg); color: var(--warning); }
@@ -306,8 +319,17 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 }
 /* Mod name column never wraps -- if we wrap anything, wrap the Detail column instead (already
    handled via .detail-cell's overflow-wrap). A long name just widens the table, scrollable within
-   its own wrapper above rather than breaking mid-name. */
+   its own wrapper above rather than breaking mid-name. CONFIRMED this breaks down for a real,
+   extreme case: a 178-character mod name (some Nexus authors concatenate several patch names into
+   one) forces this column to claim nearly the entire table width under table-layout:auto, starving
+   the Detail column down to ~75px and turning every other row's short one-line content into
+   200-300px of character-by-character wrapped text -- looked exactly like "huge blank gaps" between
+   rows. Fixed at the source (see .mod-name below): names over MOD_NAME_TRUNCATE_AT are now
+   shortened to a fixed short string BEFORE reaching the DOM, so nowrap never has an extreme value
+   to blow the column out on -- click a truncated name to see the full one. */
 .plan-table td:first-child, .plan-table th:first-child { white-space: nowrap; }
+.mod-name--truncated { cursor: pointer; border-bottom: 1px dotted var(--text-muted); }
+.mod-name--truncated:hover { color: var(--accent); border-bottom-color: var(--accent); }
 .plan-table tbody tr:last-child td { border-bottom: none; }
 .plan-table tbody tr:hover { background: var(--surface-2); }
 .status-pill {
