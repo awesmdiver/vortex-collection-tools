@@ -1,0 +1,14 @@
+node_modules/
+logs/
+reports/
+
+# Personal data — mod lists, staging paths, and full state.v2 snapshots.
+# lib/vortex-sync/state-backups/ in particular can contain Vortex's stored
+# Nexus API tokens (under the "confidential" state namespace) — never commit or share this.
+lib/vortex-sync/backups/
+lib/vortex-sync/state-backups/
+lib/vortex-sync/config.json
+
+# OS
+Thumbs.db
+.DS_Store

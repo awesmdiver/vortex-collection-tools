@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vortex Collection Tools</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="app-header__title">
+    <span class="app-header__logo">&#9881;</span>
+    <span>Vortex Collection Tools</span>
+  </div>
+  <nav class="app-nav">
+    <button id="nav-rebuild" class="nav-tab">Rebuild Collection</button>
+    <button id="nav-sync" class="nav-tab">Update Collection</button>
+  </nav>
+  <div id="headerMeta" class="app-header__meta"></div>
+</header>
+
+<section id="area-rebuild" class="tool-area">
+
+<div id="vortexBanner" class="vortex-banner hidden">
+  <span class="vortex-banner__icon">&#9888;</span>
+  <span class="vortex-banner__text">Vortex is currently running. Close it completely, then retry.</span>
+  <button id="vortexRetryBtn" class="btn btn--ghost">Retry</button>
+</div>
+
+<main id="app" class="app-main">
+
+  <!-- View: collection picker -->
+  <section id="view-picker" class="view">
+    <div class="view-header">
+      <h1>Choose a collection</h1>
+      <p class="muted">Rebuilds a real, already-installed collection's staging folder using this tool's own validated extractor instead of Vortex's slow archive pipeline.</p>
+    </div>
+    <div id="collectionPickerLoading" class="loading-row"><span class="spinner"></span> Loading installed collections&hellip;</div>
+
+    <div id="vortexDataBox" class="vortex-data-box hidden">
+      <div id="vortexDataStatus" class="vortex-data-box__status"></div>
+      <button id="refreshVortexDataBtn" class="btn btn--ghost btn--small">Load Vortex Data</button>
+    </div>
+
+    <div id="collectionPicker" class="collection-picker hidden">
+      <select id="collectionSelect" class="select"></select>
+      <button id="viewPlanBtn" class="btn btn--primary">View Collection</button>
+      <button id="viewNexusBtn" class="btn btn--ghost">View on Nexus</button>
+      <button id="viewLogsBtn" class="btn btn--ghost">View Logs</button>
+    </div>
+    <div id="collectionEmpty" class="empty-row hidden"></div>
+
+    <div id="workshopOnlySection" class="callout callout--warning hidden">
+      <div class="callout__title">&#9888; Workshop-only collections found (can't be extracted here)</div>
+      <p>These are tracked in Vortex but have no <code>collection.json</code> -- either never published, or published but only the Workshop copy is kept locally. This tool can only read a real <code>collection.json</code>, so there's nothing to extract from until one exists. If it's been published to Nexus, this tool can fetch that published <code>collection.json</code> directly -- no need to download it through Vortex.</p>
+      <div class="callout callout--warning">
+        <div class="callout__title">&#9888; Before fetching, read this</div>
+        <ol>
+          <li>This only fetches a revision <strong>already saved to NexusMods</strong> (published or not) -- pick the one you want from the Revision dropdown below.</li>
+          <li>If you've made changes in the Workshop since your last save/upload, this download will <strong>not</strong> include them.</li>
+          <li><strong>Recommended:</strong> save/upload your latest Workshop changes to NexusMods first, then fetch here.</li>
+          <li>If you skip that, you'll need to manually reconcile any un-saved changes yourself after rebuilding.</li>
+        </ol>
+      </div>
+      <div class="collection-picker">
+        <select id="workshopOnlySelect" class="select"></select>
+      </div>
+      <div class="workshop-only-row__fetch">
+        <div class="field-group">
+          <label class="field-label" for="workshopSlugInput">Nexus collection id</label>
+          <input id="workshopSlugInput" class="input input--small" type="text" placeholder="e.g. lxvyai">
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="workshopRevSelect">Revision</label>
+          <select id="workshopRevSelect" class="select select--small" disabled>
+            <option value="">Enter a collection id first</option>
+          </select>
+        </div>
+        <button id="workshopFetchBtn" class="btn btn--ghost btn--small" disabled>Fetch from Nexus</button>
+        <button id="workshopViewNexusBtn" class="btn btn--ghost btn--small" disabled>View on Nexus</button>
+        <span id="workshopFetchStatus" class="muted workshop-fetch-status"></span>
+      </div>
+      <div id="workshopRevHint" class="muted workshop-rev-hint hidden"></div>
+    </div>
+  </section>
+
+  <!-- View: browse logs -->
+  <section id="view-logs" class="view hidden">
+    <div class="view-header">
+      <button class="btn btn--ghost btn--back" data-action="back-to-picker">&larr; Collections</button>
+      <h1 id="logsCollectionName">Browse Logs</h1>
+      <p class="muted">Every past run for this collection, most recent first.</p>
+    </div>
+    <div class="collection-picker">
+      <select id="logsLogSelect" class="select"></select>
+      <button id="openLogBtn" class="btn btn--primary" disabled>Open Log</button>
+    </div>
+    <div id="logsEmpty" class="empty-row hidden">No logs found for this collection yet.</div>
+  </section>
+
+  <!-- View: plan -->
+  <section id="view-plan" class="view hidden">
+    <div class="view-header">
+      <button class="btn btn--ghost btn--back" data-action="back-to-picker">&larr; Collections</button>
+      <h1 id="planTitle">Plan</h1>
+    </div>
+
+    <div id="planLoading" class="loading-row">
+      <span class="spinner"></span>
+      <span id="planLoadingText">Reading Vortex state&hellip;</span>
+    </div>
+    <div id="planProgressBarWrap" class="progress-bar-wrap hidden">
+      <div id="planProgressBar" class="progress-bar"></div>
+    </div>
+
+    <div id="planContent" class="hidden">
+      <div id="resumeBox" class="resume-box hidden">
+        <label class="checkbox">
+          <input type="checkbox" id="resumeToggle">
+          <span>Resume from previous incomplete run <span id="resumeMeta" class="muted"></span></span>
+        </label>
+      </div>
+
+      <div id="planSummary" class="summary-badges"></div>
+
+      <div class="view-actions">
+        <button id="startRebuildBtnTop" class="btn btn--primary">Start Rebuild</button>
+        <span id="nothingToRebuildNoteTop" class="muted hidden">Nothing to rebuild &mdash; all mods are skipped/ignored.</span>
+      </div>
+
+      <div id="openFomodSection" class="callout callout--warning hidden">
+        <div class="callout__title">&#9888; Needs manual reinstall (Open FOMOD)</div>
+        <p>These mods have a real FOMOD installer wizard but no choices recorded in <code>collection.json</code> &mdash; the collection deliberately leaves them to whoever installs it, and Vortex's wizard even pre-selects based on what else is currently installed. There's no default to replay automatically.</p>
+        <ul id="openFomodList"></ul>
+      </div>
+
+      <div class="plan-table-wrap">
+        <table class="plan-table">
+          <thead><tr><th>Mod</th><th>Action</th><th>Detail</th></tr></thead>
+          <tbody id="planTableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="view-actions">
+        <button id="startRebuildBtn" class="btn btn--primary">Start Rebuild</button>
+        <span id="nothingToRebuildNote" class="muted hidden">Nothing to rebuild &mdash; all mods are skipped/ignored.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- View: confirm modal -->
+  <div id="confirmModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>Confirm rebuild</h2>
+      <p id="confirmText"></p>
+      <p class="muted">A full backup of every affected mod's current staging folder is made first, and is never auto-deleted.</p>
+      <div class="modal-actions">
+        <button class="btn btn--ghost" data-action="cancel-confirm">Cancel</button>
+        <button class="btn btn--primary" data-action="confirm-run">Start Rebuild</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- View: live progress -->
+  <section id="view-progress" class="view hidden">
+    <div class="view-header">
+      <h1 id="progressTitle">Rebuilding&hellip;</h1>
+      <div id="phaseIndicator" class="phase-indicator"></div>
+    </div>
+    <div class="plan-table-wrap">
+      <table class="plan-table">
+        <thead><tr><th>Mod</th><th>Status</th><th>Detail</th></tr></thead>
+        <tbody id="progressTableBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- View: summary -->
+  <section id="view-summary" class="view hidden">
+    <div class="view-header">
+      <h1>Done</h1>
+    </div>
+    <div id="summaryBadges" class="summary-badges"></div>
+
+    <div id="criticalBanner" class="callout callout--critical hidden">
+      <div class="callout__title">&#10060; Critical: manual restore needed</div>
+      <div id="criticalDetail"></div>
+    </div>
+
+    <div id="summaryOpenFomodSection" class="callout callout--warning hidden">
+      <div class="callout__title">&#9888; Needs manual reinstall (Open FOMOD)</div>
+      <ul id="summaryOpenFomodList"></ul>
+    </div>
+
+    <div class="path-rows">
+      <div class="path-row">
+        <span class="path-row__label">Backup folder</span>
+        <code id="backupPath" class="path-row__value"></code>
+        <button class="btn btn--ghost btn--small" data-action="reveal-backup">Reveal</button>
+      </div>
+      <div class="path-row">
+        <span class="path-row__label">Log file</span>
+        <code id="logPath" class="path-row__value"></code>
+        <a id="viewLogLink" class="btn btn--ghost btn--small" target="_blank" rel="noopener">View Log</a>
+        <button class="btn btn--ghost btn--small" data-action="reveal-log">Reveal</button>
+      </div>
+    </div>
+
+    <div class="view-actions">
+      <button class="btn btn--primary" data-action="back-to-picker">Back to collections</button>
+    </div>
+  </section>
+
+</main>
+
+</section>
+
+<section id="area-sync" class="tool-area hidden">
+
+<div id="syncVortexBanner" class="vortex-banner hidden">
+  <span class="vortex-banner__icon">&#9888;</span>
+  <span class="vortex-banner__text">Vortex is currently running. Close it completely, then retry.</span>
+  <button id="syncVortexRetryBtn" class="btn btn--ghost">Retry</button>
+</div>
+
+<main class="app-main">
+  <div class="view-header">
+    <h1>Update Collection</h1>
+    <p class="muted">Keeps mods you've marked Ignored/Disabled in an installed collection ignored/disabled across a Vortex-driven update. Vortex itself still performs the actual mod installation -- this only brackets that step in Vortex's own state database.</p>
+  </div>
+
+  <div class="collection-picker">
+    <select id="syncCollectionSelect" class="select"></select>
+    <select id="syncProfileSelect" class="select select--small">
+      <option value="">(no profile -- skip disabled-mod tracking)</option>
+    </select>
+  </div>
+  <div id="syncCollectionEmpty" class="empty-row hidden"></div>
+
+  <div class="sync-phase">
+    <div class="sync-phase__header">
+      <span class="sync-phase__num">1</span>
+      <h2>Backup</h2>
+      <span class="muted">Run BEFORE clicking Update in Vortex.</span>
+    </div>
+    <p>Snapshots which mods are currently ignored/disabled for the selected collection.</p>
+    <div class="view-actions">
+      <button id="syncBackupBtn" class="btn btn--primary">Create Backup</button>
+      <span id="syncBackupStatus" class="muted"></span>
+    </div>
+    <div id="syncBackupNextSteps" class="callout callout--warning hidden">
+      <div class="callout__title">Next steps in Vortex</div>
+      <ol>
+        <li>Click <strong>Update</strong> on this collection.</li>
+        <li>When prompted, click <strong>Download Update</strong>.</li>
+        <li>If a "Remove mods from old revision?" screen appears, choose an option.</li>
+        <li>On the "collection added" screen, choose <strong>Later</strong> -- NOT Install Now.</li>
+        <li>Close Vortex completely, then continue to step 2 below.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="sync-phase">
+    <div class="field-group">
+      <label class="field-label" for="syncBackupSelect">Backup to use for steps 2&ndash;4</label>
+      <select id="syncBackupSelect" class="select"></select>
+    </div>
+  </div>
+
+  <div class="sync-phase">
+    <div class="sync-phase__header">
+      <span class="sync-phase__num">2</span>
+      <h2>Apply Ignores</h2>
+      <span class="muted">Run AFTER Vortex Update &rarr; Later, with Vortex closed.</span>
+    </div>
+    <p>Marks the backed-up ignored mods as ignored in the <em>new</em> collection's rules, so Vortex's installer skips them &mdash; this is the only step that actually prevents Vortex from installing a mod.</p>
+    <div class="field-group">
+      <label class="field-label" for="syncNewModIdInput">New collection's Vortex mod id</label>
+      <input id="syncNewModIdInput" class="input" type="text" placeholder="e.g. My-Collection-123456-2-...">
+    </div>
+    <div class="view-actions">
+      <button id="syncIgnoresPreviewBtn" class="btn btn--ghost">Preview (dry run)</button>
+      <button id="syncIgnoresApplyBtn" class="btn btn--primary" disabled>Apply</button>
+      <span id="syncIgnoresStatus" class="muted"></span>
+    </div>
+    <ul id="syncIgnoresList" class="sync-result-list"></ul>
+    <div id="syncResumeNextSteps" class="callout callout--warning hidden">
+      <div class="callout__title">Next step in Vortex</div>
+      <p>Reopen Vortex and click <strong>Resume</strong> on the collection. This is the slow step (Vortex's own archive extraction) &mdash; not controlled by this tool. Once it finishes, close Vortex completely and continue to step 3 below.</p>
+    </div>
+  </div>
+
+  <div class="sync-phase">
+    <div class="sync-phase__header">
+      <span class="sync-phase__num">3</span>
+      <h2>Apply Disables</h2>
+      <span class="muted">Run AFTER Resume finishes, with Vortex closed.</span>
+    </div>
+    <p>Restores the disabled state on mods that should stay disabled, now that Vortex has assigned them real mod ids. Uses the profile recorded in the backup itself.</p>
+    <div class="view-actions">
+      <button id="syncDisablesPreviewBtn" class="btn btn--ghost">Preview (dry run)</button>
+      <button id="syncDisablesApplyBtn" class="btn btn--primary" disabled>Apply</button>
+      <span id="syncDisablesStatus" class="muted"></span>
+    </div>
+    <ul id="syncDisablesList" class="sync-result-list"></ul>
+  </div>
+
+  <div class="sync-phase">
+    <div class="sync-phase__header">
+      <span class="sync-phase__num">4</span>
+      <h2>Compare <span class="muted">(optional, anytime)</span></h2>
+    </div>
+    <p>Generates an HTML report of what changed vs. the backup, without touching Vortex's state at all.</p>
+    <div class="field-group">
+      <label class="field-label" for="syncCompareCollectionInput">New collection.json path</label>
+      <input id="syncCompareCollectionInput" class="input" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\&lt;modId&gt;\collection.json">
+    </div>
+    <div class="view-actions">
+      <button id="syncCompareBtn" class="btn btn--ghost">Generate Report</button>
+    </div>
+  </div>
+</main>
+
+</section>
+
+<script src="shell.js"></script>
+<script src="app.js"></script>
+<script src="sync-app.js"></script>
+</body>
+</html>
