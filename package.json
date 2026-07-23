@@ -1,0 +1,17 @@
+{
+  "name": "vortex-collection-tools",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Unified toolkit for Vortex collection management: fast direct-extraction staging rebuilds (Rebuild Collection), and update-preserving ignore/disable state sync (Update Collection), with a shared local web UI.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "web": "node web/server.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "fast-xml-parser": "^5.10.1",
+    "classic-level": "^1.4.1"
+  }
+}

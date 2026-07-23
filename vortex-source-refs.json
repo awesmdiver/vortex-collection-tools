@@ -1,0 +1,93 @@
+{
+  "_comment": "Every Vortex/fomod-installer source file this project ported or derived logic from (not called at runtime -- their behavior is hardcoded into lib/*.js). 'lastVerifiedCommit' is the SHA of the last commit that touched that exact file path, as of when we read it. check-vortex-source-drift.js re-queries GitHub for the CURRENT last-touching commit per file and flags any that no longer match, so an upstream Vortex behavior change doesn't silently desync our replicated logic. Re-run after any Vortex update, or periodically.",
+  "refs": [
+    {
+      "repo": "Nexus-Mods/fomod-installer",
+      "path": "src/InstallScripting/XmlScript/XmlScriptExecutor.cs",
+      "lastVerifiedCommit": "e39f685e5b51b7abfb84d79b3170d4d3129caa62",
+      "lastVerifiedDate": "2026-04-23T07:23:26Z",
+      "derivedInto": "lib/choice-resolver.js",
+      "whatWeDerived": "flag application order (enableOption/disableOption via ConditionStateManager), per-option file collection via Union of selected options' Files"
+    },
+    {
+      "repo": "Nexus-Mods/fomod-installer",
+      "path": "src/InstallScripting/XmlScript/XmlScriptInstaller.cs",
+      "lastVerifiedCommit": "9d815d70bd07178d10d65acbe2e97fed25a586e7",
+      "lastVerifiedDate": "2025-12-13T17:04:45Z",
+      "derivedInto": "lib/choice-resolver.js",
+      "whatWeDerived": "the 3-phase install order + hardcoded priority offsets (requiredInstallFiles=-10^9, selected-option files=0, conditionalFileInstalls=+10^9) and the ShouldUpdate destination-collision tie-break (higher priority wins; tie -> lexicographically greater source path wins)"
+    },
+    {
+      "repo": "Nexus-Mods/fomod-installer",
+      "path": "src/InstallScripting/XmlScript/ConditionStateManager.cs",
+      "lastVerifiedCommit": "ce1b335913d3733ddbdaf460fecdae3293bf2fb5",
+      "lastVerifiedDate": "2025-10-27T12:45:32Z",
+      "derivedInto": "lib/choice-resolver.js",
+      "whatWeDerived": "conditionFlags accumulation semantics: SetFlagValue is a plain dictionary overwrite, so a later step's same-named flag replaces an earlier one; others persist"
+    },
+    {
+      "repo": "Nexus-Mods/fomod-installer",
+      "path": "src/InstallScripting/XmlScript/InstallableFile.cs",
+      "lastVerifiedCommit": "ce1b335913d3733ddbdaf460fecdae3293bf2fb5",
+      "lastVerifiedDate": "2025-10-27T12:45:32Z",
+      "derivedInto": "lib/choice-resolver.js",
+      "whatWeDerived": "confirms Priority defaults/comparison semantics referenced by XmlScriptInstaller's tie-break (not directly ported, used to cross-check ShouldUpdate)"
+    },
+    {
+      "repo": "Nexus-Mods/fomod-installer",
+      "path": "src/FomodInstaller.Interface/ModInstaller/Mod.cs",
+      "lastVerifiedCommit": "80fb2da73f42b7506559c44f6376f2e1ebaad871",
+      "lastVerifiedDate": "2025-11-11T09:38:15Z",
+      "derivedInto": "lib/mod-root.js",
+      "whatWeDerived": "when a script IS found but its path isn't literally '...fomod\\ModuleConfig.xml', the mod root falls back to ArchiveStructure.FindPathPrefix -- confirms our simpler 'always scan for fomod/ModuleConfig.xml anywhere' approach is a valid, simpler special case of the real logic"
+    },
+    {
+      "repo": "Nexus-Mods/fomod-installer",
+      "path": "src/FomodInstaller.Interface/ModInstaller/ArchiveStructure.cs",
+      "lastVerifiedCommit": "ce1b335913d3733ddbdaf460fecdae3293bf2fb5",
+      "lastVerifiedDate": "2025-10-27T12:45:32Z",
+      "derivedInto": "lib/simple-installer.js",
+      "whatWeDerived": "the FindPathPrefix(fileList, expressions) algorithm itself: scan the file list in order, first path matching any stop-pattern regex, prefix = everything before the match. This is the core algorithm ported (not just referenced) into findPathPrefix() in simple-installer.js"
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/installer_fomod_shared/utils/gameSupport.ts",
+      "lastVerifiedCommit": "193bf67f0e183f2674978af1c8fa8b0c5b25d0cd",
+      "lastVerifiedDate": "2026-05-06T09:38:21Z",
+      "derivedInto": "lib/simple-installer.js",
+      "whatWeDerived": "the exact skyrimse stopPatterns list (uniPatterns + gamebryoPatterns + ['skse']), hardcoded verbatim as SKYRIMSE_STOP_PATTERNS/GAMEBRYO_TOP_LEVEL. THE single highest-risk drift point: if Vortex adds/removes a recognized top-level folder name or changes the pattern-building logic for skyrimse, our hardcoded list goes stale silently."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/installer_fomod_native/tester.ts",
+      "lastVerifiedCommit": "254485e322065a16a6aab10dd35dc76fb512bfb3",
+      "lastVerifiedDate": "2026-05-27T09:22:58Z",
+      "derivedInto": "extract-mod.js (choice of FOMOD vs simple path)",
+      "whatWeDerived": "confirms a non-FOMOD archive is handled by the SAME native installer in 'Basic' mode (isBasic=true), not a wholly separate code path -- justifies reusing the same stopPatterns mechanism for simple archives"
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/installer_fomod_native/installer.ts",
+      "lastVerifiedCommit": "193bf67f0e183f2674978af1c8fa8b0c5b25d0cd",
+      "lastVerifiedDate": "2026-05-06T09:38:21Z",
+      "derivedInto": "lib/simple-installer.js",
+      "whatWeDerived": "confirms getStopPatterns(gameId, ...) is passed straight through to the native installer for both FOMOD and Basic mode -- no separate pluginPath-based second stripping pass observed in this file, which is why simple-installer.js does NOT do extra 'Data\\' stripping"
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/mod_management/util/modUpdateState.ts",
+      "lastVerifiedCommit": "193bf67f0e183f2674978af1c8fa8b0c5b25d0cd",
+      "lastVerifiedDate": "2026-05-06T09:38:21Z",
+      "derivedInto": "lib/state-query-worker.js (buildModVersionIndex)",
+      "whatWeDerived": "confirms Vortex's OWN update-checking logic (updateState()) reads attributes.version + attributes.fileId as the authoritative 'what's currently installed' fields -- NOT modVersion (doesn't appear in this logic at all) and NOT isPrimary. Grounded a real live experiment: after manually switching a mod's installed version in Vortex, attributes.version updated correctly but attributes.modVersion stayed stale at the old value -- this file is why we trust version/fileId and ignore modVersion when cross-referencing a mod's other installed versions."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/mod_management/types/IMod.ts",
+      "lastVerifiedCommit": "7305f8b6fbf38245c4c429ba54ac5a8bb1587b98",
+      "lastVerifiedDate": "2026-06-16T14:29:45Z",
+      "derivedInto": "lib/state-query-worker.js (buildModVersionIndex)",
+      "whatWeDerived": "ICommonModAttributes confirms version and modVersion are two genuinely separate, independently-settable fields (not a typo/duplicate) -- explains why they can diverge after a manual version switch. isPrimary is listed under 'Special mod types and flags', not the version/update section -- consistent with it being a Nexus 'main file' designation, not a local Vortex install-state concept, which is why we don't use it to determine what Vortex would deploy."
+    }
+  ]
+}
