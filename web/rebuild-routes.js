@@ -564,6 +564,7 @@ function createRouter(config) {
             rest += fileListBlock('Missing', m.missing);
             rest += fileListBlock('Changed', m.changed);
             if (m.eslPreserved?.length) rest += `<div class="file-list">Marked as Light, left unchanged: ${m.eslPreserved.map(esc).join(', ')}</div>`;
+            if (m.ghostPreserved?.length) rest += `<div class="file-list">Vortex-disabled (.ghost), left untouched: ${m.ghostPreserved.map(esc).join(', ')}</div>`;
             if (m.otherVersionsNote) rest += `<div class="file-list">A different version of this exact mod IS installed: ${esc(m.otherVersionsNote)}</div>`;
             const detail = topBlock ? `${topBlock}<div class="detail-group">${rest}</div>` : rest;
             // "Extract all" (full replace) / "Keep modified" (additive merge, never overwrites
@@ -601,7 +602,45 @@ function createRouter(config) {
 <thead><tr><th>Mod</th><th>Status</th><th>Detail</th><th>Extraction</th></tr></thead>
 <tbody id="logTableBody" data-filename="${esc(filename)}">${rows}</tbody>
 </table></div>
+<!-- Same in-page modal convention as the main app (replaces native confirm()/alert(), which are
+     tiny and easy to misread) -- this page has no shared JS with app.js, so it gets its own copy. -->
+<div id="confirmModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Confirm</h2>
+    <p id="confirmModalText"></p>
+    <div class="modal-actions">
+      <button class="btn btn--ghost" id="confirmModalCancel">Cancel</button>
+      <button class="btn btn--primary" id="confirmModalOk">OK</button>
+    </div>
+  </div>
+</div>
+<div id="errorModal" class="modal-overlay hidden">
+  <div class="modal modal--wide">
+    <h2>Error</h2>
+    <p id="errorModalText" class="error-modal-text"></p>
+    <div class="modal-actions">
+      <button class="btn btn--primary" id="errorModalOk">OK</button>
+    </div>
+  </div>
+</div>
 <script>
+function showConfirmModal(message) {
+  const overlay = document.getElementById('confirmModal');
+  document.getElementById('confirmModalText').textContent = message;
+  overlay.classList.remove('hidden');
+  return new Promise((resolve) => {
+    const cleanup = (result) => { overlay.classList.add('hidden'); resolve(result); };
+    document.getElementById('confirmModalOk').onclick = () => cleanup(true);
+    document.getElementById('confirmModalCancel').onclick = () => cleanup(false);
+  });
+}
+function showErrorModal(message) {
+  document.getElementById('errorModalText').textContent = message;
+  document.getElementById('errorModal').classList.remove('hidden');
+}
+document.getElementById('errorModalOk').addEventListener('click', () => {
+  document.getElementById('errorModal').classList.add('hidden');
+});
 document.querySelectorAll('.mod-name--truncated').forEach((el) => {
   el.addEventListener('click', () => {
     const stillTruncated = el.classList.toggle('mod-name--truncated');
@@ -623,8 +662,10 @@ document.getElementById('logTableBody').addEventListener('click', async (e) => {
   const modId = Number(btn.dataset.modid);
   const fileId = Number(btn.dataset.fileid);
   const resolveMode = btn.dataset.mode;
-  const label = resolveMode === 'all' ? 'fully replace with the archive version' : 'keep everything currently staged, only restore what staging is missing';
-  if (!confirm('This will ' + label + ' for this mod, right now -- not a dry run. Continue?')) return;
+  const message = resolveMode === 'all'
+    ? 'Warning: this will fully replace this mod within the staging environment. Continue?'
+    : 'Warning: this will keep everything currently staged for this mod and only restore what staging is missing. Continue?';
+  if (!await showConfirmModal(message)) return;
   row.querySelectorAll('.resolve-mismatch-btn').forEach((b) => { b.disabled = true; });
   btn.textContent = 'Working…';
   try {
@@ -637,7 +678,7 @@ document.getElementById('logTableBody').addEventListener('click', async (e) => {
     if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
     location.reload();
   } catch (err) {
-    alert('Failed: ' + err.message);
+    showErrorModal('Failed: ' + err.message);
     row.querySelectorAll('.resolve-mismatch-btn').forEach((b) => { b.disabled = false; });
     btn.textContent = resolveMode === 'all' ? 'Extract all' : 'Keep modified';
   }
