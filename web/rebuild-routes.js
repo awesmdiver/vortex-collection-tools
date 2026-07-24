@@ -546,7 +546,16 @@ function createRouter(config) {
             if (m.eslPreserved?.length) rest += `<div class="file-list">Marked as Light, left unchanged: ${m.eslPreserved.map(esc).join(', ')}</div>`;
             if (m.otherVersionsNote) rest += `<div class="file-list">A different version of this exact mod IS installed: ${esc(m.otherVersionsNote)}</div>`;
             const detail = topBlock ? `${topBlock}<div class="detail-group">${rest}</div>` : rest;
-            return `<tr data-status="${esc(m.status)}"><td>${modNameCell(m.name)}</td><td><span class="status-pill status-pill--${m.status.toLowerCase()}">${esc(m.status)}</span></td><td class="detail-cell">${detail}</td></tr>`;
+            // "All" (full replace) / "Keep Existing" (additive merge, never overwrites anything
+            // staging already has) -- see rebuild-mod.js's resolveMode header comment. Only offered
+            // for FAILED_MISMATCH_NOT_TOUCHED rows with enough info recorded to re-locate the mod
+            // (older logs predating targetFolderName being saved can't support this).
+            const canResolve = m.status === 'FAILED_MISMATCH_NOT_TOUCHED' && m.modId != null && m.fileId != null && m.targetFolderName;
+            const extractionCell = canResolve
+                ? `<button class="btn btn--ghost btn--small resolve-mismatch-btn" data-modid="${esc(m.modId)}" data-fileid="${esc(m.fileId)}" data-mode="all">All</button> `
+                    + `<button class="btn btn--ghost btn--small resolve-mismatch-btn" data-modid="${esc(m.modId)}" data-fileid="${esc(m.fileId)}" data-mode="keep-existing">Keep Existing</button>`
+                : '';
+            return `<tr data-status="${esc(m.status)}"><td>${modNameCell(m.name)}</td><td><span class="status-pill status-pill--${m.status.toLowerCase()}">${esc(m.status)}</span></td><td class="detail-cell">${detail}</td><td class="extraction-cell">${extractionCell}</td></tr>`;
         };
         // Ignored/optional-not-installed mods carry no action at all -- same reasoning as the live
         // plan table: put them last so the mods that actually matter aren't buried.
@@ -565,8 +574,8 @@ function createRouter(config) {
 </div>
 <div class="summary-badges" id="statusBadges">${badges}</div>
 <div class="plan-table-wrap"><table class="plan-table">
-<thead><tr><th>Mod</th><th>Status</th><th>Detail</th></tr></thead>
-<tbody id="logTableBody">${rows}</tbody>
+<thead><tr><th>Mod</th><th>Status</th><th>Detail</th><th>Extraction</th></tr></thead>
+<tbody id="logTableBody" data-filename="${esc(filename)}">${rows}</tbody>
 </table></div>
 <script>
 document.querySelectorAll('.mod-name--truncated').forEach((el) => {
@@ -581,6 +590,33 @@ document.getElementById('logTableBody').addEventListener('click', (e) => {
   const extra = toggle.previousElementSibling;
   const stillHidden = extra.classList.toggle('hidden');
   toggle.textContent = stillHidden ? toggle.dataset.more : toggle.dataset.less;
+});
+document.getElementById('logTableBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.resolve-mismatch-btn');
+  if (!btn) return;
+  const row = btn.closest('tr');
+  const filename = document.getElementById('logTableBody').dataset.filename;
+  const modId = Number(btn.dataset.modid);
+  const fileId = Number(btn.dataset.fileid);
+  const resolveMode = btn.dataset.mode;
+  const label = resolveMode === 'all' ? 'fully replace with the archive version' : 'keep everything currently staged, only restore what staging is missing';
+  if (!confirm('This will ' + label + ' for this mod, right now -- not a dry run. Continue?')) return;
+  row.querySelectorAll('.resolve-mismatch-btn').forEach((b) => { b.disabled = true; });
+  btn.textContent = 'Working…';
+  try {
+    const res = await fetch('/api/rebuild/logs/' + encodeURIComponent(filename) + '/resolve-mismatch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modId, fileId, resolveMode }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    location.reload();
+  } catch (err) {
+    alert('Failed: ' + err.message);
+    row.querySelectorAll('.resolve-mismatch-btn').forEach((b) => { b.disabled = false; });
+    btn.textContent = resolveMode === 'all' ? 'All' : 'Keep Existing';
+  }
 });
 document.getElementById('statusBadges').addEventListener('click', (e) => {
   const badge = e.target.closest('.badge--clickable, .badge--show-all');
@@ -597,6 +633,61 @@ document.getElementById('statusBadges').addEventListener('click', (e) => {
 });
 </script>
 </main></body></html>`);
+    });
+
+    // Manually resolves one mod that already came back FAILED_MISMATCH_NOT_TOUCHED in this exact
+    // log, via the "Extraction" column's "All"/"Keep Existing" buttons on the log-view page above.
+    // Deliberately does NOT check isVortexRunning() -- resolveMismatchedMod never touches Vortex's
+    // state database (same as the rest of Rebuild Collection), only the staging filesystem, so this
+    // is safe to run with Vortex open. Updates the log FILE itself in place afterward so re-viewing
+    // it later reflects the resolution instead of forever showing the original mismatch.
+    router.post('/logs/:filename/resolve-mismatch', async (req, res) => {
+        const { filename } = req.params;
+        if (!/^rebuild-.+\.json$/.test(filename)) return res.status(400).json({ error: 'Invalid log filename.' });
+        const full = path.join(logsDir, filename);
+        if (path.dirname(full) !== logsDir) return res.status(400).json({ error: 'Invalid log filename.' });
+        const { modId, fileId, resolveMode } = req.body || {};
+        if (!['all', 'keep-existing'].includes(resolveMode)) {
+            return res.status(400).json({ error: 'resolveMode must be "all" or "keep-existing".' });
+        }
+        if (modId == null || fileId == null) {
+            return res.status(400).json({ error: 'modId and fileId are required.' });
+        }
+        let log;
+        try {
+            log = JSON.parse(fs.readFileSync(full, 'utf8'));
+        } catch {
+            return res.status(404).json({ error: 'Log file not found.' });
+        }
+        const entryIndex = (log.mods || []).findIndex((m) => m.modId === modId && m.fileId === fileId);
+        if (entryIndex === -1) return res.status(404).json({ error: 'Mod not found in this log.' });
+        const entry = log.mods[entryIndex];
+        if (entry.status !== 'FAILED_MISMATCH_NOT_TOUCHED') {
+            return res.status(400).json({ error: `This mod's status is "${entry.status}", not FAILED_MISMATCH_NOT_TOUCHED -- refusing to touch it.` });
+        }
+        if (!entry.targetFolderName) {
+            return res.status(400).json({ error: 'This log entry has no recorded targetFolderName -- too old a log format to resolve this way.' });
+        }
+        try {
+            const { result, archiveName } = await runner.resolveMismatchedMod({
+                collectionModId: log.collectionModId, stagingDir: staging, downloadsDir: downloads,
+                modId, fileId, targetFolderName: entry.targetFolderName, resolveMode,
+            });
+            // Built fresh, not merged with the old entry -- the FAILED_MISMATCH_NOT_TOUCHED shape's
+            // own fields (detail/missing/changed/changedEslOnly) don't apply to the new REBUILT
+            // result at all and would otherwise linger stale if just spread over.
+            const updatedEntry = {
+                name: entry.name, modId: entry.modId, fileId: entry.fileId,
+                targetFolderName: entry.targetFolderName, archiveName: archiveName || entry.archiveName,
+                ...result,
+            };
+            log.mods[entryIndex] = updatedEntry;
+            log.summary = runner.summarize(log.mods);
+            runner.writeLog(full, log);
+            res.json({ ok: true, entry: updatedEntry, summary: log.summary });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
     });
 
     // Trusted-localhost-only convenience (never exposed off loopback) -- reveals a path in
