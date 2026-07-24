@@ -262,6 +262,19 @@ function onWorkshopSelectionChange() {
   const w = currentWorkshopSelection();
   const slug = w && w.collectionSlug ? w.collectionSlug : '';
   $('workshopSlugInput').value = slug;
+  if (w && !slug) {
+    // Confirmed live against a real case ("My GTS Audio Overhaul"): a Workshop entry with NO
+    // collectionSlug recorded in Vortex's own state at all -- also no collectionId, no source,
+    // nothing -- means it has never been uploaded/published to NexusMods, not just "not looked up
+    // yet". Left as a bare, easy-to-miss disabled dropdown placeholder before ("Enter a collection
+    // id first", the same text shown when the user manually clears the field themselves) -- this
+    // is a genuinely different, more definitive state, worth a clear, visible explanation instead.
+    resetRevisionPicker('No Nexus id on record');
+    const hint = $('workshopRevHint');
+    hint.textContent = `"${w.name}" has no Nexus collection id recorded in Vortex -- it looks like this collection has never been published/uploaded to NexusMods. If it actually has been, you can type its collection id into the field above manually.`;
+    hint.classList.remove('hidden');
+    return;
+  }
   lookupRevisions(slug);
 }
 
