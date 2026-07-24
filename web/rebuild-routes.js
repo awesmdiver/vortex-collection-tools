@@ -571,6 +571,7 @@ function createRouter(config) {
 <html><head><meta charset="UTF-8"><title>${esc(log.collectionName)} -- Rebuild Log</title>
 <link rel="stylesheet" href="/styles.css"></head>
 <body><main class="app-main">
+<a href="/" class="btn btn--ghost btn--back">&larr; Back to Collections</a>
 <div class="view-header">
   <h1>${esc(log.collectionName)}</h1>
   <p class="muted">${esc(log.runStatus)} -- started ${esc(fmtDate(log.startedAt))}${log.finishedAt ? ', finished ' + esc(fmtDate(log.finishedAt)) : ''}${log.durationMs ? ` (${(log.durationMs / 1000).toFixed(1)}s)` : ''}</p>

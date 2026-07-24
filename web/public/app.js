@@ -406,7 +406,10 @@ $('viewLogsBtn').addEventListener('click', async () => {
 
 $('openLogBtn').addEventListener('click', () => {
   const filename = $('logsLogSelect').value;
-  if (filename) window.open(`/api/rebuild/logs/view/${encodeURIComponent(filename)}`, '_blank');
+  // Same-tab navigation, not a new tab -- the log-view page now has its own "Back to Collections"
+  // link (see web/rebuild-routes.js) to return here, and the new "Extraction" resolve buttons on
+  // that page make it a real working session in its own right, not just a quick look-and-close.
+  if (filename) location.href = `/api/rebuild/logs/view/${encodeURIComponent(filename)}`;
 });
 
 $('refreshVortexDataBtn').addEventListener('click', async () => {
