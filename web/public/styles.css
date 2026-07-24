@@ -7,6 +7,8 @@
   --text-muted: #8b93a3;
   --accent: #5b8def;
   --accent-hover: #75a1f5;
+  --nav: #3d6ba8;
+  --nav-hover: #4a7cbd;
   --success: #3ecf8e;
   --success-bg: rgba(62, 207, 142, 0.12);
   --warning: #f5b942;
@@ -152,6 +154,14 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 }
 .btn--ghost:hover { background: var(--surface-2); border-color: var(--accent); }
 .btn--small { padding: 5px 12px; font-size: 13px; }
+/* A distinct blue for navigation ("back to collections") -- deliberately NOT the same shade as
+   .btn--primary's --accent, so a nav button never reads as "an action to take" at a glance. */
+.btn--nav {
+  background: var(--nav);
+  color: #fff;
+  font-weight: 600;
+}
+.btn--nav:hover { background: var(--nav-hover); }
 
 /* Vortex data cache box */
 .vortex-data-box {

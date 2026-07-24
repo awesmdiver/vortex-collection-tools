@@ -88,7 +88,7 @@
   <!-- View: browse logs -->
   <section id="view-logs" class="view hidden">
     <div class="view-header">
-      <button class="btn btn--ghost btn--back" data-action="back-to-picker">&larr; Collections</button>
+      <button class="btn btn--nav btn--back" data-action="back-to-picker">&larr; Back to Collections</button>
       <h1 id="logsCollectionName">Browse Logs</h1>
       <p class="muted">Every past run for this collection, most recent first.</p>
     </div>
@@ -102,7 +102,7 @@
   <!-- View: plan -->
   <section id="view-plan" class="view hidden">
     <div class="view-header">
-      <button class="btn btn--ghost btn--back" data-action="back-to-picker">&larr; Collections</button>
+      <button class="btn btn--nav btn--back" data-action="back-to-picker">&larr; Back to Collections</button>
       <h1 id="planTitle">Plan</h1>
     </div>
 
@@ -191,6 +191,7 @@
   <!-- View: summary -->
   <section id="view-summary" class="view hidden">
     <div class="view-header">
+      <button class="btn btn--nav btn--back" data-action="back-to-picker">&larr; Back to Collections</button>
       <h1>Done</h1>
     </div>
     <div id="summaryBadges" class="summary-badges"></div>
@@ -217,10 +218,6 @@
         <a id="viewLogLink" class="btn btn--ghost btn--small">View Log</a>
         <button class="btn btn--ghost btn--small" data-action="reveal-log">Reveal</button>
       </div>
-    </div>
-
-    <div class="view-actions">
-      <button class="btn btn--primary" data-action="back-to-picker">Back to collections</button>
     </div>
   </section>
 

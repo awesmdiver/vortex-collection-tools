@@ -127,7 +127,15 @@ function createRouter(config) {
         // liveName override just above can change what's actually displayed (e.g. a Vortex "My ..."
         // rename), so re-sort here on the name actually shown, not the one used to sort upstream.
         withResume.sort((a, b) => a.name.localeCompare(b.name));
-        res.json({ collections: withResume, vortexDataLoadedAt, workshopOnlyCollections });
+        // lastExtracted must be recomputed fresh here every time, same as the main list just above
+        // -- it was previously only ever set once, inside /vortex-data/refresh's background work,
+        // then left stale in this module-level list until the next full refresh. Confirmed live:
+        // rebuilding a Workshop-fetched collection (e.g. via the "Fetch from Nexus" -> Plan ->
+        // rebuild flow) wrote a brand new log, but the Workshop dropdown kept showing no/old "Last
+        // extracted" info until a fresh "Load Vortex Data" click, since nothing else re-ran
+        // findLastExtracted for these entries in between.
+        const workshopOnlyWithLastExtracted = workshopOnlyCollections.map((w) => ({ ...w, lastExtracted: findLastExtracted(w.modId) }));
+        res.json({ collections: withResume, vortexDataLoadedAt, workshopOnlyCollections: workshopOnlyWithLastExtracted });
     });
 
     router.get('/vortex-status', (req, res) => {
@@ -160,6 +168,17 @@ function createRouter(config) {
             // convention from the main list unconditionally, so it stays exactly where it belongs,
             // in the Workshop-only list, whether or not a collection.json is cached here.
             const collectionModId = folder.trim();
+            // Confirmed live this session: a stale cache entry from BEFORE this fetch (e.g. an
+            // earlier "Load Vortex Data") carries the OLD collection.json's mod objects, including
+            // their choices -- computePlan (below) trusts this cache over re-reading the file, so a
+            // fetch that just wrote fresh FOMOD choices to disk had no effect on the plan at all,
+            // silently falling back to SKIP_OPEN_FOMOD as if no choices existed. MUST drop the old
+            // entry unconditionally, before attempting to repopulate it below -- if that attempt
+            // fails (the same native-LevelDB crash risk this whole tool isolates against; confirmed
+            // live, an assertion dialog firing here reproduced exactly this bug), the old entry needs
+            // to be GONE, not left in place, so computePlan's cache-miss branch does a fresh read
+            // instead of silently reusing pre-fetch data.
+            syncStateCache.delete(collectionModId);
             // Also populate THIS one collection's Vortex-sync-state cache right away -- confirmed
             // live this was otherwise confusing: the collection appears correctly in the main
             // picker immediately (a plain filesystem scan), but with no "✓ Vortex data cached"
@@ -167,8 +186,9 @@ function createRouter(config) {
             // normally populates syncStateCache. One small isolated-child-process batch read (same
             // mechanism /api/rebuild/vortex-data/refresh uses, just for this single collectionModId) closes
             // that gap. Best-effort: a failure here (e.g. the native LevelDB crash this whole tool
-            // isolates against) just means this one entry stays uncached until the next manual
-            // refresh -- never lets a state-read problem fail the fetch that already succeeded.
+            // isolates against) just means this one entry stays uncached (not stale -- already
+            // deleted above) until the next manual refresh -- never lets a state-read problem fail
+            // the fetch that already succeeded.
             try {
                 const collectionInfo = runner.resolveCollectionInfo(staging, collectionModId);
                 const { results } = await runner.loadSyncStateBatch({
@@ -571,7 +591,7 @@ function createRouter(config) {
 <html><head><meta charset="UTF-8"><title>${esc(log.collectionName)} -- Rebuild Log</title>
 <link rel="stylesheet" href="/styles.css"></head>
 <body><main class="app-main">
-<a href="/" class="btn btn--ghost btn--back">&larr; Back to Collections</a>
+<a href="/" class="btn btn--nav btn--back">&larr; Back to Collections</a>
 <div class="view-header">
   <h1>${esc(log.collectionName)}</h1>
   <p class="muted">${esc(log.runStatus)} -- started ${esc(fmtDate(log.startedAt))}${log.finishedAt ? ', finished ' + esc(fmtDate(log.finishedAt)) : ''}${log.durationMs ? ` (${(log.durationMs / 1000).toFixed(1)}s)` : ''}</p>
