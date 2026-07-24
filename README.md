@@ -94,6 +94,28 @@ real collection's full FOMOD-choice mod list is strong evidence a change is corr
 is either a bug to chase or (confirm via the mod's own recorded `choices`) a genuine cross-collection
 choice divergence that's *supposed* to surface as `FAILED_MISMATCH_NOT_TOUCHED`.
 
+## Vortex ".ghost" files (a deliberate disable choice, not a mismatch)
+
+Vortex marks a deployed file as disabled-but-present by appending `.ghost` to its name (e.g.
+right-click "never deploy this file", or a manual conflict-resolution choice) rather than deleting
+it. A fresh archive extraction never contains a `.ghost`-suffixed name — that suffix only ever gets
+applied by Vortex itself, after deployment — so naively diffing the two would call the archive's
+plain file "added" and the current `.ghost` file "missing", and every rebuild path would then handle
+that wrong in its own way: an ordinary clean rebuild's whole-folder swap silently discards the
+`.ghost` file (a fresh extraction has nothing to carry it forward with), while the manual "Keep
+modified" merge restored the plain, *active* file right alongside the still-present ghost. Confirmed
+live (2026-07-24, "Dragonborn UI for GTS - Resources"): both `Disable Map Markers.esp` and
+`...esp.ghost` ended up on disk at once, byte-identical, after clicking "Keep modified".
+
+`lib/ghost-files.js` strips any ghost/plain pair (matched case-insensitively, same convention as
+`diff-manifests-ci.js`'s NTFS-case-preservation handling) from both manifests before diffing, so a
+legitimately-ghosted file no longer even triggers `FAILED_MISMATCH_NOT_TOUCHED` by itself. Per the
+user's explicit call, a skipped ghost file's content is never reconciled against a possibly-newer
+archive version — it's left completely untouched, and the skip is logged (`ghostPreserved` on a
+normal/`keep-existing` result) rather than done silently. `resolveMode: 'all'` (full replace) is the
+one exception: consistent with how it already discards a local ESL-only choice, a full replace also
+discards the `.ghost` file — but now logs that it did, instead of doing it silently.
+
 ## Vortex's Workshop-tab collection folders (`vortex_collection_<id>`)
 
 Every collection you've ever added to Vortex's **Workshop** tab (authoring/curating your own,
