@@ -42,6 +42,21 @@ extraction engine (`lib/simple-installer.js`, `lib/choice-resolver.js`, `lib/fom
 `download-collection.js`, `check-vortex-source-drift.js`) are validation/utility tools used during
 this engine's own development — see comments in each file.
 
+**After a real (non-dry-run) rebuild, expect Vortex to show "External Changes" the next time it
+starts**, for every mod that came back `REBUILT` — this is expected, not a sign of a real problem.
+`rebuildMod()` swaps a rebuilt mod into place via `fs.renameSync` (crash-safety — see the header
+comment in `lib/rebuild-mod.js`), which always creates a brand-new file on disk, even when its
+content and `LastWriteTime` end up byte-identical to what was already deployed (the archive itself
+supplies each entry's stored timestamp, not "now"). Vortex's own deployment tracking follows file
+identity, not just content or mtime, so it correctly notices the staged file is no longer the same
+physical file it last deployed — confirmed directly against a real case (`Laundry.esp` inside
+"ESLified Patches"): identical size, identical `LastWriteTime`, identical SHA256 between staged and
+deployed, but different NTFS File IDs, with `CreationTime` on the staged copy matching the exact
+rebuild run that touched it. **Verified content is genuinely unchanged in this scenario** (that's
+what a clean `REBUILT` status already guarantees — a rebuild only swaps in when its own missing/
+changed diff came back clean) — safe to click **"Use newer file"** / **"Save all changes"** and
+deploy in Vortex.
+
 ## Known FOMOD authoring quirks (confirmed real-world)
 
 `lib/fomod-parser.js` / `lib/choice-resolver.js` replay a collection's recorded FOMOD choices
@@ -120,6 +135,8 @@ framework-agnostic orchestration shared by the CLI, terminal menu, and web UI.
 - Rebuild Collection never writes to Vortex's state database at all — only to the staging
   filesystem layer, using a crash-safe `.rebuilding`/`.old` swap (mirroring Vortex's own
   `.installing` convention) so an interruption never leaves a half-extracted mod in place.
+- Expect Vortex's own "External Changes" prompt after a real rebuild, for every `REBUILT` mod —
+  this is expected, not a sign of corruption. See the note under **Rebuild Collection** above.
 
 ## Future work
 
