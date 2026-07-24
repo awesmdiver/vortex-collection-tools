@@ -123,6 +123,10 @@ function createRouter(config) {
                 vortexDataError: cached && !cached.ok ? cached.error : null,
             };
         });
+        // scanStagingCollections already sorts, but on the ORIGINAL collection.json name -- the
+        // liveName override just above can change what's actually displayed (e.g. a Vortex "My ..."
+        // rename), so re-sort here on the name actually shown, not the one used to sort upstream.
+        withResume.sort((a, b) => a.name.localeCompare(b.name));
         res.json({ collections: withResume, vortexDataLoadedAt, workshopOnlyCollections });
     });
 
@@ -241,7 +245,11 @@ function createRouter(config) {
                 // A Workshop-tab modId can genuinely have a real rebuild log (nothing stops running
                 // Rebuild Collection against one directly, e.g. while testing), so this isn't
                 // hypothetical.
-                workshopOnlyCollections = found.map((w) => ({ ...w, lastExtracted: findLastExtracted(w.modId) }));
+                // scanAllCollections returns these in whatever order the state DB's iterator
+                // happened to yield keys in (not alphabetical) -- sort here, same as the main list.
+                workshopOnlyCollections = found
+                    .map((w) => ({ ...w, lastExtracted: findLastExtracted(w.modId) }))
+                    .sort((a, b) => a.name.localeCompare(b.name));
                 const failed = [...results.entries()].filter(([, r]) => !r.ok).map(([modId, r]) => ({ modId, error: r.error }));
                 emitIfCurrent({ type: 'refresh-complete', done: true, loadedCount: results.size, failed, loadedAt: vortexDataLoadedAt });
             } catch (e) {
