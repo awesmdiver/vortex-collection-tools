@@ -478,6 +478,12 @@ async function refreshVortexData() {
   vortexDataEventSource = es;
   es.onmessage = (msg) => {
     const frame = JSON.parse(msg.data);
+    if (frame.type === 'sync-state-progress') {
+      statusEl.innerHTML = '';
+      statusEl.appendChild(el('span', { class: 'spinner' }));
+      statusEl.appendChild(document.createTextNode(` Reading Vortex state — step ${frame.step} of ${frame.total}: ${frame.label}`));
+      return;
+    }
     if (frame.type === 'refresh-complete' || frame.type === 'refresh-error') {
       es.close();
       vortexDataEventSource = null;
@@ -531,6 +537,11 @@ function handlePlanEvent(frame) {
     case 'phase':
       if (frame.phase === 'sync-state') $('planLoadingText').textContent = 'Reading Vortex state… Please wait as this can take some time for a large collection.';
       else if (frame.phase === 'sync-state-cached') $('planLoadingText').textContent = 'Using cached Vortex data (no database read needed)…';
+      break;
+    case 'sync-state-progress':
+      $('planProgressBarWrap').classList.remove('hidden');
+      $('planProgressBar').style.width = `${Math.round((frame.step / frame.total) * 100)}%`;
+      $('planLoadingText').textContent = `Reading Vortex state — step ${frame.step} of ${frame.total}: ${frame.label}`;
       break;
     case 'classify-progress': {
       $('planProgressBarWrap').classList.remove('hidden');
@@ -705,6 +716,9 @@ function handleRunEvent(frame) {
   switch (frame.type) {
     case 'phase':
       if (PHASE_TEXT[frame.phase]) setPhase(PHASE_TEXT[frame.phase]);
+      break;
+    case 'sync-state-progress':
+      setPhase(`Reading Vortex state — step ${frame.step} of ${frame.total}: ${frame.label}`);
       break;
     case 'backup-progress':
       setPhase(`Backing up (${frame.index}/${frame.total}): ${frame.modName}`);
