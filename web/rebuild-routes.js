@@ -12,6 +12,7 @@ const { spawn } = require('child_process');
 const runner = require('../lib/collection-runner');
 const { findSevenZip } = require('../lib/sevenzip');
 const nexusDownload = require('../lib/nexus-collection-download');
+const appConfig = require('../lib/app-config');
 const runState = require('./run-state');
 const { createSseSession } = require('./sse-session');
 
@@ -20,7 +21,7 @@ const vortexDataSession = createSseSession();
 
 function createRouter(config) {
     const router = express.Router();
-    const { staging, downloads, state, backupRoot, backupEnabled } = config;
+    const { staging, downloads, state, backupRoot } = config;
     const syncLib = runner.loadSyncLib();
     const sevenZipExe = findSevenZip();
     const logsDir = path.join(__dirname, '..', 'logs');
@@ -459,16 +460,21 @@ function createRouter(config) {
                     return;
                 }
 
-                // Skipped when disabled in Settings, or when no backup root is configured at all
-                // (can't back up to nowhere) -- either way this never blocks a rebuild, it only
-                // means there's nothing to roll back to if something goes wrong.
+                // maxBackupsToKeep is read fresh (not baked into config at server startup) --
+                // unlike the path settings, changing it never needs a restart. 0 means off (skip
+                // the backup step entirely); null means unlimited (back up, never prune); 1-3 means
+                // back up then prune down to that many most recent. Skipped either way when no
+                // backup root is configured at all (can't back up to nowhere) -- this never blocks
+                // a rebuild, it only means there's nothing to roll back to if something goes wrong.
+                const { maxBackupsToKeep } = appConfig.loadConfig();
                 let backupRunDir = null;
-                if (backupEnabled && backupRoot) {
+                if (maxBackupsToKeep !== 0 && backupRoot) {
                     runState.emit({ type: 'phase', phase: 'backing-up' });
                     ({ backupRunDir } = runner.runBackup({
                         rebuildQueue, backupRoot, collectionModId: collectionInfo.modId, runTimestamp,
                         onProgress: (p) => runState.emit({ type: 'backup-progress', ...p }),
                     }));
+                    runner.pruneOldBackups({ backupRoot, collectionModId: collectionInfo.modId, maxBackupsToKeep });
                 } else {
                     runState.emit({ type: 'phase', phase: 'backing-up', skipped: true });
                 }

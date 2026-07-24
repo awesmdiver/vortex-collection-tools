@@ -351,7 +351,7 @@
   </div>
 
   <div id="settingsRestartBanner" class="callout callout--warning hidden">
-    Restart the server (close and re-run <code>node web/server.js</code>) for path changes to take effect.
+    A path change is saved but not yet active -- restart the server (Settings &rarr; Save Settings again, or close and re-run <code>node web/server.js</code>) to apply it.
   </div>
 
   <h2 class="settings-section-title">Appearance</h2>
@@ -365,37 +365,51 @@
   </div>
 
   <h2 class="settings-section-title">Paths</h2>
-  <p class="muted">Changes here need a server restart -- this tool reads these once at startup, not live.</p>
+  <p class="muted">Changes here need a server restart -- this tool reads these once at startup, not live. You'll be offered an automatic restart when you save.</p>
   <div class="field-group">
     <label class="field-label" for="settingsStagingInput">Vortex staging folder</label>
-    <input id="settingsStagingInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse">
+    <div class="path-input-row">
+      <input id="settingsStagingInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse">
+      <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsStagingInput">Browse&hellip;</button>
+    </div>
   </div>
   <div class="field-group">
     <label class="field-label" for="settingsDownloadsInput">Vortex downloads folder</label>
-    <input id="settingsDownloadsInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Downloads\skyrimse">
+    <div class="path-input-row">
+      <input id="settingsDownloadsInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Downloads\skyrimse">
+      <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsDownloadsInput">Browse&hellip;</button>
+    </div>
   </div>
   <div class="field-group">
     <label class="field-label" for="settingsBackupRootInput">Backup root folder</label>
-    <input id="settingsBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Mod Extraction\Vortex-Rebuild-Backups">
+    <div class="path-input-row">
+      <input id="settingsBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Mod Extraction\Vortex-Rebuild-Backups">
+      <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsBackupRootInput">Browse&hellip;</button>
+    </div>
   </div>
   <div class="field-group">
-    <label class="field-label" for="settingsStateInput">Vortex state.v2 database path (leave blank to auto-detect under %APPDATA%)</label>
-    <input id="settingsStateInput" class="input input--wide" type="text" placeholder="auto-detected under %APPDATA%\Vortex\state.v2">
+    <label class="field-label" for="settingsStateInput">Vortex database path (leave blank to auto-detect)</label>
+    <div class="path-input-row">
+      <input id="settingsStateInput" class="input input--wide" type="text" placeholder="auto-detected under %APPDATA%\Vortex\state.v2">
+      <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsStateInput">Browse&hellip;</button>
+    </div>
   </div>
 
   <h2 class="settings-section-title">Backups</h2>
-  <label class="checkbox">
-    <input id="settingsBackupEnabledCheckbox" type="checkbox">
-    <span>Back up a mod's current staging folder before rebuilding it</span>
-  </label>
-  <p class="muted">A fresh, timestamped backup folder is made per run, never overwritten -- disabling this only saves time/disk for a very large collection; nothing is required to roll back to if something goes wrong.</p>
+  <p class="muted">A backup is a full copy of every mod's current staging folder, made just before rebuilding it -- a fresh, timestamped one per run, never overwritten. Off by default: an explicit opt-in, not an assumed safety net.</p>
+  <div class="field-group">
+    <label class="field-label" for="settingsMaxBackupsInput">Backups to keep per collection (0 = off, no backup made at all; 1-3 = back up every run, keep only the N most recent; blank = back up every run and keep every one, forever)</label>
+    <input id="settingsMaxBackupsInput" class="input input--small" type="number" min="0" max="3" step="1" placeholder="unlimited">
+  </div>
 
   <h2 class="settings-section-title">NexusMods</h2>
+  <p class="muted">To obtain your Nexus API key, go to <a href="https://www.nexusmods.com/settings/api-keys" target="_blank" rel="noopener">nexusmods.com/settings/api-keys</a> and scroll to the bottom of the page, under "Personal API Key".</p>
   <div class="field-group">
     <label class="field-label" for="settingsNexusKeyInput">API key</label>
     <input id="settingsNexusKeyInput" class="input input--wide" type="password" placeholder="paste your personal API key" autocomplete="off">
     <span id="settingsNexusKeyStatus" class="muted"></span>
   </div>
+  <p class="muted">Stored as plain text in this project's own <code>config.json</code> (gitignored -- never committed/shared), same as most local single-user dev tools. Not encrypted at rest; anyone with access to this machine/user account could read it directly from disk.</p>
   <div class="view-actions">
     <button id="settingsClearNexusKeyBtn" class="btn btn--ghost btn--small">Clear stored key</button>
   </div>
@@ -405,6 +419,17 @@
     <span id="settingsSaveStatus" class="muted"></span>
   </div>
 </main>
+
+<div id="settingsRestartModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Restart required</h2>
+    <p>Settings saved. The server needs to restart to apply the path change(s) -- restart now?</p>
+    <div class="modal-actions">
+      <button id="settingsRestartCancelBtn" class="btn btn--ghost">Not now</button>
+      <button id="settingsRestartConfirmBtn" class="btn btn--primary">Restart Now</button>
+    </div>
+  </div>
+</div>
 </section>
 
 <script src="shell.js"></script>
