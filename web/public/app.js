@@ -164,9 +164,19 @@ function renderWorkshopOnlyPicker(list) {
   section.classList.remove('hidden');
   const select = $('workshopOnlySelect');
   select.innerHTML = '';
+  // A fresh page load has no previousModId to restore, so the browser's own default -- select the
+  // first real option -- silently jumped straight to whichever collection sorts first alphabetically
+  // and immediately ran its (possibly error-state) selection-change handler with nothing actually
+  // chosen yet. This placeholder makes "nothing selected" a real, explicit option instead.
+  select.appendChild(el('option', { value: '' }, 'Select collection…'));
   for (const w of workshopOnlyCollections) {
     const lastExtracted = w.lastExtracted ? ` — Last extracted: ${new Date(w.lastExtracted).toLocaleString()}` : '';
-    const label = `${w.name}${w.source ? ` (${w.source})` : ''}${lastExtracted}`;
+    // Vortex's own "source" attribute is "user-generated" for any collection authored purely in the
+    // Workshop tab, never published -- see onWorkshopSelectionChange's own "never published" case.
+    // "(user-generated)" read as jargon-y and didn't clearly convey that meaning; "(local)" is the
+    // user-facing version of the same fact.
+    const sourceLabel = w.source === 'user-generated' ? 'local' : w.source;
+    const label = `${w.name}${sourceLabel ? ` (${sourceLabel})` : ''}${lastExtracted}`;
     select.appendChild(el('option', { value: w.modId }, label));
   }
   if (previousModId && workshopOnlyCollections.some((w) => w.modId === previousModId)) {
