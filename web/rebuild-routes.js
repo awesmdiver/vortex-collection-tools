@@ -257,7 +257,10 @@ function createRouter(config) {
             try {
                 emitIfCurrent({ type: 'phase', phase: 'reading', count: collections.length });
                 const entries = collections.map((c) => ({ modId: c.modId, collection: runner.resolveCollectionInfo(staging, c.modId).collection }));
-                const { results, workshopOnlyCollections: found } = await runner.loadSyncStateBatch({ state, entries, stagingDir: staging });
+                const { results, workshopOnlyCollections: found } = await runner.loadSyncStateBatch({
+                    state, entries, stagingDir: staging,
+                    onProgress: (p) => emitIfCurrent({ type: 'sync-state-progress', ...p }),
+                });
                 for (const [modId, result] of results) syncStateCache.set(modId, result);
                 vortexDataLoadedAt = new Date().toISOString();
                 // Same enrichment the main list gets (see GET /collections above) -- lost when a
@@ -278,7 +281,7 @@ function createRouter(config) {
         })();
     });
 
-    async function computePlan(collectionModId, resumeLogPath, onModClassified) {
+    async function computePlan(collectionModId, resumeLogPath, onModClassified, onSyncStateProgress) {
         const collectionInfo = runner.resolveCollectionInfo(staging, collectionModId);
         const cached = syncStateCache.get(collectionModId);
         let ignored, removedMods, keptMods, knownVortexModIds, otherVersionsByModId, sharedWithCollectionsByKey;
@@ -288,6 +291,7 @@ function createRouter(config) {
         } else {
             ({ ignored, removedMods, keptMods, knownVortexModIds, otherVersionsByModId, sharedWithCollectionsByKey } = await runner.loadSyncState({
                 state, collectionModId: collectionInfo.modId, collection: collectionInfo.collection, stagingDir: staging,
+                onProgress: onSyncStateProgress,
             }));
         }
         const resumed = resumeLogPath ? runner.loadResumeLog(resumeLogPath) : new Map();
@@ -353,7 +357,8 @@ function createRouter(config) {
                 });
                 const { collectionInfo, ignored, keptMods, knownVortexModIds, modEntries, rebuildQueue } = await computePlan(
                     collectionModId, resumeLogPath,
-                    (entry, index, total) => emitIfCurrent({ type: 'classify-progress', name: entry.name, status: entry.status, index, total })
+                    (entry, index, total) => emitIfCurrent({ type: 'classify-progress', name: entry.name, status: entry.status, index, total }),
+                    (p) => emitIfCurrent({ type: 'sync-state-progress', ...p })
                 );
                 emitIfCurrent({
                     type: 'plan-ready',
@@ -420,7 +425,10 @@ function createRouter(config) {
             let logPath;
             try {
                 runState.emit({ type: 'phase', phase: 'sync-state' });
-                const { collectionInfo, modEntries, rebuildQueue } = await computePlan(collectionModId, resumeLogPath);
+                const { collectionInfo, modEntries, rebuildQueue } = await computePlan(
+                    collectionModId, resumeLogPath, undefined,
+                    (p) => runState.emit({ type: 'sync-state-progress', ...p })
+                );
                 logPath = path.join(logsDir, `rebuild-${collectionInfo.modId}-${runTimestamp}.json`);
 
                 const currentLog = (runStatus) => runner.buildLogData({
@@ -664,7 +672,7 @@ document.getElementById('logTableBody').addEventListener('click', async (e) => {
   const resolveMode = btn.dataset.mode;
   const message = resolveMode === 'all'
     ? 'Warning: this will fully replace this mod within the staging environment. Continue?'
-    : 'Warning: this will keep everything currently staged for this mod and only restore what staging is missing. Continue?';
+    : 'Warning: this will keep all modified files currently staged and will replace all other files and restore any missing files. Continue?';
   if (!await showConfirmModal(message)) return;
   row.querySelectorAll('.resolve-mismatch-btn').forEach((b) => { b.disabled = true; });
   btn.textContent = 'Working…';
