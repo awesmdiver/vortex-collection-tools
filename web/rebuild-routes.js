@@ -496,14 +496,42 @@ function createRouter(config) {
             const short = esc(name.slice(0, MOD_NAME_TRUNCATE_AT - 1)) + '…';
             return `<span class="mod-name mod-name--truncated" data-full="${esc(name)}" data-short="${short}" title="${esc(name)}">${short}</span>`;
         };
+        // sharedWithNote may be a plain array (current format, one entry per collection) or a legacy
+        // '; '-joined string (logs written before this field became an array) -- normalize either
+        // shape to a list so old log files still render correctly.
+        const sharedWithLines = (note) => (Array.isArray(note) ? note : String(note).split('; '));
+        // Missing/Changed can legitimately run into the hundreds for a badly-diverged mod (the
+        // Dragon Priests Retexture case that prompted this had 152) -- one comma-separated run-on
+        // line of those wasn't readable. Shows the first FILE_LIST_TRUNCATE_AT, one per line, with
+        // the rest behind a click-to-expand toggle (same pattern as the mod-name truncation above,
+        // adapted for a list instead of a single string).
+        const FILE_LIST_TRUNCATE_AT = 6;
+        const fileListBlock = (label, files) => {
+            if (!files || files.length === 0) return '';
+            const lines = files.map(esc);
+            if (lines.length <= FILE_LIST_TRUNCATE_AT) {
+                return `<div class="file-list">${label}:<br>${lines.join('<br>')}</div>`;
+            }
+            const shown = lines.slice(0, FILE_LIST_TRUNCATE_AT).join('<br>');
+            const rest = lines.slice(FILE_LIST_TRUNCATE_AT).join('<br>');
+            const restCount = lines.length - FILE_LIST_TRUNCATE_AT;
+            return `<div class="file-list">${label}:<br>${shown}<br>` +
+                `<span class="file-list-extra hidden">${rest}<br></span>` +
+                `<a class="file-list-toggle" data-more="+${restCount} more" data-less="Show less">+${restCount} more</a></div>`;
+        };
         const modRow = (m) => {
-            let detail = esc(m.detail || '');
-            if (m.missing?.length) detail += `<div class="file-list">Missing: ${m.missing.map(esc).join(', ')}</div>`;
-            if (m.changed?.length) detail += `<div class="file-list">Changed: ${m.changed.map(esc).join(', ')}</div>`;
-            if (m.eslPreserved?.length) detail += `<div class="file-list">Marked as Light, left unchanged: ${m.eslPreserved.map(esc).join(', ')}</div>`;
-            if (m.otherVersionsNote) detail += `<div class="file-list">A different version of this exact mod IS installed: ${esc(m.otherVersionsNote)}</div>`;
-            if (m.sharedWithNote) detail += `<div class="file-list">Also part of: ${esc(m.sharedWithNote)}</div>`;
-            if (m.archiveName) detail += `<div class="file-list">Archive: <code>${esc(m.archiveName)}</code></div>`;
+            // "Already included in another collection" and the source archive name are identifying
+            // info about the mod itself -- surfaced first, ahead of the (often long) missing/changed
+            // file breakdown, per the user's own request: these got buried at the bottom before.
+            let topBlock = '';
+            if (m.sharedWithNote) topBlock += `<div class="file-list">Already included in:<br>${sharedWithLines(m.sharedWithNote).map(esc).join('<br>')}</div>`;
+            if (m.archiveName) topBlock += `<div class="file-list">Archive: <code>${esc(m.archiveName)}</code></div>`;
+            let rest = esc(m.detail || '').replace(/\n/g, '<br>');
+            rest += fileListBlock('Missing', m.missing);
+            rest += fileListBlock('Changed', m.changed);
+            if (m.eslPreserved?.length) rest += `<div class="file-list">Marked as Light, left unchanged: ${m.eslPreserved.map(esc).join(', ')}</div>`;
+            if (m.otherVersionsNote) rest += `<div class="file-list">A different version of this exact mod IS installed: ${esc(m.otherVersionsNote)}</div>`;
+            const detail = topBlock ? `${topBlock}<div class="detail-group">${rest}</div>` : rest;
             return `<tr data-status="${esc(m.status)}"><td>${modNameCell(m.name)}</td><td><span class="status-pill status-pill--${m.status.toLowerCase()}">${esc(m.status)}</span></td><td class="detail-cell">${detail}</td></tr>`;
         };
         // Ignored/optional-not-installed mods carry no action at all -- same reasoning as the live
@@ -532,6 +560,13 @@ document.querySelectorAll('.mod-name--truncated').forEach((el) => {
     const stillTruncated = el.classList.toggle('mod-name--truncated');
     el.textContent = stillTruncated ? el.dataset.short : el.dataset.full;
   });
+});
+document.getElementById('logTableBody').addEventListener('click', (e) => {
+  const toggle = e.target.closest('.file-list-toggle');
+  if (!toggle) return;
+  const extra = toggle.previousElementSibling;
+  const stillHidden = extra.classList.toggle('hidden');
+  toggle.textContent = stillHidden ? toggle.dataset.more : toggle.dataset.less;
 });
 document.getElementById('statusBadges').addEventListener('click', (e) => {
   const badge = e.target.closest('.badge--clickable, .badge--show-all');
