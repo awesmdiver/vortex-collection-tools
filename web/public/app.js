@@ -365,6 +365,7 @@ async function loadCollections() {
     const select = $('collectionSelect');
     const previousModId = select.value;
     select.innerHTML = '';
+    select.appendChild(el('option', { value: '' }, 'Select collection…'));
     for (const c of collections) {
       const lastExtracted = c.lastExtracted ? ` — Last extracted: ${new Date(c.lastExtracted).toLocaleString()}` : '';
       const label = `${c.vortexDataCached ? '✓ ' : ''}${c.name} (${c.modCount} mods)${lastExtracted}${c.resumableLog ? ' — Resumable' : ''}`;
