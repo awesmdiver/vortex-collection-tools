@@ -263,8 +263,13 @@ $('workshopFetchBtn').addEventListener('click', async () => {
     // whatever Nexus's API returns for the collection -- that's what the user actually sees in
     // both the Workshop and the mods-section dropdown, and the two can genuinely differ (a local
     // rename doesn't get pushed back to Nexus's collection metadata).
-    statusEl.textContent = `Done — "${w.name}" revision ${result.revisionNumber}, ${result.modCount} mods. Reloading…`;
-    await loadCollections();
+    statusEl.textContent = `Done — "${w.name}" revision ${result.revisionNumber}, ${result.modCount} mods. Opening plan…`;
+    btn.disabled = false;
+    // A fetched collection.json is just as real as any installed collection's -- computePlan/
+    // resolveCollectionInfo only read the file and this modId's live Vortex rules, neither of which
+    // cares about the vortex_collection_* naming convention (that only decides which dropdown shows
+    // it). Go straight to the plan for what was just fetched, same as clicking "View Collection".
+    openPlan(w.folder, w.name);
   } catch (e) {
     statusEl.textContent = `Failed: ${e.message}`;
     btn.disabled = false;
