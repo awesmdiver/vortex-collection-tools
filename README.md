@@ -109,11 +109,14 @@ what's on disk inside them.
 Confirmed directly (2026-07-24): editing a Workshop collection's mod list in Vortex's UI (adding or
 removing mods) does not touch the root `collection.json` at all — not its content, not even its
 mtime. The real, live edit state lives entirely in Vortex's own internal database the whole time.
-The root file only ever reflects whatever it was when first written (apparently once, early on) and
-then sits frozen — proven on a real collection where the root file (mtime unchanged since
-2025-12-29) listed 44 mods, but publishing a new revision immediately afterward produced a
-`collection.json` with 67 mods (19 removed, 42 added since whatever point the root file was last
-accurate) inside the freshly-written `export/collection_<N>.7z`.
+The root file only ever reflects whatever it was when first written by Vortex itself (apparently
+once, early on) and then sits frozen until something explicitly overwrites it — either Vortex doing
+so again at some later point, or this project's own "Fetch from Nexus" (below), which writes
+directly into this same root path. Proven on a real collection where the root file (mtime unchanged
+since 2025-12-29, predating this project's own Fetch feature entirely) listed 44 mods, but
+publishing a new revision immediately afterward produced a `collection.json` with 67 mods (19
+removed, 42 added since whatever point the root file was last accurate) inside the freshly-written
+`export/collection_<N>.7z`.
 
 That `export/collection_<N>.7z` (one .7z per locally-packaged revision, e.g. `collection_0.7z`,
 `collection_2.7z`) is the one place a genuinely *current* local snapshot exists — written the moment
@@ -127,6 +130,11 @@ This is also why this project's "Fetch from Nexus" feature (see **Update Collect
 Workshop picker) always downloads fresh from Nexus's own CDN rather than ever reading a local
 `export/*.7z` — nothing on disk in one of these folders can be assumed to match what's actually
 published, so there's no shortcut worth trusting over asking Nexus directly for a specific revision.
+A successful fetch overwrites the folder's root `collection.json` with that freshly-downloaded
+content, then goes straight to the Plan view for it (same as clicking "View Collection" for a real
+installed collection) — a fetched `collection.json` is just as usable to `computePlan` as any real
+one, since neither it nor `resolveCollectionInfo` cares about the `vortex_collection_*` naming
+convention at all (that only decides which picker dropdown a collection shows up in).
 
 ## Update Collection
 
