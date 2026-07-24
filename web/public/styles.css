@@ -183,7 +183,11 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 }
 .select:hover { border-color: var(--accent); }
 .select:focus { outline: none; border-color: var(--accent); }
-.select--small { flex: none; width: 260px; }
+/* 340px, not 260px -- confirmed live the Workshop-only revision dropdown's real option text
+   (e.g. "Revision 113 — 7/17/2026 (published)") was wider than 260px and got cut off in the
+   closed box. text-overflow/ellipsis is defensive for any future longer label, not the primary
+   fix -- the width increase is. */
+.select--small { flex: none; width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .select:disabled { opacity: 0.55; cursor: not-allowed; }
 .loading-row, .empty-row {
   display: flex;
@@ -347,8 +351,12 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .status-pill--failed_extraction_no_prior_data { background: var(--danger-bg); color: var(--danger); }
 .status-pill--critical_manual_restore_needed { background: var(--danger); color: #fff; }
 .status-pill--pending { background: var(--surface-2); color: var(--text-muted); }
-.detail-cell { color: var(--text-muted); font-size: 13px; overflow-wrap: anywhere; }
+.detail-cell { color: var(--text-muted); font-size: 13px; overflow-wrap: anywhere; white-space: pre-line; }
 .detail-cell .file-list { margin: 4px 0 0; overflow-wrap: anywhere; }
+.detail-cell .detail-group { margin-top: 10px; }
+.detail-cell .file-list-extra.hidden { display: none; }
+.detail-cell .file-list-toggle { display: inline-block; margin-top: 2px; color: var(--accent); cursor: pointer; text-decoration: underline; }
+.detail-cell .file-list-toggle:hover { color: var(--accent-hover); }
 
 /* Resume box */
 .resume-box {

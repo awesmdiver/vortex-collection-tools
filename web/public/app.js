@@ -43,6 +43,27 @@ function statusPill(status) {
   const cls = 'status-pill status-pill--' + status.toLowerCase();
   return el('span', { class: cls }, STATUS_TEXT[status] || status);
 }
+
+// A real mod name 178 characters long (several Nexus authors concatenate multiple patch names
+// into one) combined with the Mod column's deliberate white-space:nowrap forces that column to
+// claim nearly the whole table width under table-layout:auto, squeezing the Detail column down to
+// a sliver and turning ordinary content into a vertical wall of one-word lines -- confirmed live,
+// the exact same bug already fixed in the static log-view page's modRow() (web/rebuild-routes.js)
+// but originally missed here, in the live plan/progress tables. Same fix: truncate long names with
+// a click-to-expand span instead of relying on CSS alone.
+const MOD_NAME_TRUNCATE_AT = 70;
+function modNameCell(name) {
+  if (!name || name.length <= MOD_NAME_TRUNCATE_AT) return name;
+  const short = name.slice(0, MOD_NAME_TRUNCATE_AT - 1) + '…';
+  const span = el('span', { class: 'mod-name mod-name--truncated', title: name }, short);
+  span.dataset.full = name;
+  span.dataset.short = short;
+  span.addEventListener('click', () => {
+    const stillTruncated = span.classList.toggle('mod-name--truncated');
+    span.textContent = stillTruncated ? span.dataset.short : span.dataset.full;
+  });
+  return span;
+}
 function showView(name) {
   for (const v of document.querySelectorAll('.view')) v.classList.add('hidden');
   $(`view-${name}`).classList.remove('hidden');
@@ -416,7 +437,7 @@ async function openPlan(collectionModId, name, resumeLogPath) {
   $('planTitle').textContent = name;
   $('planLoading').classList.remove('hidden');
   $('planContent').classList.add('hidden');
-  $('planLoadingText').textContent = 'Reading Vortex state…';
+  $('planLoadingText').textContent = 'Reading Vortex state… Please wait as this can take some time for a large collection.';
   $('planProgressBarWrap').classList.add('hidden');
   $('planProgressBar').style.width = '0%';
 
@@ -438,7 +459,7 @@ async function openPlan(collectionModId, name, resumeLogPath) {
 function handlePlanEvent(frame) {
   switch (frame.type) {
     case 'phase':
-      if (frame.phase === 'sync-state') $('planLoadingText').textContent = 'Reading Vortex state…';
+      if (frame.phase === 'sync-state') $('planLoadingText').textContent = 'Reading Vortex state… Please wait as this can take some time for a large collection.';
       else if (frame.phase === 'sync-state-cached') $('planLoadingText').textContent = 'Using cached Vortex data (no database read needed)…';
       break;
     case 'classify-progress': {
@@ -483,7 +504,7 @@ function renderPlan(plan) {
     $('openFomodSection').classList.remove('hidden');
     const list = $('openFomodList');
     list.innerHTML = '';
-    for (const m of plan.openFomodMods) list.appendChild(el('li', {}, m.name));
+    for (const m of plan.openFomodMods) list.appendChild(el('li', {}, modNameCell(m.name)));
   }
 
   const body = $('planTableBody');
@@ -496,7 +517,7 @@ function renderPlan(plan) {
   const actionable = plan.modEntries.filter((e) => !NON_ACTIONABLE.has(e.status));
   for (const e of actionable) {
     body.appendChild(el('tr', {}, [
-      el('td', {}, e.name),
+      el('td', {}, modNameCell(e.name)),
       el('td', {}, statusPill(e.status)),
       el('td', { class: 'detail-cell' }, e.detail || ''),
     ]));
@@ -505,16 +526,16 @@ function renderPlan(plan) {
     const status = r.existingStagingFolder ? 'REBUILD' : 'REBUILD_QUEUED';
     let detail = r.existingStagingFolder ? '' : 'No staging folder exists — will create from scratch';
     if (r.otherVersionsNote) detail += (detail ? ' — ' : '') + `a different version of this exact mod IS installed: ${r.otherVersionsNote}`;
-    if (r.sharedWithNote) detail += (detail ? ' — ' : '') + `also part of: ${r.sharedWithNote}`;
+    if (r.sharedWithNote) detail += (detail ? '\n\n' : '') + `Already included in:\n${r.sharedWithNote.join('\n')}`;
     body.appendChild(el('tr', {}, [
-      el('td', {}, r.name),
+      el('td', {}, modNameCell(r.name)),
       el('td', {}, statusPill(status)),
       el('td', { class: 'detail-cell' }, detail),
     ]));
   }
   for (const e of ignored) {
     body.appendChild(el('tr', {}, [
-      el('td', {}, e.name),
+      el('td', {}, modNameCell(e.name)),
       el('td', {}, statusPill(e.status)),
       el('td', { class: 'detail-cell' }, e.detail || ''),
     ]));
@@ -564,7 +585,7 @@ function startProgressView() {
 
   for (const r of state.plan.rebuildQueue) {
     const row = el('tr', {}, [
-      el('td', {}, r.name),
+      el('td', {}, modNameCell(r.name)),
       el('td', {}, statusPill('pending')),
       el('td', { class: 'detail-cell' }, ''),
     ]);
@@ -592,7 +613,7 @@ function setPhase(text) {
 }
 
 const PHASE_TEXT = {
-  'sync-state': 'Reading Vortex state…',
+  'sync-state': 'Reading Vortex state… Please wait as this can take some time for a large collection.',
   'plan-ready': 'Plan ready',
   'backing-up': 'Backing up current staging folders…',
   rebuilding: 'Rebuilding mods…',
@@ -623,7 +644,7 @@ function handleRunEvent(frame) {
       if (frame.restoredMissingFiles?.length) detail = `Restored ${frame.restoredMissingFiles.length} missing file(s)`;
       if (frame.eslPreserved?.length) detail = (detail ? detail + ' — ' : '') + `Marked as Light, left unchanged: ${frame.eslPreserved.join(', ')}`;
       if (frame.otherVersionsNote) detail = (detail ? detail + ' — ' : '') + `A different version of this exact mod IS installed: ${frame.otherVersionsNote}`;
-      if (frame.sharedWithNote) detail = (detail ? detail + ' — ' : '') + `Also part of: ${frame.sharedWithNote}`;
+      if (frame.sharedWithNote) detail = (detail ? detail + '\n\n' : '') + `Already included in:\n${frame.sharedWithNote.join('\n')}`;
       if (frame.archiveName && frame.status !== 'REBUILT') detail = (detail ? detail + ' — ' : '') + `Archive: ${frame.archiveName}`;
       updateProgressRow(frame.name, frame.status, detail);
       break;
