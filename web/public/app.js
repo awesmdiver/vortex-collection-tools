@@ -726,7 +726,8 @@ function updateProgressRow(name, status, detail) {
 function handleRunEvent(frame) {
   switch (frame.type) {
     case 'phase':
-      if (PHASE_TEXT[frame.phase]) setPhase(PHASE_TEXT[frame.phase]);
+      if (frame.phase === 'backing-up' && frame.skipped) setPhase('Skipping backup (disabled in Settings)…');
+      else if (PHASE_TEXT[frame.phase]) setPhase(PHASE_TEXT[frame.phase]);
       break;
     case 'sync-state-progress':
       setPhase(`Reading Vortex state — step ${frame.step} of ${frame.total}: ${frame.label}`);

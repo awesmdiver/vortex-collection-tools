@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Vortex Collection Tools</title>
+<!-- Applies a stored dark/light override, if any, before the stylesheet below is even parsed --
+     avoids a flash of the wrong theme on load. No override stored (the default) means "system":
+     styles.css's own prefers-color-scheme media query handles it, nothing to do here. -->
+<script>
+(function () {
+  var t = localStorage.getItem('theme');
+  if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -16,6 +25,7 @@
   <nav class="app-nav">
     <button id="nav-rebuild" class="nav-tab">Rebuild Collection</button>
     <button id="nav-sync" class="nav-tab">Update Collection</button>
+    <button id="nav-settings" class="nav-tab">Settings</button>
   </nav>
   <div id="headerMeta" class="app-header__meta"></div>
 </header>
@@ -333,8 +343,73 @@
 
 </section>
 
+<section id="area-settings" class="tool-area hidden">
+<main class="app-main">
+  <div class="view-header">
+    <h1>Settings</h1>
+    <p class="muted">Nothing here is required to just look around, but Rebuild/Update Collection need the paths below configured before they can do anything real.</p>
+  </div>
+
+  <div id="settingsRestartBanner" class="callout callout--warning hidden">
+    Restart the server (close and re-run <code>node web/server.js</code>) for path changes to take effect.
+  </div>
+
+  <h2 class="settings-section-title">Appearance</h2>
+  <div class="field-group">
+    <label class="field-label" for="settingsThemeSelect">Theme</label>
+    <select id="settingsThemeSelect" class="select select--small">
+      <option value="system">System default</option>
+      <option value="dark">Dark</option>
+      <option value="light">Light</option>
+    </select>
+  </div>
+
+  <h2 class="settings-section-title">Paths</h2>
+  <p class="muted">Changes here need a server restart -- this tool reads these once at startup, not live.</p>
+  <div class="field-group">
+    <label class="field-label" for="settingsStagingInput">Vortex staging folder</label>
+    <input id="settingsStagingInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse">
+  </div>
+  <div class="field-group">
+    <label class="field-label" for="settingsDownloadsInput">Vortex downloads folder</label>
+    <input id="settingsDownloadsInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Downloads\skyrimse">
+  </div>
+  <div class="field-group">
+    <label class="field-label" for="settingsBackupRootInput">Backup root folder</label>
+    <input id="settingsBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Mod Extraction\Vortex-Rebuild-Backups">
+  </div>
+  <div class="field-group">
+    <label class="field-label" for="settingsStateInput">Vortex state.v2 database path (leave blank to auto-detect under %APPDATA%)</label>
+    <input id="settingsStateInput" class="input input--wide" type="text" placeholder="auto-detected under %APPDATA%\Vortex\state.v2">
+  </div>
+
+  <h2 class="settings-section-title">Backups</h2>
+  <label class="checkbox">
+    <input id="settingsBackupEnabledCheckbox" type="checkbox">
+    <span>Back up a mod's current staging folder before rebuilding it</span>
+  </label>
+  <p class="muted">A fresh, timestamped backup folder is made per run, never overwritten -- disabling this only saves time/disk for a very large collection; nothing is required to roll back to if something goes wrong.</p>
+
+  <h2 class="settings-section-title">NexusMods</h2>
+  <div class="field-group">
+    <label class="field-label" for="settingsNexusKeyInput">API key</label>
+    <input id="settingsNexusKeyInput" class="input input--wide" type="password" placeholder="paste your personal API key" autocomplete="off">
+    <span id="settingsNexusKeyStatus" class="muted"></span>
+  </div>
+  <div class="view-actions">
+    <button id="settingsClearNexusKeyBtn" class="btn btn--ghost btn--small">Clear stored key</button>
+  </div>
+
+  <div class="view-actions">
+    <button id="settingsSaveBtn" class="btn btn--primary">Save Settings</button>
+    <span id="settingsSaveStatus" class="muted"></span>
+  </div>
+</main>
+</section>
+
 <script src="shell.js"></script>
 <script src="app.js"></script>
 <script src="sync-app.js"></script>
+<script src="settings-app.js"></script>
 </body>
 </html>

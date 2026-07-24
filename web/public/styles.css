@@ -21,6 +21,57 @@
   --shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
 }
 
+/* Light theme -- the :root block above is the default/fallback (dark). Applied two ways: (1)
+   following the OS/browser's own prefers-color-scheme when the user hasn't picked an explicit
+   theme on the Settings page (":not([data-theme=\"dark\"])" lets an explicit dark override still
+   win even on a light-preferring system); (2) an explicit override regardless of system
+   preference. Every existing rule in this file already consumes var(--x) rather than a literal
+   color, so this is purely additive -- no existing rule needs to change. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #eef0f4;
+    --border: #d8dce3;
+    --text: #1a1d24;
+    --text-muted: #5b6472;
+    --accent: #3568c9;
+    --accent-hover: #4a7bd6;
+    --nav: #2f5c94;
+    --nav-hover: #3a6da8;
+    --success: #1f9d63;
+    --success-bg: rgba(31, 157, 99, 0.12);
+    --warning: #b8790a;
+    --warning-bg: rgba(184, 121, 10, 0.12);
+    --danger: #c23652;
+    --danger-bg: rgba(194, 54, 82, 0.12);
+    --neutral: #6b7280;
+    --neutral-bg: rgba(107, 114, 128, 0.12);
+    --shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #eef0f4;
+  --border: #d8dce3;
+  --text: #1a1d24;
+  --text-muted: #5b6472;
+  --accent: #3568c9;
+  --accent-hover: #4a7bd6;
+  --nav: #2f5c94;
+  --nav-hover: #3a6da8;
+  --success: #1f9d63;
+  --success-bg: rgba(31, 157, 99, 0.12);
+  --warning: #b8790a;
+  --warning-bg: rgba(184, 121, 10, 0.12);
+  --danger: #c23652;
+  --danger-bg: rgba(194, 54, 82, 0.12);
+  --neutral: #6b7280;
+  --neutral-bg: rgba(107, 114, 128, 0.12);
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+}
+
 * { box-sizing: border-box; }
 
 html, body {
@@ -298,6 +349,12 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .input:focus { outline: none; border-color: var(--accent); }
 .input--small { width: 220px; }
 .input--tiny { width: 140px; }
+.input--wide { width: 480px; }
+
+/* Settings page section headers -- plain h2s, same rhythm as .view-header's h1 but smaller/lighter
+   since a settings page is a flat list of sections, not a set of separate "views". */
+.settings-section-title { font-size: 16px; margin: 28px 0 10px; }
+.settings-section-title:first-of-type { margin-top: 20px; }
 
 /* Workshop-only collections callout -- pulled down from the picker above it so the two dropdowns
    (installed collections vs. Workshop-only) don't visually run together. */

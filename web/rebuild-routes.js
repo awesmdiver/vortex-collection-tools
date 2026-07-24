@@ -20,7 +20,7 @@ const vortexDataSession = createSseSession();
 
 function createRouter(config) {
     const router = express.Router();
-    const { staging, downloads, state, backupRoot } = config;
+    const { staging, downloads, state, backupRoot, backupEnabled } = config;
     const syncLib = runner.loadSyncLib();
     const sevenZipExe = findSevenZip();
     const logsDir = path.join(__dirname, '..', 'logs');
@@ -97,6 +97,11 @@ function createRouter(config) {
     }
 
     router.get('/collections', (req, res) => {
+        // No staging folder configured yet (fresh install, before the Settings page has been filled
+        // in) -- a valid, expected state, not an error. The picker just shows nothing to pick yet.
+        if (!staging) {
+            return res.json({ collections: [], vortexDataLoadedAt, workshopOnlyCollections: [], configured: false });
+        }
         let collections;
         try {
             collections = syncLib.scanStagingCollections(staging);
@@ -234,6 +239,9 @@ function createRouter(config) {
     // collection viewed -- see syncStateCache's own comment above for the rationale (Vortex's
     // state can't change while it's closed, and this tool requires Vortex closed anyway).
     router.post('/vortex-data/refresh', (req, res) => {
+        if (!staging) {
+            return res.status(400).json({ error: 'not-configured', message: 'Staging folder is not configured yet -- open Settings to set it up.' });
+        }
         if (syncLib.isVortexRunning()) {
             return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
         }
@@ -329,6 +337,9 @@ function createRouter(config) {
     router.post('/plan', async (req, res) => {
         const { collectionModId, resumeLogPath } = req.body || {};
         if (!collectionModId) return res.status(400).json({ error: 'collectionModId is required.' });
+        if (!staging || !downloads) {
+            return res.status(400).json({ error: 'not-configured', message: 'Staging/downloads folders are not configured yet -- open Settings to set them up.' });
+        }
         if (syncLib.isVortexRunning()) {
             return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
         }
@@ -400,6 +411,9 @@ function createRouter(config) {
     router.post('/runs', async (req, res) => {
         const { collectionModId, resumeLogPath } = req.body || {};
         if (!collectionModId) return res.status(400).json({ error: 'collectionModId is required.' });
+        if (!staging || !downloads) {
+            return res.status(400).json({ error: 'not-configured', message: 'Staging/downloads folders are not configured yet -- open Settings to set them up.' });
+        }
         if (syncLib.isVortexRunning()) {
             return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
         }
@@ -445,11 +459,19 @@ function createRouter(config) {
                     return;
                 }
 
-                runState.emit({ type: 'phase', phase: 'backing-up' });
-                const { backupRunDir } = runner.runBackup({
-                    rebuildQueue, backupRoot, collectionModId: collectionInfo.modId, runTimestamp,
-                    onProgress: (p) => runState.emit({ type: 'backup-progress', ...p }),
-                });
+                // Skipped when disabled in Settings, or when no backup root is configured at all
+                // (can't back up to nowhere) -- either way this never blocks a rebuild, it only
+                // means there's nothing to roll back to if something goes wrong.
+                let backupRunDir = null;
+                if (backupEnabled && backupRoot) {
+                    runState.emit({ type: 'phase', phase: 'backing-up' });
+                    ({ backupRunDir } = runner.runBackup({
+                        rebuildQueue, backupRoot, collectionModId: collectionInfo.modId, runTimestamp,
+                        onProgress: (p) => runState.emit({ type: 'backup-progress', ...p }),
+                    }));
+                } else {
+                    runState.emit({ type: 'phase', phase: 'backing-up', skipped: true });
+                }
 
                 runState.emit({ type: 'phase', phase: 'rebuilding' });
                 const { haltedCritical } = await runner.runRebuild({
