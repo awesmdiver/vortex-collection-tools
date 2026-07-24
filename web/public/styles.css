@@ -187,7 +187,7 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    (e.g. "Revision 113 — 7/17/2026 (published)") was wider than 260px and got cut off in the
    closed box. text-overflow/ellipsis is defensive for any future longer label, not the primary
    fix -- the width increase is. */
-.select--small { flex: none; width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select--small { flex: none; width: 460px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .select:disabled { opacity: 0.55; cursor: not-allowed; }
 .loading-row, .empty-row {
   display: flex;
