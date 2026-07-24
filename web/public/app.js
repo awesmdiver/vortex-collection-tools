@@ -134,7 +134,8 @@ function renderWorkshopOnlyPicker(list) {
   const select = $('workshopOnlySelect');
   select.innerHTML = '';
   for (const w of workshopOnlyCollections) {
-    const label = `${w.name}${w.source ? ` (${w.source})` : ''}`;
+    const lastExtracted = w.lastExtracted ? ` — Last extracted: ${new Date(w.lastExtracted).toLocaleString()}` : '';
+    const label = `${w.name}${w.source ? ` (${w.source})` : ''}${lastExtracted}`;
     select.appendChild(el('option', { value: w.modId }, label));
   }
   onWorkshopSelectionChange();
