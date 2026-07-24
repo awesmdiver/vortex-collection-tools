@@ -621,19 +621,34 @@ document.getElementById('logTableBody').addEventListener('click', async (e) => {
     btn.textContent = resolveMode === 'all' ? 'Extract all' : 'Keep modified';
   }
 });
-document.getElementById('statusBadges').addEventListener('click', (e) => {
-  const badge = e.target.closest('.badge--clickable, .badge--show-all');
-  if (!badge) return;
-  const status = badge.dataset.status;
+// Pulled out of the click handler so a page reload (e.g. after resolving a mismatch) can re-apply
+// whichever filter was active, instead of always resetting to "show all" -- confirmed live this was
+// confusing: resolving one mismatched mod reloaded the whole page and silently dropped back to
+// showing every row, when the user was deliberately filtered down to just the mismatched ones.
+function applyStatusFilter(status) {
   document.querySelectorAll('#statusBadges .badge').forEach((b) => b.classList.remove('badge--filter-active'));
   const rows = document.querySelectorAll('#logTableBody tr');
   if (!status) {
     rows.forEach((r) => { r.style.display = ''; });
     return;
   }
-  badge.classList.add('badge--filter-active');
+  const badge = document.querySelector('#statusBadges .badge--clickable[data-status="' + CSS.escape(status) + '"]');
+  if (badge) badge.classList.add('badge--filter-active');
   rows.forEach((r) => { r.style.display = r.dataset.status === status ? '' : 'none'; });
+}
+document.getElementById('statusBadges').addEventListener('click', (e) => {
+  const badge = e.target.closest('.badge--clickable, .badge--show-all');
+  if (!badge) return;
+  const status = badge.dataset.status;
+  applyStatusFilter(status);
+  // Persist the active filter in the URL (no navigation, just updates the address bar) so a later
+  // location.reload() -- e.g. after resolving a mismatch below -- restores it instead of resetting.
+  const url = new URL(location.href);
+  if (status) url.searchParams.set('status', status); else url.searchParams.delete('status');
+  history.replaceState(null, '', url);
 });
+// Restore whatever filter was active before this page load, if the URL says so.
+applyStatusFilter(new URLSearchParams(location.search).get('status') || '');
 </script>
 </main></body></html>`);
     });
