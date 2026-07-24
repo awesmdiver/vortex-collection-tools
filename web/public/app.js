@@ -124,6 +124,12 @@ function renderVortexDataStatus(loadedAt, cachedCount, totalCount) {
 let workshopOnlyCollections = [];
 
 function renderWorkshopOnlyPicker(list) {
+  // Rebuilding a <select>'s options wipes its selection back to the first one with no explicit
+  // "selected" -- confirmed live: clicking "Fetch from Nexus" triggers exactly this reload, so
+  // right after fetching for e.g. "My QOL and Utilities" the picker silently jumped back to
+  // whatever's now alphabetically first ("Community Shaders"), discarding the user's selection.
+  // Re-select the same modId afterward if it's still in the list.
+  const previousModId = $('workshopOnlySelect').value;
   workshopOnlyCollections = list || [];
   const section = $('workshopOnlySection');
   if (workshopOnlyCollections.length === 0) {
@@ -137,6 +143,9 @@ function renderWorkshopOnlyPicker(list) {
     const lastExtracted = w.lastExtracted ? ` — Last extracted: ${new Date(w.lastExtracted).toLocaleString()}` : '';
     const label = `${w.name}${w.source ? ` (${w.source})` : ''}${lastExtracted}`;
     select.appendChild(el('option', { value: w.modId }, label));
+  }
+  if (previousModId && workshopOnlyCollections.some((w) => w.modId === previousModId)) {
+    select.value = previousModId;
   }
   onWorkshopSelectionChange();
 }
@@ -193,9 +202,13 @@ async function lookupRevisions(slug) {
       setRevisionActionButtonsDisabled(true);
     } else {
       for (const r of data.revisions) {
-        const when = new Date(r.createdAt).toLocaleDateString();
+        // updatedAt, not createdAt -- confirmed live this session: Nexus updates a draft/unlisted
+        // revision's actual content in place rather than assigning it a new revision number, so
+        // createdAt can be many months stale (e.g. "3/23/2026") even seconds after a real content
+        // update, making a genuinely fresh revision look untouched.
+        const when = new Date(r.updatedAt).toLocaleDateString();
         const statusTag = r.revisionStatus === 'published' ? 'published' : 'draft, not public';
-        revSelect.appendChild(el('option', { value: String(r.revisionNumber) }, `Revision ${r.revisionNumber} — ${when} (${statusTag})`));
+        revSelect.appendChild(el('option', { value: String(r.revisionNumber) }, `Revision ${r.revisionNumber} — updated: ${when} (${statusTag})`));
       }
       revSelect.disabled = false;
       setRevisionActionButtonsDisabled(false);
@@ -291,12 +304,18 @@ async function loadCollections() {
     renderVortexDataStatus(vortexDataLoadedAt, cachedCount, collections.length);
     $('vortexDataBox').classList.remove('hidden');
 
+    // Same "rebuilding a <select> resets its selection" issue as renderWorkshopOnlyPicker --
+    // preserve it across a reload (e.g. after "Load Vortex Data" refreshes this same list).
     const select = $('collectionSelect');
+    const previousModId = select.value;
     select.innerHTML = '';
     for (const c of collections) {
       const lastExtracted = c.lastExtracted ? ` — Last extracted: ${new Date(c.lastExtracted).toLocaleString()}` : '';
       const label = `${c.vortexDataCached ? '✓ ' : ''}${c.name} (${c.modCount} mods)${lastExtracted}${c.resumableLog ? ' — Resumable' : ''}`;
       select.appendChild(el('option', { value: c.modId }, label));
+    }
+    if (previousModId && collections.some((c) => c.modId === previousModId)) {
+      select.value = previousModId;
     }
     $('collectionPicker').classList.remove('hidden');
   } catch (e) {
