@@ -42,6 +42,12 @@ function createSettingsRouter() {
                 patch.maxBackupsToKeep = Number.isFinite(n) ? Math.min(3, Math.max(0, Math.floor(n))) : null;
             }
         }
+        // Always a plain 1-8 integer -- unlike maxBackupsToKeep, there's no meaningful "unlimited"
+        // here, so an invalid/blank value just falls back to 1 (sequential), never null.
+        if ('concurrentExtractions' in body) {
+            const n = Number(body.concurrentExtractions);
+            patch.concurrentExtractions = Number.isFinite(n) ? Math.min(8, Math.max(1, Math.floor(n))) : 1;
+        }
         if (body.clearNexusApiKey) {
             patch.nexusApiKey = null;
         } else if (typeof body.nexusApiKey === 'string' && body.nexusApiKey.trim()) {

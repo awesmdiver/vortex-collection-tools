@@ -466,7 +466,7 @@ function createRouter(config) {
                 // back up then prune down to that many most recent. Skipped either way when no
                 // backup root is configured at all (can't back up to nowhere) -- this never blocks
                 // a rebuild, it only means there's nothing to roll back to if something goes wrong.
-                const { maxBackupsToKeep } = appConfig.loadConfig();
+                const { maxBackupsToKeep, concurrentExtractions } = appConfig.loadConfig();
                 let backupRunDir = null;
                 if (maxBackupsToKeep !== 0 && backupRoot) {
                     runState.emit({ type: 'phase', phase: 'backing-up' });
@@ -483,6 +483,7 @@ function createRouter(config) {
                 const { haltedCritical } = await runner.runRebuild({
                     rebuildQueue, collectionJsonPath: collectionInfo.collectionJsonPath,
                     downloadsDir: downloads, stagingDir: staging, modEntries,
+                    concurrency: concurrentExtractions,
                     onModStart: (mod) => runState.emit({ type: 'mod-start', modName: mod.name }),
                     onModComplete: (entry) => {
                         runState.emit({ type: 'mod-complete', ...entry });
