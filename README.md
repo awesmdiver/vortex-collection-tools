@@ -42,6 +42,43 @@ extraction engine (`lib/simple-installer.js`, `lib/choice-resolver.js`, `lib/fom
 `download-collection.js`, `check-vortex-source-drift.js`) are validation/utility tools used during
 this engine's own development — see comments in each file.
 
+## Known FOMOD authoring quirks (confirmed real-world)
+
+`lib/fomod-parser.js` / `lib/choice-resolver.js` replay a collection's recorded FOMOD choices
+against the real archive's `ModuleConfig.xml`. Real, shipped mods have exposed several
+non-obvious authoring patterns that a naive reading of the FOMOD spec would get wrong — each is
+handled explicitly, with the archive that first exposed it noted for traceability:
+
+- **Duplicate installStep names.** Two install steps can share the exact same `name` (e.g. two
+  mutually-exclusive variant steps both called "Mesh Patches - Masks", gated on different earlier
+  choices). Matching by name breaks the instant this happens — `.find()` always returns the first
+  match, silently applying the wrong step's (possibly empty) recorded choices. Vortex records one
+  `choices.options` entry per raw installStep **unconditionally, in document order**, including
+  steps whose `<visible>` condition was never actually met (their entry just has empty/default
+  selections) — so **array position, not name**, is the only reliable match key. (Confirmed via
+  "Dragon Priests Retexture SE - Half Res".)
+- **Whitespace-padded names.** `fast-xml-parser` trims attribute values by default, but a real
+  mod's own XML can have a trailing space in a `name` attribute (`name="High Poly Vanilla Male
+  Body "`) that Vortex's recorded `collection.json` preserves verbatim. An exact-string group/step
+  name comparison silently fails to find the recorded entry. Always compare `.trim()`ed on both
+  sides. (Confirmed via "Nordic Faces - Textures and Body Meshes".)
+- **Non-empty-string "install at mod root" destinations.** An explicit empty-string
+  `destination=""` on a `<file>`/`<folder>` entry is already documented FOMOD behavior for
+  "install at the mod root, using just the source's basename" — but real authors also write this
+  same intent as a literal `destination=".\<file>"` ("Faster HDT-SMP FSMP 3.5.0") or a bare
+  `destination="."` (20 different `<folder>` entries in "Dwemer Armor SE - CBBE 3BA"). All three
+  forms must normalize to the same result — `path.win32.normalize()` handles `.\`/`./` correctly
+  but does **not** collapse a lone `.` further, so that case needs an explicit extra fold to `""`.
+
+**How to validate any future change here against this user's real, live modded install — safely,
+with zero writes**: for every mod in a real `collection.json` with `choices.type === 'fomod'` and
+an existing staging folder, re-run the real pipeline (`findModRoot` → extract+parse the real
+`ModuleConfig.xml` → `resolveChoices`) and diff the resulting destination-path set against
+`buildManifest()` of what's actually on disk in that mod's staging folder. A clean diff across a
+real collection's full FOMOD-choice mod list is strong evidence a change is correct; any mismatch
+is either a bug to chase or (confirm via the mod's own recorded `choices`) a genuine cross-collection
+choice divergence that's *supposed* to surface as `FAILED_MISMATCH_NOT_TOUCHED`.
+
 ## Update Collection
 
 ```
