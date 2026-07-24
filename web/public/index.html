@@ -347,7 +347,7 @@
 <main class="app-main">
   <div class="view-header">
     <h1>Settings</h1>
-    <p class="muted">Nothing here is required to just look around, but Rebuild/Update Collection need the paths below configured before they can do anything real.</p>
+    <p class="muted">You will need to provide the details below to be able to Rebuild or Update your Collections.</p>
   </div>
 
   <div id="settingsFirstRunBanner" class="callout callout--warning hidden">
@@ -369,7 +369,7 @@
   </div>
 
   <h2 class="settings-section-title">Paths</h2>
-  <p class="muted">Changes here need a server restart -- this tool reads these once at startup, not live. You'll be offered an automatic restart when you save.</p>
+  <p class="muted">Path changes will require the server restart. These tools read these once when the server is started. You'll be offered an automatic restart when you save the settings.</p>
   <div class="field-group">
     <label class="field-label" for="settingsStagingInput">Vortex staging folder</label>
     <div class="path-input-row">
@@ -400,9 +400,9 @@
   </div>
 
   <h2 class="settings-section-title">Backups</h2>
-  <p class="muted">A backup is a full copy of every mod's current staging folder, made just before rebuilding it -- a fresh, timestamped one per run, never overwritten. Off by default: an explicit opt-in, not an assumed safety net.</p>
+  <p class="muted">A backup is a full copy of every mod's current staging folder, made just before rebuilding it. For larger collections this option could consume a large amount of disk space.</p>
   <div class="field-group">
-    <label class="field-label" for="settingsMaxBackupsInput">Backups to keep per collection (0 = off, no backup made at all; 1-3 = back up every run, keep only the N most recent; blank = back up every run and keep every one, forever)</label>
+    <label class="field-label" for="settingsMaxBackupsInput">Number of backups to keep per collection (0 = off (suggested); 1-3 = keep only the N most recent; blank = unlimited, requires manual deletion)</label>
     <input id="settingsMaxBackupsInput" class="input input--small" type="number" min="0" max="3" step="1" placeholder="unlimited">
   </div>
 
@@ -413,7 +413,7 @@
     <input id="settingsNexusKeyInput" class="input input--wide" type="password" placeholder="paste your personal API key" autocomplete="off">
     <span id="settingsNexusKeyStatus" class="muted"></span>
   </div>
-  <p class="muted">Stored as plain text in this project's own <code>config.json</code> (gitignored -- never committed/shared), same as most local single-user dev tools. Not encrypted at rest; anyone with access to this machine/user account could read it directly from disk.</p>
+  <p class="muted">Stored as plain text in the <code>config.json</code> file. Not encrypted, anyone with access to this machine/user account could read it directly from the file.</p>
   <div class="view-actions">
     <button id="settingsClearNexusKeyBtn" class="btn btn--ghost btn--small">Clear stored key</button>
   </div>
