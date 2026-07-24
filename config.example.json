@@ -3,6 +3,6 @@
   "downloads": null,
   "backupRoot": null,
   "state": null,
-  "backupEnabled": true,
+  "maxBackupsToKeep": 0,
   "nexusApiKey": null
 }

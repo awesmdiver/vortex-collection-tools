@@ -7,6 +7,7 @@
 
 const express = require('express');
 const appConfig = require('../lib/app-config');
+const { pickFolderAsync } = require('../lib/vortex-sync/win-dialog');
 
 const PATH_FIELDS = ['staging', 'downloads', 'backupRoot', 'state'];
 
@@ -30,7 +31,17 @@ function createSettingsRouter() {
         for (const key of PATH_FIELDS) {
             if (key in body) patch[key] = (body[key] || '').trim() || null;
         }
-        if ('backupEnabled' in body) patch.backupEnabled = !!body.backupEnabled;
+        // One field does double duty: null = unlimited (back up every run, keep forever); 0 = off
+        // (don't back up at all); 1-3 = back up every run, prune down to the N most recent after.
+        if ('maxBackupsToKeep' in body) {
+            const raw = body.maxBackupsToKeep;
+            if (raw === null || raw === '' || raw === undefined) {
+                patch.maxBackupsToKeep = null;
+            } else {
+                const n = Number(raw);
+                patch.maxBackupsToKeep = Number.isFinite(n) ? Math.min(3, Math.max(0, Math.floor(n))) : null;
+            }
+        }
         if (body.clearNexusApiKey) {
             patch.nexusApiKey = null;
         } else if (typeof body.nexusApiKey === 'string' && body.nexusApiKey.trim()) {
@@ -40,6 +51,19 @@ function createSettingsRouter() {
         const restartRequired = PATH_FIELDS.some((k) => k in patch && patch[k] !== before[k]);
         const after = appConfig.saveConfig(patch);
         res.json({ ...withoutKey(after), restartRequired });
+    });
+
+    // Native folder-browser dialog for the path fields' "Browse..." buttons -- runs on the SAME
+    // machine as the browser (this whole tool assumes that), so a server-side native dialog is a
+    // real option, unlike a browser file input (which never exposes a real absolute OS path).
+    router.post('/browse-folder', async (req, res) => {
+        const { initialDir, title } = req.body || {};
+        try {
+            const picked = await pickFolderAsync({ title: title || 'Select a folder', initialDir: initialDir || undefined });
+            res.json({ path: picked });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
     });
 
     return router;

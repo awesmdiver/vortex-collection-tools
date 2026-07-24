@@ -66,7 +66,9 @@ function main() {
         downloads: cliArgs.downloads || fileConfig.downloads || null,
         backupRoot: cliArgs.backupRoot || fileConfig.backupRoot || null,
         state: cliArgs.state || fileConfig.state || syncLib.DEFAULT_STATE_DIR,
-        backupEnabled: fileConfig.backupEnabled !== false,
+        // maxBackupsToKeep is NOT included here deliberately -- unlike the paths above, it's read
+        // fresh from config.json at the moment each rebuild run actually needs it (see
+        // rebuild-routes.js), not baked in at startup, so changing it never needs a restart.
     };
 
     const app = express();
@@ -76,7 +78,36 @@ function main() {
     app.use('/api/sync', createSyncRouter(config));
     app.use('/api/settings', createSettingsRouter());
 
-    const server = app.listen(config.port, '127.0.0.1', () => {
+    // Settings page's "Restart Now" button -- spawns a fresh, fully independent instance of this
+    // same server (same args this one was launched with, forcing --no-open since a browser tab is
+    // already open), then tears this one down. `server` is assigned below, after this route is
+    // registered -- the handler closes over that `let` binding, so it correctly sees the real
+    // instance once listen() actually runs.
+    let server;
+    app.post('/api/settings/restart-server', (req, res) => {
+        res.json({ ok: true });
+        // Small delay so the response above actually reaches the browser before teardown starts.
+        setTimeout(() => {
+            let done = false;
+            const finish = () => {
+                if (done) return;
+                done = true;
+                const respawnArgs = process.argv.slice(2).filter((a) => a !== '--no-open');
+                respawnArgs.push('--no-open');
+                spawn(process.execPath, [__filename, ...respawnArgs], {
+                    cwd: process.cwd(), stdio: 'ignore', detached: true,
+                }).unref();
+                process.exit(0);
+            };
+            // server.close()'s callback only fires once every connection is done -- an open SSE
+            // stream (this app uses several) could keep one alive indefinitely. Force the restart
+            // anyway after a short grace period rather than hanging forever.
+            server.close(finish);
+            setTimeout(finish, 2000);
+        }, 150);
+    });
+
+    server = app.listen(config.port, '127.0.0.1', () => {
         const url = `http://127.0.0.1:${config.port}`;
         console.log(`Vortex Collection Tools running at ${url}`);
         if (config.staging && config.downloads) {

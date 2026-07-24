@@ -355,6 +355,8 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    since a settings page is a flat list of sections, not a set of separate "views". */
 .settings-section-title { font-size: 16px; margin: 28px 0 10px; }
 .settings-section-title:first-of-type { margin-top: 20px; }
+.path-input-row { display: flex; gap: 8px; align-items: center; }
+.path-input-row .input--wide { flex: 1; }
 
 /* Workshop-only collections callout -- pulled down from the picker above it so the two dropdowns
    (installed collections vs. Workshop-only) don't visually run together. */
