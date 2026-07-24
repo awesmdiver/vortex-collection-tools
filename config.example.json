@@ -4,5 +4,6 @@
   "backupRoot": null,
   "state": null,
   "maxBackupsToKeep": 0,
+  "concurrentExtractions": 1,
   "nexusApiKey": null
 }

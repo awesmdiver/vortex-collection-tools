@@ -8,7 +8,8 @@
 //
 // Usage:
 //   node rebuild-collection.js [--collection-mod-id <id>] [--staging <dir>] [--downloads <path>]
-//     [--state <path>] [--backup-root <dir>] [--dry-run] [--resume <log-file>] [--yes]
+//     [--state <path>] [--backup-root <dir>] [--concurrency <1-8>] [--dry-run]
+//     [--resume <log-file>] [--yes]
 //
 // Omit --collection-mod-id for an interactive menu of currently-installed collections.
 //
@@ -43,6 +44,8 @@ function parseArgs(argv) {
         downloads: fileConfig.downloads || null,
         state: fileConfig.state || syncLib.DEFAULT_STATE_DIR,
         backupRoot: fileConfig.backupRoot || null,
+        // Clamped 1-8, same rule as the Settings page's own field -- 1 (sequential) if unset/invalid.
+        concurrency: Math.min(8, Math.max(1, Math.floor(Number(fileConfig.concurrentExtractions)) || 1)),
         dryRun: false,
         resume: null,
         yes: false,
@@ -53,6 +56,7 @@ function parseArgs(argv) {
         else if (argv[i] === '--downloads') args.downloads = argv[++i];
         else if (argv[i] === '--state') args.state = argv[++i];
         else if (argv[i] === '--backup-root') args.backupRoot = argv[++i];
+        else if (argv[i] === '--concurrency') args.concurrency = Math.min(8, Math.max(1, Math.floor(Number(argv[++i])) || 1));
         else if (argv[i] === '--dry-run') args.dryRun = true;
         else if (argv[i] === '--resume') args.resume = argv[++i];
         else if (argv[i] === '--yes') args.yes = true;
@@ -211,10 +215,11 @@ async function main() {
     });
     console.log(`Full-collection backup complete: "${backupRunDir}". This is NOT auto-deleted -- clean it up manually once you're confident.`);
 
-    console.log('\n===== Rebuilding =====');
+    console.log(`\n===== Rebuilding${args.concurrency > 1 ? ` (${args.concurrency} at a time)` : ''} =====`);
     const { haltedCritical } = await runner.runRebuild({
         rebuildQueue, collectionJsonPath: collectionInfo.collectionJsonPath,
         downloadsDir: args.downloads, stagingDir: args.staging, modEntries,
+        concurrency: args.concurrency,
         onModComplete: (entry) => {
             const mod = { name: entry.name };
             console.log(`${STATUS_LABEL[entry.status] || `[${entry.status}]`} ${mod.name}${entry.detail ? ` -- ${entry.detail}` : ''}`);

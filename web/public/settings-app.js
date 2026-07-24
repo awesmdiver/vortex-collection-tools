@@ -45,6 +45,7 @@ async function loadSettings() {
   $g('settingsBackupRootInput').value = cfg.backupRoot || '';
   $g('settingsStateInput').value = cfg.state || '';
   $g('settingsMaxBackupsInput').value = cfg.maxBackupsToKeep != null ? cfg.maxBackupsToKeep : '';
+  $g('settingsConcurrencyInput').value = cfg.concurrentExtractions || 1;
   $g('settingsNexusKeyStatus').textContent = cfg.hasNexusApiKey
     ? 'A key is already stored -- leave blank to keep it, or type a new one to replace it.'
     : 'No key stored yet.';
@@ -114,6 +115,7 @@ $g('settingsSaveBtn').addEventListener('click', async () => {
       backupRoot: $g('settingsBackupRootInput').value,
       state: $g('settingsStateInput').value,
       maxBackupsToKeep: $g('settingsMaxBackupsInput').value === '' ? null : Number($g('settingsMaxBackupsInput').value),
+      concurrentExtractions: Number($g('settingsConcurrencyInput').value) || 1,
     };
     const keyInput = $g('settingsNexusKeyInput').value;
     if (keyInput.trim()) body.nexusApiKey = keyInput;

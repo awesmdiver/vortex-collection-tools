@@ -406,6 +406,13 @@
     <input id="settingsMaxBackupsInput" class="input input--small" type="number" min="0" max="3" step="1" placeholder="unlimited">
   </div>
 
+  <h2 class="settings-section-title">Performance</h2>
+  <p class="muted">Rebuild Collection extracts mods one at a time by default. Raising this runs several extractions in parallel (each is its own independent process) -- faster for large collections, at the cost of more simultaneous disk/CPU use.</p>
+  <div class="field-group">
+    <label class="field-label" for="settingsConcurrencyInput">Concurrent extractions (1-8)</label>
+    <input id="settingsConcurrencyInput" class="input input--small" type="number" min="1" max="8" step="1">
+  </div>
+
   <h2 class="settings-section-title">NexusMods</h2>
   <p class="muted">To obtain your Nexus API key, go to <a href="https://www.nexusmods.com/settings/api-keys" target="_blank" rel="noopener">nexusmods.com/settings/api-keys</a> and scroll to the bottom of the page, under "Personal API Key".</p>
   <div class="field-group">
