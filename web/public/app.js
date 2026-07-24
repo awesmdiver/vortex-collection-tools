@@ -187,11 +187,12 @@ function setRevisionActionButtonsDisabled(disabled) {
   $('workshopViewNexusBtn').disabled = disabled;
 }
 
-function resetRevisionPicker(placeholderText) {
+function resetRevisionPicker(placeholderText, isError) {
   const revSelect = $('workshopRevSelect');
   revSelect.innerHTML = '';
   revSelect.appendChild(el('option', { value: '' }, placeholderText));
   revSelect.disabled = true;
+  revSelect.classList.toggle('select--error', !!isError);
   setRevisionActionButtonsDisabled(true);
   $('workshopRevHint').classList.add('hidden');
 }
@@ -239,6 +240,7 @@ async function lookupRevisions(slug) {
       setRevisionActionButtonsDisabled(false);
     }
     const hint = $('workshopRevHint');
+    hint.classList.remove('workshop-rev-hint--error'); // this is the informational (not-listed) case, never the error one
     if (data.collectionStatus && data.collectionStatus !== 'listed') {
       hint.textContent = `This collection is "${data.collectionStatus}" on Nexus (not publicly searchable) -- the revisions above are real and fetchable via your own account, but won't be visible to anyone else until you publish and list it.`;
       hint.classList.remove('hidden');
@@ -269,9 +271,10 @@ function onWorkshopSelectionChange() {
     // yet". Left as a bare, easy-to-miss disabled dropdown placeholder before ("Enter a collection
     // id first", the same text shown when the user manually clears the field themselves) -- this
     // is a genuinely different, more definitive state, worth a clear, visible explanation instead.
-    resetRevisionPicker('No Nexus id on record');
+    resetRevisionPicker('No Nexus id on record', true);
     const hint = $('workshopRevHint');
     hint.textContent = `"${w.name}" has no Nexus collection id recorded in Vortex -- it looks like this collection has never been published/uploaded to NexusMods. If it actually has been, you can type its collection id into the field above manually.`;
+    hint.classList.add('workshop-rev-hint--error');
     hint.classList.remove('hidden');
     return;
   }
