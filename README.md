@@ -94,6 +94,40 @@ real collection's full FOMOD-choice mod list is strong evidence a change is corr
 is either a bug to chase or (confirm via the mod's own recorded `choices`) a genuine cross-collection
 choice divergence that's *supposed* to surface as `FAILED_MISMATCH_NOT_TOUCHED`.
 
+## Vortex's Workshop-tab collection folders (`vortex_collection_<id>`)
+
+Every collection you've ever added to Vortex's **Workshop** tab (authoring/curating your own,
+whether ever published or not) gets its own folder under the staging directory, named with Vortex's
+raw internal id (`vortex_collection_<random>`), distinct from a real *installed* collection's
+archive-derived folder name (`<Name>-<modId>-<revision>-<timestamp>`). This project's collection
+picker treats the two completely differently (see the naming-convention checks in
+`scanStagingCollections`/`scanAllCollections`) — only archive-named folders are real, rebuildable
+collections; `vortex_collection_*` ones only ever show in the Workshop dropdown, regardless of
+what's on disk inside them.
+
+**The root `collection.json` in one of these folders cannot be trusted as "current state."**
+Confirmed directly (2026-07-24): editing a Workshop collection's mod list in Vortex's UI (adding or
+removing mods) does not touch the root `collection.json` at all — not its content, not even its
+mtime. The real, live edit state lives entirely in Vortex's own internal database the whole time.
+The root file only ever reflects whatever it was when first written (apparently once, early on) and
+then sits frozen — proven on a real collection where the root file (mtime unchanged since
+2025-12-29) listed 44 mods, but publishing a new revision immediately afterward produced a
+`collection.json` with 67 mods (19 removed, 42 added since whatever point the root file was last
+accurate) inside the freshly-written `export/collection_<N>.7z`.
+
+That `export/collection_<N>.7z` (one .7z per locally-packaged revision, e.g. `collection_0.7z`,
+`collection_2.7z`) is the one place a genuinely *current* local snapshot exists — written the moment
+you package/publish a revision from Vortex's Workshop editor, containing the real `collection.json`
+as of that exact action. If you need the actual current state of a Workshop collection without
+publishing first, the only reliable options are that latest `export/collection_<N>.7z`, or a live
+read of Vortex's own state DB (the collection's `rules` array reflects real-time edits, confirmed
+against "My Empowering The NPCs").
+
+This is also why this project's "Fetch from Nexus" feature (see **Update Collection** below and the
+Workshop picker) always downloads fresh from Nexus's own CDN rather than ever reading a local
+`export/*.7z` — nothing on disk in one of these folders can be assumed to match what's actually
+published, so there's no shortcut worth trusting over asking Nexus directly for a specific revision.
+
 ## Update Collection
 
 ```
