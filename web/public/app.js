@@ -104,13 +104,23 @@ async function api(method, path, body) {
 function showVortexBanner() { $('vortexBanner').classList.remove('hidden'); }
 function hideVortexBanner() { $('vortexBanner').classList.add('hidden'); }
 
+// Which action to re-run when "Retry" is clicked -- confirmed live this was hardcoded to always
+// re-run loadCollections(), regardless of what actually failed. A "vortex is running" error hit
+// while on the Plan view (e.g. after a Workshop fetch's auto-navigate-to-plan) left the view stuck
+// showing just its header (back button + title), and clicking Retry silently refreshed the
+// invisible collections-picker view instead of re-attempting the plan -- looked like Retry did
+// nothing at all. Defaults to loadCollections for the one call site (loadCollections' own error
+// handler) that doesn't set anything more specific.
+let pendingVortexRetry = loadCollections;
+
 $('vortexRetryBtn').addEventListener('click', () => {
   hideVortexBanner();
-  loadCollections();
+  pendingVortexRetry();
 });
 
-function handleApiError(e) {
+function handleApiError(e, retryFn) {
   if (e.status === 409 && e.body && e.body.error === 'vortex-running') {
+    pendingVortexRetry = retryFn || loadCollections;
     showVortexBanner();
     return true;
   }
@@ -427,7 +437,7 @@ $('openLogBtn').addEventListener('click', () => {
   if (filename) location.href = `/api/rebuild/logs/view/${encodeURIComponent(filename)}`;
 });
 
-$('refreshVortexDataBtn').addEventListener('click', async () => {
+async function refreshVortexData() {
   const btn = $('refreshVortexDataBtn');
   btn.disabled = true;
   const statusEl = $('vortexDataStatus');
@@ -439,7 +449,7 @@ $('refreshVortexDataBtn').addEventListener('click', async () => {
     hideVortexBanner();
   } catch (e) {
     btn.disabled = false;
-    if (!handleApiError(e)) showErrorModal(e.message, 'Could not load Vortex data');
+    if (!handleApiError(e, refreshVortexData)) showErrorModal(e.message, 'Could not load Vortex data');
     return;
   }
 
@@ -457,12 +467,13 @@ $('refreshVortexDataBtn').addEventListener('click', async () => {
       vortexDataEventSource = null;
       btn.disabled = false;
       if (frame.type === 'refresh-error') {
-        if (!handleApiError({ message: frame.message })) showErrorModal(frame.message, 'Could not load Vortex data');
+        if (!handleApiError({ message: frame.message }, refreshVortexData)) showErrorModal(frame.message, 'Could not load Vortex data');
       }
       loadCollections();
     }
   };
-});
+}
+$('refreshVortexDataBtn').addEventListener('click', refreshVortexData);
 
 document.querySelectorAll('[data-action="back-to-picker"]').forEach((b) => b.addEventListener('click', () => {
   showView('picker');
@@ -489,7 +500,7 @@ async function openPlan(collectionModId, name, resumeLogPath) {
     hideVortexBanner();
   } catch (e) {
     $('planLoading').classList.add('hidden');
-    if (!handleApiError(e)) showErrorModal(e.message, 'Could not load plan');
+    if (!handleApiError(e, () => openPlan(collectionModId, name, resumeLogPath))) showErrorModal(e.message, 'Could not load plan');
     return;
   }
 
@@ -606,14 +617,17 @@ for (const id of ['startRebuildBtn', 'startRebuildBtnTop']) {
 document.querySelector('[data-action="cancel-confirm"]').addEventListener('click', () => {
   $('confirmModal').classList.add('hidden');
 });
-document.querySelector('[data-action="confirm-run"]').addEventListener('click', async () => {
-  $('confirmModal').classList.add('hidden');
+async function startRebuildRun() {
   try {
     await api('POST', '/api/rebuild/runs', { collectionModId: state.collectionModId, resumeLogPath: state.resumeLogPath });
     startProgressView();
   } catch (e) {
-    if (!handleApiError(e)) showErrorModal(e.message, 'Could not start rebuild');
+    if (!handleApiError(e, startRebuildRun)) showErrorModal(e.message, 'Could not start rebuild');
   }
+}
+document.querySelector('[data-action="confirm-run"]').addEventListener('click', () => {
+  $('confirmModal').classList.add('hidden');
+  startRebuildRun();
 });
 
 // ---------- Live progress ----------
