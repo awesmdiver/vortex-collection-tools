@@ -21,6 +21,7 @@ const path = require('path');
 const runner = require('./lib/collection-runner');
 const { selectFromList, confirm, requireVortexClosed, closeInteractive } = require('./lib/interactive');
 const { findSevenZip } = require('./lib/sevenzip');
+const appConfig = require('./lib/app-config');
 
 let syncLib;
 try {
@@ -30,13 +31,18 @@ try {
     process.exit(2);
 }
 
+// No hardcoded personal-path defaults -- this project is meant to be shared. Falls back to the
+// unified config.json (set via the web UI's Settings page) instead; if still unset, main() below
+// errors clearly rather than silently operating against a wrong/nonexistent path.
+const fileConfig = appConfig.loadConfig();
+
 function parseArgs(argv) {
     const args = {
         collectionModId: null,
-        staging: 'E:/Vortex Mods/skyrimse',
-        downloads: 'F:/Vortex Downloads/skyrimse',
-        state: syncLib.DEFAULT_STATE_DIR,
-        backupRoot: 'F:/Mod Extraction/Vortex-Rebuild-Backups',
+        staging: fileConfig.staging || null,
+        downloads: fileConfig.downloads || null,
+        state: fileConfig.state || syncLib.DEFAULT_STATE_DIR,
+        backupRoot: fileConfig.backupRoot || null,
         dryRun: false,
         resume: null,
         yes: false,
@@ -109,6 +115,10 @@ const STATUS_LABEL = {
 
 async function main() {
     const args = parseArgs(process.argv.slice(2));
+    if (!args.staging || !args.downloads || !args.backupRoot) {
+        console.error('Staging/downloads/backup-root are not configured. Pass --staging/--downloads/--backup-root, or set them via the web UI\'s Settings page (writes config.json).');
+        process.exit(2);
+    }
     const interactive = !args.yes;
     const sevenZipExe = findSevenZip();
 

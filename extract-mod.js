@@ -27,11 +27,16 @@ const { parseModuleConfigFile, hasUnhandledFeatures } = require('./lib/fomod-par
 const { resolveChoices } = require('./lib/choice-resolver');
 const { findModRoot, hasFomodInstaller } = require('./lib/mod-root');
 const { resolveSimpleInstall } = require('./lib/simple-installer');
+const appConfig = require('./lib/app-config');
+
+const fileConfig = appConfig.loadConfig();
 
 function parseArgs(argv) {
     const args = {
+        // collection/output are dev-fixture convenience defaults for this internal prototype
+        // script, not real user-facing settings -- unlike downloads, left as-is.
         collection: 'F:/Mod Extraction/Daughter-of-Coldharbour-SDA-in-GTS-735477-30-1783874181/collection.json',
-        downloads: 'F:/Vortex Downloads/skyrimse',
+        downloads: fileConfig.downloads || null,
         output: 'F:/Mod Extraction/prototype-output',
         folderName: null, // override for the output subfolder name; default: derived from the archive's own filename
         modName: null,

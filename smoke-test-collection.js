@@ -18,13 +18,18 @@ const { loadCollection } = require('./lib/collection-parser');
 const { locateArchive } = require('./lib/archive-locator');
 const { buildManifest } = require('./lib/hash-manifest');
 const { diffManifests } = require('./lib/diff-manifests');
+const appConfig = require('./lib/app-config');
+
+const fileConfig = appConfig.loadConfig();
 
 function parseArgs(argv) {
     const args = {
+        // collection/output are dev-fixture convenience defaults for this internal smoke-test
+        // script, not real user-facing settings -- unlike downloads/staging, left as-is.
         collection: 'F:/Mod Extraction/Daughter-of-Coldharbour-SDA-in-GTS-735477-30-1783874181/collection.json',
-        downloads: 'F:/Vortex Downloads/skyrimse',
+        downloads: fileConfig.downloads || null,
         output: 'F:/Mod Extraction/prototype-output',
-        staging: 'E:/Vortex Mods/skyrimse',
+        staging: fileConfig.staging || null,
     };
     for (let i = 0; i < argv.length; i++) {
         if (argv[i] === '--collection') args.collection = argv[++i];

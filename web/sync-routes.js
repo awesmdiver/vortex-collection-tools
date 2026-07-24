@@ -26,6 +26,8 @@ function createSyncRouter(config) {
     }
 
     router.get('/collections', (req, res) => {
+        // No staging folder configured yet (fresh install) -- expected, not an error.
+        if (!staging) return res.json({ collections: [], configured: false });
         try {
             res.json({ collections: runner.listInstalledCollections(staging) });
         } catch (e) {
@@ -55,6 +57,7 @@ function createSyncRouter(config) {
     router.post('/backup', async (req, res) => {
         const { collectionModId, profileId } = req.body || {};
         if (!collectionModId) return res.status(400).json({ error: 'collectionModId is required.' });
+        if (!staging) return res.status(400).json({ error: 'not-configured', message: 'Staging folder is not configured yet -- open Settings to set it up.' });
         if (vortexRunningGate(res)) return;
         try {
             const snapshot = await runner.captureBackupSnapshot({ stateDir: state, stagingDir: staging, collectionModId, profileId });

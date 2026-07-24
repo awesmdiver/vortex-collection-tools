@@ -5,7 +5,7 @@
 // index.html; this only toggles which one is visible. app.js and sync-app.js each own their own
 // internal view-state exactly as before -- this file knows nothing about either.
 
-const TOOL_AREAS = ['rebuild', 'sync'];
+const TOOL_AREAS = ['rebuild', 'sync', 'settings'];
 
 function showToolArea(id) {
   for (const a of TOOL_AREAS) {

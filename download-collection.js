@@ -14,12 +14,13 @@
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
+const appConfig = require('./lib/app-config');
 
 function resolveApiKey() {
-    const keyFile = 'E:/SteamLibrary/steamapps/common/Skyrim Special Edition/tools/.nexus_api_key';
-    if (fs.existsSync(keyFile)) return fs.readFileSync(keyFile, 'utf8').trim();
+    const configured = appConfig.loadConfig().nexusApiKey;
+    if (configured) return configured;
     if (process.env.NEXUS_API_KEY) return process.env.NEXUS_API_KEY.trim();
-    throw new Error(`No Nexus API key found (checked "${keyFile}" and $NEXUS_API_KEY).`);
+    throw new Error('No Nexus API key configured -- enter one on the Settings page (or set $NEXUS_API_KEY).');
 }
 
 function httpsRequest(url, options, body) {

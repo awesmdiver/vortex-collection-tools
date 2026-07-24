@@ -2,12 +2,14 @@ node_modules/
 logs/
 reports/
 
-# Personal data — mod lists, staging paths, and full state.v2 snapshots.
+# Personal data — mod lists, staging paths, full state.v2 snapshots, and the Nexus API key.
 # lib/vortex-sync/state-backups/ in particular can contain Vortex's stored
 # Nexus API tokens (under the "confidential" state namespace) — never commit or share this.
+# config.json (project root) is the single unified settings file (see lib/app-config.js) —
+# config.example.json is the committed, placeholder-only template for it.
+config.json
 lib/vortex-sync/backups/
 lib/vortex-sync/state-backups/
-lib/vortex-sync/config.json
 
 # OS
 Thumbs.db

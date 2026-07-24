@@ -12,14 +12,17 @@
 const fs = require('fs');
 const path = require('path');
 const runner = require('./lib/collection-runner');
+const appConfig = require('./lib/app-config');
+
+const fileConfig = appConfig.loadConfig();
 
 function parseArgs(argv) {
     const args = {
         collectionModId: null,
         output: null,
-        staging: 'E:/Vortex Mods/skyrimse',
-        downloads: 'F:/Vortex Downloads/skyrimse',
-        state: null,
+        staging: fileConfig.staging || null,
+        downloads: fileConfig.downloads || null,
+        state: fileConfig.state || null,
     };
     for (let i = 0; i < argv.length; i++) {
         if (argv[i] === '--collection-mod-id') args.collectionModId = argv[++i];
