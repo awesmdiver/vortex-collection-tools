@@ -112,6 +112,30 @@
       "lastVerifiedDate": "2026-07-02T06:59:29Z",
       "derivedInto": "lib/state-query-worker.js (scanAllCollections / ruleIdentityKeys)",
       "whatWeDerived": "testRef()'s real matching precedence: a tag MISMATCH is not immediately fatal if a stricter identifying marker (fileMD5, then repo.modId+repo.fileId) is present -- it falls through instead of refusing. Directly explains a real, confirmed-live finding: the identical file had a DIFFERENT rule.reference.tag value in each of 3 collections referencing it (tag is a deterministic-but-PER-COLLECTION value, not a stable cross-collection identity key -- see deterministicReferenceTag.ts, not separately pinned here). ruleIdentityKeys() deliberately matches by fileMD5 then repo.modId+fileId only, never tag, mirroring this real precedence rather than the naive assumption that a matching tag would be reliable."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "extensions/gamebryo-plugin-management/src/statics.ts",
+      "lastVerifiedCommit": "6c1ce01da65dbd7af238095a1ea6ca864323494b",
+      "lastVerifiedDate": "2026-02-02T10:30:52Z",
+      "derivedInto": "lib/ghost-files.js",
+      "whatWeDerived": "confirms GHOST_EXT = '.ghost' is a real, Vortex-defined constant (gamebryo-plugin-management extension) -- the mechanism is specifically plugin (ESP/ESM/ESL) ghosting, not a generic deployment feature for arbitrary file types. Added AFTER the fix already shipped (the original fix was based on real observed on-disk behavior, not a source read) -- backfilled per this project's own standing practice of verifying against real Vortex source before/after implementing logic that mirrors it."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "extensions/gamebryo-plugin-management/src/util/toPluginId.ts",
+      "lastVerifiedCommit": "193bf67f0e183f2674978af1c8fa8b0c5b25d0cd",
+      "lastVerifiedDate": "2026-05-06T09:38:21Z",
+      "derivedInto": "lib/ghost-files.js",
+      "whatWeDerived": "toPluginId(fileName) = path.basename(fileName.toLowerCase(), GHOST_EXT) -- Vortex's own real logic for recovering a ghosted file's base identity: lowercase, then strip the literal '.ghost' suffix. Confirms stripGhostPairs()'s case-insensitive suffix-matching approach (match a '.ghost'-suffixed name in current staging against its stripped counterpart in the fresh archive extraction) is the same normalization Vortex itself uses, not an invented convention."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/collections/util/transformCollection.ts",
+      "lastVerifiedCommit": "a6ea65456dabb7df64651a4bc70f029cf2739bff",
+      "lastVerifiedDate": "2026-06-23T13:00:30Z",
+      "derivedInto": "lib/vortex-sync/lib.js (scanStagingCollections), lib/state-query-worker.js (scanAllCollections)",
+      "whatWeDerived": "makeCollectionId(baseId) = 'vortex_collection_' + baseId -- confirms the 'vortex_collection_<id>' staging-folder naming convention this project uses to distinguish a Workshop-tab-only collection (never installed, or the Workshop copy only) from a real archive-installed one is Vortex's OWN real naming function, not an inferred/guessed pattern. Backfilled after the fact (the distinction was originally confirmed via live real-install observation, not a source read) per this project's standing practice of verifying against real Vortex source."
     }
   ]
 }

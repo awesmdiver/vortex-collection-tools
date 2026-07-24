@@ -25,14 +25,48 @@ npm install
 npm run web
 ```
 
-Opens `http://127.0.0.1:4321` with a top-level nav for both tool areas. Terminal CLI access is also
-available (see below) for either flow without the web UI.
+Opens `http://127.0.0.1:4321` with a top-level nav for both tool areas plus **Settings**. Terminal
+CLI access is also available (see below) for either flow without the web UI.
+
+## Settings & configuration
+
+Every path (staging/downloads/backup-root/Vortex database) and the Nexus API key live in a single
+unified `config.json` (project root, gitignored — see `lib/app-config.js`; `config.example.json` is
+the committed, placeholder-only template). **No personal path or credential is hardcoded anywhere in
+source** — this project is meant to be shared, so a fresh clone has nothing machine-specific baked
+in. Resolution order everywhere (both the web UI and every CLI script): explicit CLI flag wins, then
+`config.json`, then (Vortex database path only) auto-detected under `%APPDATA%`.
+
+The Settings page (web UI) edits this file directly:
+- **Paths** — staging/downloads/backup-root/Vortex-database, each with a native folder-browse button
+  (`lib/vortex-sync/win-dialog.js`'s `pickFolderAsync`, a `FolderBrowserDialog` via `spawn` — async,
+  so an open dialog never freezes the server). Path changes need a server restart; Save offers to do
+  this for you automatically (spawns a fresh server process with the same launch args, tears the old
+  one down once the response has flushed, then the page polls until the new one answers and reloads)
+  rather than requiring you to do it manually.
+- **Backups** — a single "backups to keep" number: `0` = off (no backup made at all, the default for
+  a fresh install — explicit opt-in, not an assumed safety net), `1`-`3` = back up every real run and
+  prune down to the N most recent afterward, blank = back up every run and never prune (unlimited).
+  A backup is always a fresh, timestamped, full copy of every affected mod's current staging folder
+  — never overwritten, so there's never a "stale leftover files" problem to manage.
+- **Performance** — "Concurrent extractions" (1-8 in the UI). See **Concurrent extraction** below.
+- **NexusMods** — the personal API key (masked; the page never echoes a stored key back, only
+  whether one exists). Stored as **plain text** in `config.json` — gitignored, so it never leaves
+  this machine via git, but not encrypted at rest; anyone with access to this Windows account could
+  read it directly from disk.
+- **Appearance** — System/Dark/Light theme, defaulting to System (follows the OS/browser's
+  `prefers-color-scheme` until explicitly overridden), persisted in the browser's `localStorage`
+  only (a pure display preference, not written to `config.json`).
+
+A brand-new install with nothing configured yet lands on Settings automatically, once, with a
+welcome banner — never again once staging/downloads are saved.
 
 ## Rebuild Collection
 
 ```
 node rebuild-collection.js [--collection-mod-id <id>] [--staging <dir>] [--downloads <dir>]
-  [--state <path>] [--backup-root <dir>] [--dry-run] [--resume <log-file>] [--yes]
+  [--state <path>] [--backup-root <dir>] [--concurrency <1-8>] [--dry-run]
+  [--resume <log-file>] [--yes]
 ```
 
 Always run `--dry-run` first. See `lib/collection-runner.js`, `lib/rebuild-mod.js`, and the
@@ -56,6 +90,60 @@ rebuild run that touched it. **Verified content is genuinely unchanged in this s
 what a clean `REBUILT` status already guarantees — a rebuild only swaps in when its own missing/
 changed diff came back clean) — safe to click **"Use newer file"** / **"Save all changes"** and
 deploy in Vortex.
+
+## Concurrent extraction
+
+`lib/collection-runner.js`'s `runRebuild()` extracts mods in parallel via a small hand-rolled worker
+pool (`concurrentExtractions` in Settings/`config.json`, 1-8, default 1/sequential — no restart
+needed to change it, read fresh at the start of every run). This is safe because each mod's rebuild
+already only spawns its own independent `extract-mod.js` child process and touches only that mod's
+own uniquely-named paths — see the header comment on `runRebuild()` for the full reasoning (no shared
+state, no real data race even though Node's event loop still serializes the bookkeeping).
+
+**Confirmed real-world findings** (A/B-tested against a real 309-mod collection, "Body Swap
+updated", via the sandbox technique below):
+- Correctness is identical at every concurrency level (1, 3, 8, 16 all tested) — same exact
+  REBUILT/SKIP_* counts every time. Concurrency only changes speed, never outcome.
+- Real speedup is well short of the theoretical linear ceiling (8x for concurrency 8) — extraction is
+  disk-I/O-bound as much as CPU-bound, so parallel 7-Zip processes end up competing for the same
+  disk's I/O queue rather than getting independent lanes of work. Observed **~2-3x** at concurrency 8
+  depending on drive layout, not 8x.
+- **Drive choice measurably changes the result.** Staging and downloads on the SAME physical drive
+  vs. two SEPARATE drives produced different speedups in real testing — always test (and expect real
+  throughput from) whatever drive layout you actually run with; don't assume a number from one drive
+  configuration applies to another.
+- Going past 8 (tested 16 directly, bypassing the Settings page's UI cap) produced **zero further
+  speedup** on the hardware/collection tested — 8 already sat at the real saturation point. There's
+  no hard cap in `runRebuild()` itself, only in the Settings page's own input validation; raise
+  `config.json`'s `concurrentExtractions` directly past 8 if you want to test your own ceiling.
+- **Task Manager may show fewer simultaneous `7z.exe` processes than the concurrency setting** — this
+  is expected, not a sign concurrency isn't working. Each mod's own pipeline alternates short 7-Zip
+  invocations (list, an optional single-file FOMOD-config peek-extract, the real bulk extract) with
+  pure-JS work in between (XML parsing/choice resolution, and SHA256-hashing every extracted file
+  afterward to build the manifest) — at any snapshot, several "in-flight" mods are very likely
+  sitting in one of those JS-only gaps rather than mid-extraction, so the live process count
+  structurally undercounts the real concurrency happening underneath.
+
+## Sandbox-testing a rebuild without touching real staging
+
+`node sandbox-test-rebuild.js --collection-mod-id <id> --sandbox <dir> [--port 4322]
+[--concurrency <n>] [--keep-server]` — smoke-tests a REAL rebuild (real archives, real 7-Zip work)
+against a THROWAWAY staging folder, so you can safely test concurrency levels, or anything else,
+against a large real collection without any risk to your actual staged mods. Spawns a completely
+separate server instance on its own port with `--staging` pointed at the sandbox; `--downloads`/
+`--state` stay pointed at your real ones (read-only in this flow, safe to share).
+
+`--sandbox` is required with no default — deliberately forces a conscious choice of drive every
+time (see the drive-choice finding above), and the script refuses outright if it resolves to your
+real configured staging directory. `--concurrency`, if given, temporarily overwrites `config.json`'s
+shared `concurrentExtractions` for the duration of the one run and always restores the original
+value afterward, even on error.
+
+The sandbox only ever contains a copy of the target collection's own `collection.json` — no per-mod
+folders — so every mod takes the fast "staging folder doesn't exist yet" path (still a full, real
+extraction) rather than the separate, already-independently-tested diff-against-existing-content
+logic. That's why this is a smoke test for the extraction pipeline/concurrency specifically, not a
+substitute for running the collection for real once you're ready to actually update your staging.
 
 ## Known FOMOD authoring quirks (confirmed real-world)
 
@@ -205,6 +293,10 @@ framework-agnostic orchestration shared by the CLI, terminal menu, and web UI.
   collection's rebuild history (status per mod, "last extracted" timestamps, missing/changed file
   diffs), and it's just plain JSON on disk, as deletable as any other file here. Include it in
   whatever backup routine already covers the rest of your Skyrim/Vortex setup.
+- **`config.json` (project root) is gitignored and holds your Nexus API key in plain text** — never
+  encrypted at rest, only kept out of git. Same threat model as most local single-user dev tools;
+  see **Settings & configuration** above. Include it in your own backup routine if you don't want to
+  re-enter everything after a fresh machine/reformat.
 
 ## Future work
 
@@ -218,29 +310,53 @@ this project creates a brand-new mod entry from scratch. This needs its own rese
 Vortex's real installer source, the way `vortex-source-refs.json`/`check-vortex-source-drift.js`
 already do for the extraction side) before any design is attempted.
 
+Other open items, not yet started:
+- **Multi-profile validation**: both tools should operate on/show data from whichever Vortex profile
+  is currently ENABLED when more than one profile exists, not blend across profiles. Update
+  Collection is already explicitly profile-aware (`profileId` is a first-class concept throughout
+  its own code); Rebuild Collection's side looks murkier (`state-query-worker.js`'s
+  `buildModVersionIndex` collects every profile a mod is enabled in, with no apparent "current
+  profile" scoping). Can't be fully tested yet — needs a second real Vortex profile to validate
+  against.
+- **Cross-collection FOMOD-choice divergence**: currently always refuses
+  (`FAILED_MISMATCH_NOT_TOUCHED`) when two collections recorded genuinely different install choices
+  for a shared mod. Wants a "last collection wins" option with an explicit warning/confirm step
+  (never silent), possibly a dedicated page listing every mod currently blocked this way with a
+  manual per-mod "extract anyway" button. Not designed yet.
+- **`sync-cli.js`/`sync-menu.js` refactor** to call `lib/sync-runner.js` (they still call
+  `lib/vortex-sync/lib.js` directly) — pure cleanup, functionally unaffected, low priority.
+- Backup-before-rebuild deliberately stayed sequential when extraction went concurrent (see
+  **Concurrent extraction** above) — revisit only if it's ever an actual bottleneck; it's off by
+  default already.
+
 ## Project structure
 
 ```
 Vortex-Collection-Tools/
+├── config.json (gitignored), config.example.json      — single unified settings file, see lib/app-config.js
 ├── rebuild-collection.js, extract-mod.js, compare-output.js, smoke-test-collection.js,
-│   snapshot-collection-staging.js, download-collection.js, check-vortex-source-drift.js
+│   snapshot-collection-staging.js, download-collection.js, check-vortex-source-drift.js,
+│   sandbox-test-rebuild.js                              — safe A/B concurrency testing, see README section above
 ├── sync-cli.js, sync-menu.js
 ├── vortex-source-refs.json
 ├── lib/
+│   ├── app-config.js                                     — the unified config.json reader/writer
 │   ├── collection-parser.js, archive-locator.js, fomod-parser.js, choice-resolver.js,
 │   │   mod-root.js, simple-installer.js, sevenzip.js       — Rebuild Collection's extraction engine
-│   ├── rebuild-mod.js, collection-runner.js                — Rebuild Collection orchestration
+│   ├── rebuild-mod.js, collection-runner.js                — Rebuild Collection orchestration (incl. the
+│   │                                                          concurrent-extraction worker pool)
+│   ├── ghost-files.js                                      — Vortex ".ghost" (disabled file) handling
 │   ├── state-query-worker.js, state-write-worker.js         — isolated child-process DB access
 │   ├── sync-runner.js                                       — Update Collection orchestration
 │   ├── hash-manifest.js, diff-manifests.js, diff-manifests-ci.js, esp-flag-diff.js — comparison utils
 │   ├── vortex-drift-check.js, nexus-collection-download.js
 │   └── vortex-sync/                                          — Update Collection's engine
-│       ├── lib.js, report.js, win-dialog.js
-│       ├── config.json (gitignored), config.example.json
+│       ├── lib.js, report.js, win-dialog.js (incl. the async pickFolderAsync used by Settings' Browse buttons)
 │       ├── backups/ (gitignored), state-backups/ (gitignored)
 ├── web/
-│   ├── server.js, rebuild-routes.js, sync-routes.js, run-state.js, sync-run-state.js, sse-session.js
-│   └── public/ (index.html, app.js, sync-app.js, shell.js, styles.css)
+│   ├── server.js, rebuild-routes.js, sync-routes.js, settings-routes.js,
+│   │   run-state.js, sync-run-state.js, sse-session.js
+│   └── public/ (index.html, app.js, sync-app.js, settings-app.js, shell.js, styles.css)
 ├── logs/ (gitignored)      — Rebuild Collection run logs
 └── reports/ (gitignored)   — Update Collection HTML reports
 ```
