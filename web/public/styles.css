@@ -137,6 +137,8 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   border-radius: 8px;
   border: 1px solid transparent;
   cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
 }
 .btn:active { transform: translateY(1px); }
@@ -199,6 +201,9 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    fix -- the width increase is. */
 .select--small { flex: none; width: 460px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .select:disabled { opacity: 0.55; cursor: not-allowed; }
+/* Error state: e.g. the Workshop revision dropdown when no Nexus id is on record at all --
+   the plain 0.55-opacity disabled look was too easy to miss, per live user report. */
+.select--error, .select--error:disabled { color: var(--danger); border-color: var(--danger); opacity: 0.85; }
 .loading-row, .empty-row {
   display: flex;
   align-items: center;
@@ -305,6 +310,9 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .field-group { display: flex; flex-direction: column; gap: 5px; }
 .field-label { font-size: 12px; color: var(--text-muted); }
 .workshop-rev-hint { font-size: 12.5px; margin-top: 10px; }
+/* Distinct from the informational (draft/unlisted) use of this same element -- applied only for
+   the "never published to Nexus" case, and explicitly removed elsewhere so it never lingers. */
+.workshop-rev-hint--error { color: var(--danger); }
 
 /* Plan / progress table */
 .plan-table-wrap {
