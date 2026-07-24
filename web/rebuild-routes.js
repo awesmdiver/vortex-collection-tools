@@ -148,13 +148,14 @@ function createRouter(config) {
         const destDir = path.join(staging, folder);
         try {
             const result = await nexusDownload.fetchAndExtractCollectionJson({ slug: slug.trim(), revisionNumber: revNum, destDir, sevenZipExe });
-            // Drop it from the cached Workshop-only list immediately -- that cache is only ever
-            // refreshed by a full /vortex-data/refresh, so without this a just-fetched collection
-            // (now a real, scannable staging folder) would keep showing up in the Workshop-only
-            // dropdown until the user manually reloads Vortex data, even though /collections
-            // already lists it correctly via scanStagingCollections' own fresh filesystem read.
+            // Previously removed this collection from the cached Workshop-only list here, on the
+            // assumption a fetched collection.json makes it "a real, scannable staging folder" the
+            // main list should handle instead. Confirmed wrong (2026-07-24): fetching a
+            // collection.json for a Workshop draft doesn't make it a real installed collection --
+            // scanStagingCollections (vortex-sync/lib.js) now excludes this folder-naming
+            // convention from the main list unconditionally, so it stays exactly where it belongs,
+            // in the Workshop-only list, whether or not a collection.json is cached here.
             const collectionModId = folder.trim();
-            workshopOnlyCollections = workshopOnlyCollections.filter((w) => w.folder !== collectionModId);
             // Also populate THIS one collection's Vortex-sync-state cache right away -- confirmed
             // live this was otherwise confusing: the collection appears correctly in the main
             // picker immediately (a plain filesystem scan), but with no "✓ Vortex data cached"
@@ -235,7 +236,12 @@ function createRouter(config) {
                 const { results, workshopOnlyCollections: found } = await runner.loadSyncStateBatch({ state, entries, stagingDir: staging });
                 for (const [modId, result] of results) syncStateCache.set(modId, result);
                 vortexDataLoadedAt = new Date().toISOString();
-                workshopOnlyCollections = found;
+                // Same enrichment the main list gets (see GET /collections above) -- lost when a
+                // Workshop entry stopped being (mis)routed through the main list's own rendering.
+                // A Workshop-tab modId can genuinely have a real rebuild log (nothing stops running
+                // Rebuild Collection against one directly, e.g. while testing), so this isn't
+                // hypothetical.
+                workshopOnlyCollections = found.map((w) => ({ ...w, lastExtracted: findLastExtracted(w.modId) }));
                 const failed = [...results.entries()].filter(([, r]) => !r.ok).map(([modId, r]) => ({ modId, error: r.error }));
                 emitIfCurrent({ type: 'refresh-complete', done: true, loadedCount: results.size, failed, loadedAt: vortexDataLoadedAt });
             } catch (e) {
