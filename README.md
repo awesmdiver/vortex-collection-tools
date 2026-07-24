@@ -137,6 +137,10 @@ framework-agnostic orchestration shared by the CLI, terminal menu, and web UI.
   `.installing` convention) so an interruption never leaves a half-extracted mod in place.
 - Expect Vortex's own "External Changes" prompt after a real rebuild, for every `REBUILT` mod —
   this is expected, not a sign of corruption. See the note under **Rebuild Collection** above.
+- **`logs/` is not backed up by anything in this project** — it's the *only* record of a
+  collection's rebuild history (status per mod, "last extracted" timestamps, missing/changed file
+  diffs), and it's just plain JSON on disk, as deletable as any other file here. Include it in
+  whatever backup routine already covers the rest of your Skyrim/Vortex setup.
 
 ## Future work
 
