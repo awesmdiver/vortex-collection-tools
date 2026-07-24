@@ -239,7 +239,7 @@ $s('syncDisablesApplyBtn').addEventListener('click', async () => {
 $s('syncCompareBtn').addEventListener('click', () => {
   const backup = currentSyncBackup();
   const collectionPath = $s('syncCompareCollectionInput').value.trim();
-  if (!backup || !collectionPath) { alert('Choose a backup and enter the new collection.json path first.'); return; }
+  if (!backup || !collectionPath) { showErrorModal('Choose a backup and enter the new collection.json path first.'); return; }
   const url = `/api/sync/compare/report?backupPath=${encodeURIComponent(backup.filePath)}&collectionPath=${encodeURIComponent(collectionPath)}`;
   window.open(url, '_blank');
 });

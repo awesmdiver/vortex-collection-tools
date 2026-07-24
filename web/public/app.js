@@ -68,6 +68,21 @@ function showView(name) {
   for (const v of document.querySelectorAll('.view')) v.classList.add('hidden');
   $(`view-${name}`).classList.remove('hidden');
 }
+
+// Replaces the native alert() for error messages -- confirmed live this was hard to read for a
+// real, genuinely long error (the native-LevelDB-crash explanation, several sentences with its own
+// suggested recovery steps): alert()'s box is small, unstyled, and gives no control over sizing.
+function showErrorModal(message, title) {
+  $('errorModalTitle').textContent = title || 'Error';
+  $('errorModalText').textContent = message;
+  $('errorModal').classList.remove('hidden');
+}
+document.querySelector('[data-action="close-error-modal"]').addEventListener('click', () => {
+  $('errorModal').classList.add('hidden');
+});
+$('errorModal').addEventListener('click', (e) => {
+  if (e.target.id === 'errorModal') $('errorModal').classList.add('hidden');
+});
 async function api(method, path, body) {
   const res = await fetch(path, {
     method,
@@ -354,7 +369,7 @@ $('viewNexusBtn').addEventListener('click', async () => {
   const c = collectionsById.get(modId);
   if (!c) return;
   if (!c.collectionSlug) {
-    alert('This collection\'s Nexus id isn\'t known yet -- click "Load Vortex Data" first.');
+    showErrorModal('This collection\'s Nexus id isn\'t known yet -- click "Load Vortex Data" first.');
     return;
   }
   const btn = $('viewNexusBtn');
@@ -369,7 +384,7 @@ $('viewNexusBtn').addEventListener('click', async () => {
     const latest = data.revisions[0];
     if (tab && latest) tab.location.href = nexusCollectionUrl(c.collectionSlug, latest.revisionNumber);
   } catch (e) {
-    alert(`Could not look up this collection's revisions on Nexus: ${e.message}`);
+    showErrorModal(`Could not look up this collection's revisions on Nexus: ${e.message}`);
   } finally {
     btn.disabled = false;
   }
@@ -424,7 +439,7 @@ $('refreshVortexDataBtn').addEventListener('click', async () => {
     hideVortexBanner();
   } catch (e) {
     btn.disabled = false;
-    if (!handleApiError(e)) alert(`Could not load Vortex data: ${e.message}`);
+    if (!handleApiError(e)) showErrorModal(e.message, 'Could not load Vortex data');
     return;
   }
 
@@ -442,7 +457,7 @@ $('refreshVortexDataBtn').addEventListener('click', async () => {
       vortexDataEventSource = null;
       btn.disabled = false;
       if (frame.type === 'refresh-error') {
-        if (!handleApiError({ message: frame.message })) alert(`Could not load Vortex data: ${frame.message}`);
+        if (!handleApiError({ message: frame.message })) showErrorModal(frame.message, 'Could not load Vortex data');
       }
       loadCollections();
     }
@@ -474,7 +489,7 @@ async function openPlan(collectionModId, name, resumeLogPath) {
     hideVortexBanner();
   } catch (e) {
     $('planLoading').classList.add('hidden');
-    if (!handleApiError(e)) alert(`Could not load plan: ${e.message}`);
+    if (!handleApiError(e)) showErrorModal(e.message, 'Could not load plan');
     return;
   }
 
@@ -507,7 +522,7 @@ function handlePlanEvent(frame) {
     case 'plan-error':
       if (planEventSource) { planEventSource.close(); planEventSource = null; }
       $('planLoading').classList.add('hidden');
-      alert(`Could not load plan: ${frame.message}`);
+      showErrorModal(frame.message, 'Could not load plan');
       break;
   }
 }
@@ -597,7 +612,7 @@ document.querySelector('[data-action="confirm-run"]').addEventListener('click', 
     await api('POST', '/api/rebuild/runs', { collectionModId: state.collectionModId, resumeLogPath: state.resumeLogPath });
     startProgressView();
   } catch (e) {
-    if (!handleApiError(e)) alert(`Could not start rebuild: ${e.message}`);
+    if (!handleApiError(e)) showErrorModal(e.message, 'Could not start rebuild');
   }
 });
 
@@ -684,7 +699,7 @@ function handleRunEvent(frame) {
       finishProgressView(frame);
       break;
     case 'run-error':
-      alert(`Run error: ${frame.message}`);
+      showErrorModal(frame.message, 'Run error');
       showView('picker');
       break;
   }
