@@ -546,14 +546,17 @@ function createRouter(config) {
             if (m.eslPreserved?.length) rest += `<div class="file-list">Marked as Light, left unchanged: ${m.eslPreserved.map(esc).join(', ')}</div>`;
             if (m.otherVersionsNote) rest += `<div class="file-list">A different version of this exact mod IS installed: ${esc(m.otherVersionsNote)}</div>`;
             const detail = topBlock ? `${topBlock}<div class="detail-group">${rest}</div>` : rest;
-            // "All" (full replace) / "Keep Existing" (additive merge, never overwrites anything
-            // staging already has) -- see rebuild-mod.js's resolveMode header comment. Only offered
-            // for FAILED_MISMATCH_NOT_TOUCHED rows with enough info recorded to re-locate the mod
-            // (older logs predating targetFolderName being saved can't support this).
+            // "Extract all" (full replace) / "Keep modified" (additive merge, never overwrites
+            // anything staging already has) -- see rebuild-mod.js's resolveMode header comment.
+            // Only offered for FAILED_MISMATCH_NOT_TOUCHED rows with enough info recorded to
+            // re-locate the mod (older logs predating targetFolderName being saved can't support
+            // this).
             const canResolve = m.status === 'FAILED_MISMATCH_NOT_TOUCHED' && m.modId != null && m.fileId != null && m.targetFolderName;
             const extractionCell = canResolve
-                ? `<button class="btn btn--ghost btn--small resolve-mismatch-btn" data-modid="${esc(m.modId)}" data-fileid="${esc(m.fileId)}" data-mode="all">All</button> `
-                    + `<button class="btn btn--ghost btn--small resolve-mismatch-btn" data-modid="${esc(m.modId)}" data-fileid="${esc(m.fileId)}" data-mode="keep-existing">Keep Existing</button>`
+                ? `<div class="extraction-actions">`
+                    + `<button class="btn btn--primary btn--small resolve-mismatch-btn" data-modid="${esc(m.modId)}" data-fileid="${esc(m.fileId)}" data-mode="all">Extract all</button>`
+                    + `<button class="btn btn--primary btn--small resolve-mismatch-btn" data-modid="${esc(m.modId)}" data-fileid="${esc(m.fileId)}" data-mode="keep-existing">Keep modified</button>`
+                    + `</div>`
                 : '';
             return `<tr data-status="${esc(m.status)}"><td>${modNameCell(m.name)}</td><td><span class="status-pill status-pill--${m.status.toLowerCase()}">${esc(m.status)}</span></td><td class="detail-cell">${detail}</td><td class="extraction-cell">${extractionCell}</td></tr>`;
         };
@@ -615,7 +618,7 @@ document.getElementById('logTableBody').addEventListener('click', async (e) => {
   } catch (err) {
     alert('Failed: ' + err.message);
     row.querySelectorAll('.resolve-mismatch-btn').forEach((b) => { b.disabled = false; });
-    btn.textContent = resolveMode === 'all' ? 'All' : 'Keep Existing';
+    btn.textContent = resolveMode === 'all' ? 'Extract all' : 'Keep modified';
   }
 });
 document.getElementById('statusBadges').addEventListener('click', (e) => {
@@ -636,7 +639,7 @@ document.getElementById('statusBadges').addEventListener('click', (e) => {
     });
 
     // Manually resolves one mod that already came back FAILED_MISMATCH_NOT_TOUCHED in this exact
-    // log, via the "Extraction" column's "All"/"Keep Existing" buttons on the log-view page above.
+    // log, via the "Extraction" column's "Extract all"/"Keep modified" buttons on the log-view page.
     // Deliberately does NOT check isVortexRunning() -- resolveMismatchedMod never touches Vortex's
     // state database (same as the rest of Rebuild Collection), only the staging filesystem, so this
     // is safe to run with Vortex open. Updates the log FILE itself in place afterward so re-viewing

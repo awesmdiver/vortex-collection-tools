@@ -335,6 +335,8 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .mod-name--truncated { cursor: pointer; border-bottom: 1px dotted var(--text-muted); }
 .mod-name--truncated:hover { color: var(--accent); border-bottom-color: var(--accent); }
 .plan-table tbody tr:last-child td { border-bottom: none; }
+.extraction-cell { vertical-align: middle; }
+.extraction-actions { display: flex; flex-direction: column; gap: 8px; }
 .plan-table tbody tr:hover { background: var(--surface-2); }
 .status-pill {
   display: inline-block;
