@@ -922,8 +922,11 @@ function updateProgressRow(name, status, detail) {
 function handleRunEvent(frame) {
   switch (frame.type) {
     case 'phase':
-      if (frame.phase === 'backing-up' && frame.skipped) setPhase('Skipping backup (disabled in Settings)…');
-      else if (PHASE_TEXT[frame.phase]) setPhase(PHASE_TEXT[frame.phase]);
+      if (frame.phase === 'backing-up' && frame.skipped) {
+        setPhase(frame.skippedReason === 'not-configured'
+          ? 'Skipping backup (no backup folder configured in Settings)…'
+          : 'Skipping backup (disabled in Settings)…');
+      } else if (PHASE_TEXT[frame.phase]) setPhase(PHASE_TEXT[frame.phase]);
       break;
     case 'sync-state-progress':
       setPhase(`Reading Vortex state — step ${frame.step} of ${frame.total}: ${frame.label}`);
@@ -956,13 +959,24 @@ function handleRunEvent(frame) {
       // live phase indicator alone to be noticed before it's overwritten by "Rebuilding mods…".
       $('backupNotice').classList.remove('hidden');
       const revealBtn = $('revealProgressBackupBtn');
+      const noticeTextEl = $('backupNoticeText');
       if (frame.skipped) {
-        $('backupNoticeText').textContent = 'Skipped (disabled in Settings)';
+        // "not-configured" is a real misconfiguration worth noticing (backups are turned ON in
+        // Settings, but there's nowhere to put them) -- styled distinctly from the plain, expected
+        // "disabled" case so it doesn't read as "working as intended".
+        if (frame.skippedReason === 'not-configured') {
+          noticeTextEl.textContent = 'Skipped -- backups are turned on, but no backup folder is configured. Open Settings to fix this.';
+          noticeTextEl.classList.add('path-row__value--warning');
+        } else {
+          noticeTextEl.textContent = 'Skipped (disabled in Settings)';
+          noticeTextEl.classList.remove('path-row__value--warning');
+        }
         revealBtn.classList.add('hidden');
       } else {
+        noticeTextEl.classList.remove('path-row__value--warning');
         // No location in the text -- the Reveal button already covers that.
         const seconds = frame.durationMs != null ? (frame.durationMs / 1000).toFixed(1) : '?';
-        $('backupNoticeText').textContent = `${frame.backedUpCount} mod(s) backed up in ${seconds} second(s).`;
+        noticeTextEl.textContent = `${frame.backedUpCount} mod(s) backed up in ${seconds} second(s).`;
         revealBtn.dataset.path = frame.backupRunDir;
         revealBtn.classList.remove('hidden');
       }

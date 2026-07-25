@@ -29,7 +29,13 @@ function listBackupRunDirs(backupRoot) {
     return entries.filter((e) => e.isDirectory() && BACKUP_RUN_DIR_PATTERN.test(e.name)).map((e) => e.name);
 }
 
-const PATH_FIELDS = ['staging', 'downloads', 'backupRoot', 'state'];
+const PATH_FIELDS = ['staging', 'downloads', 'backupRoot', 'syncBackupRoot', 'state'];
+// No sensible blank/default state for these three -- Rebuild Collection can't scan a collection
+// without staging/downloads, and Update Collection can't save a backup without somewhere real
+// (not "wherever this project happens to think is a good place") to put it. backupRoot/state are
+// deliberately NOT required: backupRoot only matters if maxBackupsToKeep is turned on (0 = off,
+// the default), and state auto-detects a real default under %APPDATA%.
+const REQUIRED_PATH_FIELDS = ['staging', 'downloads', 'syncBackupRoot'];
 // Server bind settings -- like the paths above, these are only read once at process startup
 // (web/server.js), so changing any of them needs the same restart-required treatment.
 const SERVER_FIELDS = ['serverPort', 'serverHost', 'autoOpenBrowser'];
@@ -94,6 +100,15 @@ function createSettingsRouter() {
         }
         if ('forceExtractOffSiteMismatches' in body) {
             patch.forceExtractOffSiteMismatches = !!body.forceExtractOffSiteMismatches;
+        }
+
+        // Server-side backstop for the required fields -- the Settings page itself already blocks
+        // Save client-side, but this defends against a corrupt/manually-edited config.json (or any
+        // future non-web caller) ending up with one of these blank via this same endpoint.
+        const merged = { ...before, ...patch };
+        const missing = REQUIRED_PATH_FIELDS.filter((k) => !merged[k]);
+        if (missing.length > 0) {
+            return res.status(400).json({ error: 'missing-required', missing, message: `Required setting(s) missing: ${missing.join(', ')}.` });
         }
 
         const restartRequired = [...PATH_FIELDS, ...SERVER_FIELDS].some((k) => k in patch && patch[k] !== before[k]);

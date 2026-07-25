@@ -266,27 +266,54 @@
     <p class="muted">Keeps mods you've marked Ignored/Disabled in an installed collection ignored/disabled across a Vortex-driven update. Vortex itself still performs the actual mod installation -- this only brackets that step in Vortex's own state database.</p>
   </div>
 
+  <div id="syncBackupRootMissingBanner" class="callout callout--warning hidden">
+    A backups folder for Update Collection isn't configured yet -- <a href="/?area=settings">open Settings</a> to set one up before creating a backup.
+  </div>
+
   <div class="collection-picker">
-    <select id="syncCollectionSelect" class="select"></select>
-    <select id="syncProfileSelect" class="select select--small">
-      <option value="">(no profile -- skip disabled-mod tracking)</option>
+    <select id="syncProfileSelect" class="select select--small"></select>
+    <select id="syncCollectionSelect" class="select">
+      <option value="">-- Select Collection --</option>
     </select>
   </div>
   <div id="syncCollectionEmpty" class="empty-row hidden"></div>
 
+  <div class="view-actions">
+    <button id="syncListModsBtn" class="btn btn--ghost" disabled>List Ignored/Disabled</button>
+  </div>
+
   <div class="sync-phase">
     <div class="sync-phase__header">
       <span class="sync-phase__num">1</span>
-      <h2>Backup</h2>
+      <h2>Backup/Restore</h2>
       <span class="muted">Run BEFORE clicking Update in Vortex.</span>
     </div>
     <p>Snapshots which mods are currently ignored/disabled for the selected collection.</p>
     <div class="view-actions">
-      <button id="syncBackupBtn" class="btn btn--primary">Create Backup</button>
+      <button id="syncBackupBtn" class="btn btn--primary" disabled>Create Backup</button>
+      <button id="syncRestoreBackupBtn" class="btn btn--ghost" disabled>Restore Backup</button>
       <span id="syncBackupStatus" class="muted"></span>
     </div>
-    <div id="syncBackupNextSteps" class="callout callout--warning hidden">
-      <div class="callout__title">Next steps in Vortex</div>
+    <!-- Same triangle-alert icon this app already uses for warnings -- confirmed against Vortex's
+         own real source that error/critical severity there uses the identical shape, just red
+         instead of amber, not a different icon. Rare case: the collection was updated to a newer
+         revision (a new Vortex-tracked mod id) since this page was last loaded, so the id this page
+         still has in memory no longer exists anywhere -- reloading is the only real fix, since
+         everything else on this page (the collection picker, the backup list) needs to be re-read
+         fresh too, not just this one id patched in place. -->
+    <div id="syncCollectionStaleError" class="callout callout--critical hidden">
+      <div class="callout__title">&#9888; Collection out of date</div>
+      <p>The version of the collection you are attempting to create a backup for is no longer available. You will need to refresh this collection.</p>
+      <div class="view-actions">
+        <button id="syncCollectionStaleRetryBtn" class="btn btn--ghost">Retry</button>
+      </div>
+    </div>
+    <!-- Filled in dynamically by showCriticalCallout() in sync-app.js when a step fails for real
+         (e.g. the crash/can't-read-write-Vortex's-database error). -->
+    <div id="syncBackupCriticalError" class="callout callout--critical hidden"></div>
+    <!-- Informational, not warning -- these are plain next-steps to follow, nothing is wrong. -->
+    <div id="syncBackupNextSteps" class="callout callout--info hidden">
+      <div class="callout__title">&#9432; Next steps in Vortex</div>
       <ol>
         <li>Click <strong>Update</strong> on this collection.</li>
         <li>When prompted, click <strong>Download Update</strong>.</li>
@@ -298,13 +325,6 @@
   </div>
 
   <div class="sync-phase">
-    <div class="field-group">
-      <label class="field-label" for="syncBackupSelect">Backup to use for steps 2&ndash;4</label>
-      <select id="syncBackupSelect" class="select"></select>
-    </div>
-  </div>
-
-  <div class="sync-phase">
     <div class="sync-phase__header">
       <span class="sync-phase__num">2</span>
       <h2>Apply Ignores</h2>
@@ -312,17 +332,22 @@
     </div>
     <p>Marks the backed-up ignored mods as ignored in the <em>new</em> collection's rules, so Vortex's installer skips them &mdash; this is the only step that actually prevents Vortex from installing a mod.</p>
     <div class="field-group">
-      <label class="field-label" for="syncNewModIdInput">New collection's Vortex mod id</label>
+      <label class="field-label" for="syncNewModIdInput">New collection's Vortex collection id</label>
       <input id="syncNewModIdInput" class="input" type="text" placeholder="e.g. My-Collection-123456-2-...">
+      <span class="muted">Pre-filled with the collection you selected above. If Vortex assigned a different id since
+        (e.g. the collection was updated to a newer revision), clear this field and Preview will pull the current
+        one automatically -- or type a specific id yourself and it's used exactly as entered.</span>
     </div>
     <div class="view-actions">
-      <button id="syncIgnoresPreviewBtn" class="btn btn--ghost">Preview (dry run)</button>
+      <button id="syncIgnoresPreviewBtn" class="btn btn--ghost">Preview</button>
       <button id="syncIgnoresApplyBtn" class="btn btn--primary" disabled>Apply</button>
-      <span id="syncIgnoresStatus" class="muted"></span>
+      <span id="syncIgnoresStatus" class="muted">Run Preview first to see what would change and enable Apply.</span>
     </div>
     <ul id="syncIgnoresList" class="sync-result-list"></ul>
-    <div id="syncResumeNextSteps" class="callout callout--warning hidden">
-      <div class="callout__title">Next step in Vortex</div>
+    <div id="syncIgnoresCriticalError" class="callout callout--critical hidden"></div>
+    <!-- Informational, not warning -- same reasoning as syncBackupNextSteps above. -->
+    <div id="syncResumeNextSteps" class="callout callout--info hidden">
+      <div class="callout__title">&#9432; Next step in Vortex</div>
       <p>Reopen Vortex and click <strong>Resume</strong> on the collection. This is the slow step (Vortex's own archive extraction) &mdash; not controlled by this tool. Once it finishes, close Vortex completely and continue to step 3 below.</p>
     </div>
   </div>
@@ -335,11 +360,12 @@
     </div>
     <p>Restores the disabled state on mods that should stay disabled, now that Vortex has assigned them real mod ids. Uses the profile recorded in the backup itself.</p>
     <div class="view-actions">
-      <button id="syncDisablesPreviewBtn" class="btn btn--ghost">Preview (dry run)</button>
+      <button id="syncDisablesPreviewBtn" class="btn btn--ghost">Preview</button>
       <button id="syncDisablesApplyBtn" class="btn btn--primary" disabled>Apply</button>
-      <span id="syncDisablesStatus" class="muted"></span>
+      <span id="syncDisablesStatus" class="muted">Run Preview first to see what would change and enable Apply.</span>
     </div>
     <ul id="syncDisablesList" class="sync-result-list"></ul>
+    <div id="syncDisablesCriticalError" class="callout callout--critical hidden"></div>
   </div>
 
   <div class="sync-phase">
@@ -357,6 +383,18 @@
     </div>
   </div>
 </main>
+
+<div id="syncRestoreBackupModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Restore Backup</h2>
+    <p>Select the backup to restore:</p>
+    <select id="syncRestoreBackupSelect" class="select"></select>
+    <div class="modal-actions">
+      <button id="syncRestoreBackupCancelBtn" class="btn btn--ghost">Cancel</button>
+      <button id="syncRestoreBackupConfirmBtn" class="btn btn--primary">Restore</button>
+    </div>
+  </div>
+</div>
 
 </section>
 
@@ -388,24 +426,31 @@
   <h2 class="settings-section-title">Paths</h2>
   <p class="muted">Path changes will require the server restart. These tools read these once when the server is started. You'll be offered an automatic restart when you save the settings.</p>
   <div class="field-group">
-    <label class="field-label" for="settingsStagingInput">Vortex staging folder</label>
+    <label class="field-label" for="settingsStagingInput">Vortex staging folder <span class="field-required">(required)</span></label>
     <div class="path-input-row">
       <input id="settingsStagingInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse">
       <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsStagingInput">Browse&hellip;</button>
     </div>
   </div>
   <div class="field-group">
-    <label class="field-label" for="settingsDownloadsInput">Vortex downloads folder</label>
+    <label class="field-label" for="settingsDownloadsInput">Vortex downloads folder <span class="field-required">(required)</span></label>
     <div class="path-input-row">
       <input id="settingsDownloadsInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Downloads\skyrimse">
       <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsDownloadsInput">Browse&hellip;</button>
     </div>
   </div>
   <div class="field-group">
-    <label class="field-label" for="settingsBackupRootInput">Backup root folder</label>
+    <label class="field-label" for="settingsBackupRootInput">Backup root folder <span class="muted">(Rebuild Collection -- optional, only needed if backups are turned on below)</span></label>
     <div class="path-input-row">
       <input id="settingsBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Mod Extraction\Vortex-Rebuild-Backups">
       <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsBackupRootInput">Browse&hellip;</button>
+    </div>
+  </div>
+  <div class="field-group">
+    <label class="field-label" for="settingsSyncBackupRootInput">Backups folder <span class="muted">(Update Collection)</span> <span class="field-required">(required)</span></label>
+    <div class="path-input-row">
+      <input id="settingsSyncBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\collection-sync">
+      <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsSyncBackupRootInput">Browse&hellip;</button>
     </div>
   </div>
   <div class="field-group">

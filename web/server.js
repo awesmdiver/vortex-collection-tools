@@ -39,6 +39,7 @@ function parseArgs(argv) {
         downloads: null,
         state: null,
         backupRoot: null,
+        syncBackupRoot: null,
         open: null,
     };
     for (let i = 0; i < argv.length; i++) {
@@ -48,6 +49,7 @@ function parseArgs(argv) {
         else if (argv[i] === '--downloads') args.downloads = argv[++i];
         else if (argv[i] === '--state') args.state = argv[++i];
         else if (argv[i] === '--backup-root') args.backupRoot = argv[++i];
+        else if (argv[i] === '--sync-backup-root') args.syncBackupRoot = argv[++i];
         else if (argv[i] === '--no-open') args.open = false;
         else { console.error(`Unknown argument: ${argv[i]}`); process.exit(2); }
     }
@@ -75,6 +77,7 @@ function main() {
         staging: cliArgs.staging || fileConfig.staging || null,
         downloads: cliArgs.downloads || fileConfig.downloads || null,
         backupRoot: cliArgs.backupRoot || fileConfig.backupRoot || null,
+        syncBackupRoot: cliArgs.syncBackupRoot || fileConfig.syncBackupRoot || null,
         state: cliArgs.state || fileConfig.state || syncLib.DEFAULT_STATE_DIR,
         // maxBackupsToKeep is NOT included here deliberately -- unlike the paths above, it's read
         // fresh from config.json at the moment each rebuild run actually needs it (see

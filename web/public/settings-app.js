@@ -10,6 +10,16 @@ function $g(id) { return document.getElementById(id); }
 // guard" section below for how this is tracked and used.
 let settingsDirty = false;
 
+// Fields with no valid blank state -- Rebuild Collection can't scan a collection without
+// staging/downloads, and Update Collection can't save a backup without somewhere real to put it.
+// backupRoot/state are deliberately excluded: backupRoot only matters if backups are turned on
+// (off by default), and state auto-detects a real default.
+const REQUIRED_FIELDS = [
+  { key: 'staging', inputId: 'settingsStagingInput', label: 'Vortex staging folder' },
+  { key: 'downloads', inputId: 'settingsDownloadsInput', label: 'Vortex downloads folder' },
+  { key: 'syncBackupRoot', inputId: 'settingsSyncBackupRootInput', label: 'Backups folder (Update Collection)' },
+];
+
 async function settingsApi(method, path, body) {
   const res = await fetch(path, {
     method,
@@ -48,6 +58,7 @@ async function loadSettings() {
   $g('settingsStagingInput').value = cfg.staging || '';
   $g('settingsDownloadsInput').value = cfg.downloads || '';
   $g('settingsBackupRootInput').value = cfg.backupRoot || '';
+  $g('settingsSyncBackupRootInput').value = cfg.syncBackupRoot || '';
   $g('settingsStateInput').value = cfg.state || '';
   $g('settingsMaxBackupsInput').value = cfg.maxBackupsToKeep != null ? cfg.maxBackupsToKeep : '';
   $g('settingsConcurrencyInput').value = cfg.concurrentExtractions || 1;
@@ -61,6 +72,7 @@ async function loadSettings() {
     : 'No key stored yet.';
   settingsDirty = false;
 }
+
 loadSettings().catch((e) => {
   $g('settingsSaveStatus').textContent = `Could not load settings: ${e.message}`;
 });
@@ -129,6 +141,15 @@ async function restartServerAndWait(newOrigin) {
 async function saveSettings() {
   const btn = $g('settingsSaveBtn');
   const statusEl = $g('settingsSaveStatus');
+  // Checked BEFORE anything is disabled/sent -- a required field left blank is a mistake worth
+  // catching immediately (no round trip needed), same intent as the server-side backstop in
+  // web/settings-routes.js (which exists for a corrupt/manually-edited config.json, not the normal
+  // path through this form).
+  const missing = REQUIRED_FIELDS.filter((f) => $g(f.inputId).value.trim() === '');
+  if (missing.length > 0) {
+    statusEl.textContent = `Required setting(s) missing: ${missing.map((f) => f.label).join(', ')}.`;
+    return;
+  }
   btn.disabled = true;
   statusEl.textContent = 'Saving…';
   try {
@@ -136,6 +157,7 @@ async function saveSettings() {
       staging: $g('settingsStagingInput').value,
       downloads: $g('settingsDownloadsInput').value,
       backupRoot: $g('settingsBackupRootInput').value,
+      syncBackupRoot: $g('settingsSyncBackupRootInput').value,
       state: $g('settingsStateInput').value,
       maxBackupsToKeep: $g('settingsMaxBackupsInput').value === '' ? null : Number($g('settingsMaxBackupsInput').value),
       concurrentExtractions: Number($g('settingsConcurrencyInput').value) || 1,
