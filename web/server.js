@@ -13,8 +13,8 @@
 // unset after that, the server boots anyway -- every route that needs them handles the unconfigured
 // case explicitly instead of crashing (see rebuild-routes.js/sync-routes.js's own comments).
 //
-// Usage: node web/server.js [--port N] [--staging <dir>] [--downloads <dir>] [--state <path>]
-//   [--backup-root <dir>] [--no-open]
+// Usage: node web/server.js [--port N] [--host <ip>] [--staging <dir>] [--downloads <dir>]
+//   [--state <path>] [--backup-root <dir>] [--no-open]
 
 const path = require('path');
 const express = require('express');
@@ -23,20 +23,27 @@ const { spawn } = require('child_process');
 const { createRouter } = require('./rebuild-routes');
 const { createSyncRouter } = require('./sync-routes');
 const { createSettingsRouter } = require('./settings-routes');
+const { createStatsRouter } = require('./stats-routes');
+const { createWorkThroughRouter } = require('./work-through-routes');
 const { loadSyncLib } = require('../lib/collection-runner');
 const appConfig = require('../lib/app-config');
 
 function parseArgs(argv) {
     const args = {
-        port: 4321,
+        // port/host/open default to null/undefined here (not their real defaults) so main() can
+        // tell "not passed on the CLI" apart from "passed" and fall back to config.json, same
+        // resolution order as the path fields below (CLI flag > config.json > built-in default).
+        port: null,
+        host: null,
         staging: null,
         downloads: null,
         state: null,
         backupRoot: null,
-        open: true,
+        open: null,
     };
     for (let i = 0; i < argv.length; i++) {
         if (argv[i] === '--port') args.port = Number(argv[++i]);
+        else if (argv[i] === '--host') args.host = argv[++i];
         else if (argv[i] === '--staging') args.staging = argv[++i];
         else if (argv[i] === '--downloads') args.downloads = argv[++i];
         else if (argv[i] === '--state') args.state = argv[++i];
@@ -60,8 +67,11 @@ function main() {
 
     const fileConfig = appConfig.loadConfig();
     const config = {
-        port: cliArgs.port,
-        open: cliArgs.open,
+        port: cliArgs.port || fileConfig.serverPort || 4321,
+        host: cliArgs.host || fileConfig.serverHost || '127.0.0.1',
+        // --no-open always wins (sandbox-test-rebuild.js relies on this to force it off
+        // regardless of the user's own autoOpenBrowser preference); otherwise fall back to config.
+        open: cliArgs.open === false ? false : fileConfig.autoOpenBrowser !== false,
         staging: cliArgs.staging || fileConfig.staging || null,
         downloads: cliArgs.downloads || fileConfig.downloads || null,
         backupRoot: cliArgs.backupRoot || fileConfig.backupRoot || null,
@@ -77,6 +87,8 @@ function main() {
     app.use('/api/rebuild', createRouter(config));
     app.use('/api/sync', createSyncRouter(config));
     app.use('/api/settings', createSettingsRouter());
+    app.use('/api/stats', createStatsRouter());
+    app.use('/api/work-through', createWorkThroughRouter());
 
     // Settings page's "Restart Now" button -- spawns a fresh, fully independent instance of this
     // same server (same args this one was launched with, forcing --no-open since a browser tab is
@@ -107,9 +119,13 @@ function main() {
         }, 150);
     });
 
-    server = app.listen(config.port, '127.0.0.1', () => {
-        const url = `http://127.0.0.1:${config.port}`;
-        console.log(`Vortex Collection Tools running at ${url}`);
+    server = app.listen(config.port, config.host, () => {
+        // A browser can't navigate to 0.0.0.0 -- that only means "all interfaces" as a bind
+        // address. Always open/print a real loopback URL for local browsing; the bind-address line
+        // below is what actually tells the user whether the network can reach it too.
+        const isLoopback = config.host === '127.0.0.1' || config.host === 'localhost';
+        const browseUrl = `http://${isLoopback ? config.host : '127.0.0.1'}:${config.port}`;
+        console.log(`Vortex Collection Tools running at ${browseUrl}`);
         if (config.staging && config.downloads) {
             console.log(`Staging: ${config.staging}`);
             console.log(`Downloads: ${config.downloads}`);
@@ -117,9 +133,13 @@ function main() {
         } else {
             console.log('Staging/downloads not configured yet -- open Settings in the web UI to set them up.');
         }
-        console.log('(bound to 127.0.0.1 only -- not reachable from the network)');
+        if (isLoopback) {
+            console.log(`(bound to ${config.host} only -- not reachable from the network)`);
+        } else {
+            console.log(`(bound to ${config.host} -- REACHABLE FROM THE NETWORK. This server has no authentication; anyone who can reach it has full control of your mod files.)`);
+        }
         if (config.open) {
-            spawn('cmd.exe', ['/c', 'start', '', url], { stdio: 'ignore', detached: true }).unref();
+            spawn('cmd.exe', ['/c', 'start', '', browseUrl], { stdio: 'ignore', detached: true }).unref();
         }
     });
 

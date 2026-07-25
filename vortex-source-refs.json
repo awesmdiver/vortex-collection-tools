@@ -136,6 +136,30 @@
       "lastVerifiedDate": "2026-06-23T13:00:30Z",
       "derivedInto": "lib/vortex-sync/lib.js (scanStagingCollections), lib/state-query-worker.js (scanAllCollections)",
       "whatWeDerived": "makeCollectionId(baseId) = 'vortex_collection_' + baseId -- confirms the 'vortex_collection_<id>' staging-folder naming convention this project uses to distinguish a Workshop-tab-only collection (never installed, or the Workshop copy only) from a real archive-installed one is Vortex's OWN real naming function, not an inferred/guessed pattern. Backfilled after the fact (the distinction was originally confirmed via live real-install observation, not a source read) per this project's standing practice of verifying against real Vortex source."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/health_check/utils/modRequirements/onDownloadRequirement.ts",
+      "lastVerifiedCommit": "abebc145b4ac89549de6659bf68799eb7fb17899",
+      "lastVerifiedDate": "2026-07-02T10:53:40Z",
+      "derivedInto": "lib/nexus-mod-download.js",
+      "whatWeDerived": "Vortex's own real 'download this exact modId+fileId from Nexus' trigger: build an nxm://<domain>/mods/<modId>/files/<fileId> URL and emit a 'start-download' event. Confirms the modId+fileId (not a search/guess) is the correct identity to resolve a specific file against, matching what this project's downloadModArchive() does via the direct REST call instead of the nxm:// protocol indirection (this project has no OS-level protocol handler to route through -- it calls the same underlying API endpoint directly)."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/nexus_integration/eventHandlers.ts",
+      "lastVerifiedCommit": "b8ef79b034f3c5e3ba523849635bed3b5655d717",
+      "lastVerifiedDate": "2026-07-23T12:12:07Z",
+      "derivedInto": "lib/nexus-mod-download.js",
+      "whatWeDerived": "downloadFile()'s own explicit Premium-only gate for direct/automated downloads: 'nexusmods can't let users download files directly from client, without showing ads' -- a non-Premium account is refused client-side, by design, to protect Nexus's ad-supported revenue model for free users. This project's checkPremiumStatus() + upfront Premium check before any download attempt mirrors this exact policy rather than working around it -- a non-Premium account gets the same refusal Vortex's own client would give, with no attempt to route around Nexus's ad model."
+    },
+    {
+      "repo": "Nexus-Mods/node-nexus-api",
+      "path": "src/Nexus.ts",
+      "lastVerifiedCommit": "d2856eccdc852f6b7eb36ac7288f9446b3bc66e5",
+      "lastVerifiedDate": "2026-07-23T07:59:24Z",
+      "derivedInto": "lib/nexus-mod-download.js",
+      "whatWeDerived": "getDownloadURLs()'s real endpoint shape: GET /v1/games/{gameId}/mods/{modId}/files/{fileId}/download_link.json, no key/expires needed for Premium accounts (those are only for the free-user nxm-link-click flow this project does not implement). Response is an array of {URI,...} (or a single object) -- resolveDownloadLink() handles both shapes, matching this library's own res.download_links ?? [res.download_link] fallback."
     }
   ]
 }

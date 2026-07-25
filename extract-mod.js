@@ -13,9 +13,13 @@
 // Exit codes: 0 = extracted successfully. 1 = the mod's FOMOD uses a feature this prototype
 // doesn't parse yet (a top-level always-installed <files> block outside <installSteps>) --
 // refuses to produce a silently-incomplete extraction rather than guessing. 2 = any other
-// failure (mod not found, archive not locatable, etc). 3 = "Open FOMOD" -- collection.json has no
+// failure (mod not found, 7z error, FOMOD parsing, etc). 3 = "Open FOMOD" -- collection.json has no
 // recorded choices, and the archive genuinely has a FOMOD wizard with no deterministic default to
-// replay; needs manual reinstall through Vortex.
+// replay; needs manual reinstall through Vortex. 4 = archive not locatable specifically (NOT_FOUND/
+// HASH_MISMATCH from locateArchive(), and only when --archive-path wasn't given -- an explicit
+// override that's since gone missing surfaces as a real "the file you pointed at is gone" case, not
+// this one) -- its own code so rebuild-mod.js's caller can distinguish "genuinely no archive"
+// (offer Retry Download/Import, same as SKIP_NO_ARCHIVE) from a real extraction-tool failure.
 
 const fs = require('fs');
 const path = require('path');
@@ -40,6 +44,7 @@ function parseArgs(argv) {
         output: 'F:/Mod Extraction/prototype-output',
         folderName: null, // override for the output subfolder name; default: derived from the archive's own filename
         modName: null,
+        archivePath: null, // override -- skip locateArchive() entirely and use this exact file
     };
     const rest = [];
     for (let i = 0; i < argv.length; i++) {
@@ -47,6 +52,7 @@ function parseArgs(argv) {
         else if (argv[i] === '--downloads') args.downloads = argv[++i];
         else if (argv[i] === '--output') args.output = argv[++i];
         else if (argv[i] === '--folder-name') args.folderName = argv[++i];
+        else if (argv[i] === '--archive-path') args.archivePath = argv[++i];
         else rest.push(argv[i]);
     }
     args.modName = rest[0];
@@ -90,7 +96,29 @@ async function main() {
     const mod = findMod(collection, args.modName);
     console.log(`Mod: ${mod.name} (modId ${mod.source.modId})`);
 
-    const archivePath = await locateArchive(args.downloads, mod.source);
+    // --archive-path (set by rebuild-mod.js's runExtract(), passed action.archivePath -- the SAME
+    // archive classifyMod() already resolved in the parent process, whether via a normal exact
+    // size/md5 match, an auto-detected same-size "Force Extract Anyway" candidate, or an explicit
+    // "Import" association) always wins over re-resolving here. Confirmed live this was a real bug:
+    // re-running locateArchive() against collection.json's exact recorded size/md5 re-fails for
+    // BOTH the force-extract and import cases -- their whole point is accepting a file that does
+    // NOT match that exact recording -- so a mod that classifyMod() correctly resolved to REBUILD
+    // was hitting "No archive of size X found" here anyway, from a completely redundant re-lookup.
+    let archivePath;
+    if (args.archivePath) {
+        // The override itself can go stale (file deleted/moved after classifyMod() resolved it,
+        // between planning and this actual extraction attempt) -- given the SAME NOT_FOUND shape
+        // as a natural locateArchive() miss so it's handled identically downstream (exit code 4,
+        // friendly message, Retry Download/Import offered again on the log/Work Through Report).
+        if (!fs.existsSync(args.archivePath)) {
+            const err = new Error(`No archive file found at "${args.archivePath}" (was recorded, but is no longer there).`);
+            err.code = 'NOT_FOUND';
+            throw err;
+        }
+        archivePath = args.archivePath;
+    } else {
+        archivePath = await locateArchive(args.downloads, mod.source);
+    }
     console.log(`Archive: ${archivePath}`);
 
     // Vortex assigns a mod's staging folder name once, at first install, and never renames it on
@@ -184,6 +212,27 @@ async function main() {
 }
 
 main().catch((e) => {
-    console.error(`ERROR: ${e.message}`);
-    process.exit(2);
+    // locateArchive()'s own NOT_FOUND/HASH_MISMATCH messages (and the override-gone-stale one just
+    // above) embed the raw recorded fileSize and downloads path -- meaningful for debugging this
+    // script directly, but this was flowing straight through into the log's user-facing detail text
+    // verbatim (stderr -> extractErrorDetail() in rebuild-mod.js, unchanged). Simplified here, at
+    // the source, rather than trying to pattern-match the string back out of it later once it's
+    // just plain stderr text with no .code anymore. Anything else (7z errors, FOMOD parsing, etc.)
+    // keeps its own real message unchanged. Exit code 4 (distinct from the generic 2) is what lets
+    // rebuild-mod.js's caller tell "genuinely no archive" apart from a real extraction-tool failure,
+    // so it can offer the same Retry Download/Import recovery SKIP_NO_ARCHIVE already gets.
+    const archiveMissing = e.code === 'NOT_FOUND' || e.code === 'HASH_MISMATCH';
+    // EPERM/EBUSY on a file copy (Node's own fs error codes, not locateArchive()'s) is Windows
+    // reporting the file as in use -- confirmed real-world this session (a freshly-extracted .ini
+    // file, almost certainly antivirus/indexer briefly holding a handle). Genuinely transient in
+    // practice, not a real corruption/permissions problem, so this points straight at the fix
+    // (Retry Extraction) instead of a raw scratch-path-to-.rebuilding-path copyfile error.
+    const transientLock = e.code === 'EPERM' || e.code === 'EBUSY';
+    const friendly = archiveMissing
+        ? 'No archive found.'
+        : transientLock
+        ? 'A file was locked by another program during extraction (likely antivirus or a file indexer briefly scanning it) -- this is usually temporary. Try Retry Extraction.'
+        : e.message;
+    console.error(`ERROR: ${friendly}`);
+    process.exit(archiveMissing ? 4 : 2);
 });

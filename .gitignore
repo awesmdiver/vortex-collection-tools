@@ -7,7 +7,13 @@ reports/
 # Nexus API tokens (under the "confidential" state namespace) — never commit or share this.
 # config.json (project root) is the single unified settings file (see lib/app-config.js) —
 # config.example.json is the committed, placeholder-only template for it.
+# work-through-state.json tracks manually-completed problem mods (Work Through Report) — also
+# personal, local-progress data (see lib/work-through-state.js).
+# offsite-import-map.json tracks manually-imported off-site archive associations (see
+# lib/offsite-import-map.js) — also personal, local filenames.
 config.json
+work-through-state.json
+offsite-import-map.json
 lib/vortex-sync/backups/
 lib/vortex-sync/state-backups/
 

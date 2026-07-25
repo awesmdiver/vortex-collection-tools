@@ -1,5 +1,11 @@
 # Vortex Collection Tools
 
+> ⚠️ **Update Collection is not stable yet.** It's still being actively reviewed and improved, and
+> hasn't had the same testing as Rebuild Collection. Please stick to **Rebuild Collection** for now
+> — that's the part we'd love your help testing. If you want to poke at Update Collection anyway,
+> back up your Vortex state first (the tool does this automatically, but a second, independent
+> backup never hurts) and expect rough edges.
+
 A local toolkit for managing Vortex-installed Skyrim SE collections, with a shared web UI
 (`node web/server.js`, binds `127.0.0.1` only) covering two related but distinct jobs:
 
@@ -28,6 +34,21 @@ npm run web
 Opens `http://127.0.0.1:4321` with a top-level nav for both tool areas plus **Settings**. Terminal
 CLI access is also available (see below) for either flow without the web UI.
 
+## Getting a release without installing anything
+
+If you just want to try this out (in particular, testing **Rebuild Collection** — see the warning
+at the top of this page about Update Collection), grab the zip from the
+[Releases page](../../releases) instead of cloning this repo. It comes with everything bundled —
+its own copy of Node.js and 7-Zip — so there's nothing else to install:
+
+1. Download the zip from the latest release and unzip it anywhere.
+2. Double-click `start-server.bat`.
+3. Your browser opens to the app automatically. First time through, it'll ask you to set your
+   staging/downloads folders under **Settings** — do that once and you're set.
+
+No Node.js, no 7-Zip, no `npm install`, no command line. When you're done, just close the console
+window that opened alongside it (that's the server; closing it stops the app).
+
 ## Settings & configuration
 
 Every path (staging/downloads/backup-root/Vortex database) and the Nexus API key live in a single
@@ -53,7 +74,8 @@ The Settings page (web UI) edits this file directly:
 - **NexusMods** — the personal API key (masked; the page never echoes a stored key back, only
   whether one exists). Stored as **plain text** in `config.json` — gitignored, so it never leaves
   this machine via git, but not encrypted at rest; anyone with access to this Windows account could
-  read it directly from disk.
+  read it directly from disk. Also has "Download missing archives automatically during rebuild"
+  (Premium accounts only — see **Downloading missing archives automatically** below).
 - **Appearance** — System/Dark/Light theme, defaulting to System (follows the OS/browser's
   `prefers-color-scheme` until explicitly overridden), persisted in the browser's `localStorage`
   only (a pure display preference, not written to `config.json`).
@@ -123,6 +145,70 @@ updated", via the sandbox technique below):
   afterward to build the manifest) — at any snapshot, several "in-flight" mods are very likely
   sitting in one of those JS-only gaps rather than mid-extraction, so the live process count
   structurally undercounts the real concurrency happening underneath.
+
+## Downloading missing archives automatically
+
+Rebuild Collection can auto-download a mod's archive from Nexus when it's missing from your
+downloads folder, instead of just skipping it (`SKIP_NO_ARCHIVE`). Opt-in via Settings →
+"Download missing archives automatically during rebuild" (`downloadMissingArchives` in
+`config.json`, default `false`, read fresh per-run — no restart needed).
+
+**Requires a Nexus Premium account.** This deliberately mirrors Vortex's own real behavior, not an
+invented shortcut — see `vortex-source-refs.json` for the exact source citations. Vortex's own
+`nexus_integration/eventHandlers.ts` refuses direct/automated downloads for non-Premium accounts
+client-side, by design: *"nexusmods can't let users download files directly from client, without
+showing ads"* — this respects Nexus's ad-supported revenue model for free users. This project
+checks Premium status once per run (`GET /v1/users/validate.json`) before attempting anything; a
+non-Premium account gets the exact same refusal Vortex's own client would give, logged clearly, with
+no attempt at a workaround. A free account must download the archive manually via the website and
+let Vortex install it.
+
+The actual download resolves the collection.json-pinned `modId`+`fileId` via
+`GET /v1/games/{domain}/mods/{modId}/files/{fileId}/download_link.json` (the same real endpoint
+Vortex's own `node-nexus-api` calls) — never "latest"/"main file", so a mod with multiple file
+versions on Nexus still gets the *exact* version the collection recorded. Every download is
+verified against collection.json's own recorded `md5`/`fileSize` **before** being accepted (a
+mismatch deletes the partial file and reports a clean `HASH_MISMATCH`/`SIZE_MISMATCH` failure,
+never leaves a wrong file at a name a later run could mistake for the real thing).
+
+**Two different "we don't have the archive" cases are treated identically** (same friendly Plan-page
+message, same auto-download eligibility): a true "nothing this size in the downloads folder at all"
+(`NOT_FOUND`), and a "something this exact size exists, but it's the wrong file" coincidence
+(`HASH_MISMATCH`) — confirmed real-world with a 441-byte mod (`archive-locator.js` matches candidates
+by file size first, then verifies by md5; a completely unrelated archive happened to be exactly the
+same size and showed up as a "candidate" that had nothing to do with the mod in question). Only a
+genuine **`AMBIGUOUS`** case (multiple candidates that are ALL byte-identical, real, correct matches —
+an actual duplicate-file situation) is excluded and keeps its technical detail — downloading again
+wouldn't resolve a duplicate, only add a third correct copy, so that one still needs a human.
+
+**Off-site mods (not hosted on Nexus) are never auto-downloaded** — real collections can reference
+`browse`/`direct`/`bundle`-type sources (Google Drive links, GitHub release assets, LoversLab, a
+bundled asset shipped inside the collection's own package) which structurally carry no `modId`/
+`fileId` to call the Nexus API with. These get their own Plan/log message instead: the recorded URL
+for manual download, or *"This file is an off-site mod and no URL available."* if the collection
+didn't record one either.
+
+Any download failure (mod taken down, the pinned file version since removed by its author, network
+error) is caught per-mod — one failure never stops the rest — and listed in the run's log under
+`downloadedArchives.entries`, with the real Nexus API error message (not a raw JSON blob).
+
+**Verify with `sandbox-test-download.js` before enabling this for real** (see below) — it downloads
+into a throwaway folder, never your real downloads directory, so you can confirm the mechanism
+against your own real collection first.
+
+## Sandbox-testing a download (or a rebuild) without touching real folders
+
+`node sandbox-test-download.js --collection-mod-id <id> --sandbox-downloads <dir>
+(--mod-name "<name or substring>" | --all-missing) [--clean]` — downloads real archive(s) from Nexus
+for a real collection's currently-missing mods into a THROWAWAY folder, never your real downloads
+directory (refuses outright if `--sandbox-downloads` resolves to it). `--mod-name` targets one mod by
+a case-insensitive substring match (errors if ambiguous); `--all-missing` scans every Nexus-hosted
+mod in the collection (read-only against your real downloads folder — stat/hash only, never writes
+there) and downloads whichever ones are genuinely missing. A clean run **is** the verification —
+`downloadModArchive()` already checks actual size+md5 against collection.json before accepting a
+download as real, the same way this project trusts collection.json everywhere else. No automatic
+cleanup (unlike the rebuild sandbox below) — the point is letting you inspect the real file
+afterward; pass `--clean` to remove the sandbox folder when done.
 
 ## Sandbox-testing a rebuild without touching real staging
 
@@ -248,6 +334,9 @@ convention at all (that only decides which picker dropdown a collection shows up
 
 ## Update Collection
 
+> ⚠️ **Not stable yet — still being reviewed and improved.** Rebuild Collection is the well-tested
+> part of this toolkit right now; treat everything below as in-progress.
+
 ```
 node sync-menu.js      # interactive terminal menu (recommended)
 node sync-cli.js <command> [options]   # flag-based CLI (list-collections, backup, apply-ignores,
@@ -328,7 +417,10 @@ Other open items, not yet started:
 - Backup-before-rebuild deliberately stayed sequential when extraction went concurrent (see
   **Concurrent extraction** above) — revisit only if it's ever an actual bottleneck; it's off by
   default already.
-
+- ~~**Self-contained release packaging**~~ — done, see **Getting a release without installing
+  anything** below. A literal single-.exe (Node SEA / `pkg`) was considered and rejected:
+  `classic-level`'s native addon and this project's read/write-next-to-the-app-folder assumptions
+  (config.json, logs, backups) both fight a packaged snapshot's read-only filesystem model.
 ## Project structure
 
 ```
@@ -337,6 +429,8 @@ Vortex-Collection-Tools/
 ├── rebuild-collection.js, extract-mod.js, compare-output.js, smoke-test-collection.js,
 │   snapshot-collection-staging.js, download-collection.js, check-vortex-source-drift.js,
 │   sandbox-test-rebuild.js                              — safe A/B concurrency testing, see README section above
+│   sandbox-test-download.js                             — safe archive-download testing, see README section above
+├── start-server.bat, start-server.ps1                    — double-click launchers (npm install on first run, then start + auto-open browser)
 ├── sync-cli.js, sync-menu.js
 ├── vortex-source-refs.json
 ├── lib/
@@ -349,7 +443,8 @@ Vortex-Collection-Tools/
 │   ├── state-query-worker.js, state-write-worker.js         — isolated child-process DB access
 │   ├── sync-runner.js                                       — Update Collection orchestration
 │   ├── hash-manifest.js, diff-manifests.js, diff-manifests-ci.js, esp-flag-diff.js — comparison utils
-│   ├── vortex-drift-check.js, nexus-collection-download.js
+│   ├── vortex-drift-check.js, nexus-collection-download.js, nexus-mod-download.js — per-mod archive
+│   │   auto-download (Downloading missing archives automatically, see README section above)
 │   └── vortex-sync/                                          — Update Collection's engine
 │       ├── lib.js, report.js, win-dialog.js (incl. the async pickFolderAsync used by Settings' Browse buttons)
 │       ├── backups/ (gitignored), state-backups/ (gitignored)

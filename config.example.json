@@ -5,5 +5,9 @@
   "state": null,
   "maxBackupsToKeep": 0,
   "concurrentExtractions": 1,
-  "nexusApiKey": null
+  "nexusApiKey": null,
+  "downloadMissingArchives": false,
+  "serverPort": 4321,
+  "serverHost": "127.0.0.1",
+  "autoOpenBrowser": true
 }

@@ -90,12 +90,22 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 
 /* Header */
 .app-header {
-  display: flex;
+  /* Grid, not flex+space-between -- with 3 flex children, the middle nav's on-screen position
+     shifts whenever the breadcrumb (right-hand item) changes length, confirmed live (moved left/
+     right as pages with longer/shorter breadcrumbs were visited). Equal 1fr side columns keep the
+     center column (nav) truly centered regardless of either side's content width. */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   padding: 16px 28px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
+  /* Stays visible while scrolling any long page (a long collection/log list, etc.) instead of
+     scrolling off-screen -- background is required here, not optional, same "sticky-but-
+     transparent" gotcha already fixed once for the plan table's own sticky header. */
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 .app-header__title {
   display: flex;
@@ -104,9 +114,10 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   font-size: 17px;
   font-weight: 600;
   letter-spacing: 0.2px;
+  justify-self: start;
 }
 .app-header__logo { font-size: 20px; opacity: 0.85; }
-.app-header__meta { color: var(--text-muted); font-size: 13px; }
+.app-header__meta { color: var(--text-muted); font-size: 13px; justify-self: end; text-align: right; }
 
 /* Top-level tool-area nav (shell.js) */
 .app-nav { display: flex; gap: 6px; }
@@ -120,6 +131,11 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
+  /* The log-view page's own nav uses real <a> links (cross-page navigation, not JS-driven like the
+     main app's <button> tabs) -- browsers underline anchors by default but not buttons, which is
+     the only reason the two ever looked different. Normalizes both to the same button-like look. */
+  text-decoration: none;
+  display: inline-block;
   transition: background 0.15s ease, color 0.15s ease;
 }
 .nav-tab:hover { background: var(--surface-2); color: var(--text); }
@@ -168,7 +184,10 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 
 /* Main */
 .app-main {
-  max-width: min(1400px, 92vw);
+  /* Was capped at 1400px even on a wide monitor -- left a lot of unused space on both sides,
+     confirmed live ("I have a ton of space on the left and right"). Wider cap gives real tables
+     (Detail/Extraction columns especially) more room to breathe before anything needs to wrap. */
+  max-width: min(1800px, 96vw);
   margin: 0 auto;
   padding: 32px 24px 80px;
 }
@@ -191,6 +210,12 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   text-decoration: none;
   display: inline-block;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+  /* A button sitting in a flex row next to a long sibling (a file path, in particular) got squeezed
+     below its own natural width, wrapping its label to two lines ("Dele"/"te") -- confirmed live.
+     Buttons never need to wrap here, and never need to shrink to make room for a sibling; let the
+     sibling (the file path, which already wraps/scrolls on its own) give up the space instead. */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .btn:active { transform: translateY(1px); }
 .btn--primary {
@@ -313,6 +338,7 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   cursor: pointer;
 }
 .badge--show-all:hover { border-color: var(--text-muted); }
+.wt-row--completed { opacity: 0.55; text-decoration: line-through; }
 .badge--rebuilt, .badge--rebuild { background: var(--success-bg); color: var(--success); }
 .badge--skip_ignored, .badge--skip_optional_not_installed { background: var(--neutral-bg); color: var(--neutral); }
 .badge--skip_no_archive, .badge--skip_open_fomod { background: var(--warning-bg); color: var(--warning); }
@@ -335,6 +361,25 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .callout p { margin: 4px 0; font-size: 13.5px; }
 .callout ol li { font-size: 13.5px; margin: 4px 0; }
 .callout .callout { margin: 12px 0 8px; }
+/* An off-site mismatch (a same-size candidate file exists but fails the md5 check) is a more
+   alarming case than a plain "nothing here yet" -- danger-colored so it stands out inside the
+   yellow off-site-missing callout instead of reading the same as every other list item. */
+.mismatch-note { color: var(--danger); font-weight: 600; }
+/* Off-site source-URL links (Plan page warning, plan table Detail column, log-view Extraction
+   column, Work Through Report) -- browser-default link purple/blue was hard to read against the
+   dark theme, so all of these use the same --accent color as every other interactive element
+   instead. :visited overridden too so clicking one doesn't turn it an even harder-to-read purple. */
+.archive-link, .archive-link:visited { color: var(--accent); }
+.archive-link:hover { color: var(--accent-hover); }
+/* Log-view mod names link out to their Nexus mod page (new tab) -- same --accent color as every
+   other link in this app, just no underline (requested explicitly: the Mod column reads as a
+   table of names first, links second). */
+.mod-name-link, .mod-name-link:visited { color: var(--accent); text-decoration: none; }
+.mod-name-link:hover { color: var(--accent-hover); }
+/* A long URL and/or mod name on the same line as the Import button either overflowed or wrapped
+   awkwardly -- given its own row, with overflow-wrap so a long URL (one unbroken "word") wraps
+   inside the callout instead of forcing horizontal scroll/overflow. */
+.archive-link-row { margin-top: 4px; overflow-wrap: anywhere; }
 
 /* Inline text input (workshop-fetch slug field, etc.) */
 .input {
@@ -381,6 +426,14 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   overflow-y: hidden;
   margin-bottom: 20px;
 }
+/* Live progress view only -- the mod list scrolls within its own bounded region (scrollIntoView()
+   naturally confines itself to the nearest scrollable ancestor) so the header/phase/backup notice
+   above it stay fixed in place instead of the whole page jumping around as rows update. */
+.plan-table-wrap--scrollable { max-height: 78vh; overflow-y: auto; }
+/* The background must be on the TH itself, not just the (non-sticky) thead ancestor -- otherwise a
+   sticky, effectively-transparent header lets scrolling rows show through it, which looks exactly
+   like the header isn't sticking at all even though its position is technically correct. */
+.plan-table-wrap--scrollable thead th { position: sticky; top: 0; z-index: 1; background: var(--surface-2); }
 .plan-table { width: 100%; border-collapse: collapse; }
 .plan-table thead { background: var(--surface-2); }
 .plan-table th {
@@ -412,8 +465,22 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .mod-name--truncated { cursor: pointer; border-bottom: 1px dotted var(--text-muted); }
 .mod-name--truncated:hover { color: var(--accent); border-bottom-color: var(--accent); }
 .plan-table tbody tr:last-child td { border-bottom: none; }
-.extraction-cell { vertical-align: middle; }
-.extraction-actions { display: flex; flex-direction: column; gap: 8px; }
+/* The off-site "Import"/message block's raw URL had no wrapping at all (unlike .detail-cell's own
+   file-list, which already has overflow-wrap) -- under table-layout:auto, one long unbroken URL
+   forces this column to blow out to fit it, starving the Detail column down to a hairline of
+   character-by-character wrapped text. Same failure mode already documented above for a long mod
+   name, just triggered by a URL here instead -- confirmed live via a real Google Drive link. */
+.extraction-cell { vertical-align: middle; overflow-wrap: anywhere; }
+/* align-items defaults to 'stretch' in a column flex container -- with no explicit value here, a
+   SINGLE button (Retry Download, on its own with nothing else in the cell) stretched to fill the
+   entire column width, while other rows with multiple/paired buttons didn't look that way,
+   confirmed live as an inconsistent, "off-center of each other" look across different mods'
+   Extraction cells. flex-start makes every button here content-sized and left-aligned, uniformly. */
+.extraction-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+/* AMBIGUOUS duplicate-candidate list -- a shared CSS grid (not one flex row per candidate) so every
+   "Delete" button lines up in the same column regardless of how long/wrapped each file path is.
+   Children are emitted in pairs (path, button) and auto-flow two-per-row into these columns. */
+.ambiguous-candidates { display: grid; grid-template-columns: 1fr auto; align-items: start; gap: 10px 12px; }
 .plan-table tbody tr:hover { background: var(--surface-2); }
 .status-pill {
   display: inline-block;
@@ -422,6 +489,7 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 .status-pill--rebuilt, .status-pill--rebuild, .status-pill--rebuild_queued { background: var(--success-bg); color: var(--success); }
 .status-pill--skip_ignored, .status-pill--skip_optional_not_installed { background: var(--neutral-bg); color: var(--neutral); }
@@ -437,10 +505,11 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .detail-cell .file-list-toggle { display: inline-block; margin-top: 2px; color: var(--accent); cursor: pointer; text-decoration: underline; }
 .detail-cell .file-list-toggle:hover { color: var(--accent-hover); }
 
-/* Resume box */
+/* Resume box -- warning-colored (like .callout--warning) so a resumable incomplete run stands out
+   rather than blending in as an ordinary neutral option. */
 .resume-box {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning);
   border-radius: var(--radius);
   padding: 12px 16px;
   margin-bottom: 18px;
@@ -497,6 +566,10 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 }
 .path-row__label { color: var(--text-muted); font-size: 13px; width: 100px; flex-shrink: 0; }
 .path-row__value { flex: 1; overflow-wrap: anywhere; }
+/* Backup/Downloads notices on the Rebuilding page are two sibling .path-row divs, not wrapped in a
+   .path-rows group, so they need their own gap -- otherwise they render flush against each other
+   when both are visible at once. */
+#downloadNotice { margin-top: 10px; }
 
 @media (max-width: 640px) {
   .app-main { padding: 20px 14px 60px; }

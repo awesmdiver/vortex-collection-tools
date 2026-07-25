@@ -23,6 +23,7 @@ const runner = require('./lib/collection-runner');
 const { selectFromList, confirm, requireVortexClosed, closeInteractive } = require('./lib/interactive');
 const { findSevenZip } = require('./lib/sevenzip');
 const appConfig = require('./lib/app-config');
+const nexusModDownload = require('./lib/nexus-mod-download');
 
 let syncLib;
 try {
@@ -136,9 +137,11 @@ async function main() {
         process.exit(1);
     }
 
+    const syncStateStart = Date.now();
     const { ignored, removedMods, keptMods, knownVortexModIds, otherVersionsByModId, sharedWithCollectionsByKey } = await runner.loadSyncState({
         state: args.state, collectionModId: collectionInfo.modId, collection: collectionInfo.collection, stagingDir: args.staging,
     });
+    const phaseDurationsMs = { syncStateMs: Date.now() - syncStateStart, backupMs: null, rebuildMs: null };
     console.log(`${ignored.length} mod(s) marked ignored in Vortex -- these are never touched.`);
     console.log(`${knownVortexModIds.size} of ${keptMods.length} kept mod(s) already have a real Vortex-tracked staging folder.`);
 
@@ -155,12 +158,15 @@ async function main() {
     const { modEntries, rebuildQueue } = await runner.buildPlan({
         removedMods, keptMods, knownVortexModIds, resumed, otherVersionsByModId, sharedWithCollectionsByKey,
         downloadsDir: args.downloads, stagingDir: args.staging, sevenZipExe, logsDir: path.join(__dirname, 'logs'),
+        downloadMissingArchivesEnabled: fileConfig.downloadMissingArchives,
     });
 
+    let downloadResults = null; // set below if the download phase runs; currentLog() closes over it
     function currentLog(runStatus) {
         return runner.buildLogData({
             collectionInfo, stagingDir: args.staging, downloadsDir: args.downloads,
-            backupRoot: args.backupRoot, dryRun: args.dryRun, startedAt, runStatus, modEntries,
+            backupRoot: args.backupRoot, dryRun: args.dryRun, startedAt, runStatus, modEntries, downloadResults,
+            concurrentExtractions: args.concurrency, phaseDurationsMs,
         });
     }
 
@@ -188,6 +194,45 @@ async function main() {
         process.exit(0);
     }
 
+    // Auto-download missing archives (opt-in, Premium-only -- see lib/nexus-mod-download.js's
+    // header comment for why free accounts are refused entirely rather than worked around). Runs
+    // BEFORE the empty-queue check below, so a plan whose only gap is missing archives gets a real
+    // chance to fill it first, not an immediate "nothing to rebuild".
+    // HASH_MISMATCH is eligible too -- a same-size "candidate" is a coincidence, not the real file,
+    // so downloading the correct one fixes it. AMBIGUOUS (multiple candidates that ARE byte-identical
+    // correct matches) is excluded -- a real duplicate needing a human, not something this can resolve.
+    const eligibleForDownload = modEntries.filter((e) =>
+        e.status === 'SKIP_NO_ARCHIVE' && (e.code === 'NOT_FOUND' || e.code === 'HASH_MISMATCH'));
+    const missingNexusMods = collectionInfo.collection.mods.filter((m) =>
+        m.source?.type === 'nexus' && eligibleForDownload.some((e) => e.modId === m.source?.modId && e.fileId === m.source?.fileId));
+    if (fileConfig.downloadMissingArchives && missingNexusMods.length > 0) {
+        console.log(`\n===== Downloading ${missingNexusMods.length} missing archive(s) =====`);
+        const apiKey = nexusModDownload.resolveApiKey();
+        const premium = await nexusModDownload.checkPremiumStatus(apiKey);
+        if (!premium.isPremium) {
+            console.log("Skipped: this Nexus account is not Premium, so automated downloads aren't available -- this respects Nexus's ad-supported download model for free users. Download these archives manually from Nexus and let Vortex install them, or upgrade to Premium.");
+            downloadResults = { results: [], skippedReason: 'not-premium' };
+        } else {
+            downloadResults = await nexusModDownload.downloadMissingArchivesForPlan({
+                mods: missingNexusMods, downloadsDir: args.downloads, gameDomain: collectionInfo.collection.info?.domainName, apiKey,
+                onProgress: ({ index, total, modName }) => console.log(`  [${index}/${total}] ${modName}...`),
+            });
+            for (const r of downloadResults.results) {
+                console.log(r.status === 'DOWNLOADED' ? `  [OK] ${r.name} -> ${r.fileName}` : `  [FAILED] ${r.name} -- ${r.error}`);
+            }
+            const downloadedMods = missingNexusMods.filter((m) =>
+                downloadResults.results.some((r) => r.modId === m.source.modId && r.fileId === m.source.fileId && r.status === 'DOWNLOADED'));
+            if (downloadedMods.length > 0) {
+                const newItems = await runner.reclassifyDownloadedMods({
+                    downloadedMods, modEntries, knownVortexModIds, otherVersionsByModId, sharedWithCollectionsByKey,
+                    downloadsDir: args.downloads, stagingDir: args.staging, sevenZipExe, logsDir: path.join(__dirname, 'logs'),
+                });
+                rebuildQueue.push(...newItems);
+            }
+        }
+        runner.writeLog(logPath, currentLog('in-progress'));
+    }
+
     if (rebuildQueue.length === 0) {
         console.log('\nNothing to rebuild.');
         runner.writeLog(logPath, currentLog('completed'));
@@ -207,15 +252,23 @@ async function main() {
         process.exit(1);
     }
 
-    const { backupRunDir } = runner.runBackup({
+    // Unlike the web UI's /runs handler, this backup call is unconditional whenever there's a
+    // rebuildQueue -- backupRoot is a required CLI arg (checked earlier), with no maxBackupsToKeep
+    // gate here. A pre-existing asymmetry with the web path (which skips entirely when
+    // maxBackupsToKeep === 0), not something this feature changes -- backupMs will therefore always
+    // be a real number for this CLI path once the rebuild queue is non-empty, never null.
+    const backupStart = Date.now();
+    const { backupRunDir } = await runner.runBackup({
         rebuildQueue, backupRoot: args.backupRoot, collectionModId: collectionInfo.modId, runTimestamp,
         onProgress: ({ index, total, modName }) => {
             if (index === 1) console.log(`\nBacking up ${total} mod(s)' current staging folders before touching anything...`);
         },
     });
+    phaseDurationsMs.backupMs = Date.now() - backupStart;
     console.log(`Full-collection backup complete: "${backupRunDir}". This is NOT auto-deleted -- clean it up manually once you're confident.`);
 
     console.log(`\n===== Rebuilding${args.concurrency > 1 ? ` (${args.concurrency} at a time)` : ''} =====`);
+    const rebuildStart = Date.now();
     const { haltedCritical } = await runner.runRebuild({
         rebuildQueue, collectionJsonPath: collectionInfo.collectionJsonPath,
         downloadsDir: args.downloads, stagingDir: args.staging, modEntries,
@@ -250,6 +303,7 @@ async function main() {
             }
         },
     });
+    phaseDurationsMs.rebuildMs = Date.now() - rebuildStart;
 
     runner.writeLog(logPath, currentLog(haltedCritical ? 'halted-critical' : 'completed'));
 
