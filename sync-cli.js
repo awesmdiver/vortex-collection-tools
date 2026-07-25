@@ -206,7 +206,17 @@ async function cmdSync(args) {
 async function cmdBackup(args) {
   const modId = args['mod-id'];
   if (!modId) {
-    console.error('Usage: backup --mod-id <installed-collection-mod-id> [--profile-id <id>] [--staging-dir <path>] [--state <path>]');
+    console.error('Usage: backup --mod-id <installed-collection-mod-id> [--profile-id <id>] [--staging-dir <path>] [--state <path>] [--sync-backup-root <path>]');
+    process.exit(1);
+  }
+  // No fallback to a hardcoded folder inside this project -- confirmed live this was confusing (a
+  // real backup silently landed inside lib/vortex-sync/backups/, nothing resembling a real "Vortex"
+  // location, with no way to tell where it actually went). Same required-config convention as
+  // --staging-dir above: the web UI's Settings page is the normal way to set this once; --sync-
+  // backup-root is the CLI-only equivalent for anyone not using the web UI at all.
+  const syncBackupRoot = args['sync-backup-root'] || lib.loadConfig().syncBackupRoot;
+  if (!syncBackupRoot) {
+    console.error('No backups folder configured. Pass --sync-backup-root <path>, or set it once in the web UI\'s Settings page.');
     process.exit(1);
   }
   const stateDir = args.state || lib.DEFAULT_STATE_DIR;
@@ -239,7 +249,7 @@ async function cmdBackup(args) {
     ignored: captured.ignored,
     disabled: captured.disabled,
   });
-  const filePath = lib.saveBackup(snapshot);
+  const filePath = lib.saveBackup(snapshot, syncBackupRoot);
 
   console.log(`Backup saved: ${filePath}`);
   console.log(`${snapshot.ignored.length} ignored mod(s), ${snapshot.disabled.length} disabled mod(s) captured.`);
@@ -255,9 +265,14 @@ async function cmdBackup(args) {
   console.log('  compare --backup "' + filePath + '" --collection <path-to-new-collection.json>');
 }
 
-async function cmdListBackups() {
-  const backups = lib.listBackups();
-  console.log(`${backups.length} backup(s) in ${lib.BACKUPS_DIR}:\n`);
+async function cmdListBackups(args) {
+  const backupsDir = args['sync-backup-root'] || lib.loadConfig().syncBackupRoot;
+  if (!backupsDir) {
+    console.error('No backups folder configured. Pass --sync-backup-root <path>, or set it once in the web UI\'s Settings page.');
+    process.exit(1);
+  }
+  const backups = lib.listBackups(backupsDir);
+  console.log(`${backups.length} backup(s) in ${backupsDir}:\n`);
   for (const b of backups) {
     console.log(`  ${b.collectionName}  (${new Date(b.createdAt).toLocaleString()})`);
     console.log(`    ${b.filePath}`);
@@ -385,6 +400,34 @@ async function cmdApplyDisables(args) {
   for (const c of changed) console.log(`  - ${c.name}  [${c.vortexModId}]`);
 }
 
+// Recovery: lists this project's own state.v2 backups (see lib.js's backupLiveState, taken
+// automatically before every apply-ignores/apply-disables --apply) so you have something to point
+// restore-state at.
+async function cmdListStateBackups() {
+  const backups = lib.listStateBackups();
+  console.log(`${backups.length} state.v2 backup(s) in ${lib.STATE_BACKUPS_DIR}:\n`);
+  for (const b of backups) {
+    console.log(`  ${new Date(b.createdAt).toLocaleString()}`);
+    console.log(`    ${b.dir}`);
+  }
+}
+
+// Recovery: restores one of the above backups back over Vortex's LIVE state.v2 directory. Takes a
+// fresh backup of whatever is currently live first (so this is itself undoable), same safety
+// wrapper as apply-ignores/apply-disables --apply -- see lib.js's restoreLiveState.
+async function cmdRestoreState(args) {
+  const backupDir = args['backup-dir'];
+  if (!backupDir) {
+    console.error('Usage: restore-state --backup-dir <path-from-list-state-backups> [--state <path>]');
+    process.exit(1);
+  }
+  const stateDir = args.state || lib.DEFAULT_STATE_DIR;
+  console.log('Restoring Vortex\'s live state database from backup (the current live state is backed up first)...');
+  const { restoredFrom, preRestoreBackupDir } = lib.restoreLiveState(stateDir, backupDir);
+  console.log(`Restored from: ${restoredFrom}`);
+  console.log(`Your previous live state was backed up to: ${preRestoreBackupDir}`);
+}
+
 async function main() {
   const [, , cmd, ...rest] = process.argv;
   const args = parseArgs(rest);
@@ -400,13 +443,17 @@ async function main() {
     } else if (cmd === 'backup') {
       await cmdBackup(args);
     } else if (cmd === 'list-backups') {
-      await cmdListBackups();
+      await cmdListBackups(args);
     } else if (cmd === 'compare') {
       await cmdCompare(args);
     } else if (cmd === 'apply-ignores') {
       await cmdApplyIgnores(args);
     } else if (cmd === 'apply-disables') {
       await cmdApplyDisables(args);
+    } else if (cmd === 'list-state-backups') {
+      await cmdListStateBackups();
+    } else if (cmd === 'restore-state') {
+      await cmdRestoreState(args);
     } else {
       console.error('Usage:');
       console.error('  node index.js list-collections [--staging-dir <path>]');
@@ -424,6 +471,11 @@ async function main() {
       console.error('     node index.js apply-disables --profile-id <id> --backup <path> --apply');
       console.error('  6) node index.js compare --backup <path> --collection <new-collection.json> [--out <path>] [--apply]   -- report + plugin disabling');
       console.error('  node index.js list-backups');
+      console.error('');
+      console.error('  If something goes wrong during apply-ignores/apply-disables (a full state.v2 backup is');
+      console.error('  always taken first automatically):');
+      console.error('     node index.js list-state-backups');
+      console.error('     node index.js restore-state --backup-dir <path-from-list-state-backups>');
       console.error('');
       console.error('  node index.js sync --mod-id <id> --collection <path> [--profile-id <id>] [--out <path>] [--apply] [--state <path>]  (advanced/scripting)');
       process.exit(1);

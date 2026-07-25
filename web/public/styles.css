@@ -7,6 +7,7 @@
   --text-muted: #8b93a3;
   --accent: #5b8def;
   --accent-hover: #75a1f5;
+  --accent-bg: rgba(91, 141, 239, 0.12);
   --nav: #3d6ba8;
   --nav-hover: #4a7cbd;
   --success: #3ecf8e;
@@ -37,6 +38,7 @@
     --text-muted: #5b6472;
     --accent: #3568c9;
     --accent-hover: #4a7bd6;
+    --accent-bg: rgba(53, 104, 201, 0.12);
     --nav: #2f5c94;
     --nav-hover: #3a6da8;
     --success: #1f9d63;
@@ -59,6 +61,7 @@
   --text-muted: #5b6472;
   --accent: #3568c9;
   --accent-hover: #4a7bd6;
+  --accent-bg: rgba(53, 104, 201, 0.12);
   --nav: #2f5c94;
   --nav-hover: #3a6da8;
   --success: #1f9d63;
@@ -86,6 +89,11 @@ html, body {
 
 .hidden { display: none !important; }
 .muted { color: var(--text-muted); }
+/* Update Collection's own status spans (Backup/Apply Ignores/Apply Disables) sometimes show a
+   longer, multi-line message (e.g. the numbered crash/not-yet-in-state-database explanation) --
+   without this, \n characters in .textContent collapse to a single run-on line by default. Short
+   one-line status text is unaffected. */
+#syncBackupStatus, #syncIgnoresStatus, #syncDisablesStatus { white-space: pre-line; }
 code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 0.9em; }
 
 /* Header */
@@ -167,6 +175,12 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .sync-result-list { list-style: none; margin: 10px 0 0; padding: 0; font-size: 13.5px; }
 .sync-result-list li { padding: 4px 0; border-bottom: 1px solid var(--border); }
 .sync-result-list li:last-child { border-bottom: none; }
+/* "+N more / Show less" toggle -- same collapsed-by-default convention as Rebuild Collection's own
+   long file lists (.file-list-toggle), just its own class since that one is scoped under
+   .detail-cell and this list isn't nested inside one. */
+.sync-list-toggle-row { padding-top: 6px !important; }
+.sync-list-toggle { display: inline-block; color: var(--accent); cursor: pointer; text-decoration: underline; }
+.sync-list-toggle:hover { color: var(--accent-hover); }
 
 /* Vortex banner */
 .vortex-banner {
@@ -345,6 +359,10 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .badge--failed_mismatch_not_touched, .badge--failed_extraction_not_touched,
 .badge--failed_extraction_no_prior_data { background: var(--danger-bg); color: var(--danger); }
 .badge--critical_manual_restore_needed { background: var(--danger); color: #fff; }
+/* Update Collection's Ignored/Disabled report -- same color convention as the status-pill variants
+   of the same name above. */
+.badge--ignored { background: var(--neutral-bg); color: var(--neutral); }
+.badge--disabled { background: var(--warning-bg); color: var(--warning); }
 .badge__count { font-variant-numeric: tabular-nums; }
 
 /* Callouts */
@@ -354,6 +372,13 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   margin-bottom: 20px;
   border: 1px solid;
 }
+/* Four severities -- see TECHNICAL.md's "Callout severity conventions" for when to use which.
+   info: plain status/instructions, nothing wrong (e.g. "Next steps in Vortex"). success: something
+   completed. warning: needs attention but isn't blocking (e.g. a misconfiguration that only skips
+   an optional feature). critical: a real failure or blocking problem (e.g. a write to Vortex's
+   database failed). */
+.callout--info { background: var(--accent-bg); border-color: var(--accent); }
+.callout--success { background: var(--success-bg); border-color: var(--success); }
 .callout--warning { background: var(--warning-bg); border-color: var(--warning); }
 .callout--critical { background: var(--danger-bg); border-color: var(--danger); }
 .callout__title { font-weight: 700; margin-bottom: 6px; }
@@ -413,6 +438,10 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    two boxes give no clue what they're for beyond a placeholder that vanishes on typing. */
 .field-group { display: flex; flex-direction: column; gap: 5px; }
 .field-label { font-size: 12px; color: var(--text-muted); }
+/* Marks a Settings field that has no valid blank state (e.g. staging/downloads/Update Collection's
+   backups folder) -- distinct from fields like backupRoot/state that have a real, working default
+   when left empty. */
+.field-required { color: var(--danger); font-weight: 600; }
 .workshop-rev-hint { font-size: 12.5px; margin-top: 10px; }
 /* Distinct from the informational (draft/unlisted) use of this same element -- applied only for
    the "never published to Nexus" case, and explicitly removed elsewhere so it never lingers. */
@@ -498,6 +527,10 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .status-pill--failed_extraction_no_prior_data { background: var(--danger-bg); color: var(--danger); }
 .status-pill--critical_manual_restore_needed { background: var(--danger); color: #fff; }
 .status-pill--pending { background: var(--surface-2); color: var(--text-muted); }
+/* Update Collection's Ignored/Disabled report -- same color convention as the Rebuild Collection
+   pills above (neutral for a plain informational status, warning for one that needs attention). */
+.status-pill--ignored { background: var(--neutral-bg); color: var(--neutral); }
+.status-pill--disabled { background: var(--warning-bg); color: var(--warning); }
 .detail-cell { color: var(--text-muted); font-size: 13px; overflow-wrap: anywhere; white-space: pre-line; }
 .detail-cell .file-list { margin: 4px 0 0; overflow-wrap: anywhere; }
 .detail-cell .detail-group { margin-top: 10px; }
@@ -550,6 +583,9 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 }
 .modal h2 { margin-top: 0; font-size: 18px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+/* .select's own flex:1 only applies inside a flex row -- a bare <select> dropped straight into a
+   modal (e.g. the Restore Backup picker) needs its own full-width rule instead. */
+.modal .select { display: block; width: 100%; }
 .modal--wide { max-width: 640px; }
 .error-modal-text { white-space: pre-line; line-height: 1.55; font-size: 14px; max-height: 55vh; overflow-y: auto; }
 
@@ -566,6 +602,9 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 }
 .path-row__label { color: var(--text-muted); font-size: 13px; width: 100px; flex-shrink: 0; }
 .path-row__value { flex: 1; overflow-wrap: anywhere; }
+/* Flags a real misconfiguration (e.g. backups turned on but no folder configured) distinctly from
+   the plain default-state text .path-row__value normally shows. */
+.path-row__value--warning { color: var(--warning); }
 /* Backup/Downloads notices on the Rebuilding page are two sibling .path-row divs, not wrapped in a
    .path-rows group, so they need their own gap -- otherwise they render flush against each other
    when both are visible at once. */

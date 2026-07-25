@@ -193,6 +193,23 @@ async function doListDisabled() {
   for (const m of result.disabled) console.log(`  - ${m.name}`);
 }
 
+// No fallback to a hardcoded folder inside this project any more -- confirmed live this was
+// confusing (a real backup silently landed inside lib/vortex-sync/backups/, nothing resembling a
+// real "Vortex" location, with no way to tell where it actually went). Same interactive-prompt
+// convention as resolveStagingDir() above -- doesn't need to already exist (saveBackup creates it).
+async function resolveSyncBackupRoot() {
+  const config = lib.loadConfig();
+  if (config.syncBackupRoot) return config.syncBackupRoot;
+  console.log('\nWhere should this tool save its own backups (the ignored/disabled mod snapshot');
+  console.log('files, NOT Vortex\'s own database)? e.g. "F:\\Vortex Backups\\collection-sync"');
+  const answer = await ask('Backups folder: ');
+  if (!answer) throw new Error('A backups folder is required before a backup can be created.');
+  if (await confirm(`Save "${answer}" as the default for next time?`, false)) {
+    lib.saveConfig({ ...config, syncBackupRoot: answer });
+  }
+  return answer;
+}
+
 // Phase 1 — run this BEFORE clicking "Update" on a collection in Vortex.
 // Vortex's update flow deletes the currently-installed revision's data
 // (staging folder, and the corresponding state entry) as soon as the update
@@ -203,6 +220,7 @@ async function doBackup() {
   const stagingDir = await resolveStagingDir();
   const collection = await pickInstalledCollection(stagingDir);
   if (!collection) return;
+  const syncBackupRoot = await resolveSyncBackupRoot();
   if (!(await requireVortexClosed())) return;
 
   const captured = await lib.withStateDb(lib.DEFAULT_STATE_DIR, async (db) => {
@@ -223,7 +241,7 @@ async function doBackup() {
     ignored: captured.ignored,
     disabled: captured.disabled,
   });
-  const filePath = lib.saveBackup(snapshot);
+  const filePath = lib.saveBackup(snapshot, syncBackupRoot);
 
   console.log(okText(`\nBackup saved: ${filePath}`));
   console.log(`  ${snapshot.ignored.length} ignored mod(s), ${snapshot.disabled.length} disabled mod(s) captured.`);
@@ -247,7 +265,12 @@ async function doBackup() {
 }
 
 async function pickBackup(promptText) {
-  const backups = lib.listBackups();
+  // Picking an EXISTING backup (for apply-ignores/apply-disables/compare) doesn't require
+  // syncBackupRoot to be configured -- if it isn't, there's simply nothing to list here, and the
+  // browse-for-a-file fallback below still works regardless (e.g. a backup file kept somewhere
+  // else entirely).
+  const syncBackupRoot = lib.loadConfig().syncBackupRoot;
+  const backups = syncBackupRoot ? lib.listBackups(syncBackupRoot) : [];
   let backupPath = null;
   if (backups.length > 0) {
     const items = [...backups, { filePath: '__browse__', collectionName: '(browse for a different backup file...)' }];
@@ -264,7 +287,7 @@ async function pickBackup(promptText) {
   if (!backupPath) {
     backupPath = dialog.pickOpenFile({
       title: 'Select a backup snapshot file',
-      initialDir: lib.BACKUPS_DIR,
+      initialDir: syncBackupRoot || undefined,
       filter: 'JSON files (*.json)|*.json',
     });
     if (!backupPath) return null;

@@ -2,11 +2,13 @@
   "staging": null,
   "downloads": null,
   "backupRoot": null,
+  "syncBackupRoot": null,
   "state": null,
   "maxBackupsToKeep": 0,
   "concurrentExtractions": 1,
   "nexusApiKey": null,
   "downloadMissingArchives": false,
+  "forceExtractOffSiteMismatches": false,
   "serverPort": 4321,
   "serverHost": "127.0.0.1",
   "autoOpenBrowser": true

@@ -24,17 +24,29 @@ in. Resolution order everywhere (both the web UI and every CLI script): explicit
 `config.json`, then (Vortex database path only) auto-detected under `%APPDATA%`.
 
 The Settings page (web UI) edits this file directly:
-- **Paths** — staging/downloads/backup-root/Vortex-database, each with a native folder-browse button
-  (`lib/vortex-sync/win-dialog.js`'s `pickFolderAsync`, a `FolderBrowserDialog` via `spawn` — async,
-  so an open dialog never freezes the server). Path changes need a server restart; Save offers to do
-  this for you automatically (spawns a fresh server process with the same launch args, tears the old
-  one down once the response has flushed, then the page polls until the new one answers and reloads)
-  rather than requiring you to do it manually.
+- **Paths** — staging/downloads/backup-root/Update-Collection-backups-folder/Vortex-database, each
+  with a native folder-browse button (`lib/vortex-sync/win-dialog.js`'s `pickFolderAsync`, a
+  `FolderBrowserDialog` via `spawn` — async, so an open dialog never freezes the server). Path
+  changes need a server restart; Save offers to do this for you automatically (spawns a fresh server
+  process with the same launch args, tears the old one down once the response has flushed, then the
+  page polls until the new one answers and reloads) rather than requiring you to do it manually.
+  **Staging, downloads, and the Update Collection backups folder have no valid blank state** — the
+  Settings page marks them `(required)` and blocks Save (client-side, plus a server-side backstop in
+  `web/settings-routes.js` for a corrupt/manually-edited `config.json`) until all three are filled
+  in. Rebuild Collection's own `backupRoot` and the Vortex database path stay optional: `backupRoot`
+  only matters once backups are actually turned on (off by default, see below), and the database
+  path auto-detects a real default under `%APPDATA%`.
 - **Backups** — a single "backups to keep" number: `0` = off (no backup made at all, the default for
   a fresh install — explicit opt-in, not an assumed safety net), `1`-`3` = back up every real run and
   prune down to the N most recent afterward, blank = back up every run and never prune (unlimited).
   A backup is always a fresh, timestamped, full copy of every affected mod's current staging folder
-  — never overwritten, so there's never a "stale leftover files" problem to manage.
+  — never overwritten, so there's never a "stale leftover files" problem to manage. **Update
+  Collection's own backups** (the ignored/disabled-mod snapshot files, a completely separate thing
+  from the above) have no on/off toggle — they're small and cheap, so every "Create Backup" click
+  just saves one to whatever folder is configured; there used to be a hardcoded fallback to a folder
+  inside this project's own source tree (`lib/vortex-sync/backups/`) when nothing was configured,
+  removed after live confirmation that landing a real backup somewhere with no obvious "Vortex"
+  relationship, with no way to tell where it went, was actively confusing.
 - **Performance** — "Concurrent extractions" (1-8 in the UI). See **Concurrent extraction** below.
 - **NexusMods** — the personal API key (masked; the page never echoes a stored key back, only
   whether one exists). Stored as **plain text** in `config.json` — gitignored, so it never leaves
@@ -352,15 +364,66 @@ framework-agnostic orchestration shared by the CLI, terminal menu, and web UI.
   see **Settings & configuration** above. Include it in your own backup routine if you don't want to
   re-enter everything after a fresh machine/reformat.
 
+## Callout severity conventions
+
+Four severities -- informational/warning/critical match Vortex's own real notification system
+(confirmed against `Nexus-Mods/Vortex`'s own source, `src/renderer/src/views/Notification.tsx` /
+`tools/iconconfig.json`): informational uses a genuinely different icon shape (circled "i"), while
+warning and critical are differentiated **only by color**, using the identical triangle-alert icon
+— Vortex does NOT use a separate icon shape for warning vs. error/critical. This project follows
+the same rule. Success has no Vortex equivalent to match (its own notification list doesn't
+distinguish "you did something and it worked" from plain info) but fits the same green already
+used elsewhere in this app for a completed/successful state (`--success`, `REBUILT` badges/pills).
+
+| Severity | CSS class | Color token | Icon | When to use |
+|---|---|---|---|---|
+| Informational | `.callout--info` | `--accent` / `--accent-bg` (blue) | `&#9432;` (circled i) | Plain status or instructions — nothing is wrong. E.g. "Next steps in Vortex" (what to click next), a first-run welcome banner. |
+| Success | `.callout--success` | `--success` / `--success-bg` (green) | none fixed yet -- a checkmark would match the badge/pill convention | Something completed. No callout currently uses this (only inline badges/pills/status text do) — added for a complete palette, not yet exercised by a real callout. |
+| Warning | `.callout--warning` | `--warning` / `--warning-bg` (amber) | `&#9888;` (triangle-alert) | Needs attention but isn't blocking — an optional feature got skipped, a version compatibility caveat, "Vortex is running" gates. |
+| Critical | `.callout--critical` | `--danger` / `--danger-bg` (red) | `&#9888;` (same triangle-alert, red) | A real failure or a step that cannot proceed until the user does something — a write to Vortex's database failed, a collection id no longer exists, a native crash. |
+
+Outside of callouts, this same five-color system also covers: **grey** (`--text-muted` / `.muted`)
+for plain secondary verbiage with no severity at all (the overwhelming majority of this app's text);
+blue is additionally used for `.btn--primary`/links (a UI-affordance blue, not a severity signal —
+don't read every blue element as "informational").
+
+**Markup shape** (all four): a `<div class="callout callout--{severity}">` containing a
+`<div class="callout__title">` (icon + short label) and body content (`<p>`/`<ol>`/`<ul>` as
+needed) — see `web/public/index.html`'s existing callouts (`syncBackupNextSteps`,
+`syncCollectionStaleError`, `syncBackupCriticalError`, etc.) for real examples of each severity.
+
+**Critical messages built from a shared plain-text string** (e.g. `lib/sync-runner.js`'s
+`CRASH_HELP_TEXT`, reused verbatim by the CLI's own console output) are rendered into this same
+structured markup client-side by `web/public/sync-app.js`'s `renderCriticalMessage()` — a generic
+`\n\n`-block parser that turns a trailing run of `"1. ..."`/`"2. ..."` lines into a real `<ol>`,
+rather than needing a second, separately-maintained HTML copy of the same wording. Reuse this
+function (or its same parsing convention) for any future shared plain-text/HTML message pair,
+rather than inventing a new one-off format.
+
+**Known inconsistency, not yet fixed** — several existing `.callout--warning` uses in this app
+aren't actually warnings under the table above; they're informational/instructional and should
+eventually become `.callout--info` (e.g. the "Next steps in Vortex" boxes, the first-run Settings
+welcome banner). See **Future work**'s "Callout icon/classification pass" for the full inventory
+this needs — this section defines the target convention; that TODO is the work of migrating
+everything already-shipped over to it.
+
 ## Future work
 
 Eventually replacing Vortex's own slow "Resume" install step with this project's fast direct
 extraction, for the Update Collection flow too — so collection updates become as fast as rebuilds
-already are. Real, unsolved blockers: Rebuild Collection's engine only ever touches the staging
-filesystem, with zero awareness of Vortex's state database; Vortex itself must still register any
-new/changed staging folder as a tracked mod entry (state-DB record, correct per-profile enabled
-state, load-order integration) — today only Vortex's own "Resume" step does this, and nothing in
-this project creates a brand-new mod entry from scratch. This needs its own research spike (reading
+already are. Independently re-raised twice now (once during this project's own early design, once
+again later after noticing the "Resume is the slow step" wording on the Update Collection page) --
+a second, independent read on the same idea is a good sign it's worth pursuing seriously, not just
+a one-off thought. The likely division of labor: Rebuild Collection's engine does the actual
+SLOW part (archive extraction, FOMOD choice replay) directly to the staging folder -- the part
+this project already does fast -- while Vortex itself still handles anything this project doesn't
+replicate today (live FOMOD installer PROMPTS for a genuinely new mod with no prior recorded
+choices, and critically, registering the result as a tracked mod entry in its own state database).
+Real, unsolved blocker: Rebuild Collection's engine only ever touches the staging filesystem, with
+zero awareness of Vortex's state database; Vortex itself must still register any new/changed
+staging folder as a tracked mod entry (state-DB record, correct per-profile enabled state,
+load-order integration) — today only Vortex's own "Resume" step does this, and nothing in this
+project creates a brand-new mod entry from scratch. This needs its own research spike (reading
 Vortex's real installer source, the way `vortex-source-refs.json`/`check-vortex-source-drift.js`
 already do for the extraction side) before any design is attempted.
 
@@ -379,9 +442,20 @@ Other open items, not yet started:
   manual per-mod "extract anyway" button. Not designed yet.
 - **`sync-cli.js`/`sync-menu.js` refactor** to call `lib/sync-runner.js` (they still call
   `lib/vortex-sync/lib.js` directly) — pure cleanup, functionally unaffected, low priority.
+- **Multi-game support**: this whole project is hardcoded to `GAME_ID = 'skyrimse'` throughout
+  (`lib/vortex-sync/lib.js` and beyond) — Vortex's own state.v2 is shared across every game it
+  manages, not just Skyrim SE (confirmed live: a real install had a genuine, unrelated Dragon's
+  Dogma 2 profile sitting in the same database, correctly filtered out of `listProfiles()` rather
+  than treated as corrupted). Supporting other games would mean threading a `gameId` parameter
+  through instead of the current hardcoded constant — real scope, not started, only worth doing if
+  this tool is ever meant to cover games besides Skyrim SE.
 - Backup-before-rebuild deliberately stayed sequential when extraction went concurrent (see
   **Concurrent extraction** above) — revisit only if it's ever an actual bottleneck; it's off by
   default already.
+- **Ignored/Disabled report could show every Vortex mod status**, not just Ignored/Disabled (e.g.
+  Enabled, Endorsed/not, install-failed, etc.) — currently scoped narrowly to what Update Collection
+  itself actually tracks/acts on. Raised as a "maybe in the future" idea, not designed or scoped yet
+  — needs a real discussion on which statuses are worth surfacing and why before building it.
 - ~~**Self-contained release packaging**~~ — done, see the main README's "Getting a release without
   installing anything" section. A literal single-.exe (Node SEA / `pkg`) was considered and
   rejected: `classic-level`'s native addon and this project's read/write-next-to-the-app-folder
@@ -392,6 +466,21 @@ Other open items, not yet started:
   touched, so there's no separate dry-run *mode* to opt into there today. Not needed right now, but
   worth reconsidering if testers end up wanting an explicit "just preview, don't even show me the
   Start Rebuild button yet" option in Settings.
+- **New "Utilities" section** (top-level nav area, alongside Rebuild Collection/Update
+  Collection/Settings/Reports) — a home for standalone maintenance tools that don't belong to either
+  main workflow. First utility: **delete unused staging folders and/or archives** — find staging
+  mod-folders and/or downloaded archives that no longer correspond to anything any installed
+  collection actually references, and let the user review/delete them. Not designed yet (needs
+  real thought on what "unused" means precisely — e.g. cross-referencing every installed
+  collection's `collection.json` against staging/downloads contents — and what the review/confirm
+  UI looks like before deleting anything real).
+- **Callout icon/classification pass**: the target convention is now documented (see **Callout
+  severity conventions** above) and `.callout--info`/`.callout--warning`/`.callout--critical` all
+  exist — but most of the app hasn't been migrated to it yet. Needs a real inventory pass: list
+  every existing callout/banner/status message in the app and reclassify each into the right
+  severity, fixing the several `.callout--warning` uses that aren't actually warnings under the
+  documented convention (e.g. the "Next steps in Vortex" instructional boxes, the first-run
+  Settings welcome banner — both informational, not warnings). Not started.
 
 ## Project structure
 

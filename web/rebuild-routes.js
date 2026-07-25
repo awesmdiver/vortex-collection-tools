@@ -561,16 +561,29 @@ function createRouter(config) {
                 // maxBackupsToKeep is read fresh (not baked into config at server startup) --
                 // unlike the path settings, changing it never needs a restart. 0 means off (skip
                 // the backup step entirely); null means unlimited (back up, never prune); 1-3 means
-                // back up then prune down to that many most recent. Skipped either way when no
-                // backup root is configured at all (can't back up to nowhere) -- this never blocks
-                // a rebuild, it only means there's nothing to roll back to if something goes wrong.
+                // back up then prune down to that many most recent.
                 const { maxBackupsToKeep, concurrentExtractions } = appConfig.loadConfig();
                 // Recorded here, at the SAME fresh-read point the setting has always been read at
                 // (deliberately not hoisted earlier) -- a long download phase could see a real
                 // Settings change take effect before this point, exactly as before this feature.
                 concurrentExtractionsForThisRun = concurrentExtractions;
                 let backupRunDir = null;
-                if (maxBackupsToKeep !== 0 && backupRoot) {
+                // Two DIFFERENT skip reasons used to be reported identically ("Skipped (disabled in
+                // Settings)") -- confirmed live this was actively misleading for the second case:
+                // backups deliberately turned OFF (maxBackupsToKeep === 0, the intentional default)
+                // vs. backups turned ON but with nowhere configured to put them (backupRoot blank) --
+                // a real misconfiguration a user would want to notice and fix, not something that
+                // reads as "working as intended". Distinguished here so the client can say which one
+                // actually happened, matching this project's existing convention of surfacing a
+                // misconfigured-but-non-fatal state clearly instead of silently doing less than
+                // requested (see the not-Premium download-skip callout elsewhere in this same file).
+                if (maxBackupsToKeep === 0) {
+                    runState.emit({ type: 'phase', phase: 'backing-up', skipped: true, skippedReason: 'disabled' });
+                    runState.emit({ type: 'backup-complete', skipped: true, skippedReason: 'disabled' });
+                } else if (!backupRoot) {
+                    runState.emit({ type: 'phase', phase: 'backing-up', skipped: true, skippedReason: 'not-configured' });
+                    runState.emit({ type: 'backup-complete', skipped: true, skippedReason: 'not-configured' });
+                } else {
                     const backupStart = Date.now();
                     runState.emit({ type: 'phase', phase: 'backing-up' });
                     let backedUpCount;
@@ -586,9 +599,6 @@ function createRouter(config) {
                     // The client keeps this visible for the rest of the run instead of letting it get
                     // overwritten the instant 'phase: rebuilding' arrives.
                     runState.emit({ type: 'backup-complete', backedUpCount, backupRunDir, durationMs: phaseDurationsMs.backupMs });
-                } else {
-                    runState.emit({ type: 'phase', phase: 'backing-up', skipped: true });
-                    runState.emit({ type: 'backup-complete', skipped: true });
                 }
 
                 const rebuildStart = Date.now();
@@ -701,7 +711,7 @@ function createRouter(config) {
         const downloadSummary = log.downloadedArchives ? (() => {
             const d = log.downloadedArchives;
             if (d.skippedReason === 'not-premium') {
-                return `<div class="callout callout--warning">Download of ${d.attempted || 'the missing'} archive(s) was skipped: this Nexus account is not Premium, so automated downloads aren't available (respects Nexus's ad-supported download model for free users). Download these manually and reinstall via Vortex.</div>`;
+                return `<div class="callout callout--warning">Download of ${d.attempted || 'the missing'} archive(s) was skipped: this Nexus account is not Premium, so automated downloads aren't available (respects Nexus's ad-supported download model for free users). Download and reinstall it yourself either via Vortex or using the Work Through Report.</div>`;
             }
             if (!d.attempted) return '';
             const failedLines = (d.entries || []).filter((e) => e.status === 'FAILED')

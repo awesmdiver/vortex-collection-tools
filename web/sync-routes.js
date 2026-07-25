@@ -12,9 +12,87 @@ const runner = require('../lib/sync-runner');
 const { buildHtmlReport } = require('../lib/vortex-sync/report');
 const syncLock = require('./sync-lock');
 
+function escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Same dark-theme app-header/nav/back-button/table/status-badge-filter structure as Rebuild
+// Collection's own /logs/view/:filename report page, per an explicit request to keep this
+// consistent rather than inventing a new look. A real page navigation (not window.open in a new
+// tab) -- a Back button wouldn't make sense/would break the flow in a separate tab, per direct
+// feedback. The Back link round-trips collectionModId/profileId so the Update Collection page can
+// restore the exact collection/profile you were working on, instead of resetting to "-- Select
+// Collection --" -- confirmed live this was lost otherwise, since this is a real page reload, not
+// an SPA route change.
+function renderIgnoredDisabledReport({ collectionModId, profileId, collectionName, profileName, rows }) {
+    const tableRows = rows.map((r) => `<tr data-status="${escHtml(r.status)}"><td>${escHtml(r.name)}</td>` +
+        `<td><span class="status-pill status-pill--${r.status.toLowerCase()}">${escHtml(r.status)}</span></td></tr>`).join('');
+    const counts = rows.reduce((acc, r) => { acc[r.status] = (acc[r.status] || 0) + 1; return acc; }, {});
+    const badges = Object.entries(counts)
+        .map(([status, count]) => `<span class="badge badge--${status.toLowerCase()} badge--clickable" data-status="${escHtml(status)}"><span class="badge__count">${count}</span> ${escHtml(status)}</span>`)
+        .join('') + `<span class="badge badge--show-all" data-status="">Show all</span>`;
+    const backHref = `/?area=sync&collectionModId=${encodeURIComponent(collectionModId)}&profileId=${encodeURIComponent(profileId)}`;
+    return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Vortex Collection Tools — Ignored/Disabled Mods</title>
+<link rel="stylesheet" href="/styles.css"></head>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <span class="app-header__logo">&#9881;</span>
+    <span>Vortex Collection Tools</span>
+  </div>
+  <nav class="app-nav">
+    <a href="/?area=rebuild" class="nav-tab">Rebuild Collection</a>
+    <a href="/?area=sync" class="nav-tab nav-tab--active">Update Collection</a>
+    <a href="/?area=settings" class="nav-tab">Settings</a>
+    <a href="/?reports=stats" class="nav-tab">Reports</a>
+  </nav>
+  <div class="app-header__meta">Update Collection &gt; Ignored/Disabled Mods</div>
+</header>
+<main class="app-main">
+<a href="${escHtml(backHref)}" class="btn btn--nav btn--back">&larr; Back to Update Collection</a>
+<div class="view-header">
+  <h1>Ignored/Disabled Mods</h1>
+  <p class="muted">${escHtml(collectionName)} &mdash; profile ${escHtml(profileName)}</p>
+</div>
+<div class="summary-badges" id="statusBadges">${badges}</div>
+<div class="plan-table-wrap"><table class="plan-table">
+<thead><tr><th>Mod</th><th>Status</th></tr></thead>
+<tbody id="modListTableBody">${tableRows || `<tr><td colspan="2" class="muted">No mods are currently ignored or disabled in this collection.</td></tr>`}</tbody>
+</table></div>
+</main>
+<script>
+// Same badge-filter behavior as Rebuild Collection's own log-view report -- click a badge to show
+// only that status, "Show all" to clear the filter, active filter persisted in the URL (no
+// navigation) so a reload restores it instead of resetting.
+function applyStatusFilter(status) {
+  document.querySelectorAll('#statusBadges .badge').forEach(function (b) { b.classList.remove('badge--filter-active'); });
+  var rows = document.querySelectorAll('#modListTableBody tr');
+  if (!status) {
+    rows.forEach(function (r) { r.style.display = ''; });
+    return;
+  }
+  var badge = document.querySelector('#statusBadges .badge--clickable[data-status="' + CSS.escape(status) + '"]');
+  if (badge) badge.classList.add('badge--filter-active');
+  rows.forEach(function (r) { r.style.display = r.dataset.status === status ? '' : 'none'; });
+}
+document.getElementById('statusBadges').addEventListener('click', function (e) {
+  var badge = e.target.closest('.badge--clickable, .badge--show-all');
+  if (!badge) return;
+  var status = badge.dataset.status;
+  applyStatusFilter(status);
+  var url = new URL(location.href);
+  if (status) url.searchParams.set('status', status); else url.searchParams.delete('status');
+  history.replaceState(null, '', url);
+});
+applyStatusFilter(new URLSearchParams(location.search).get('status') || '');
+</script>
+</body></html>`;
+}
+
 function createSyncRouter(config) {
     const router = express.Router();
-    const { staging, state } = config;
+    const { staging, state, syncBackupRoot } = config;
     const syncLib = runner.loadSyncLib();
 
     function vortexRunningGate(res) {
@@ -42,14 +120,55 @@ function createSyncRouter(config) {
     router.get('/profiles', async (req, res) => {
         if (vortexRunningGate(res)) return;
         try {
-            res.json({ profiles: await runner.listProfiles(state) });
+            const { profiles, lastActiveProfileId } = await runner.listProfiles(state);
+            res.json({ profiles, lastActiveProfileId });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
     });
 
     router.get('/backups', (req, res) => {
-        res.json({ backups: runner.listBackups() });
+        // No auto-fallback to a hardcoded folder -- confirmed live this was confusing (a real
+        // backup silently landed inside this project's own lib/vortex-sync/backups/, not anywhere
+        // resembling a "Vortex" location, with no indication of where to actually go find it).
+        // Same "not configured yet" shape as /collections above, mirroring Rebuild Collection's own
+        // staging/downloads requirement exactly -- nothing works here until this is explicitly set.
+        if (!syncBackupRoot) return res.json({ backups: [], configured: false });
+        res.json({ backups: runner.listBackups(syncBackupRoot), configured: true });
+    });
+
+    // ---------- Read-only reports (callable any time, regardless of workflow phase) ----------
+    // collectionName/profileName are supplied by the client (it already has both from the pickers
+    // above) purely for display in the report's subtitle -- avoids a second DB round-trip just to
+    // look up a name the caller already knows.
+
+    // One combined report (not two separate ones) -- a mod that's both ignored AND disabled gets
+    // two rows, one per status, rather than a merged "Ignored, Disabled" label; keeps each row a
+    // single plain fact rather than needing its own combined-status vocabulary.
+    router.get('/list-mods/report', async (req, res) => {
+        const { modId, profileId, collectionName, profileName } = req.query;
+        if (!modId || !profileId) return res.status(400).send('modId and profileId query params are required.');
+        if (syncLib.isVortexRunning()) return res.status(409).send("Vortex is currently running. Close it completely and try again.");
+        try {
+            const [ignored, disabled] = await Promise.all([
+                runner.listIgnoredMods({ stateDir: state, modId }),
+                runner.listDisabledMods({ stateDir: state, modId, profileId }),
+            ]);
+            const rows = [
+                ...ignored.map((m) => ({ name: m.name, status: 'Ignored' })),
+                ...disabled.map((m) => ({ name: m.name, status: 'Disabled' })),
+            ].sort((a, b) => a.name.localeCompare(b.name));
+            const html = renderIgnoredDisabledReport({
+                collectionModId: modId,
+                profileId,
+                collectionName: collectionName || modId,
+                profileName: profileName || profileId,
+                rows,
+            });
+            res.type('html').send(html);
+        } catch (e) {
+            res.status(500).send(`Error: ${escHtml(e.message)}`);
+        }
     });
 
     // Phase 1 -- run BEFORE clicking "Update" on the collection in Vortex. Read-only (a temp copy
@@ -58,10 +177,24 @@ function createSyncRouter(config) {
         const { collectionModId, profileId } = req.body || {};
         if (!collectionModId) return res.status(400).json({ error: 'collectionModId is required.' });
         if (!staging) return res.status(400).json({ error: 'not-configured', message: 'Staging folder is not configured yet -- open Settings to set it up.' });
+        if (!syncBackupRoot) return res.status(400).json({ error: 'not-configured', message: 'Update Collection backups folder is not configured yet -- open Settings to set it up.' });
         if (vortexRunningGate(res)) return;
+        // Rare but confirmed real: the collection was updated to a newer revision (Vortex renames
+        // the staging folder to a new archive-derived id) since this page last loaded, so the
+        // client's own in-memory collectionModId no longer corresponds to anything -- not on disk,
+        // not in Vortex's state. Caught HERE, before ever touching the state DB, so it surfaces as
+        // its own clear, distinct error instead of falling into getRules()'s generic "mod not found"
+        // message (which reads as a possible crash/transient issue, not "this id is simply gone").
+        const stillExists = runner.listInstalledCollections(staging).some((c) => c.modId === collectionModId);
+        if (!stillExists) {
+            return res.status(409).json({
+                error: 'collection-stale',
+                message: 'The version of the collection you are attempting to create a backup for is no longer available. You will need to refresh this collection.',
+            });
+        }
         try {
             const snapshot = await runner.captureBackupSnapshot({ stateDir: state, stagingDir: staging, collectionModId, profileId });
-            const filePath = runner.saveBackupSnapshot(snapshot);
+            const filePath = runner.saveBackupSnapshot(snapshot, syncBackupRoot);
             res.json({ ok: true, filePath, ignoredCount: snapshot.ignored.length, disabledCount: snapshot.disabled.length });
         } catch (e) {
             res.status(500).json({ error: e.message });
@@ -142,6 +275,43 @@ function createSyncRouter(config) {
         try {
             const snapshot = runner.loadBackup(backupPath);
             const result = await runner.applyDisables({ stateDir: state, profileId, disabledRefs: snapshot.disabled });
+            res.json({ ok: true, ...result });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        } finally {
+            syncLock.release();
+        }
+    });
+
+    // ---------- Recovery: restore a previous state.v2 backup ----------
+    // Every Phase 2/3 write above takes a full state.v2 backup first (see lib/vortex-sync/lib.js's
+    // backupLiveState) -- these two routes are the other half of that safety net, letting you
+    // actually use one of those backups if something goes wrong (e.g. the native LevelDB crash risk
+    // documented in TECHNICAL.md's Safety notes).
+
+    // Pure directory listing (this project's own state-backups folder) -- never touches Vortex's
+    // state DB at all, so no Vortex-closed gate needed here.
+    router.get('/state-backups', (req, res) => {
+        try {
+            res.json({ backups: runner.listStateBackups() });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // The actual restore -- same live-state safety wrapper (Vortex-closed gate, write lock) as
+    // apply-ignores/apply-disables above, since this also writes to the live state.v2 directory.
+    router.post('/restore-state', async (req, res) => {
+        const { backupDir } = req.body || {};
+        if (!backupDir) return res.status(400).json({ error: 'backupDir is required.' });
+        if (vortexRunningGate(res)) return;
+        try {
+            syncLock.acquire('restore-state');
+        } catch (e) {
+            return res.status(409).json({ error: 'write-active', message: e.message });
+        }
+        try {
+            const result = await runner.restoreState({ stateDir: state, backupDir });
             res.json({ ok: true, ...result });
         } catch (e) {
             res.status(500).json({ error: e.message });
