@@ -3,16 +3,17 @@
 #
 # Works two ways:
 #   - Self-contained release zip: uses the bundled node\node.exe and pre-installed node_modules --
-#     nothing to install, just run this.
-#   - Plain git clone: falls back to whatever "node" is on PATH, and runs npm install once if
-#     node_modules is missing.
+#     nothing to install, just run this. (No bundled npm -- node_modules already has everything
+#     needed, and npm/npx/corepack would just be dead weight in the zip.)
+#   - Plain git clone: falls back to whatever "node"/"npm" is on PATH, and runs npm install once
+#     if node_modules is missing.
 $ErrorActionPreference = 'Stop'
 Set-Location -Path $PSScriptRoot
 
 $bundledNode = Join-Path $PSScriptRoot "node\node.exe"
-if (Test-Path $bundledNode) {
+$usingBundledNode = Test-Path $bundledNode
+if ($usingBundledNode) {
     $nodeExe = $bundledNode
-    $npmCmd = Join-Path $PSScriptRoot "node\npm.cmd"
 } else {
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
         Write-Host "Node.js was not found on PATH."
@@ -21,12 +22,17 @@ if (Test-Path $bundledNode) {
         exit 1
     }
     $nodeExe = "node"
-    $npmCmd = "npm"
 }
 
 if (-not (Test-Path "node_modules")) {
+    if ($usingBundledNode) {
+        Write-Host "node_modules is missing from this release -- it should have shipped pre-installed."
+        Write-Host "Try re-downloading the release zip instead of running npm install here."
+        Read-Host "Press Enter to exit"
+        exit 1
+    }
     Write-Host "First run: installing dependencies..."
-    & $npmCmd install
+    npm install
     if ($LASTEXITCODE -ne 0) {
         Write-Host "npm install failed -- see the errors above."
         Read-Host "Press Enter to exit"

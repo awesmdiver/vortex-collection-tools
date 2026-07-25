@@ -6,15 +6,16 @@ rem readable instead of flashing shut.
 rem
 rem Works two ways:
 rem   - Self-contained release zip: uses the bundled node\node.exe and pre-installed node_modules --
-rem     nothing to install, just double-click.
-rem   - Plain git clone: falls back to whatever "node" is on PATH, and runs npm install once if
-rem     node_modules is missing.
+rem     nothing to install, just double-click. (No bundled npm -- node_modules already has
+rem     everything needed, and npm/npx/corepack would just be dead weight in the zip.)
+rem   - Plain git clone: falls back to whatever "node"/"npm" is on PATH, and runs npm install once
+rem     if node_modules is missing.
 setlocal
 cd /d "%~dp0"
 
 if exist "node\node.exe" (
     set "NODE_EXE=%~dp0node\node.exe"
-    set "NPM_CMD=%~dp0node\npm.cmd"
+    set "USING_BUNDLED_NODE=1"
 ) else (
     where node >nul 2>nul
     if errorlevel 1 (
@@ -24,12 +25,17 @@ if exist "node\node.exe" (
         exit /b 1
     )
     set "NODE_EXE=node"
-    set "NPM_CMD=npm"
 )
 
 if not exist "node_modules" (
+    if defined USING_BUNDLED_NODE (
+        echo node_modules is missing from this release -- it should have shipped pre-installed.
+        echo Try re-downloading the release zip instead of running npm install here.
+        pause
+        exit /b 1
+    )
     echo First run: installing dependencies...
-    call "%NPM_CMD%" install
+    call npm install
     if errorlevel 1 (
         echo npm install failed -- see the errors above.
         pause
