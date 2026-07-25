@@ -33,10 +33,8 @@ alongside it (that's the server; closing it stops the app). Full instructions ar
 
 ## A few things worth knowing
 
-- **Always try "Dry Run" first** on Rebuild Collection — it shows you exactly what would happen
-  without changing anything on your disk.
 - **Vortex needs to be fully closed** before running either tool.
-- After a real (non-dry-run) rebuild, Vortex will likely show an **"External Changes"** prompt the
+- After you have rebuilt a collection, Vortex will likely show an **"External Changes"** prompt the
   next time you open it, for anything that got rebuilt. That's expected — go ahead and click
   through it ("Use newer file" / "Save all changes").
 

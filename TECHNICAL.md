@@ -387,6 +387,11 @@ Other open items, not yet started:
   rejected: `classic-level`'s native addon and this project's read/write-next-to-the-app-folder
   assumptions (config.json, logs, backups) both fight a packaged snapshot's read-only filesystem
   model.
+- **Possible web-UI "Dry Run" option**: the CLI has a real `--dry-run` flag, but the web UI's own
+  "View Collection" → Plan → "Start Rebuild" flow already shows a full preview before anything is
+  touched, so there's no separate dry-run *mode* to opt into there today. Not needed right now, but
+  worth reconsidering if testers end up wanting an explicit "just preview, don't even show me the
+  Start Rebuild button yet" option in Settings.
 
 ## Project structure
 
