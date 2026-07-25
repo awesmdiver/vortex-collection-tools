@@ -26,6 +26,7 @@
     <button id="nav-rebuild" class="nav-tab">Rebuild Collection</button>
     <button id="nav-sync" class="nav-tab">Update Collection</button>
     <button id="nav-settings" class="nav-tab">Settings</button>
+    <button id="nav-reports" class="nav-tab">Reports</button>
   </nav>
   <div id="headerMeta" class="app-header__meta"></div>
 </header>
@@ -145,6 +146,13 @@
         <ul id="openFomodList"></ul>
       </div>
 
+      <div id="offSiteMissingSection" class="callout callout--warning hidden">
+        <div class="callout__title">&#9888; <span id="offSiteMissingTitle"></span></div>
+        <p id="offSiteMissingText"></p>
+        <ul id="offSiteMissingList"></ul>
+        <button id="downloadedStartRebuildBtn" class="btn btn--primary" style="margin-top: 10px;">Downloaded and Start Rebuild</button>
+      </div>
+
       <div class="plan-table-wrap">
         <table class="plan-table">
           <thead><tr><th>Mod</th><th>Action</th><th>Detail</th></tr></thead>
@@ -164,7 +172,7 @@
     <div class="modal">
       <h2>Confirm rebuild</h2>
       <p id="confirmText"></p>
-      <p class="muted">A full backup of every affected mod's current staging folder is made first, and is never auto-deleted.</p>
+      <p id="confirmBackupText" class="muted"></p>
       <div class="modal-actions">
         <button class="btn btn--ghost" data-action="cancel-confirm">Cancel</button>
         <button class="btn btn--primary" data-action="confirm-run">Start Rebuild</button>
@@ -189,8 +197,17 @@
     <div class="view-header">
       <h1 id="progressTitle">Rebuilding&hellip;</h1>
       <div id="phaseIndicator" class="phase-indicator"></div>
+      <div id="backupNotice" class="path-row hidden">
+        <span class="path-row__label">Backup</span>
+        <code id="backupNoticeText" class="path-row__value"></code>
+        <button id="revealProgressBackupBtn" class="btn btn--ghost btn--small hidden">Reveal</button>
+      </div>
+      <div id="downloadNotice" class="path-row hidden">
+        <span class="path-row__label">Downloads</span>
+        <code id="downloadNoticeText" class="path-row__value"></code>
+      </div>
     </div>
-    <div class="plan-table-wrap">
+    <div class="plan-table-wrap plan-table-wrap--scrollable" id="progressTableWrap">
       <table class="plan-table">
         <thead><tr><th>Mod</th><th>Status</th><th>Detail</th></tr></thead>
         <tbody id="progressTableBody"></tbody>
@@ -399,18 +416,64 @@
     </div>
   </div>
 
-  <h2 class="settings-section-title">Backups</h2>
-  <p class="muted">A backup is a full copy of every mod's current staging folder, made just before rebuilding it. For larger collections this option could consume a large amount of disk space.</p>
+  <h2 class="settings-section-title">Download Missing Archives</h2>
   <div class="field-group">
-    <label class="field-label" for="settingsMaxBackupsInput">Number of backups to keep per collection (0 = off (suggested); 1-3 = keep only the N most recent; blank = unlimited, requires manual deletion)</label>
-    <input id="settingsMaxBackupsInput" class="input input--small" type="number" min="0" max="3" step="1" placeholder="unlimited">
+    <label class="checkbox">
+      <input type="checkbox" id="settingsDownloadMissingInput">
+      Download missing archives automatically during rebuild
+    </label>
   </div>
+  <p class="muted">
+    When enabled, Rebuild Collection will automatically download any mod archive it can't find in
+    your downloads folder directly from Nexus before extracting it, instead of skipping that mod.
+  </p>
+  <div class="callout callout--warning">
+    Automated downloads only work for Nexus <strong>Premium</strong> accounts -- Nexus's API refuses
+    this for free accounts by design, the same way Vortex's own client refuses to auto-download for
+    non-Premium users. This respects Nexus's ad-supported download model: free-tier users must
+    download the archive manually from the Nexus website (which shows ads) and let Vortex install
+    it. If your account is not Premium, this tool won't attempt anything else on your behalf -- it
+    will just skip the mod as it does today, with a note in the run log telling you to download and
+    reinstall it yourself via Vortex.
+  </div>
+
+  <div class="field-group">
+    <label class="checkbox">
+      <input type="checkbox" id="settingsForceExtractMismatchInput">
+      Automatically force-extract off-site mods when a downloaded file doesn't exactly match
+    </label>
+  </div>
+  <p class="muted">
+    When enabled, Force Extract will automatically extract any off-site mod archive that you have
+    downloaded, instead of skipping that mod. Note: Vortex might show this a new mod and ask for you
+    to import, make sure you do.
+  </p>
 
   <h2 class="settings-section-title">Performance</h2>
   <p class="muted">Rebuild Collection extracts mods one at a time by default. Raising this runs several extractions in parallel (each is its own independent process) -- faster for large collections, at the cost of more simultaneous disk/CPU use.</p>
   <div class="field-group">
     <label class="field-label" for="settingsConcurrencyInput">Concurrent extractions (1-8)</label>
     <input id="settingsConcurrencyInput" class="input input--small" type="number" min="1" max="8" step="1">
+  </div>
+
+  <h2 class="settings-section-title">Server</h2>
+  <p class="muted">Changes here require the server restart. This server has no login/authentication of its own, so leave the host as <code>127.0.0.1</code> unless you specifically want another device on your network to reach it.</p>
+  <div class="field-group">
+    <label class="field-label" for="settingsServerPortInput">Port</label>
+    <input id="settingsServerPortInput" class="input input--small" type="number" min="1" max="65535" step="1">
+  </div>
+  <div class="field-group" style="margin-bottom: 16px;">
+    <label class="field-label" for="settingsServerHostInput">Host / IP address to bind to</label>
+    <input id="settingsServerHostInput" class="input input--small" type="text" placeholder="127.0.0.1">
+  </div>
+  <div class="callout callout--warning">
+    Only change the host if you understand the risk: anything other than <code>127.0.0.1</code> or <code>localhost</code> exposes this tool -- with full read/write access to your mod files and Vortex state -- to your whole network, with no password protecting it.
+  </div>
+  <div class="field-group">
+    <label class="checkbox">
+      <input type="checkbox" id="settingsAutoOpenInput">
+      Automatically open a browser tab when the server starts
+    </label>
   </div>
 
   <h2 class="settings-section-title">NexusMods</h2>
@@ -423,6 +486,17 @@
   <p class="muted">Stored as plain text in the <code>config.json</code> file. Not encrypted, anyone with access to this machine/user account could read it directly from the file.</p>
   <div class="view-actions">
     <button id="settingsClearNexusKeyBtn" class="btn btn--ghost btn--small">Clear stored key</button>
+  </div>
+
+  <h2 class="settings-section-title">Backups</h2>
+  <p class="muted">A backup is a full copy of every mod's current staging folder, made just before rebuilding it. For larger collections this option could consume a large amount of disk space.</p>
+  <div class="field-group">
+    <label class="field-label" for="settingsMaxBackupsInput">Number of backups to keep per collection (0 = off (suggested); 1-3 = keep only the N most recent; blank = unlimited, requires manual deletion)</label>
+    <input id="settingsMaxBackupsInput" class="input input--small" type="number" min="0" max="3" step="1" placeholder="unlimited">
+  </div>
+  <div class="view-actions">
+    <button id="settingsDeleteBackupsBtn" class="btn btn--ghost btn--small">Delete all backups</button>
+    <span id="settingsDeleteBackupsStatus" class="muted"></span>
   </div>
 
   <div class="view-actions">
@@ -441,11 +515,125 @@
     </div>
   </div>
 </div>
+
+<div id="settingsDeleteBackupsModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Delete all backups?</h2>
+    <p id="settingsDeleteBackupsModalText"></p>
+    <div class="modal-actions">
+      <button id="settingsDeleteBackupsCancelBtn" class="btn btn--ghost">Cancel</button>
+      <button id="settingsDeleteBackupsConfirmBtn" class="btn btn--primary">Delete All</button>
+    </div>
+  </div>
+</div>
 </section>
+
+<section id="area-reports" class="tool-area hidden">
+<main class="app-main">
+  <div class="view-header">
+    <h1>Reports</h1>
+  </div>
+
+  <div class="view-actions">
+    <button id="reports-sub-stats" class="btn btn--primary btn--small">Stats Report</button>
+    <button id="reports-sub-workthrough" class="btn btn--ghost btn--small">Work Through Report</button>
+  </div>
+
+  <div id="reports-sub-area-stats">
+  <p class="muted">Aggregate history across every collection this tool has rebuilt, plus current problem mods in one place.</p>
+
+  <div class="view-actions" id="statsPeriodPicker">
+    <button class="btn btn--ghost btn--small stats-period-btn" data-period="7d">Last 7 days</button>
+    <button class="btn btn--ghost btn--small stats-period-btn" data-period="30d">Last 30 days</button>
+    <button class="btn btn--primary btn--small stats-period-btn" data-period="all">All time</button>
+  </div>
+
+  <h2 class="settings-section-title">Overview</h2>
+  <p class="muted" id="statsOverviewMeta"></p>
+  <div class="summary-badges" id="statsSummaryBadges"></div>
+
+  <h2 class="settings-section-title">Concurrency vs. rebuild-phase duration</h2>
+  <p class="muted" id="statsTimingMeta"></p>
+  <div class="plan-table-wrap">
+    <table class="plan-table">
+      <thead><tr><th>Concurrency</th><th>Runs</th><th>Samples with timing</th><th>Avg rebuild time</th></tr></thead>
+      <tbody id="statsConcurrencyBody"></tbody>
+    </table>
+  </div>
+
+  <h2 class="settings-section-title">Current Issues (across all collections)</h2>
+  <p class="muted">The latest completed (or halted-critical) run for each collection, showing only mods that need attention. Click a status below to filter to just that problem, grouped by collection -- e.g. click "Open FOMOD" to see everywhere you still need to work through Vortex's installer manually.</p>
+  <div class="summary-badges" id="statsIssuesBadges"></div>
+  <div id="statsIssuesList"></div>
+
+  <h2 class="settings-section-title">Browse by Collection</h2>
+  <div class="field-group" style="margin-bottom: 16px;">
+    <select id="statsCollectionSelect" class="select select--small"></select>
+  </div>
+  <div class="plan-table-wrap">
+    <table class="plan-table">
+      <thead><tr><th>Date</th><th>Status</th><th>Total</th><th>Duration</th><th>Sync</th><th>Backup</th><th>Rebuild</th><th>Concurrency</th></tr></thead>
+      <tbody id="statsCollectionHistoryBody"></tbody>
+    </table>
+  </div>
+  </div>
+
+  <div id="reports-sub-area-workthrough" class="hidden">
+  <p class="muted">Work through every current problem mod, collection by collection. Resolvable mismatches and missing archives can be fixed right here; everything else gets a manual completed checkbox that persists across visits until a real rerun clears it.</p>
+  <p class="muted" id="wtProgress"></p>
+  <div class="summary-badges" id="wtBadges"></div>
+  <div id="wtList"></div>
+  </div>
+</main>
+</section>
+
+<!-- Outside every .tool-area on purpose, same reason as #unsavedChangesModal below -- these were
+     previously nested inside <section id="area-reports">, which has display:none whenever Reports
+     isn't the active tab. That silently suppressed the modal (display:none on an ancestor always
+     wins, even over the modal's own position:fixed) any time an action outside the Reports tab
+     (e.g. "Load Vortex Data" on Rebuild Collection) fell through to work-through-app.js's
+     showErrorModal/showConfirmModal -- which it does, since work-through-app.js loads last and its
+     same-named functions clobber app.js's on the shared global scope (see app.js's own comment on
+     that). Confirmed live: the modal's classList/display were correct (visible), it just had zero
+     effect while nested inside a hidden ancestor. -->
+<div id="wtConfirmModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Confirm</h2>
+    <p id="wtConfirmModalText"></p>
+    <div class="modal-actions">
+      <button class="btn btn--ghost" id="wtConfirmModalCancel">Cancel</button>
+      <button class="btn btn--primary" id="wtConfirmModalOk">OK</button>
+    </div>
+  </div>
+</div>
+<div id="wtErrorModal" class="modal-overlay hidden">
+  <div class="modal modal--wide">
+    <h2>Error</h2>
+    <p id="wtErrorModalText" class="error-modal-text"></p>
+    <div class="modal-actions">
+      <button class="btn btn--primary" id="wtErrorModalOk">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Outside every .tool-area on purpose -- triggered by shell.js's nav-click guard when leaving
+     Settings with unsaved changes, so it must stay visible no matter which area is toggled. -->
+<div id="unsavedChangesModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Unsaved changes</h2>
+    <p>You have unsaved changes. Would you like to save them?</p>
+    <div class="modal-actions">
+      <button class="btn btn--ghost" id="unsavedChangesDiscardBtn">Cancel</button>
+      <button class="btn btn--primary" id="unsavedChangesSaveBtn">Save</button>
+    </div>
+  </div>
+</div>
 
 <script src="shell.js"></script>
 <script src="app.js"></script>
 <script src="sync-app.js"></script>
 <script src="settings-app.js"></script>
+<script src="stats-app.js"></script>
+<script src="work-through-app.js"></script>
 </body>
 </html>

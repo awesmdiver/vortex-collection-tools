@@ -12,7 +12,9 @@ const { spawn } = require('child_process');
 const runner = require('../lib/collection-runner');
 const { findSevenZip } = require('../lib/sevenzip');
 const nexusDownload = require('../lib/nexus-collection-download');
+const nexusModDownload = require('../lib/nexus-mod-download');
 const appConfig = require('../lib/app-config');
+const { pickOpenFileAsync } = require('../lib/vortex-sync/win-dialog');
 const runState = require('./run-state');
 const { createSseSession } = require('./sse-session');
 
@@ -25,6 +27,14 @@ function createRouter(config) {
     const syncLib = runner.loadSyncLib();
     const sevenZipExe = findSevenZip();
     const logsDir = path.join(__dirname, '..', 'logs');
+
+    // Shared by /retry-download and /import-offsite -- a FAILED_EXTRACTION_* row with
+    // archiveNotFound is the SAME underlying problem as SKIP_NO_ARCHIVE (the archive genuinely isn't
+    // there), just discovered later, at actual extraction time instead of during classification.
+    function isArchiveMissingStatus(entry) {
+        return entry.status === 'SKIP_NO_ARCHIVE'
+            || ((entry.status === 'FAILED_EXTRACTION_NOT_TOUCHED' || entry.status === 'FAILED_EXTRACTION_NO_PRIOR_DATA') && entry.archiveNotFound);
+    }
 
     // Cache of loadSyncState results, keyed by collectionModId -- populated by
     // POST /api/rebuild/vortex-data/refresh (one shared DB open across every installed collection,
@@ -304,11 +314,14 @@ function createRouter(config) {
             }));
         }
         const resumed = resumeLogPath ? runner.loadResumeLog(resumeLogPath) : new Map();
+        const { downloadMissingArchives, forceExtractOffSiteMismatches } = appConfig.loadConfig();
         const { modEntries, rebuildQueue } = await runner.buildPlan({
-            removedMods, keptMods, knownVortexModIds, resumed, otherVersionsByModId, sharedWithCollectionsByKey,
+            collectionModId, removedMods, keptMods, knownVortexModIds, resumed, otherVersionsByModId, sharedWithCollectionsByKey,
             downloadsDir: downloads, stagingDir: staging, sevenZipExe, logsDir, onModClassified,
+            downloadMissingArchivesEnabled: downloadMissingArchives,
+            forceExtractOffSiteMismatchesEnabled: forceExtractOffSiteMismatches,
         });
-        return { collectionInfo, ignored, keptMods, knownVortexModIds, modEntries, rebuildQueue };
+        return { collectionInfo, ignored, keptMods, knownVortexModIds, modEntries, rebuildQueue, otherVersionsByModId, sharedWithCollectionsByKey };
     }
 
     // Serializes a rebuildQueue entry (which carries live archive paths etc.) down to what the
@@ -320,6 +333,7 @@ function createRouter(config) {
             targetFolderName: action.targetFolderName,
             otherVersionsNote: base?.otherVersionsNote,
             sharedWithNote: base?.sharedWithNote,
+            forcedMismatch: action.forcedMismatch || undefined,
         }));
     }
 
@@ -383,12 +397,42 @@ function createRouter(config) {
                     rebuildQueue: rebuildQueueToJson(rebuildQueue),
                     summary: runner.summarize([...modEntries, ...rebuildQueue.map(() => ({ status: 'REBUILD' }))]),
                     openFomodMods: runner.getOpenFomodMods(modEntries),
+                    offSiteMissingMods: runner.getOffSiteMissingMods(modEntries),
                     resumableLog: findResumableLog(collectionModId),
                 });
             } catch (e) {
                 emitIfCurrent({ type: 'plan-error', done: true, error: true, message: e.message });
             }
         })();
+    });
+
+    // Plan-page "Import" button -- opens a native file picker (the user can point at the archive
+    // wherever they actually saved it, no need to move it into the downloads folder by hand first),
+    // then moves it there and records the mod association (lib/offsite-import-map.js). Does NOT
+    // extract anything itself -- there's no log yet at this point (pre-run), so the user still
+    // clicks "Downloaded and Start Rebuild" afterward, same as the plain-download case. Deliberately
+    // does NOT check isVortexRunning() -- this only touches the downloads folder + a JSON mapping
+    // file, never Vortex's own state.
+    router.post('/import-offsite-archive', async (req, res) => {
+        const { collectionModId, name } = req.body || {};
+        if (!collectionModId || !name) return res.status(400).json({ error: 'collectionModId and name are required.' });
+        if (!downloads) return res.status(400).json({ error: 'Downloads folder is not configured yet -- open Settings.' });
+        let picked;
+        try {
+            picked = await pickOpenFileAsync({
+                title: `Select the archive for "${name}"`,
+                filter: 'Archive files (*.zip;*.7z;*.rar)|*.zip;*.7z;*.rar|All files (*.*)|*.*',
+            });
+        } catch (e) {
+            return res.status(500).json({ error: `File picker failed: ${e.message}` });
+        }
+        if (!picked) return res.json({ ok: false, cancelled: true });
+        try {
+            const { filename } = runner.importOffSiteArchive({ downloadsDir: downloads, collectionModId, name, pickedFilePath: picked });
+            res.json({ ok: true, filename });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
     });
 
     router.get('/runs/current', (req, res) => {
@@ -439,20 +483,74 @@ function createRouter(config) {
             const runTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
             let logPath;
             try {
+                const syncStateStart = Date.now();
                 runState.emit({ type: 'phase', phase: 'sync-state' });
-                const { collectionInfo, modEntries, rebuildQueue } = await computePlan(
+                const { collectionInfo, modEntries, rebuildQueue, knownVortexModIds, otherVersionsByModId, sharedWithCollectionsByKey } = await computePlan(
                     collectionModId, resumeLogPath, undefined,
                     (p) => runState.emit({ type: 'sync-state-progress', ...p })
                 );
                 logPath = path.join(logsDir, `rebuild-${collectionInfo.modId}-${runTimestamp}.json`);
 
+                // Stats Report data (schemaVersion 3) -- phaseDurationsMs/concurrentExtractionsForThisRun
+                // are mutated in place below as each phase actually happens; currentLog()'s closure
+                // picks up whatever's been set so far, so even a run that dies early logs partial,
+                // honest data (null for anything never reached) rather than nothing at all.
+                const phaseDurationsMs = { syncStateMs: Date.now() - syncStateStart, backupMs: null, rebuildMs: null };
+                let concurrentExtractionsForThisRun = null; // set later, at the SAME fresh-read point as today -- see note below
+                let downloadResults = null; // set below if the download phase runs; closed over here
                 const currentLog = (runStatus) => runner.buildLogData({
                     collectionInfo, stagingDir: staging, downloadsDir: downloads, backupRoot,
-                    dryRun: false, startedAt, runStatus, modEntries,
+                    dryRun: false, startedAt, runStatus, modEntries, downloadResults,
+                    concurrentExtractions: concurrentExtractionsForThisRun, phaseDurationsMs,
                 });
 
                 runState.emit({ type: 'phase', phase: 'plan-ready', modEntries, rebuildQueueCount: rebuildQueue.length, openFomodMods: runner.getOpenFomodMods(modEntries) });
                 runner.writeLog(logPath, currentLog('in-progress'));
+
+                // Auto-download missing archives (opt-in, Premium-only -- see
+                // lib/nexus-mod-download.js's header comment for why free accounts are refused
+                // entirely rather than worked around). Runs BEFORE the empty-queue check below, so a
+                // plan whose only gap is missing archives gets a real chance to fill it first, not an
+                // immediate "nothing to rebuild".
+                const { downloadMissingArchives } = appConfig.loadConfig();
+                // HASH_MISMATCH is eligible too -- a same-size "candidate" is a coincidence, not the
+                // real file, so downloading the correct one fixes it. AMBIGUOUS (multiple candidates
+                // that ARE byte-identical correct matches) is excluded -- a real duplicate needing a
+                // human, not something auto-download can resolve.
+                const eligibleForDownload = modEntries.filter((e) =>
+                    e.status === 'SKIP_NO_ARCHIVE' && (e.code === 'NOT_FOUND' || e.code === 'HASH_MISMATCH'));
+                const missingNexusMods = collectionInfo.collection.mods.filter((m) =>
+                    m.source?.type === 'nexus' && eligibleForDownload.some((e) => e.modId === m.source?.modId && e.fileId === m.source?.fileId));
+                if (downloadMissingArchives && missingNexusMods.length > 0) {
+                    runState.emit({ type: 'phase', phase: 'checking-premium' });
+                    const apiKey = nexusModDownload.resolveApiKey();
+                    const premium = await nexusModDownload.checkPremiumStatus(apiKey);
+                    if (!premium.isPremium) {
+                        runState.emit({
+                            type: 'download-skipped', reason: 'not-premium', count: missingNexusMods.length,
+                            message: "Nexus API only allows automated downloads for Premium accounts -- this respects Nexus's ad-supported download model for free users. Download these archives manually from Nexus and let Vortex install them, or upgrade to Premium.",
+                        });
+                        downloadResults = { results: [], skippedReason: 'not-premium' };
+                    } else {
+                        runState.emit({ type: 'phase', phase: 'downloading-missing', count: missingNexusMods.length });
+                        downloadResults = await nexusModDownload.downloadMissingArchivesForPlan({
+                            mods: missingNexusMods, downloadsDir: downloads, gameDomain: collectionInfo.collection.info?.domainName, apiKey,
+                            onProgress: (p) => runState.emit({ type: 'download-progress', ...p }),
+                        });
+                        const downloadedMods = missingNexusMods.filter((m) =>
+                            downloadResults.results.some((r) => r.modId === m.source.modId && r.fileId === m.source.fileId && r.status === 'DOWNLOADED'));
+                        if (downloadedMods.length > 0) {
+                            const newItems = await runner.reclassifyDownloadedMods({
+                                downloadedMods, modEntries, knownVortexModIds,
+                                otherVersionsByModId, sharedWithCollectionsByKey,
+                                downloadsDir: downloads, stagingDir: staging, sevenZipExe, logsDir,
+                            });
+                            rebuildQueue.push(...newItems);
+                        }
+                        runState.emit({ type: 'download-complete', ...downloadResults });
+                    }
+                    runner.writeLog(logPath, currentLog('in-progress'));
+                }
 
                 if (rebuildQueue.length === 0) {
                     runner.writeLog(logPath, currentLog('completed'));
@@ -467,18 +565,33 @@ function createRouter(config) {
                 // backup root is configured at all (can't back up to nowhere) -- this never blocks
                 // a rebuild, it only means there's nothing to roll back to if something goes wrong.
                 const { maxBackupsToKeep, concurrentExtractions } = appConfig.loadConfig();
+                // Recorded here, at the SAME fresh-read point the setting has always been read at
+                // (deliberately not hoisted earlier) -- a long download phase could see a real
+                // Settings change take effect before this point, exactly as before this feature.
+                concurrentExtractionsForThisRun = concurrentExtractions;
                 let backupRunDir = null;
                 if (maxBackupsToKeep !== 0 && backupRoot) {
+                    const backupStart = Date.now();
                     runState.emit({ type: 'phase', phase: 'backing-up' });
-                    ({ backupRunDir } = runner.runBackup({
+                    let backedUpCount;
+                    ({ backupRunDir, backedUpCount } = await runner.runBackup({
                         rebuildQueue, backupRoot, collectionModId: collectionInfo.modId, runTimestamp,
                         onProgress: (p) => runState.emit({ type: 'backup-progress', ...p }),
                     }));
+                    phaseDurationsMs.backupMs = Date.now() - backupStart;
                     runner.pruneOldBackups({ backupRoot, collectionModId: collectionInfo.modId, maxBackupsToKeep });
+                    // A separate, PERSISTENT event from the transient 'phase'/'backup-progress' text --
+                    // for a small/fast collection the whole backup can finish in under a second (confirmed
+                    // live: 20 mods, 849ms), too fast for the live phase indicator to be noticed at all.
+                    // The client keeps this visible for the rest of the run instead of letting it get
+                    // overwritten the instant 'phase: rebuilding' arrives.
+                    runState.emit({ type: 'backup-complete', backedUpCount, backupRunDir, durationMs: phaseDurationsMs.backupMs });
                 } else {
                     runState.emit({ type: 'phase', phase: 'backing-up', skipped: true });
+                    runState.emit({ type: 'backup-complete', skipped: true });
                 }
 
+                const rebuildStart = Date.now();
                 runState.emit({ type: 'phase', phase: 'rebuilding' });
                 const { haltedCritical } = await runner.runRebuild({
                     rebuildQueue, collectionJsonPath: collectionInfo.collectionJsonPath,
@@ -493,6 +606,7 @@ function createRouter(config) {
                         }
                     },
                 });
+                phaseDurationsMs.rebuildMs = Date.now() - rebuildStart;
 
                 const finalRunStatus = haltedCritical ? 'halted-critical' : 'completed';
                 runner.writeLog(logPath, currentLog(finalRunStatus));
@@ -547,6 +661,32 @@ function createRouter(config) {
             return res.status(404).send('Log file not found.');
         }
         const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        // ?from=work-through|stats (set by those pages' own "View Log" links) -- lets the back
+        // button say "Back to Reports" and land on the exact sub-tab this was opened from, instead
+        // of the generic "Back to Collections" default (which is still correct when this log was
+        // reached some other way, e.g. from the main collection picker).
+        const cameFromReports = req.query.from === 'work-through' || req.query.from === 'stats';
+        // req.query.status carries the active badge filter (set by the Reports page's own "View
+        // Log" link) so it round-trips back too -- confirmed live this was dropped here even though
+        // the log page itself already restores it from this same query string on its own load
+        // (see applyStatusFilter(...) in this page's embedded script below). Without this, "Back to
+        // Reports" landed on the right sub-tab but always reset to "Show all", losing whatever
+        // status badge was selected before clicking into the log.
+        const statusQuery = req.query.status ? `&status=${encodeURIComponent(req.query.status)}` : '';
+        const backButtonHtml = cameFromReports
+            ? `<a href="${esc(`/?reports=${req.query.from}${statusQuery}`)}" class="btn btn--nav btn--back">&larr; Back to Reports</a>`
+            : `<a href="/" class="btn btn--nav btn--back">&larr; Back to Collections</a>`;
+        // Same breadcrumb-trail convention as the main SPA's #headerMeta label (shell.js's
+        // setPageLabel) -- this page is server-rendered separately from that app, so it gets its own
+        // static equivalent here rather than trying to share the JS mechanism across that boundary.
+        const breadcrumb = req.query.from === 'work-through' ? 'Reports > Work Through Report > Log View'
+            : req.query.from === 'stats' ? 'Reports > Stats Report > Log View'
+            : 'Rebuild Collection > Browse Logs > Log View';
+        // The nav's blue "active" highlight is normally driven entirely by shell.js (JS, only runs
+        // on the main SPA page) -- this standalone page needs its own server-side equivalent so the
+        // nav still reflects which section it conceptually belongs to, same breadcrumb reasoning.
+        const activeArea = cameFromReports ? 'reports' : 'rebuild';
+        const navTabClass = (area) => `nav-tab${area === activeArea ? ' nav-tab--active' : ''}`;
         // This is a local, single-user tool -- the server runs on the same machine as the person
         // viewing it, so Node's own Date formatting already reflects the system's configured local
         // timezone with zero extra work (no need to detect/pass timezone explicitly).
@@ -554,6 +694,21 @@ function createRouter(config) {
         const badges = Object.entries(log.summary || {})
             .map(([status, count]) => `<span class="badge badge--${status.toLowerCase()} badge--clickable" data-status="${esc(status)}"><span class="badge__count">${count}</span> ${esc(status)}</span>`)
             .join('') + `<span class="badge badge--show-all" data-status="">Show all</span>`;
+        // Downloaded-archives recap -- only present when the "download missing archives" setting
+        // was on for this run. A successful download that went on to rebuild is just a normal
+        // REBUILT row already (no special-casing needed there); this block exists so a FAILED
+        // download isn't easy to miss, and so a not-Premium skip is explained instead of silent.
+        const downloadSummary = log.downloadedArchives ? (() => {
+            const d = log.downloadedArchives;
+            if (d.skippedReason === 'not-premium') {
+                return `<div class="callout callout--warning">Download of ${d.attempted || 'the missing'} archive(s) was skipped: this Nexus account is not Premium, so automated downloads aren't available (respects Nexus's ad-supported download model for free users). Download these manually and reinstall via Vortex.</div>`;
+            }
+            if (!d.attempted) return '';
+            const failedLines = (d.entries || []).filter((e) => e.status === 'FAILED')
+                .map((e) => `<li>${esc(e.name)} -- ${esc(e.error)}</li>`).join('');
+            return `<div class="file-list">Downloaded archives: ${d.succeeded} succeeded, ${d.failed} failed (of ${d.attempted} attempted).` +
+                (failedLines ? `<ul>${failedLines}</ul>` : '') + `</div>`;
+        })() : '';
         // A real collection produced a 178-character mod name (several Nexus authors concatenate
         // multiple patch names into one) -- confirmed live this forces the (deliberately nowrap)
         // Mod column to claim nearly the whole table width under table-layout:auto, squeezing every
@@ -561,11 +716,25 @@ function createRouter(config) {
         // 200-300px of character-by-character wrapped text. Fixed at the source: truncate the
         // STRING itself before it reaches the DOM (not just visually via CSS) so nowrap never has an
         // extreme value to blow the column out on. Click a truncated name to see the full one.
-        const MOD_NAME_TRUNCATE_AT = 70;
-        const modNameCell = (name) => {
-            if (name.length <= MOD_NAME_TRUNCATE_AT) return esc(name);
-            const short = esc(name.slice(0, MOD_NAME_TRUNCATE_AT - 1)) + '…';
-            return `<span class="mod-name mod-name--truncated" data-full="${esc(name)}" data-short="${short}" title="${esc(name)}">${short}</span>`;
+        const MOD_NAME_TRUNCATE_AT = 60;
+        // Same skyrimspecialedition-domain convention lib/vortex-sync/report.js's own nexusUrl()
+        // already uses -- this whole toolkit is SSE-only, never a different Nexus game domain.
+        // Off-site mods (no modId) get no link at all, same as that other report's own behavior.
+        // Plain mod page only (no ?tab=files&file_id=... download-tab deep link) -- confirmed live
+        // this was the wrong page: the user wants the mod's own description page, not its Files tab.
+        const nexusModUrl = (modId) => modId == null ? null : `https://www.nexusmods.com/skyrimspecialedition/mods/${modId}`;
+        const modNameCell = (name, modId) => {
+            const url = nexusModUrl(modId);
+            const inner = name.length <= MOD_NAME_TRUNCATE_AT ? esc(name) : (() => {
+                const short = esc(name.slice(0, MOD_NAME_TRUNCATE_AT - 1)) + '…';
+                return `<span class="mod-name mod-name--truncated" data-full="${esc(name)}" data-short="${short}" title="${esc(name)}">${short}</span>`;
+            })();
+            // target="_blank" is just a fallback for middle-click/ctrl-click -- the real "open in a
+            // new WINDOW, not a tab" behavior (what was actually asked for) needs window.open() with
+            // explicit window features (width/height), which is what forces browsers to treat it as
+            // a popup window instead of a tab; a plain target="_blank" anchor click alone can't do
+            // that. See the .mod-name-link click handler further down in this page's embedded script.
+            return url ? `<a class="mod-name-link" href="${esc(url)}" target="_blank" rel="noopener">${inner}</a>` : inner;
         };
         // sharedWithNote may be a plain array (current format, one entry per collection) or a legacy
         // '; '-joined string (logs written before this field became an array) -- normalize either
@@ -590,6 +759,20 @@ function createRouter(config) {
                 `<span class="file-list-extra hidden">${rest}<br></span>` +
                 `<a class="file-list-toggle" data-more="+${restCount} more" data-less="Show less">+${restCount} more</a></div>`;
         };
+        // One "Delete" button per AMBIGUOUS duplicate candidate -- a plain helper function (not an
+        // inline .map(...).join('') in modRow's own ternary chain) so nested template literals inside
+        // an arrow function body can't create any ambiguity for the parser. Emits just the two cells
+        // (no wrapping row div) -- the CALLER wraps every row in ONE shared CSS grid, so the button
+        // column aligns across all rows regardless of how long/wrapped each path is. Confirmed live:
+        // giving each row its OWN flex container let the button's position drift row to row whenever
+        // one path wrapped to two lines and another didn't.
+        // Displayed text is just the filename -- the full path never matters to the user (there's
+        // only one archive/downloads folder in this whole app, already known from Settings), only
+        // the name of the file to delete does. The full path still travels in data-filepath, which
+        // the actual delete action needs to locate the real file -- only the DISPLAY is simplified.
+        const ambiguousCandidateRow = (m, f) => `<code style="font-size:12px; white-space:nowrap;">${esc(path.basename(f))}</code>` +
+            `<button class="btn btn--ghost btn--small delete-archive-candidate-btn" data-modid="${esc(m.modId ?? '')}" data-fileid="${esc(m.fileId ?? '')}" data-name="${esc(m.name)}" data-filepath="${esc(f)}">Delete</button>`;
+        const ambiguousCandidateRows = (m) => m.candidateFiles.map((f) => ambiguousCandidateRow(m, f)).join('');
         const modRow = (m) => {
             // "Already included in another collection" and the source archive name are identifying
             // info about the mod itself -- surfaced first, ahead of the (often long) missing/changed
@@ -597,7 +780,13 @@ function createRouter(config) {
             let topBlock = '';
             if (m.sharedWithNote) topBlock += `<div class="file-list">Already included in:<br>${sharedWithLines(m.sharedWithNote).map(esc).join('<br>')}</div>`;
             if (m.archiveName) topBlock += `<div class="file-list">Archive: <code>${esc(m.archiveName)}</code></div>`;
-            let rest = esc(m.detail || '').replace(/\n/g, '<br>');
+            // CRITICAL_MANUAL_RESTORE_NEEDED and an off-site hash-mismatch candidate both get a
+            // highlighted (not plain/muted) treatment -- both are cases where the instruction text is
+            // only useful if it's actually noticed, not lost among ordinary grey detail text.
+            const offSiteMismatchForDetail = m.status === 'SKIP_NO_ARCHIVE' && m.offSite && m.code === 'HASH_MISMATCH' && m.candidateFile;
+            let rest = (m.status === 'CRITICAL_MANUAL_RESTORE_NEEDED' || offSiteMismatchForDetail)
+                ? `<div class="callout callout--critical">${esc(m.detail || '')}</div>`
+                : esc(m.detail || '').replace(/\n/g, '<br>');
             rest += fileListBlock('Missing', m.missing);
             rest += fileListBlock('Changed', m.changed);
             if (m.eslPreserved?.length) rest += `<div class="file-list">Marked as Light, left unchanged: ${m.eslPreserved.map(esc).join(', ')}</div>`;
@@ -608,15 +797,81 @@ function createRouter(config) {
             // anything staging already has) -- see rebuild-mod.js's resolveMode header comment.
             // Only offered for FAILED_MISMATCH_NOT_TOUCHED rows with enough info recorded to
             // re-locate the mod (older logs predating targetFolderName being saved can't support
-            // this).
-            const canResolve = m.status === 'FAILED_MISMATCH_NOT_TOUCHED' && m.modId != null && m.fileId != null && m.targetFolderName;
+            // this). Off-site mods (no modId/fileId) still qualify -- re-located by name instead,
+            // confirmed live with a real "browse"-type mod ("High Poly Head") that otherwise showed
+            // no buttons at all despite having a real, resolvable staging folder and archive.
+            const canResolve = m.status === 'FAILED_MISMATCH_NOT_TOUCHED' && m.targetFolderName && (m.modId != null && m.fileId != null || m.name);
+            // A FAILED_EXTRACTION_* row with archiveNotFound is the SAME underlying problem as
+            // SKIP_NO_ARCHIVE (the archive genuinely isn't there), just discovered later -- at actual
+            // extraction time instead of during classification (e.g. an Import'd/force-extracted file
+            // that was deleted again between planning and this run). Confirmed live: a mismatch-status
+            // row like this had no recovery action at all before, unlike its SKIP_NO_ARCHIVE sibling.
+            const archiveMissingStatus = m.status === 'SKIP_NO_ARCHIVE'
+                || ((m.status === 'FAILED_EXTRACTION_NOT_TOUCHED' || m.status === 'FAILED_EXTRACTION_NO_PRIOR_DATA') && m.archiveNotFound);
+            // AMBIGUOUS -- two or more byte-identical duplicate files for the same mod, confirmed
+            // real-world ("Diverse 4thUnknown Dragons" had the exact same archive under two
+            // different filenames). Computed here (not further down) so canRetryDownload below can
+            // exclude it -- confirmed live this was a real bug: canRetryDownload didn't check code at
+            // all, so an AMBIGUOUS mod still showed "Retry Download" (which would just add a THIRD
+            // duplicate) instead of ever reaching the delete-a-duplicate buttons, since it's checked
+            // earlier in this same ternary chain.
+            const isAmbiguous = m.status === 'SKIP_NO_ARCHIVE' && m.code === 'AMBIGUOUS' && Array.isArray(m.candidateFiles) && m.candidateFiles.length > 1;
+            // Shown for ANY current archive-missing row -- the backend route is the real eligibility
+            // gatekeeper (rejects off-site/non-Nexus mods with a clear error), not this condition, so
+            // it's offered even for a mod that was never auto-download-attempted at all.
+            const canRetryDownload = archiveMissingStatus && !isAmbiguous && m.modId != null && m.fileId != null;
+            // A same-size candidate that failed the md5 check IS a real, concrete file sitting in the
+            // downloads folder -- almost certainly the user's own manual download attempt, just not a
+            // byte-for-byte match. Offer to accept it anyway rather than only pointing back at the URL.
+            // SKIP_NO_ARCHIVE-only -- candidateFile is only ever recorded during classification.
+            const canForceExtract = offSiteMismatchForDetail;
+            // An off-site missing archive (source.type 'browse'/'direct'/'bundle') can never be
+            // auto-downloaded regardless of settings -- this tool has no way to fetch it, so the
+            // Extraction column says so directly instead of just staying blank, with a link to the
+            // collection.json-recorded source URL when one was actually recorded.
+            const offSiteMissing = archiveMissingStatus && m.offSite && !canForceExtract;
+            // Import is offered for ANY off-site SKIP_NO_ARCHIVE row, alongside whatever else applies
+            // (Force Extract Anyway if a same-size candidate was auto-detected, or just the plain
+            // "off-site" note otherwise) -- it's the reliable path regardless of whether the file
+            // happens to be a same-size candidate, since the user explicitly picks the file rather
+            // than relying on any auto-detection at all.
+            const importBtnHtml = (canForceExtract || offSiteMissing)
+                ? `<button class="btn btn--ghost btn--small import-offsite-btn" data-name="${esc(m.name)}">Import</button>`
+                : '';
+            // A FAILED_EXTRACTION_* row that ISN'T archive-missing failed for some other reason --
+            // confirmed real-world this session, a transient Windows file-lock (EPERM) during the
+            // 7z-scratch copy step, not anything wrong with the archive itself. Simple retry of the
+            // exact same classify+extract flow is the right recovery action, distinct from Retry
+            // Download/Import (which only make sense when the archive itself was the problem).
+            const canRetryExtraction = (m.status === 'FAILED_EXTRACTION_NOT_TOUCHED' || m.status === 'FAILED_EXTRACTION_NO_PRIOR_DATA')
+                && !archiveMissingStatus && m.targetFolderName && (m.modId != null && m.fileId != null || m.name);
             const extractionCell = canResolve
                 ? `<div class="extraction-actions">`
-                    + `<button class="btn btn--primary btn--small resolve-mismatch-btn" data-modid="${esc(m.modId)}" data-fileid="${esc(m.fileId)}" data-mode="all">Extract all</button>`
-                    + `<button class="btn btn--primary btn--small resolve-mismatch-btn" data-modid="${esc(m.modId)}" data-fileid="${esc(m.fileId)}" data-mode="keep-existing">Keep modified</button>`
+                    + `<button class="btn btn--primary btn--small resolve-mismatch-btn" data-modid="${esc(m.modId ?? '')}" data-fileid="${esc(m.fileId ?? '')}" data-name="${esc(m.name)}" data-mode="all">Extract all</button>`
+                    + `<button class="btn btn--primary btn--small resolve-mismatch-btn" data-modid="${esc(m.modId ?? '')}" data-fileid="${esc(m.fileId ?? '')}" data-name="${esc(m.name)}" data-mode="keep-existing">Keep modified</button>`
                     + `</div>`
+                : canRetryDownload
+                ? `<div class="extraction-actions">`
+                    + `<button class="btn btn--primary btn--small retry-download-btn" data-modid="${esc(m.modId)}" data-fileid="${esc(m.fileId)}">Retry Download</button>`
+                    + `</div>`
+                : canForceExtract
+                ? `<div class="extraction-actions">`
+                    + `<button class="btn btn--primary btn--small force-extract-offsite-btn" data-name="${esc(m.name)}">Force Extract Anyway</button>`
+                    + importBtnHtml
+                    + `</div>`
+                : offSiteMissing
+                ? `<div class="extraction-actions">${importBtnHtml}</div>`
+                    + `<div class="file-list">Mod is located off-site, you'll need to obtain it manually and install via Vortex.`
+                    + (m.sourceUrl ? `<br><a class="archive-link" href="${esc(m.sourceUrl)}" target="_blank" rel="noopener noreferrer">${esc(m.sourceUrl)}</a>` : '')
+                    + `</div>`
+                : canRetryExtraction
+                ? `<div class="extraction-actions">`
+                    + `<button class="btn btn--primary btn--small retry-extraction-btn" data-modid="${esc(m.modId ?? '')}" data-fileid="${esc(m.fileId ?? '')}" data-name="${esc(m.name)}">Retry Extraction</button>`
+                    + `</div>`
+                : isAmbiguous
+                ? `<div class="ambiguous-candidates">${ambiguousCandidateRows(m)}</div>`
                 : '';
-            return `<tr data-status="${esc(m.status)}"><td>${modNameCell(m.name)}</td><td><span class="status-pill status-pill--${m.status.toLowerCase()}">${esc(m.status)}</span></td><td class="detail-cell">${detail}</td><td class="extraction-cell">${extractionCell}</td></tr>`;
+            return `<tr data-status="${esc(m.status)}"><td>${modNameCell(m.name, m.modId)}</td><td><span class="status-pill status-pill--${m.status.toLowerCase()}">${esc(m.status)}</span></td><td class="detail-cell">${detail}</td><td class="extraction-cell">${extractionCell}</td></tr>`;
         };
         // Ignored/optional-not-installed mods carry no action at all -- same reasoning as the live
         // plan table: put them last so the mods that actually matter aren't buried.
@@ -626,15 +881,30 @@ function createRouter(config) {
         const ignoredMods = allMods.filter((m) => NON_ACTIONABLE.has(m.status));
         const rows = [...actionableMods, ...ignoredMods].map(modRow).join('');
         res.send(`<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>${esc(log.collectionName)} -- Rebuild Log</title>
+<html><head><meta charset="UTF-8"><title>Vortex Collection Tools — ${esc(breadcrumb)}</title>
 <link rel="stylesheet" href="/styles.css"></head>
-<body><main class="app-main">
-<a href="/" class="btn btn--nav btn--back">&larr; Back to Collections</a>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <span class="app-header__logo">&#9881;</span>
+    <span>Vortex Collection Tools</span>
+  </div>
+  <nav class="app-nav">
+    <a href="/?area=rebuild" class="${navTabClass('rebuild')}">Rebuild Collection</a>
+    <a href="/?area=sync" class="${navTabClass('sync')}">Update Collection</a>
+    <a href="/?area=settings" class="${navTabClass('settings')}">Settings</a>
+    <a href="/?reports=stats" class="${navTabClass('reports')}">Reports</a>
+  </nav>
+  <div class="app-header__meta">${esc(breadcrumb)}</div>
+</header>
+<main class="app-main">
+${backButtonHtml}
 <div class="view-header">
   <h1>${esc(log.collectionName)}</h1>
   <p class="muted">${esc(log.runStatus)} -- started ${esc(fmtDate(log.startedAt))}${log.finishedAt ? ', finished ' + esc(fmtDate(log.finishedAt)) : ''}${log.durationMs ? ` (${(log.durationMs / 1000).toFixed(1)}s)` : ''}</p>
 </div>
 <div class="summary-badges" id="statusBadges">${badges}</div>
+${downloadSummary}
 <div class="plan-table-wrap"><table class="plan-table">
 <thead><tr><th>Mod</th><th>Status</th><th>Detail</th><th>Extraction</th></tr></thead>
 <tbody id="logTableBody" data-filename="${esc(filename)}">${rows}</tbody>
@@ -678,6 +948,17 @@ function showErrorModal(message) {
 document.getElementById('errorModalOk').addEventListener('click', () => {
   document.getElementById('errorModal').classList.add('hidden');
 });
+// Forces a real popup WINDOW instead of a new tab -- a plain target="_blank" anchor click is
+// treated as a tab by every modern browser regardless of site preference; window.open() with
+// explicit width/height window features is what actually gets browsers to open a separate window.
+// target="_blank"/rel="noopener" stay on the <a> itself purely as a middle-click/ctrl-click
+// fallback (those bypass this click handler entirely and use the browser's own default).
+document.querySelectorAll('.mod-name-link').forEach((a) => {
+  a.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.open(a.href, '_blank', 'noopener,width=1200,height=900');
+  });
+});
 document.querySelectorAll('.mod-name--truncated').forEach((el) => {
   el.addEventListener('click', () => {
     const stillTruncated = el.classList.toggle('mod-name--truncated');
@@ -696,8 +977,9 @@ document.getElementById('logTableBody').addEventListener('click', async (e) => {
   if (!btn) return;
   const row = btn.closest('tr');
   const filename = document.getElementById('logTableBody').dataset.filename;
-  const modId = Number(btn.dataset.modid);
-  const fileId = Number(btn.dataset.fileid);
+  const modId = btn.dataset.modid ? Number(btn.dataset.modid) : null;
+  const fileId = btn.dataset.fileid ? Number(btn.dataset.fileid) : null;
+  const name = btn.dataset.name;
   const resolveMode = btn.dataset.mode;
   const message = resolveMode === 'all'
     ? 'Warning: this will fully replace this mod within the staging environment. Continue?'
@@ -709,7 +991,7 @@ document.getElementById('logTableBody').addEventListener('click', async (e) => {
     const res = await fetch('/api/rebuild/logs/' + encodeURIComponent(filename) + '/resolve-mismatch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ modId, fileId, resolveMode }),
+      body: JSON.stringify({ modId, fileId, name, resolveMode }),
     });
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
@@ -718,6 +1000,135 @@ document.getElementById('logTableBody').addEventListener('click', async (e) => {
     showErrorModal('Failed: ' + err.message);
     row.querySelectorAll('.resolve-mismatch-btn').forEach((b) => { b.disabled = false; });
     btn.textContent = resolveMode === 'all' ? 'Extract all' : 'Keep modified';
+  }
+});
+document.getElementById('logTableBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.retry-download-btn');
+  if (!btn) return;
+  const row = btn.closest('tr');
+  const filename = document.getElementById('logTableBody').dataset.filename;
+  const modId = Number(btn.dataset.modid);
+  const fileId = Number(btn.dataset.fileid);
+  btn.disabled = true;
+  btn.textContent = 'Downloading…';
+  try {
+    const res = await fetch('/api/rebuild/logs/' + encodeURIComponent(filename) + '/retry-download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modId, fileId }),
+    });
+    const data = await res.json();
+    // A non-ok HTTP status (NOT_NEXUS/NOT_PREMIUM) means the log was NOT touched -- just show the
+    // error, nothing to reload. data.ok === false with a 200 status means the download failed but
+    // the route already persisted an updated "Download failed..." detail into the log -- reload
+    // either way (success or that case) to show the current, real log content.
+    if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    location.reload();
+  } catch (err) {
+    showErrorModal('Failed: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Retry Download';
+  }
+});
+document.getElementById('logTableBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.force-extract-offsite-btn');
+  if (!btn) return;
+  const row = btn.closest('tr');
+  const filename = document.getElementById('logTableBody').dataset.filename;
+  const name = btn.dataset.name;
+  if (!await showConfirmModal('Warning: this file does not exactly match what this collection recorded (a different repack/edition). Extract it anyway? Vortex may prompt you to import it as a new mod afterward -- accept that prompt if so.')) return;
+  btn.disabled = true;
+  btn.textContent = 'Extracting…';
+  try {
+    const res = await fetch('/api/rebuild/logs/' + encodeURIComponent(filename) + '/force-extract-offsite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    location.reload();
+  } catch (err) {
+    showErrorModal('Failed: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Force Extract Anyway';
+  }
+});
+document.getElementById('logTableBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.import-offsite-btn');
+  if (!btn) return;
+  const filename = document.getElementById('logTableBody').dataset.filename;
+  const name = btn.dataset.name;
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = 'Waiting for file…';
+  try {
+    const res = await fetch('/api/rebuild/logs/' + encodeURIComponent(filename) + '/import-offsite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+    if (data.cancelled) { btn.disabled = false; btn.textContent = originalText; return; }
+    if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    location.reload();
+  } catch (err) {
+    showErrorModal('Failed: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+});
+document.getElementById('logTableBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.retry-extraction-btn');
+  if (!btn) return;
+  const row = btn.closest('tr');
+  const filename = document.getElementById('logTableBody').dataset.filename;
+  const modId = btn.dataset.modid ? Number(btn.dataset.modid) : null;
+  const fileId = btn.dataset.fileid ? Number(btn.dataset.fileid) : null;
+  const name = btn.dataset.name;
+  btn.disabled = true;
+  btn.textContent = 'Retrying…';
+  try {
+    const res = await fetch('/api/rebuild/logs/' + encodeURIComponent(filename) + '/retry-extraction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modId, fileId, name }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    location.reload();
+  } catch (err) {
+    showErrorModal('Failed: ' + err.message);
+    row.querySelectorAll('.retry-extraction-btn').forEach((b) => { b.disabled = false; b.textContent = 'Retry Extraction'; });
+  }
+});
+document.getElementById('logTableBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.delete-archive-candidate-btn');
+  if (!btn) return;
+  const row = btn.closest('tr');
+  const filename = document.getElementById('logTableBody').dataset.filename;
+  const modId = btn.dataset.modid ? Number(btn.dataset.modid) : null;
+  const fileId = btn.dataset.fileid ? Number(btn.dataset.fileid) : null;
+  const name = btn.dataset.name;
+  const filePath = btn.dataset.filepath;
+  var sepIdx = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf(String.fromCharCode(92)));
+  var filePathBaseName = sepIdx >= 0 ? filePath.slice(sepIdx + 1) : filePath;
+  if (!await showConfirmModal('Warning: this will permanently delete this file:\\n' + filePathBaseName + '\\n\\nContinue?')) return;
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+  try {
+    const res = await fetch('/api/rebuild/logs/' + encodeURIComponent(filename) + '/delete-archive-candidate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modId, fileId, name, filePath }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    location.reload();
+  } catch (err) {
+    showErrorModal('Failed: ' + err.message);
+    row.querySelectorAll('.delete-archive-candidate-btn').forEach((b) => { b.disabled = false; });
+    btn.textContent = 'Delete';
   }
 });
 // Pulled out of the click handler so a page reload (e.g. after resolving a mismatch) can re-apply
@@ -763,10 +1174,189 @@ applyStatusFilter(new URLSearchParams(location.search).get('status') || '');
         if (!/^rebuild-.+\.json$/.test(filename)) return res.status(400).json({ error: 'Invalid log filename.' });
         const full = path.join(logsDir, filename);
         if (path.dirname(full) !== logsDir) return res.status(400).json({ error: 'Invalid log filename.' });
-        const { modId, fileId, resolveMode } = req.body || {};
+        const { modId, fileId, name, resolveMode } = req.body || {};
         if (!['all', 'keep-existing'].includes(resolveMode)) {
             return res.status(400).json({ error: 'resolveMode must be "all" or "keep-existing".' });
         }
+        // Off-site mods (source.type 'browse'/'direct') carry no modId/fileId at all -- name is the
+        // only identifier available for those, so it's required whenever modId/fileId aren't.
+        if ((modId == null || fileId == null) && !name) {
+            return res.status(400).json({ error: 'modId+fileId, or name, are required.' });
+        }
+        let log;
+        try {
+            log = JSON.parse(fs.readFileSync(full, 'utf8'));
+        } catch {
+            return res.status(404).json({ error: 'Log file not found.' });
+        }
+        const entryIndex = (log.mods || []).findIndex((m) => (
+            modId != null && fileId != null ? (m.modId === modId && m.fileId === fileId) : (m.name === name && m.modId == null && m.fileId == null)
+        ));
+        if (entryIndex === -1) return res.status(404).json({ error: 'Mod not found in this log.' });
+        const entry = log.mods[entryIndex];
+        if (entry.status !== 'FAILED_MISMATCH_NOT_TOUCHED') {
+            return res.status(400).json({ error: `This mod's status is "${entry.status}", not FAILED_MISMATCH_NOT_TOUCHED -- refusing to touch it.` });
+        }
+        if (!entry.targetFolderName) {
+            return res.status(400).json({ error: 'This log entry has no recorded targetFolderName -- too old a log format to resolve this way.' });
+        }
+        try {
+            const { result, archiveName } = await runner.resolveMismatchedMod({
+                collectionModId: log.collectionModId, stagingDir: staging, downloadsDir: downloads,
+                modId, fileId, name: entry.name, targetFolderName: entry.targetFolderName, resolveMode,
+            });
+            // Built fresh, not merged with the old entry -- the FAILED_MISMATCH_NOT_TOUCHED shape's
+            // own fields (detail/missing/changed/changedEslOnly) don't apply to the new REBUILT
+            // result at all and would otherwise linger stale if just spread over.
+            const updatedEntry = {
+                name: entry.name, modId: entry.modId, fileId: entry.fileId,
+                targetFolderName: entry.targetFolderName, archiveName: archiveName || entry.archiveName,
+                ...result,
+            };
+            log.mods[entryIndex] = updatedEntry;
+            log.summary = runner.summarize(log.mods);
+            runner.writeLog(full, log);
+            res.json({ ok: true, entry: updatedEntry, summary: log.summary });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    // "Retry Extraction" -- a FAILED_EXTRACTION_NOT_TOUCHED/NO_PRIOR_DATA mod whose failure wasn't
+    // archive-not-found (that gets Retry Download/Import instead -- see isArchiveMissingStatus()
+    // above). Covers a genuinely transient failure (confirmed real-world this session: an EPERM on a
+    // freshly-extracted file during the 7z-scratch copy step, almost certainly antivirus/indexer
+    // briefly holding a handle) by just re-attempting the exact same classify+extract flow.
+    router.post('/logs/:filename/retry-extraction', async (req, res) => {
+        const { filename } = req.params;
+        if (!/^rebuild-.+\.json$/.test(filename)) return res.status(400).json({ error: 'Invalid log filename.' });
+        const full = path.join(logsDir, filename);
+        if (path.dirname(full) !== logsDir) return res.status(400).json({ error: 'Invalid log filename.' });
+        const { modId, fileId, name } = req.body || {};
+        if ((modId == null || fileId == null) && !name) {
+            return res.status(400).json({ error: 'modId+fileId, or name, are required.' });
+        }
+        let log;
+        try {
+            log = JSON.parse(fs.readFileSync(full, 'utf8'));
+        } catch {
+            return res.status(404).json({ error: 'Log file not found.' });
+        }
+        const entryIndex = (log.mods || []).findIndex((m) => (
+            modId != null && fileId != null ? (m.modId === modId && m.fileId === fileId) : (m.name === name && m.modId == null && m.fileId == null)
+        ));
+        if (entryIndex === -1) return res.status(404).json({ error: 'Mod not found in this log.' });
+        const entry = log.mods[entryIndex];
+        if (entry.status !== 'FAILED_EXTRACTION_NOT_TOUCHED' && entry.status !== 'FAILED_EXTRACTION_NO_PRIOR_DATA') {
+            return res.status(400).json({ error: `This mod's status is "${entry.status}" -- refusing to touch it.` });
+        }
+        if (!entry.targetFolderName) {
+            return res.status(400).json({ error: 'This log entry has no recorded targetFolderName -- too old a log format to resolve this way.' });
+        }
+        try {
+            const outcome = await runner.retryExtraction({
+                collectionModId: log.collectionModId, stagingDir: staging, downloadsDir: downloads,
+                modId, fileId, name: entry.name, targetFolderName: entry.targetFolderName,
+            });
+            // The archive situation can genuinely change between the original failure and this
+            // retry (e.g. now AMBIGUOUS) -- retryExtraction() reports that as kind:'SKIP_NO_ARCHIVE'
+            // instead of throwing, so it must be handled as its own distinct shape here, not assumed
+            // to always be a successful { result, archiveName } outcome.
+            const updatedEntry = outcome.kind === 'SKIP_NO_ARCHIVE'
+                ? {
+                    name: entry.name, modId: entry.modId, fileId: entry.fileId, status: 'SKIP_NO_ARCHIVE',
+                    detail: outcome.detail, code: outcome.code, candidateFile: outcome.candidateFile, candidateFiles: outcome.candidateFiles,
+                }
+                : {
+                    name: entry.name, modId: entry.modId, fileId: entry.fileId,
+                    targetFolderName: entry.targetFolderName, archiveName: outcome.archiveName || entry.archiveName,
+                    ...outcome.result,
+                };
+            log.mods[entryIndex] = updatedEntry;
+            log.summary = runner.summarize(log.mods);
+            runner.writeLog(full, log);
+            res.json({ ok: true, entry: updatedEntry, summary: log.summary });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    // "Delete duplicate" for an AMBIGUOUS SKIP_NO_ARCHIVE mod (real-world case: two byte-identical
+    // copies of the same archive under different filenames, confirmed with "Diverse 4thUnknown
+    // Dragons"). Deletes ONE of the recorded candidate files (validated to actually be one of them),
+    // then re-checks the mod fresh once the ambiguity is resolved down to a single file -- or just
+    // updates the remaining candidate list if more than one duplicate is still left.
+    router.post('/logs/:filename/delete-archive-candidate', async (req, res) => {
+        const { filename } = req.params;
+        if (!/^rebuild-.+\.json$/.test(filename)) return res.status(400).json({ error: 'Invalid log filename.' });
+        const full = path.join(logsDir, filename);
+        if (path.dirname(full) !== logsDir) return res.status(400).json({ error: 'Invalid log filename.' });
+        const { modId, fileId, name, filePath } = req.body || {};
+        if ((modId == null || fileId == null) && !name) {
+            return res.status(400).json({ error: 'modId+fileId, or name, are required.' });
+        }
+        if (!filePath) return res.status(400).json({ error: 'filePath is required.' });
+        let log;
+        try {
+            log = JSON.parse(fs.readFileSync(full, 'utf8'));
+        } catch {
+            return res.status(404).json({ error: 'Log file not found.' });
+        }
+        const entryIndex = (log.mods || []).findIndex((m) => (
+            modId != null && fileId != null ? (m.modId === modId && m.fileId === fileId) : (m.name === name && m.modId == null && m.fileId == null)
+        ));
+        if (entryIndex === -1) return res.status(404).json({ error: 'Mod not found in this log.' });
+        const entry = log.mods[entryIndex];
+        if (entry.status !== 'SKIP_NO_ARCHIVE' || entry.code !== 'AMBIGUOUS' || !Array.isArray(entry.candidateFiles)) {
+            return res.status(400).json({ error: 'This mod has no recorded duplicate-file list to resolve this way.' });
+        }
+        if (!entry.candidateFiles.includes(filePath)) {
+            return res.status(400).json({ error: 'That file is not one of the recorded candidates for this mod.' });
+        }
+        try {
+            runner.deleteArchiveCandidate({ downloadsDir: downloads, filePath });
+        } catch (e) {
+            return res.status(500).json({ ok: false, error: e.message });
+        }
+        const remaining = entry.candidateFiles.filter((f) => f !== filePath);
+        try {
+            let updatedEntry;
+            if (remaining.length <= 1) {
+                const outcome = await runner.reclassifyMod({
+                    collectionModId: log.collectionModId, stagingDir: staging, downloadsDir: downloads, sevenZipExe,
+                    modId, fileId, name: entry.name,
+                });
+                updatedEntry = outcome.kind === 'REBUILD'
+                    ? { name: entry.name, modId: entry.modId, fileId: entry.fileId, targetFolderName: outcome.targetFolderName, archiveName: outcome.archiveName, ...outcome }
+                    : { ...entry, status: outcome.kind, detail: outcome.detail, code: outcome.code, candidateFile: outcome.candidateFile, candidateFiles: outcome.candidateFiles };
+            } else {
+                updatedEntry = { ...entry, candidateFiles: remaining };
+            }
+            log.mods[entryIndex] = updatedEntry;
+            log.summary = runner.summarize(log.mods);
+            runner.writeLog(full, log);
+            res.json({ ok: true, entry: updatedEntry, summary: log.summary });
+        } catch (e) {
+            // The file was already deleted successfully even if reclassify itself blew up -- still
+            // persist that much rather than silently losing track of it.
+            const updatedEntry = { ...entry, candidateFiles: remaining };
+            log.mods[entryIndex] = updatedEntry;
+            runner.writeLog(full, log);
+            res.status(500).json({ ok: false, error: e.message, entry: updatedEntry });
+        }
+    });
+
+    // On-demand retry for one SKIP_NO_ARCHIVE mod (log-view page's "Retry Download" button, or the
+    // Work Through Report's equivalent). Shown for ANY current SKIP_NO_ARCHIVE entry regardless of
+    // whether an auto-download was ever attempted before (useful even if downloadMissingArchives was
+    // off during the original run) -- this route itself is the single source of truth for
+    // eligibility (rejects off-site/non-Nexus mods with a clear error), not the caller.
+    router.post('/logs/:filename/retry-download', async (req, res) => {
+        const { filename } = req.params;
+        if (!/^rebuild-.+\.json$/.test(filename)) return res.status(400).json({ error: 'Invalid log filename.' });
+        const full = path.join(logsDir, filename);
+        if (path.dirname(full) !== logsDir) return res.status(400).json({ error: 'Invalid log filename.' });
+        const { modId, fileId } = req.body || {};
         if (modId == null || fileId == null) {
             return res.status(400).json({ error: 'modId and fileId are required.' });
         }
@@ -779,25 +1369,124 @@ applyStatusFilter(new URLSearchParams(location.search).get('status') || '');
         const entryIndex = (log.mods || []).findIndex((m) => m.modId === modId && m.fileId === fileId);
         if (entryIndex === -1) return res.status(404).json({ error: 'Mod not found in this log.' });
         const entry = log.mods[entryIndex];
-        if (entry.status !== 'FAILED_MISMATCH_NOT_TOUCHED') {
-            return res.status(400).json({ error: `This mod's status is "${entry.status}", not FAILED_MISMATCH_NOT_TOUCHED -- refusing to touch it.` });
-        }
-        if (!entry.targetFolderName) {
-            return res.status(400).json({ error: 'This log entry has no recorded targetFolderName -- too old a log format to resolve this way.' });
+        if (!isArchiveMissingStatus(entry)) {
+            return res.status(400).json({ error: `This mod's status is "${entry.status}" -- no archive-missing state recorded, refusing to touch it.` });
         }
         try {
-            const { result, archiveName } = await runner.resolveMismatchedMod({
-                collectionModId: log.collectionModId, stagingDir: staging, downloadsDir: downloads,
-                modId, fileId, targetFolderName: entry.targetFolderName, resolveMode,
+            const outcome = await runner.retryMissingArchiveDownload({
+                collectionModId: log.collectionModId, stagingDir: staging, downloadsDir: downloads, sevenZipExe,
+                modId, fileId,
             });
-            // Built fresh, not merged with the old entry -- the FAILED_MISMATCH_NOT_TOUCHED shape's
-            // own fields (detail/missing/changed/changedEslOnly) don't apply to the new REBUILT
-            // result at all and would otherwise linger stale if just spread over.
-            const updatedEntry = {
-                name: entry.name, modId: entry.modId, fileId: entry.fileId,
-                targetFolderName: entry.targetFolderName, archiveName: archiveName || entry.archiveName,
-                ...result,
-            };
+            // code/candidateFile/candidateFiles must overwrite the OLD entry's copies, not just get
+            // dropped by spreading ...entry first -- confirmed live this was a real bug: a stale
+            // code="NOT_FOUND" survived a retry that actually came back AMBIGUOUS, hiding the
+            // delete-duplicate UI even though the detail text correctly described the new situation.
+            const updatedEntry = outcome.kind === 'REBUILD'
+                ? { name: entry.name, modId, fileId, targetFolderName: outcome.targetFolderName, archiveName: outcome.archiveName, ...outcome }
+                : {
+                    ...entry, status: outcome.kind, detail: outcome.detail, code: outcome.code,
+                    candidateFile: outcome.candidateFile, candidateFiles: outcome.candidateFiles,
+                };
+            log.mods[entryIndex] = updatedEntry;
+            log.summary = runner.summarize(log.mods);
+            runner.writeLog(full, log);
+            res.json({ ok: true, entry: updatedEntry, summary: log.summary });
+        } catch (e) {
+            if (e.code === 'DOWNLOAD_FAILED') {
+                // Per explicit request -- persisted into the log itself so it's visible on next
+                // view too, not just this one response.
+                const updatedEntry = { ...entry, detail: 'Download failed. Please download via Vortex.' };
+                log.mods[entryIndex] = updatedEntry;
+                runner.writeLog(full, log);
+                return res.status(200).json({ ok: false, entry: updatedEntry, error: e.message });
+            }
+            res.status(400).json({ ok: false, error: e.message }); // NOT_NEXUS / NOT_PREMIUM -- don't mutate the log
+        }
+    });
+
+    // On-demand "Force Extract Anyway" for one off-site SKIP_NO_ARCHIVE mod whose recorded
+    // candidateFile is a real, same-size file that just failed the md5 check -- the manual
+    // equivalent of the Settings "forceExtractOffSiteMismatches" toggle, for a mod the user chose
+    // NOT to auto-force during the run. Name-based (off-site mods carry no modId/fileId), same
+    // lookup convention as /resolve-mismatch's off-site fallback.
+    router.post('/logs/:filename/force-extract-offsite', async (req, res) => {
+        const { filename } = req.params;
+        if (!/^rebuild-.+\.json$/.test(filename)) return res.status(400).json({ error: 'Invalid log filename.' });
+        const full = path.join(logsDir, filename);
+        if (path.dirname(full) !== logsDir) return res.status(400).json({ error: 'Invalid log filename.' });
+        const { name } = req.body || {};
+        if (!name) return res.status(400).json({ error: 'name is required.' });
+        let log;
+        try {
+            log = JSON.parse(fs.readFileSync(full, 'utf8'));
+        } catch {
+            return res.status(404).json({ error: 'Log file not found.' });
+        }
+        const entryIndex = (log.mods || []).findIndex((m) => m.name === name && m.modId == null && m.fileId == null);
+        if (entryIndex === -1) return res.status(404).json({ error: 'Mod not found in this log.' });
+        const entry = log.mods[entryIndex];
+        if (entry.status !== 'SKIP_NO_ARCHIVE' || entry.code !== 'HASH_MISMATCH' || !entry.candidateFile) {
+            return res.status(400).json({ error: `This mod has no recorded hash-mismatch candidate file to force-extract.` });
+        }
+        try {
+            const outcome = await runner.forceExtractOffSiteMod({
+                collectionModId: log.collectionModId, stagingDir: staging, downloadsDir: downloads, sevenZipExe,
+                name,
+            });
+            const updatedEntry = outcome.kind === 'REBUILD'
+                ? { name: entry.name, targetFolderName: outcome.targetFolderName, archiveName: outcome.archiveName, ...outcome }
+                : { ...entry, status: outcome.kind, detail: outcome.detail };
+            log.mods[entryIndex] = updatedEntry;
+            log.summary = runner.summarize(log.mods);
+            runner.writeLog(full, log);
+            res.json({ ok: true, entry: updatedEntry, summary: log.summary });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    // Log-view/Work Through Report "Import" button -- unlike the Plan page's version, there IS a log
+    // here to update, so this imports (native picker -> move into downloads -> record association)
+    // AND immediately attempts the extraction in one step, matching how "resolve this issue" already
+    // works everywhere else on this page (one click = attempt + log update, not two separate steps).
+    router.post('/logs/:filename/import-offsite', async (req, res) => {
+        const { filename } = req.params;
+        if (!/^rebuild-.+\.json$/.test(filename)) return res.status(400).json({ error: 'Invalid log filename.' });
+        const full = path.join(logsDir, filename);
+        if (path.dirname(full) !== logsDir) return res.status(400).json({ error: 'Invalid log filename.' });
+        const { name } = req.body || {};
+        if (!name) return res.status(400).json({ error: 'name is required.' });
+        if (!downloads) return res.status(400).json({ error: 'Downloads folder is not configured yet -- open Settings.' });
+        let log;
+        try {
+            log = JSON.parse(fs.readFileSync(full, 'utf8'));
+        } catch {
+            return res.status(404).json({ error: 'Log file not found.' });
+        }
+        const entryIndex = (log.mods || []).findIndex((m) => m.name === name && m.modId == null && m.fileId == null);
+        if (entryIndex === -1) return res.status(404).json({ error: 'Mod not found in this log.' });
+        const entry = log.mods[entryIndex];
+        if (!isArchiveMissingStatus(entry)) {
+            return res.status(400).json({ error: `This mod's status is "${entry.status}" -- no archive-missing state recorded, refusing to touch it.` });
+        }
+        let picked;
+        try {
+            picked = await pickOpenFileAsync({
+                title: `Select the archive for "${name}"`,
+                filter: 'Archive files (*.zip;*.7z;*.rar)|*.zip;*.7z;*.rar|All files (*.*)|*.*',
+            });
+        } catch (e) {
+            return res.status(500).json({ error: `File picker failed: ${e.message}` });
+        }
+        if (!picked) return res.json({ ok: false, cancelled: true });
+        try {
+            runner.importOffSiteArchive({ downloadsDir: downloads, collectionModId: log.collectionModId, name, pickedFilePath: picked });
+            const outcome = await runner.extractImportedOffSiteMod({
+                collectionModId: log.collectionModId, stagingDir: staging, downloadsDir: downloads, sevenZipExe, name,
+            });
+            const updatedEntry = outcome.kind === 'REBUILD'
+                ? { name: entry.name, targetFolderName: outcome.targetFolderName, archiveName: outcome.archiveName, ...outcome }
+                : { ...entry, status: outcome.kind, detail: outcome.detail };
             log.mods[entryIndex] = updatedEntry;
             log.summary = runner.summarize(log.mods);
             runner.writeLog(full, log);

@@ -21,6 +21,10 @@ const state = {
   resumeLogPath: null,
   eventSource: null,
   progressRows: new Map(), // modName -> <tr>
+  // Set right before re-planning from the "Downloaded and Start Rebuild" button -- checked once the
+  // fresh plan-ready frame arrives so we only auto-open the confirm modal if the off-site mod(s) are
+  // actually gone now, instead of blindly proceeding into a rebuild that would just skip them again.
+  pendingOffSiteRecheck: false,
 };
 
 // ---------- tiny helpers ----------
@@ -64,9 +68,41 @@ function modNameCell(name) {
   });
   return span;
 }
+// The full path never matters to the user, just the file/folder NAME -- there are only two base
+// locations in this whole app (the archive/downloads folder and the staging folder), both already
+// known/configured once in Settings. Stripped down at display time wherever a full path would
+// otherwise show up in user-facing text (per explicit request, applies everywhere, not case-by-case).
+function baseName(p) {
+  return String(p ?? '').split(/[\\/]/).filter(Boolean).pop() || String(p ?? '');
+}
+// An off-site missing-archive detail string has its recorded URL baked right into the text (see
+// collection-runner.js's buildPlan()) -- this wraps just that substring in a real, clickable link
+// instead of leaving the whole thing as inert plain text the user has to select and copy by hand.
+function detailCellContent(e) {
+  // A same-size candidate file exists but fails the md5 check -- more alarming than a plain
+  // "nothing here yet" off-site message, so the whole line is danger-colored instead of plain text.
+  if (e.status === 'SKIP_NO_ARCHIVE' && e.offSite && e.code === 'HASH_MISMATCH' && e.candidateFile) {
+    return el('span', { class: 'mismatch-note' }, e.detail || '');
+  }
+  if (e.offSite && e.sourceUrl && e.detail && e.detail.includes(e.sourceUrl)) {
+    const idx = e.detail.indexOf(e.sourceUrl);
+    const before = e.detail.slice(0, idx);
+    const after = e.detail.slice(idx + e.sourceUrl.length);
+    return [before, el('a', { class: 'archive-link', href: e.sourceUrl, target: '_blank', rel: 'noopener noreferrer' }, e.sourceUrl), after];
+  }
+  return e.detail || '';
+}
+const VIEW_LABELS = {
+  picker: 'Rebuild Collection > Choose a Collection',
+  logs: 'Rebuild Collection > Browse Logs',
+  plan: 'Rebuild Collection > Plan',
+  progress: 'Rebuild Collection > Rebuilding',
+  summary: 'Rebuild Collection > Summary',
+};
 function showView(name) {
   for (const v of document.querySelectorAll('.view')) v.classList.add('hidden');
   $(`view-${name}`).classList.remove('hidden');
+  if (typeof setPageLabel === 'function') setPageLabel(VIEW_LABELS[name] || 'Rebuild Collection');
 }
 
 // Replaces the native alert() for error messages -- confirmed live this was hard to read for a
@@ -83,6 +119,12 @@ document.querySelector('[data-action="close-error-modal"]').addEventListener('cl
 $('errorModal').addEventListener('click', (e) => {
   if (e.target.id === 'errorModal') $('errorModal').classList.add('hidden');
 });
+// NOT wrapped in an IIFE, unlike stats-app.js/work-through-app.js -- this is the FIRST page script
+// loaded (after shell.js), so its declarations are the ones every later same-named collision used
+// to clobber (api/el/baseName/showErrorModal). Those two later files are now IIFE-wrapped instead,
+// which is the actual fix -- see either of their top-of-file comments for the full story. Left
+// unwrapped here since nothing loaded before this file could clobber it, and settings-app.js/
+// sync-app.js already avoid the collision by using distinctly-named helpers (settingsApi/syncApi/elS).
 async function api(method, path, body) {
   const res = await fetch(path, {
     method,
@@ -567,6 +609,13 @@ function handlePlanEvent(frame) {
       renderPlan(frame);
       $('planLoading').classList.add('hidden');
       $('planContent').classList.remove('hidden');
+      if (state.pendingOffSiteRecheck) {
+        state.pendingOffSiteRecheck = false;
+        // Only auto-continue if the off-site mod(s) are actually gone now -- otherwise stay right
+        // here on the Plan page (renderPlan() above already re-shows the still-relevant warning),
+        // rather than proceeding into a rebuild that would just skip the same mod again.
+        if (!frame.offSiteMissingMods || frame.offSiteMissingMods.length === 0) openConfirmRebuildModal();
+      }
       break;
     case 'plan-error':
       if (planEventSource) { planEventSource.close(); planEventSource = null; }
@@ -587,16 +636,55 @@ function renderPlan(plan) {
   const summaryEl = $('planSummary');
   summaryEl.innerHTML = '';
   for (const [status, count] of Object.entries(plan.summary)) {
-    summaryEl.appendChild(el('span', { class: 'badge badge--' + status.toLowerCase() }, [
+    summaryEl.appendChild(el('span', { class: 'badge badge--clickable badge--' + status.toLowerCase(), 'data-status': status }, [
       el('span', { class: 'badge__count' }, String(count)), ' ' + (STATUS_TEXT[status] || status),
     ]));
   }
+  summaryEl.appendChild(el('span', { class: 'badge badge--show-all', 'data-status': '' }, 'Show all'));
 
   if (plan.openFomodMods.length > 0) {
     $('openFomodSection').classList.remove('hidden');
     const list = $('openFomodList');
     list.innerHTML = '';
     for (const m of plan.openFomodMods) list.appendChild(el('li', {}, modNameCell(m.name)));
+  } else {
+    // Previously only ever shown, never re-hidden -- a re-plan (e.g. via the Resume checkbox) whose
+    // FOMOD issue had actually cleared would leave this stuck on screen with stale content.
+    $('openFomodSection').classList.add('hidden');
+  }
+
+  if (plan.offSiteMissingMods && plan.offSiteMissingMods.length > 0) {
+    $('offSiteMissingSection').classList.remove('hidden');
+    const many = plan.offSiteMissingMods.length > 1;
+    $('offSiteMissingTitle').textContent = many ? 'Off-site mods missing' : 'Off-site mod missing';
+    $('offSiteMissingText').textContent = many
+      ? `${plan.offSiteMissingMods.length} mods are hosted off-site and missing from your archive folder -- this tool can't download these automatically. Use the link(s) below, if provided, to download the file(s) manually into your archive folder. Once downloaded, press "Downloaded and Start Rebuild" below.`
+      : `An off-site mod is missing from your archive folder -- this tool can't download this automatically. Use the link below, if provided, to download the file manually into your archive folder. Once downloaded, press "Downloaded and Start Rebuild" below.`;
+    const list = $('offSiteMissingList');
+    list.innerHTML = '';
+    for (const m of plan.offSiteMissingMods) {
+      // Name + Import button on their own line -- a long URL and/or mod name sharing one line with
+      // the button either ran off-screen or wrapped awkwardly, so the URL/mismatch note gets its own
+      // second line below instead.
+      const statusSpan = el('span', { class: 'muted', style: 'margin-left:8px;' }, '');
+      const importBtn = el('button', { class: 'btn btn--ghost btn--small', style: 'margin-left:8px;' }, 'Import');
+      importBtn.addEventListener('click', () => importOffSiteArchive(m.name, importBtn, statusSpan));
+      const li = el('li', {}, [modNameCell(m.name), importBtn, statusSpan]);
+
+      if (m.code === 'HASH_MISMATCH' && m.candidateFile) {
+        // A same-size candidate file exists but fails the md5 check -- more alarming than a plain
+        // "nothing downloaded yet", and NOT auto-resolved by re-planning (no button here per design;
+        // resolving this happens post-run on the log/Work Through Report page).
+        li.appendChild(el('div', { class: 'mismatch-note archive-link-row' }, 'a new file was found but does not match what is expected by this collection'));
+      } else if (m.sourceUrl) {
+        li.appendChild(el('div', { class: 'archive-link-row' }, el('a', { class: 'archive-link', href: m.sourceUrl, target: '_blank', rel: 'noopener noreferrer' }, m.sourceUrl)));
+      } else {
+        li.appendChild(el('div', { class: 'muted archive-link-row' }, 'no URL recorded in collection.json; check Vortex/Nexus manually.'));
+      }
+      list.appendChild(li);
+    }
+  } else {
+    $('offSiteMissingSection').classList.add('hidden');
   }
 
   const body = $('planTableBody');
@@ -605,28 +693,38 @@ function renderPlan(plan) {
   // actually matter (will rebuild, need research, etc.) are visible without scrolling past a wall
   // of non-actionable rows.
   const NON_ACTIONABLE = new Set(['SKIP_IGNORED', 'SKIP_OPTIONAL_NOT_INSTALLED']);
-  const ignored = plan.modEntries.filter((e) => NON_ACTIONABLE.has(e.status));
-  const actionable = plan.modEntries.filter((e) => !NON_ACTIONABLE.has(e.status));
+  // Alphabetical within each group -- a large collection's classification order left the user
+  // ctrl-F'ing to find one specific mod by name. Sorted per-group (not the whole table flattened)
+  // so the existing "actionable first, ignored last" curation above is preserved.
+  const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  const ignored = plan.modEntries.filter((e) => NON_ACTIONABLE.has(e.status)).sort(byName);
+  const actionable = plan.modEntries.filter((e) => !NON_ACTIONABLE.has(e.status)).sort(byName);
+  const sortedRebuildQueue = [...plan.rebuildQueue].sort(byName);
   for (const e of actionable) {
-    body.appendChild(el('tr', {}, [
+    body.appendChild(el('tr', { 'data-status': e.status }, [
       el('td', {}, modNameCell(e.name)),
       el('td', {}, statusPill(e.status)),
-      el('td', { class: 'detail-cell' }, e.detail || ''),
+      el('td', { class: 'detail-cell' }, detailCellContent(e)),
     ]));
   }
-  for (const r of plan.rebuildQueue) {
-    const status = r.existingStagingFolder ? 'REBUILD' : 'REBUILD_QUEUED';
+  for (const r of sortedRebuildQueue) {
+    // data-status is always 'REBUILD' here (not 'REBUILD_QUEUED') to match plan.summary/the badge --
+    // the server's summarize() call lumps every rebuildQueue item into one 'REBUILD' count regardless
+    // of existingStagingFolder, so the "Will rebuild" badge's filter must select both sub-cases too.
+    // The status PILL text still shows 'Queued' vs 'Rebuilt' distinctly -- that's a separate, purely
+    // visual distinction from the filter grouping.
+    const displayStatus = r.existingStagingFolder ? 'REBUILD' : 'REBUILD_QUEUED';
     let detail = r.existingStagingFolder ? '' : 'No staging folder exists — will create from scratch';
     if (r.otherVersionsNote) detail += (detail ? ' — ' : '') + `a different version of this exact mod IS installed: ${r.otherVersionsNote}`;
     if (r.sharedWithNote) detail += (detail ? '\n\n' : '') + `Already included in:\n${r.sharedWithNote.join('\n')}`;
-    body.appendChild(el('tr', {}, [
+    body.appendChild(el('tr', { 'data-status': 'REBUILD' }, [
       el('td', {}, modNameCell(r.name)),
-      el('td', {}, statusPill(status)),
+      el('td', {}, statusPill(displayStatus)),
       el('td', { class: 'detail-cell' }, detail),
     ]));
   }
   for (const e of ignored) {
-    body.appendChild(el('tr', {}, [
+    body.appendChild(el('tr', { 'data-status': e.status }, [
       el('td', {}, modNameCell(e.name)),
       el('td', {}, statusPill(e.status)),
       el('td', { class: 'detail-cell' }, e.detail || ''),
@@ -636,7 +734,28 @@ function renderPlan(plan) {
   const hasWork = plan.rebuildQueue.length > 0;
   for (const id of ['startRebuildBtn', 'startRebuildBtnTop']) $(id).disabled = !hasWork;
   for (const id of ['nothingToRebuildNote', 'nothingToRebuildNoteTop']) $(id).classList.toggle('hidden', hasWork);
+  applyPlanStatusFilter(''); // fresh plan render -- always start unfiltered, same as a fresh page load
 }
+
+// Same clickable-badge-filters-the-table pattern as the log-view page's own statusBadges/
+// applyStatusFilter (web/rebuild-routes.js's /logs/view/:filename) -- lets a collection with a lot
+// of yellow/red rows be reviewed by status instead of scrolling to find them all.
+function applyPlanStatusFilter(status) {
+  document.querySelectorAll('#planSummary .badge').forEach((b) => b.classList.remove('badge--filter-active'));
+  const rows = document.querySelectorAll('#planTableBody tr');
+  if (!status) {
+    rows.forEach((r) => { r.style.display = ''; });
+    return;
+  }
+  const badge = document.querySelector('#planSummary .badge--clickable[data-status="' + CSS.escape(status) + '"]');
+  if (badge) badge.classList.add('badge--filter-active');
+  rows.forEach((r) => { r.style.display = r.dataset.status === status ? '' : 'none'; });
+}
+$('planSummary').addEventListener('click', (e) => {
+  const badge = e.target.closest('.badge--clickable, .badge--show-all');
+  if (!badge) return;
+  applyPlanStatusFilter(badge.dataset.status);
+});
 
 $('resumeToggle').addEventListener('change', (e) => {
   const resumeLogPath = e.target.checked ? state.plan.resumableLog.path : null;
@@ -646,11 +765,64 @@ $('resumeToggle').addEventListener('change', (e) => {
 
 // ---------- Confirm modal ----------
 
+// Mirrors the exact backup gate the real run uses (web/rebuild-routes.js's `/runs` handler:
+// `maxBackupsToKeep !== 0 && backupRoot`) -- so this dialog is never factually wrong about whether a
+// backup will actually happen. maxBackupsToKeep: 0 = off (no line at all), null/undefined = unlimited
+// (back up every run, never pruned), 1-3 = back up every run, kept to that many most recent.
+function backupConfirmText(cfg) {
+  if (!cfg.backupRoot || cfg.maxBackupsToKeep === 0) return '';
+  if (cfg.maxBackupsToKeep == null) {
+    return "A backup of every affected mod's current staging folder will be made before the mods are rebuilt. These backups are stored indefinitely and require manual deletion.";
+  }
+  return `A backup of every affected mod's current staging folder will be made before the mods are rebuilt, and kept for up to ${cfg.maxBackupsToKeep} most recent run(s).`;
+}
+
+// Shared by the two Start Rebuild buttons AND the auto-continue path from "Downloaded and Start
+// Rebuild" (once a re-plan confirms the off-site mod(s) are actually resolved) -- kept as a single
+// function so that path gets the exact same backup-notice confirmation step, not a shortcut around it.
+async function openConfirmRebuildModal() {
+  $('confirmText').textContent = `This will rebuild ${state.plan.rebuildQueue.length} mod(s) in "${state.plan.collectionInfo.name}".`;
+  let backupText = '';
+  try {
+    backupText = backupConfirmText(await api('GET', '/api/settings'));
+  } catch {
+    // Settings fetch failing shouldn't block the confirm dialog -- just omit the backup line.
+  }
+  $('confirmBackupText').textContent = backupText;
+  $('confirmBackupText').classList.toggle('hidden', !backupText);
+  $('confirmModal').classList.remove('hidden');
+}
 for (const id of ['startRebuildBtn', 'startRebuildBtnTop']) {
-  $(id).addEventListener('click', () => {
-    $('confirmText').textContent = `This will rebuild ${state.plan.rebuildQueue.length} mod(s) in "${state.plan.collectionInfo.name}".`;
-    $('confirmModal').classList.remove('hidden');
-  });
+  $(id).addEventListener('click', openConfirmRebuildModal);
+}
+// "I've downloaded it by hand" -- re-plans from scratch (same mechanism as the Resume checkbox) so
+// the just-downloaded archive gets picked up, then handlePlanEvent's plan-ready case decides whether
+// to auto-continue (see pendingOffSiteRecheck there).
+$('downloadedStartRebuildBtn').addEventListener('click', () => {
+  const name = $('planTitle').textContent;
+  state.pendingOffSiteRecheck = true;
+  openPlan(state.collectionModId, name, state.resumeLogPath);
+});
+
+// "Import" (per off-site mod, in the offSiteMissingSection list) -- opens a native file picker
+// (server-side, since this tool assumes browser and server share a machine) so the user can point
+// at the archive wherever they actually saved it. Doesn't itself re-plan -- matches the described
+// workflow of importing several mods in a row, then hitting "Downloaded and Start Rebuild" once at
+// the end -- but does update this one list item's status text so multiple imports are trackable.
+async function importOffSiteArchive(name, btn, statusSpan) {
+  btn.disabled = true;
+  statusSpan.textContent = 'Waiting for file…';
+  try {
+    const data = await api('POST', '/api/rebuild/import-offsite-archive', { collectionModId: state.collectionModId, name });
+    if (data.cancelled) { statusSpan.textContent = ''; btn.disabled = false; return; }
+    if (!data.ok) throw new Error(data.error || 'Import failed.');
+    statusSpan.textContent = `Imported: ${data.filename}`;
+    btn.textContent = 'Re-import';
+    btn.disabled = false;
+  } catch (e) {
+    statusSpan.textContent = `Failed: ${e.message}`;
+    btn.disabled = false;
+  }
 }
 document.querySelector('[data-action="cancel-confirm"]').addEventListener('click', () => {
   $('confirmModal').classList.add('hidden');
@@ -675,6 +847,8 @@ function startProgressView() {
   window.scrollTo({ top: 0, behavior: 'instant' });
   $('progressTitle').textContent = `Rebuilding ${state.plan.collectionInfo.name}…`;
   $('phaseIndicator').innerHTML = '';
+  $('backupNotice').classList.add('hidden');
+  $('downloadNotice').classList.add('hidden');
   $('progressTableBody').innerHTML = '';
   state.progressRows.clear();
 
@@ -707,9 +881,19 @@ function setPhase(text) {
   $('phaseIndicator').appendChild(document.createTextNode(' ' + text));
 }
 
+// A long mod name in the live backup/download phase text wrapped to a second line, changing the
+// header's height and bouncing the page -- confirmed live. The name here is just for a "yes,
+// something's happening" feel, not something anyone needs to read in full, so it's simply
+// truncated rather than made expandable (unlike modNameCell's table-cell version).
+function truncatePhaseName(name, max = 40) {
+  return (!name || name.length <= max) ? name : name.slice(0, max - 1) + '…';
+}
+
 const PHASE_TEXT = {
   'sync-state': 'Reading Vortex state… Please wait as this can take some time for a large collection.',
   'plan-ready': 'Plan ready',
+  'checking-premium': 'Checking Nexus Premium status…',
+  'downloading-missing': 'Downloading missing archive(s)…',
   'backing-up': 'Backing up current staging folders…',
   rebuilding: 'Rebuilding mods…',
 };
@@ -720,7 +904,19 @@ function updateProgressRow(name, status, detail) {
   row.children[1].innerHTML = '';
   row.children[1].appendChild(statusPill(status));
   row.children[2].textContent = detail || '';
-  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  // Scroll only the bounded inner wrap, not the page -- row.scrollIntoView() walks EVERY scrollable
+  // ancestor (including the window itself) to center the row, which is what caused the whole page to
+  // bounce/jump: whenever the wrap's own scroll wasn't enough to fully center the row within the full
+  // viewport, the browser nudged the window scroll too. Computed via getBoundingClientRect (not
+  // row.offsetTop) so it's correct regardless of what the row's offsetParent happens to be.
+  const wrap = document.getElementById('progressTableWrap');
+  if (wrap) {
+    const rowRect = row.getBoundingClientRect();
+    const wrapRect = wrap.getBoundingClientRect();
+    const offsetWithinWrap = (rowRect.top - wrapRect.top) + wrap.scrollTop;
+    const target = offsetWithinWrap - (wrap.clientHeight / 2) + (row.clientHeight / 2);
+    wrap.scrollTo({ top: target, behavior: 'smooth' });
+  }
 }
 
 function handleRunEvent(frame) {
@@ -733,8 +929,45 @@ function handleRunEvent(frame) {
       setPhase(`Reading Vortex state — step ${frame.step} of ${frame.total}: ${frame.label}`);
       break;
     case 'backup-progress':
-      setPhase(`Backing up (${frame.index}/${frame.total}): ${frame.modName}`);
+      setPhase(`Backing up (${frame.index}/${frame.total}): ${truncatePhaseName(frame.modName)}`);
       break;
+    case 'download-progress':
+      setPhase(`Downloading missing archive (${frame.index}/${frame.total}): ${truncatePhaseName(frame.modName)}…`);
+      break;
+    case 'download-skipped':
+      // Same "persistent, not just transient phase text" reasoning as backup-complete below --
+      // this can otherwise flash by and leave "Plan ready" looking frozen for the whole download
+      // phase (confirmed live: the not-premium check + skip happens well under a second).
+      $('downloadNotice').classList.remove('hidden');
+      $('downloadNoticeText').textContent = `Skipped (${frame.count} archive(s)) -- ${frame.message}`;
+      break;
+    case 'download-complete': {
+      $('downloadNotice').classList.remove('hidden');
+      const succeeded = frame.results.filter((r) => r.status === 'DOWNLOADED').length;
+      const failed = frame.results.filter((r) => r.status === 'FAILED').length;
+      $('downloadNoticeText').textContent = frame.results.length === 0
+        ? 'Nothing to download'
+        : `${succeeded} succeeded, ${failed} failed (of ${frame.results.length} attempted)`;
+      break;
+    }
+    case 'backup-complete': {
+      // A persistent record, separate from the transient phase text above -- confirmed live that a
+      // fast/small backup can finish in well under a second (849ms for 20 mods), too quick for the
+      // live phase indicator alone to be noticed before it's overwritten by "Rebuilding mods…".
+      $('backupNotice').classList.remove('hidden');
+      const revealBtn = $('revealProgressBackupBtn');
+      if (frame.skipped) {
+        $('backupNoticeText').textContent = 'Skipped (disabled in Settings)';
+        revealBtn.classList.add('hidden');
+      } else {
+        // No location in the text -- the Reveal button already covers that.
+        const seconds = frame.durationMs != null ? (frame.durationMs / 1000).toFixed(1) : '?';
+        $('backupNoticeText').textContent = `${frame.backedUpCount} mod(s) backed up in ${seconds} second(s).`;
+        revealBtn.dataset.path = frame.backupRunDir;
+        revealBtn.classList.remove('hidden');
+      }
+      break;
+    }
     case 'mod-start':
       updateProgressRow(frame.modName, 'pending', 'Extracting…');
       break;
@@ -781,9 +1014,9 @@ function finishProgressView(frame) {
     $('criticalDetail').innerHTML = '';
     $('criticalDetail').appendChild(el('div', {}, [
       el('div', {}, `Mod: ${pendingCritical.modName}`),
-      el('div', {}, `Old content at: ${pendingCritical.oldContentDir}`),
-      el('div', {}, `New content at: ${pendingCritical.rebuildingDir}`),
-      el('div', {}, `Real staging slot: ${pendingCritical.stagingModDir}`),
+      el('div', {}, `Old content folder: ${baseName(pendingCritical.oldContentDir)}`),
+      el('div', {}, `New content folder: ${baseName(pendingCritical.rebuildingDir)}`),
+      el('div', {}, `Real staging folder: ${baseName(pendingCritical.stagingModDir)}`),
       el('div', { class: 'muted' }, 'Restore this one by hand, then resume this collection.'),
     ]));
     pendingCritical = null;
@@ -812,6 +1045,10 @@ document.querySelector('[data-action="reveal-backup"]').addEventListener('click'
 });
 document.querySelector('[data-action="reveal-log"]').addEventListener('click', () => {
   const p = $('logPath').textContent;
+  if (p) api('POST', '/api/rebuild/reveal', { targetPath: p }).catch(() => {});
+});
+$('revealProgressBackupBtn').addEventListener('click', () => {
+  const p = $('revealProgressBackupBtn').dataset.path;
   if (p) api('POST', '/api/rebuild/reveal', { targetPath: p }).catch(() => {});
 });
 
