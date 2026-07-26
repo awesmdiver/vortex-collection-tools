@@ -711,7 +711,7 @@ function createRouter(config) {
         const downloadSummary = log.downloadedArchives ? (() => {
             const d = log.downloadedArchives;
             if (d.skippedReason === 'not-premium') {
-                return `<div class="callout callout--warning">Download of ${d.attempted || 'the missing'} archive(s) was skipped: this Nexus account is not Premium, so automated downloads aren't available (respects Nexus's ad-supported download model for free users). Download and reinstall it yourself either via Vortex or using the Work Through Report.</div>`;
+                return `<div class="callout callout--warning">Download of ${d.attempted || 'the missing'} archive(s) was skipped: this Nexus account is not Premium, so automated downloads aren't available (respects Nexus's ad-supported download model for free users). Download and reinstall the archive(s) yourself either via Vortex or using the Work Through Report.</div>`;
             }
             if (!d.attempted) return '';
             const failedLines = (d.entries || []).filter((e) => e.status === 'FAILED')
@@ -871,7 +871,7 @@ function createRouter(config) {
                     + `</div>`
                 : offSiteMissing
                 ? `<div class="extraction-actions">${importBtnHtml}</div>`
-                    + `<div class="file-list">Mod is located off-site, you'll need to obtain it manually and install via Vortex.`
+                    + `<div class="file-list">This mod is located off-site. You'll need to obtain it manually and install it via Vortex.`
                     + (m.sourceUrl ? `<br><a class="archive-link" href="${esc(m.sourceUrl)}" target="_blank" rel="noopener noreferrer">${esc(m.sourceUrl)}</a>` : '')
                     + `</div>`
                 : canRetryExtraction
@@ -992,8 +992,8 @@ document.getElementById('logTableBody').addEventListener('click', async (e) => {
   const name = btn.dataset.name;
   const resolveMode = btn.dataset.mode;
   const message = resolveMode === 'all'
-    ? 'Warning: this will fully replace this mod within the staging environment. Continue?'
-    : 'Warning: this will keep all modified files currently staged and will replace all other files and restore any missing files. Continue?';
+    ? "Warning: this will fully replace this mod's staging folder. Continue?"
+    : 'Warning: this keeps your modified files as they are, replaces everything else, and restores any missing files. Continue?';
   if (!await showConfirmModal(message)) return;
   row.querySelectorAll('.resolve-mismatch-btn').forEach((b) => { b.disabled = true; });
   btn.textContent = 'Working…';

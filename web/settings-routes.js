@@ -101,6 +101,9 @@ function createSettingsRouter() {
         if ('forceExtractOffSiteMismatches' in body) {
             patch.forceExtractOffSiteMismatches = !!body.forceExtractOffSiteMismatches;
         }
+        if ('hideVortexVersionWarning' in body) {
+            patch.hideVortexVersionWarning = !!body.hideVortexVersionWarning;
+        }
 
         // Server-side backstop for the required fields -- the Settings page itself already blocks
         // Save client-side, but this defends against a corrupt/manually-edited config.json (or any

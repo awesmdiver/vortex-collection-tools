@@ -31,6 +31,17 @@ async function settingsApi(method, path, body) {
   return data;
 }
 
+// This page has no Vortex-running concerns of its own (Settings never touches Vortex's state DB),
+// so unlike app.js's/sync-app.js's own handleApiError/handleSyncApiError, the only thing this
+// checks for is the server being fully unreachable -- same shared shell.js modal either way.
+function handleSettingsApiError(e, retryFn) {
+  if (isServerUnreachableError(e)) {
+    showServerUnreachableError(retryFn);
+    return true;
+  }
+  return false;
+}
+
 // ---------- Theme ----------
 // 'system' (default) means no explicit override -- styles.css follows the OS/browser's own
 // prefers-color-scheme media query in that case. index.html's inline bootstrap script applies
@@ -67,6 +78,7 @@ async function loadSettings() {
   $g('settingsAutoOpenInput').checked = cfg.autoOpenBrowser !== false;
   $g('settingsDownloadMissingInput').checked = cfg.downloadMissingArchives === true;
   $g('settingsForceExtractMismatchInput').checked = cfg.forceExtractOffSiteMismatches === true;
+  $g('settingsHideVortexVersionWarningInput').checked = cfg.hideVortexVersionWarning === true;
   $g('settingsNexusKeyStatus').textContent = cfg.hasNexusApiKey
     ? 'A key is already stored -- leave blank to keep it, or type a new one to replace it.'
     : 'No key stored yet.';
@@ -74,7 +86,9 @@ async function loadSettings() {
 }
 
 loadSettings().catch((e) => {
-  $g('settingsSaveStatus').textContent = `Could not load settings: ${e.message}`;
+  if (!handleSettingsApiError(e, loadSettings)) {
+    $g('settingsSaveStatus').textContent = `Could not load settings: ${e.message}`;
+  }
 });
 
 // ---------- Restart flow ----------
@@ -166,6 +180,7 @@ async function saveSettings() {
       autoOpenBrowser: $g('settingsAutoOpenInput').checked,
       downloadMissingArchives: $g('settingsDownloadMissingInput').checked,
       forceExtractOffSiteMismatches: $g('settingsForceExtractMismatchInput').checked,
+      hideVortexVersionWarning: $g('settingsHideVortexVersionWarningInput').checked,
     };
     const keyInput = $g('settingsNexusKeyInput').value;
     if (keyInput.trim()) body.nexusApiKey = keyInput;
@@ -192,7 +207,7 @@ async function saveSettings() {
     }
     return true;
   } catch (e) {
-    statusEl.textContent = `Failed: ${e.message}`;
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
     btn.disabled = false;
     return false;
   }
@@ -222,7 +237,7 @@ document.querySelectorAll('.settings-browse-btn').forEach((btn) => {
       const result = await settingsApi('POST', '/api/settings/browse-folder', { initialDir: input.value || undefined });
       if (result.path) input.value = result.path;
     } catch (e) {
-      $g('settingsSaveStatus').textContent = `Browse failed: ${e.message}`;
+      if (!handleSettingsApiError(e)) $g('settingsSaveStatus').textContent = `Browse failed: ${e.message}`;
     } finally {
       btn.disabled = false;
     }
@@ -237,7 +252,7 @@ $g('settingsClearNexusKeyBtn').addEventListener('click', async () => {
     $g('settingsNexusKeyStatus').textContent = 'No key stored yet.';
     statusEl.textContent = result.hasNexusApiKey ? 'Failed to clear.' : 'Key cleared.';
   } catch (e) {
-    statusEl.textContent = `Failed: ${e.message}`;
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
   }
 });
 
@@ -258,7 +273,7 @@ $g('settingsDeleteBackupsBtn').addEventListener('click', async () => {
       `This will permanently delete ${count} backup${count === 1 ? '' : 's'} from "${backupRoot}".`;
     $g('settingsDeleteBackupsModal').classList.remove('hidden');
   } catch (e) {
-    statusEl.textContent = `Failed: ${e.message}`;
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
   }
 });
 $g('settingsDeleteBackupsCancelBtn').addEventListener('click', () => {
@@ -272,6 +287,115 @@ $g('settingsDeleteBackupsConfirmBtn').addEventListener('click', async () => {
     const { deletedCount } = await settingsApi('POST', '/api/settings/delete-backups');
     statusEl.textContent = deletedCount > 0 ? `Deleted ${deletedCount} backup${deletedCount === 1 ? '' : 's'}.` : 'Nothing to delete.';
   } catch (e) {
-    statusEl.textContent = `Failed: ${e.message}`;
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+  }
+});
+
+// ---------- Delete all Update Collection backups (two separate stores, same pattern as above) ----------
+$g('settingsSyncDeleteBackupsBtn').addEventListener('click', async () => {
+  const statusEl = $g('settingsSyncDeleteBackupsStatus');
+  try {
+    const { backupRoot, count } = await settingsApi('GET', '/api/sync/backups-info');
+    if (!backupRoot) {
+      statusEl.textContent = 'No Update Collection backups folder is configured -- nothing to delete.';
+      return;
+    }
+    if (count === 0) {
+      statusEl.textContent = 'No backups found.';
+      return;
+    }
+    $g('settingsSyncDeleteBackupsModalText').textContent =
+      `This will permanently delete ${count} backup${count === 1 ? '' : 's'}.`;
+    $g('settingsSyncDeleteBackupsModal').classList.remove('hidden');
+  } catch (e) {
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+  }
+});
+$g('settingsSyncDeleteBackupsCancelBtn').addEventListener('click', () => {
+  $g('settingsSyncDeleteBackupsModal').classList.add('hidden');
+});
+$g('settingsSyncDeleteBackupsConfirmBtn').addEventListener('click', async () => {
+  const statusEl = $g('settingsSyncDeleteBackupsStatus');
+  $g('settingsSyncDeleteBackupsModal').classList.add('hidden');
+  statusEl.textContent = 'Deleting…';
+  try {
+    const { deletedCount } = await settingsApi('POST', '/api/sync/delete-backups');
+    statusEl.textContent = deletedCount > 0 ? `Deleted ${deletedCount} backup${deletedCount === 1 ? '' : 's'}.` : 'Nothing to delete.';
+  } catch (e) {
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+  }
+});
+
+$g('settingsStateDeleteBackupsBtn').addEventListener('click', async () => {
+  const statusEl = $g('settingsStateDeleteBackupsStatus');
+  try {
+    const { count } = await settingsApi('GET', '/api/sync/state-backups-info');
+    if (count === 0) {
+      statusEl.textContent = 'No backups found.';
+      return;
+    }
+    $g('settingsStateDeleteBackupsModalText').textContent =
+      `This will permanently delete ${count} Vortex database backup${count === 1 ? '' : 's'}.`;
+    $g('settingsStateDeleteBackupsModal').classList.remove('hidden');
+  } catch (e) {
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+  }
+});
+$g('settingsStateDeleteBackupsCancelBtn').addEventListener('click', () => {
+  $g('settingsStateDeleteBackupsModal').classList.add('hidden');
+});
+$g('settingsStateDeleteBackupsConfirmBtn').addEventListener('click', async () => {
+  const statusEl = $g('settingsStateDeleteBackupsStatus');
+  $g('settingsStateDeleteBackupsModal').classList.add('hidden');
+  statusEl.textContent = 'Deleting…';
+  try {
+    const { deletedCount } = await settingsApi('POST', '/api/sync/delete-state-backups');
+    statusEl.textContent = deletedCount > 0 ? `Deleted ${deletedCount} backup${deletedCount === 1 ? '' : 's'}.` : 'Nothing to delete.';
+  } catch (e) {
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+  }
+});
+
+// ---------- Restore a Vortex database backup ----------
+// GET /api/sync/state-backups and POST /api/sync/restore-state already existed server-side (built
+// during an earlier session's stability audit) with no UI ever wired up to them -- this was the
+// standing "backend ready, UI missing" gap noted in TECHNICAL.md's Future Work.
+$g('settingsStateRestoreBtn').addEventListener('click', async () => {
+  const statusEl = $g('settingsStateDeleteBackupsStatus');
+  const select = $g('settingsStateRestoreSelect');
+  try {
+    const { backups } = await settingsApi('GET', '/api/sync/state-backups');
+    select.innerHTML = '';
+    for (const b of backups) {
+      const opt = document.createElement('option');
+      opt.value = b.dir;
+      opt.textContent = new Date(b.createdAt).toLocaleString();
+      select.appendChild(opt);
+    }
+    const hasBackups = backups.length > 0;
+    select.classList.toggle('hidden', !hasBackups);
+    $g('settingsStateRestoreEmpty').classList.toggle('hidden', hasBackups);
+    $g('settingsStateRestoreConfirmBtn').disabled = !hasBackups;
+    $g('settingsStateRestoreModal').classList.remove('hidden');
+  } catch (e) {
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+  }
+});
+$g('settingsStateRestoreCancelBtn').addEventListener('click', () => {
+  $g('settingsStateRestoreModal').classList.add('hidden');
+});
+$g('settingsStateRestoreConfirmBtn').addEventListener('click', async () => {
+  const statusEl = $g('settingsStateDeleteBackupsStatus');
+  const backupDir = $g('settingsStateRestoreSelect').value;
+  if (!backupDir) return;
+  $g('settingsStateRestoreModal').classList.add('hidden');
+  statusEl.textContent = 'Restoring…';
+  try {
+    const { restoredFrom, preRestoreBackupDir } = await settingsApi('POST', '/api/sync/restore-state', { backupDir });
+    statusEl.textContent = `Restored from "${restoredFrom}". The database as it was just before this restore was itself backed up to "${preRestoreBackupDir}".`;
+  } catch (e) {
+    // Server already returns a clear, complete message either way (including the 409
+    // vortex-running case) -- no special-casing needed here.
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
   }
 });

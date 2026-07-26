@@ -89,6 +89,16 @@ html, body {
 
 .hidden { display: none !important; }
 .muted { color: var(--text-muted); }
+/* Small "?" help marker -- native title attribute gives a browser tooltip on hover, no JS/modal
+   needed for a single short explanatory line. */
+.help-marker {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 1px solid var(--border); color: var(--text-muted);
+  font-size: 11px; font-weight: 700; cursor: help; user-select: none;
+  margin-left: 4px; vertical-align: middle;
+}
+.help-marker:hover { border-color: var(--accent); color: var(--accent); }
 /* Update Collection's own status spans (Backup/Apply Ignores/Apply Disables) sometimes show a
    longer, multi-line message (e.g. the numbered crash/not-yet-in-state-database explanation) --
    without this, \n characters in .textContent collapse to a single run-on line by default. Short
@@ -181,20 +191,6 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .sync-list-toggle-row { padding-top: 6px !important; }
 .sync-list-toggle { display: inline-block; color: var(--accent); cursor: pointer; text-decoration: underline; }
 .sync-list-toggle:hover { color: var(--accent-hover); }
-
-/* Vortex banner */
-.vortex-banner {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 28px;
-  background: var(--danger-bg);
-  border-bottom: 1px solid var(--danger);
-  color: var(--danger);
-  font-weight: 500;
-}
-.vortex-banner__icon { font-size: 18px; }
-.vortex-banner__text { flex: 1; }
 
 /* Main */
 .app-main {
@@ -364,6 +360,23 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .badge--ignored { background: var(--neutral-bg); color: var(--neutral); }
 .badge--disabled { background: var(--warning-bg); color: var(--warning); }
 .badge__count { font-variant-numeric: tabular-nums; }
+/* Generic severity variants (Compare Report and any future badge that isn't one of the specific
+   per-status colors above) -- same four-color convention as .callout-- / .modal--, see TECHNICAL.md's
+   "Callout severity conventions". */
+.badge--info { background: var(--accent-bg); color: var(--accent); }
+.badge--success { background: var(--success-bg); color: var(--success); }
+.badge--warning { background: var(--warning-bg); color: var(--warning); }
+.badge--critical { background: var(--danger-bg); color: var(--danger); }
+.badge--neutral { background: var(--neutral-bg); color: var(--neutral); }
+/* Same generic severities for a table's own Status column pill (as opposed to the clickable filter
+   badge above the table) -- one color language for "this row is an info/neutral/warning/critical
+   item" used in both places at once. */
+.status-pill--info { background: var(--accent-bg); color: var(--accent); }
+.status-pill--success { background: var(--success-bg); color: var(--success); }
+.status-pill--warning { background: var(--warning-bg); color: var(--warning); }
+.status-pill--critical { background: var(--danger-bg); color: var(--danger); }
+.status-pill--neutral { background: var(--neutral-bg); color: var(--neutral); }
+.table-empty-note { color: var(--text-muted); font-style: italic; padding: 20px; text-align: center; }
 
 /* Callouts */
 .callout {
@@ -421,10 +434,36 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .input--tiny { width: 140px; }
 .input--wide { width: 480px; }
 
-/* Settings page section headers -- plain h2s, same rhythm as .view-header's h1 but smaller/lighter
-   since a settings page is a flat list of sections, not a set of separate "views". */
+/* Settings page section headers -- plain h2s, same rhythm as .view-header's h1 but smaller/lighter.
+   Only used bare (no .settings-group ancestor) inside .settings-group__header now; everywhere else
+   the more specific .settings-group .settings-section-title rule below wins instead. */
 .settings-section-title { font-size: 16px; margin: 28px 0 10px; }
 .settings-section-title:first-of-type { margin-top: 20px; }
+/* Settings page: groups fields by which tool they serve (General / Rebuild Collection / Update
+   Collection) instead of one long flat list -- same bordered-card look as .sync-phase (Update
+   Collection's own numbered steps use this already), just without a numbered circle since these
+   aren't a sequence. */
+.settings-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin: 20px 0;
+}
+.settings-group__header { margin-bottom: 4px; }
+.settings-group__header h2 { font-size: 17px; margin: 0; }
+.settings-group__header p { margin: 4px 0 0; }
+/* Sub-headings INSIDE an already-bounded card -- tighter and quieter than the old flat-list rhythm
+   above, same uppercase/letter-spacing/muted treatment this app already uses for table headers
+   (.plan-table th), applied here to a new context rather than inventing another label style. */
+.settings-group .settings-section-title {
+  font-size: 12px; margin: 18px 0 8px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-muted); font-weight: 600;
+}
+.settings-group .settings-section-title:first-of-type { margin-top: 4px; }
+/* Two short fields side by side (Port/Host, the two backup-cleanup rows) -- stacks on narrow
+   screens via the existing 640px breakpoint below. */
+.settings-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
 .path-input-row { display: flex; gap: 8px; align-items: center; }
 .path-input-row .input--wide { flex: 1; }
 
@@ -587,6 +626,14 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    modal (e.g. the Restore Backup picker) needs its own full-width rule instead. */
 .modal .select { display: block; width: 100%; }
 .modal--wide { max-width: 640px; }
+/* Severity variants for a blocking modal -- same color tokens/icon as the callout severities above
+   (see TECHNICAL.md's "Callout severity conventions"), just applied to a modal's border/title
+   instead of a full-width callout box. Use warning for a gate the user can resolve and retry
+   ("Vortex is running"), critical for a real failure ("Can't reach the server"). */
+.modal--warning { border-color: var(--warning); }
+.modal--warning h2 { color: var(--warning); }
+.modal--critical { border-color: var(--danger); }
+.modal--critical h2 { color: var(--danger); }
 .error-modal-text { white-space: pre-line; line-height: 1.55; font-size: 14px; max-height: 55vh; overflow-y: auto; }
 
 /* Path rows */
@@ -613,4 +660,5 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 @media (max-width: 640px) {
   .app-main { padding: 20px 14px 60px; }
   .plan-table th:nth-child(3), .plan-table td:nth-child(3) { display: none; }
+  .settings-row-2 { grid-template-columns: 1fr; }
 }

@@ -31,13 +31,60 @@
   <div id="headerMeta" class="app-header__meta"></div>
 </header>
 
-<section id="area-rebuild" class="tool-area">
-
-<div id="vortexBanner" class="vortex-banner hidden">
-  <span class="vortex-banner__icon">&#9888;</span>
-  <span class="vortex-banner__text">Vortex is currently running. Close it completely, then retry.</span>
-  <button id="vortexRetryBtn" class="btn btn--ghost">Retry</button>
+<!-- Shown by shell.js's showServerUnreachableError() whenever ANY page's api() call fails at the
+     network level (the server process is fully down -- nothing listening at all), distinct from a
+     normal HTTP error response. Deliberately OUTSIDE every <section id="area-*">, unlike the
+     Rebuild-Collection-scoped #errorModal, so it's never trapped inside a hidden tool-area (that
+     exact bug already bit #errorModal once when called from the Sync tab). No functional "Restart"
+     button here -- if nothing's listening, there's no process left to receive that request. -->
+<div id="serverUnreachableModal" class="modal-overlay hidden">
+  <div class="modal modal--critical">
+    <h2>&#9888; Can't reach the server</h2>
+    <p>The server isn't responding -- it may have stopped running. Close and reopen <code>start-server.bat</code> to restart it.</p>
+    <div class="modal-actions">
+      <button id="serverUnreachableCloseBtn" class="btn btn--ghost">Close</button>
+      <button id="serverUnreachableRetryBtn" class="btn btn--primary">Try Again</button>
+    </div>
+  </div>
 </div>
+
+<!-- Shown by shell.js's showVortexRunningModal() whenever ANY page's api() call hits the
+     vortex-running 409 with no local callout of its own to show it in. Replaces the old
+     #vortexBanner/#syncVortexBanner (one per tool area, scroll-to-top since they weren't
+     fixed/sticky) with a single centered modal that never depends on scroll position at all -- you
+     keep your place on the page instead of being scrolled away from it. -->
+<div id="vortexRunningModal" class="modal-overlay hidden">
+  <div class="modal modal--warning">
+    <h2>&#9888; Vortex is currently running</h2>
+    <p>Close Vortex completely, then try again.</p>
+    <div class="modal-actions">
+      <button id="vortexRunningCloseBtn" class="btn btn--ghost">Close</button>
+      <button id="vortexRunningRetryBtn" class="btn btn--primary">Try Again</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shown once by shell.js at app startup (GET /api/sync/vortex-version-check), NOT tied to Apply
+     Ignores' Preview flow -- this is a whole-app "is your installed Vortex one this tool has
+     actually been tested against" question, not specific to any one step. Skipped entirely if
+     Vortex is running at startup (that check just quietly retries next launch) or if the user has
+     already checked "Don't show this again" (persisted to config.json). -->
+<div id="vortexVersionWarningModal" class="modal-overlay hidden">
+  <div class="modal modal--warning">
+    <h2>&#9888; Vortex version not tested</h2>
+    <p id="vortexVersionWarningText">This tool has been tested against Vortex 2.3.0-beta.1 and 2.3.0.</p>
+    <p>Vortex occasionally changes how it stores its data between versions. Proceed carefully, and double-check the results here against what you see in Vortex.</p>
+    <label class="checkbox">
+      <input type="checkbox" id="vortexVersionWarningDontShowInput">
+      Don't show this again
+    </label>
+    <div class="modal-actions">
+      <button id="vortexVersionWarningCloseBtn" class="btn btn--primary">Got it</button>
+    </div>
+  </div>
+</div>
+
+<section id="area-rebuild" class="tool-area">
 
 <main id="app" class="app-main">
 
@@ -45,7 +92,7 @@
   <section id="view-picker" class="view">
     <div class="view-header">
       <h1>Choose a collection</h1>
-      <p class="muted">Rebuilds a real, already-installed collection's staging folder using this tool's own validated extractor instead of Vortex's slow archive pipeline.</p>
+      <p class="muted">Rebuilds an already-installed collection's staging folder directly, instead of through Vortex's slower archive install process.</p>
     </div>
     <div id="collectionPickerLoading" class="loading-row"><span class="spinner"></span> Loading installed collections&hellip;</div>
 
@@ -64,14 +111,14 @@
 
     <div id="workshopOnlySection" class="callout callout--warning hidden">
       <div class="callout__title">&#9888; Workshop-only collections found (can't be extracted here)</div>
-      <p>These are tracked in Vortex but have no <code>collection.json</code> -- either never published, or published but only the Workshop copy is kept locally. This tool can only read a real <code>collection.json</code>, so there's nothing to extract from until one exists. If it's been published to Nexus, this tool can fetch that published <code>collection.json</code> directly -- no need to download it through Vortex.</p>
+      <p>These are tracked in Vortex but have no <code>collection.json</code> -- either never published, or published but only the Workshop copy is kept locally. If it's been published to Nexus, this tool can fetch that published <code>collection.json</code> directly -- no need to download it through Vortex.</p>
       <div class="callout callout--warning">
         <div class="callout__title">&#9888; Before fetching, read this</div>
         <ol>
           <li>This only fetches a revision <strong>already saved to NexusMods</strong> (published or not) -- pick the one you want from the Revision dropdown below.</li>
           <li>If you've made changes in the Workshop since your last save/upload, this download will <strong>not</strong> include them.</li>
           <li><strong>Recommended:</strong> save/upload your latest Workshop changes to NexusMods first, then fetch here.</li>
-          <li>If you skip that, you'll need to manually reconcile any un-saved changes yourself after rebuilding.</li>
+          <li>If you skip that, you'll need to manually reconcile any unsaved changes yourself after rebuilding.</li>
         </ol>
       </div>
       <div class="collection-picker">
@@ -254,16 +301,10 @@
 
 <section id="area-sync" class="tool-area hidden">
 
-<div id="syncVortexBanner" class="vortex-banner hidden">
-  <span class="vortex-banner__icon">&#9888;</span>
-  <span class="vortex-banner__text">Vortex is currently running. Close it completely, then retry.</span>
-  <button id="syncVortexRetryBtn" class="btn btn--ghost">Retry</button>
-</div>
-
 <main class="app-main">
   <div class="view-header">
     <h1>Update Collection</h1>
-    <p class="muted">Keeps mods you've marked Ignored/Disabled in an installed collection ignored/disabled across a Vortex-driven update. Vortex itself still performs the actual mod installation -- this only brackets that step in Vortex's own state database.</p>
+    <p class="muted">This feature allows you to retain the mods you have marked as <strong>Ignored</strong> or <strong>Disabled</strong> after you have performed an Update to the collection. This helps reduce the amount of mod management you have to do after a collection is updated.</p>
   </div>
 
   <div id="syncBackupRootMissingBanner" class="callout callout--warning hidden">
@@ -282,16 +323,25 @@
     <button id="syncListModsBtn" class="btn btn--ghost" disabled>List Ignored/Disabled</button>
   </div>
 
+  <div class="callout callout--warning">
+    <div class="callout__title">&#9888; Before you start</div>
+    <ul>
+      <li>Make sure every mod you want to keep is marked <strong>Ignored</strong> or <strong>Disabled</strong> in Vortex first -- this tool only preserves whatever is already set, it doesn't set anything for you.</li>
+      <li>If a mod is marked <strong>Ignored</strong> because you don't want it anymore, make sure it's also removed (deleted) within Vortex. <strong>Ignored</strong> only stops Vortex from reinstalling it later -- it doesn't remove or disable a mod that's already active.</li>
+    </ul>
+  </div>
+
   <div class="sync-phase">
     <div class="sync-phase__header">
       <span class="sync-phase__num">1</span>
       <h2>Backup/Restore</h2>
-      <span class="muted">Run BEFORE clicking Update in Vortex.</span>
+      <span class="muted">Run <strong>BEFORE</strong> clicking <strong>Update</strong> in Vortex.</span>
     </div>
     <p>Snapshots which mods are currently ignored/disabled for the selected collection.</p>
     <div class="view-actions">
       <button id="syncBackupBtn" class="btn btn--primary" disabled>Create Backup</button>
       <button id="syncRestoreBackupBtn" class="btn btn--ghost" disabled>Restore Backup</button>
+      <span class="help-marker" title="You would use Restore Backup if you have created a backup before updating the collection in Vortex but did not continue to step 2. This allows to restore the backup you created and move to step 2 without having to create a new backup.">?</span>
       <span id="syncBackupStatus" class="muted"></span>
     </div>
     <!-- Same triangle-alert icon this app already uses for warnings -- confirmed against Vortex's
@@ -315,12 +365,21 @@
     <div id="syncBackupNextSteps" class="callout callout--info hidden">
       <div class="callout__title">&#9432; Next steps in Vortex</div>
       <ol>
-        <li>Click <strong>Update</strong> on this collection.</li>
+        <li>Click <strong>Update</strong> on '<span id="syncCollectionNameSpan"></span>'.</li>
         <li>When prompted, click <strong>Download Update</strong>.</li>
-        <li>If a "Remove mods from old revision?" screen appears, choose an option.</li>
-        <li>On the "collection added" screen, choose <strong>Later</strong> -- NOT Install Now.</li>
-        <li>Close Vortex completely, then continue to step 2 below.</li>
+        <li>If a 'Remove mods from old revision?' screen appears, choose an option.</li>
+        <li>On the '<span id="syncGameNameSpan">collection</span> added' screen, choose <strong>Later</strong> -- NOT <strong>Install Now</strong>.</li>
+        <li>Once Vortex closes the update window, click <strong>Refresh</strong> in the upper-right corner of the 'Added Collections' page.</li>
+        <li>When the refresh finishes, close Vortex.</li>
+        <li>Continue to step 2, 'Apply Ignores' below.</li>
       </ol>
+    </div>
+    <!-- Shown INSTEAD of syncBackupNextSteps when the backup captured 0 ignored AND 0 disabled mods
+         -- Apply Ignores/Apply Disables (steps 2-3) would have nothing to do either way, so the
+         careful Later-not-Install-Now/Refresh choreography above isn't needed for this collection. -->
+    <div id="syncBackupNothingToDoInfo" class="callout callout--success hidden">
+      <div class="callout__title">&#10003; Nothing to do here</div>
+      <p>There are no ignored or disabled mods for this collection, so there's nothing to carry over. Update it normally in Vortex -- no need to come back here afterward.</p>
     </div>
   </div>
 
@@ -328,15 +387,14 @@
     <div class="sync-phase__header">
       <span class="sync-phase__num">2</span>
       <h2>Apply Ignores</h2>
-      <span class="muted">Run AFTER Vortex Update &rarr; Later, with Vortex closed.</span>
+      <span class="muted">Run <strong>AFTER</strong> you have done the step above, updated Vortex, and it is closed.</span>
     </div>
-    <p>Marks the backed-up ignored mods as ignored in the <em>new</em> collection's rules, so Vortex's installer skips them &mdash; this is the only step that actually prevents Vortex from installing a mod.</p>
+    <p>Changes the Status of the mods in Vortex of the updated collection back to Ignored to prevent them from being downloaded and installed when you resume the Update.</p>
     <div class="field-group">
-      <label class="field-label" for="syncNewModIdInput">New collection's Vortex collection id</label>
+      <label class="field-label" for="syncNewModIdInput">Updated Vortex collection id</label>
       <input id="syncNewModIdInput" class="input" type="text" placeholder="e.g. My-Collection-123456-2-...">
-      <span class="muted">Pre-filled with the collection you selected above. If Vortex assigned a different id since
-        (e.g. the collection was updated to a newer revision), clear this field and Preview will pull the current
-        one automatically -- or type a specific id yourself and it's used exactly as entered.</span>
+      <span class="muted">If you know the id of the collection after doing the Update, you can enter it here.
+        Otherwise, leave blank for the current id to be obtained upon pressing the Preview button.</span>
     </div>
     <div class="view-actions">
       <button id="syncIgnoresPreviewBtn" class="btn btn--ghost">Preview</button>
@@ -347,8 +405,12 @@
     <div id="syncIgnoresCriticalError" class="callout callout--critical hidden"></div>
     <!-- Informational, not warning -- same reasoning as syncBackupNextSteps above. -->
     <div id="syncResumeNextSteps" class="callout callout--info hidden">
-      <div class="callout__title">&#9432; Next step in Vortex</div>
-      <p>Reopen Vortex and click <strong>Resume</strong> on the collection. This is the slow step (Vortex's own archive extraction) &mdash; not controlled by this tool. Once it finishes, close Vortex completely and continue to step 3 below.</p>
+      <div class="callout__title">&#9432; Next steps in Vortex</div>
+      <ol>
+        <li>Reopen Vortex and click <strong>Resume</strong> on the collection.</li>
+        <li>Once it finishes, close Vortex completely.</li>
+        <li>Continue to step 3, 'Apply Disables' below.</li>
+      </ol>
     </div>
   </div>
 
@@ -356,9 +418,9 @@
     <div class="sync-phase__header">
       <span class="sync-phase__num">3</span>
       <h2>Apply Disables</h2>
-      <span class="muted">Run AFTER Resume finishes, with Vortex closed.</span>
+      <span class="muted">Run <strong>AFTER</strong> you have resumed the installation of the update and Vortex is closed.</span>
     </div>
-    <p>Restores the disabled state on mods that should stay disabled, now that Vortex has assigned them real mod ids. Uses the profile recorded in the backup itself.</p>
+    <p>Changes the Status in Vortex of the updated mods back to Disabled.</p>
     <div class="view-actions">
       <button id="syncDisablesPreviewBtn" class="btn btn--ghost">Preview</button>
       <button id="syncDisablesApplyBtn" class="btn btn--primary" disabled>Apply</button>
@@ -366,6 +428,11 @@
     </div>
     <ul id="syncDisablesList" class="sync-result-list"></ul>
     <div id="syncDisablesCriticalError" class="callout callout--critical hidden"></div>
+    <!-- Success, not info -- the whole three-step sync is genuinely done at this point. -->
+    <div id="syncAllDoneInfo" class="callout callout--success hidden">
+      <div class="callout__title">&#10003; Completed</div>
+      <p>Vortex is ready for deployment. Enjoy your game.</p>
+    </div>
   </div>
 
   <div class="sync-phase">
@@ -373,14 +440,11 @@
       <span class="sync-phase__num">4</span>
       <h2>Compare <span class="muted">(optional, anytime)</span></h2>
     </div>
-    <p>Generates an HTML report of what changed vs. the backup, without touching Vortex's state at all.</p>
-    <div class="field-group">
-      <label class="field-label" for="syncCompareCollectionInput">New collection.json path</label>
-      <input id="syncCompareCollectionInput" class="input" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\&lt;modId&gt;\collection.json">
-    </div>
+    <p>Generates a report of the changes you just performed during the update of the collection.</p>
     <div class="view-actions">
       <button id="syncCompareBtn" class="btn btn--ghost">Generate Report</button>
     </div>
+    <div id="syncCompareCriticalError" class="callout callout--critical hidden"></div>
   </div>
 </main>
 
@@ -392,6 +456,19 @@
     <div class="modal-actions">
       <button id="syncRestoreBackupCancelBtn" class="btn btn--ghost">Cancel</button>
       <button id="syncRestoreBackupConfirmBtn" class="btn btn--primary">Restore</button>
+    </div>
+  </div>
+</div>
+
+<!-- Replaces the native browser confirm() previously used before Apply Ignores/Apply Disables --
+     shared by both since they need the identical shape (a message + Cancel/Confirm). -->
+<div id="syncApplyConfirmModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Confirm</h2>
+    <p id="syncApplyConfirmModalText"></p>
+    <div class="modal-actions">
+      <button id="syncApplyConfirmModalCancel" class="btn btn--ghost">Cancel</button>
+      <button id="syncApplyConfirmModalOk" class="btn btn--primary">Confirm</button>
     </div>
   </div>
 </div>
@@ -413,135 +490,187 @@
     A path change is saved but not yet active -- restart the server (Settings &rarr; Save Settings again, or close and re-run <code>node web/server.js</code>) to apply it.
   </div>
 
-  <h2 class="settings-section-title">Appearance</h2>
-  <div class="field-group">
-    <label class="field-label" for="settingsThemeSelect">Theme</label>
-    <select id="settingsThemeSelect" class="select select--small">
-      <option value="system">System default</option>
-      <option value="dark">Dark</option>
-      <option value="light">Light</option>
-    </select>
-  </div>
+  <!-- General -- applies regardless of which tool you're using. -->
+  <div class="settings-group">
+    <div class="settings-group__header">
+      <h2>General</h2>
+      <p class="muted">Shared by both Rebuild Collection and Update Collection.</p>
+    </div>
 
-  <h2 class="settings-section-title">Paths</h2>
-  <p class="muted">Path changes will require the server restart. These tools read these once when the server is started. You'll be offered an automatic restart when you save the settings.</p>
-  <div class="field-group">
-    <label class="field-label" for="settingsStagingInput">Vortex staging folder <span class="field-required">(required)</span></label>
-    <div class="path-input-row">
-      <input id="settingsStagingInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse">
-      <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsStagingInput">Browse&hellip;</button>
+    <h3 class="settings-section-title">Appearance</h3>
+    <div class="field-group">
+      <label class="field-label" for="settingsThemeSelect">Theme</label>
+      <select id="settingsThemeSelect" class="select select--small">
+        <option value="system">System default</option>
+        <option value="dark">Dark</option>
+        <option value="light">Light</option>
+      </select>
+    </div>
+
+    <h3 class="settings-section-title">Vortex paths</h3>
+    <p class="muted">Path changes require a server restart -- you'll be offered one automatically when you save.</p>
+    <div class="field-group">
+      <label class="field-label" for="settingsStagingInput">Vortex staging folder <span class="field-required">(required)</span></label>
+      <div class="path-input-row">
+        <input id="settingsStagingInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse">
+        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsStagingInput">Browse&hellip;</button>
+      </div>
+    </div>
+    <div class="field-group">
+      <label class="field-label" for="settingsDownloadsInput">Vortex downloads folder <span class="field-required">(required)</span></label>
+      <div class="path-input-row">
+        <input id="settingsDownloadsInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Downloads\skyrimse">
+        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsDownloadsInput">Browse&hellip;</button>
+      </div>
+    </div>
+
+    <h3 class="settings-section-title">Server</h3>
+    <p class="muted">Changes here require the server restart. This server has no login/authentication of its own, so leave the host as <code>127.0.0.1</code> unless you specifically want another device on your network to reach it.</p>
+    <div class="settings-row-2">
+      <div class="field-group">
+        <label class="field-label" for="settingsServerPortInput">Port</label>
+        <input id="settingsServerPortInput" class="input input--small" type="number" min="1" max="65535" step="1">
+      </div>
+      <div class="field-group">
+        <label class="field-label" for="settingsServerHostInput">Host / IP address to bind to</label>
+        <input id="settingsServerHostInput" class="input input--small" type="text" placeholder="127.0.0.1">
+      </div>
+    </div>
+    <div class="callout callout--warning" style="margin-top: 14px;">
+      Only change the host if you understand the risk: anything other than <code>127.0.0.1</code> or <code>localhost</code> exposes this tool -- with full read/write access to your mod files and Vortex state -- to your whole network, with no password protecting it.
+    </div>
+    <div class="field-group">
+      <label class="checkbox">
+        <input type="checkbox" id="settingsAutoOpenInput">
+        Automatically open a browser tab when the server starts
+      </label>
+    </div>
+
+    <h3 class="settings-section-title">NexusMods</h3>
+    <p class="muted">To obtain your Nexus API key, go to <a href="https://www.nexusmods.com/settings/api-keys" target="_blank" rel="noopener">nexusmods.com/settings/api-keys</a> and scroll to the bottom of the page, under "Personal API Key".</p>
+    <div class="field-group">
+      <label class="field-label" for="settingsNexusKeyInput">API key</label>
+      <input id="settingsNexusKeyInput" class="input input--wide" type="password" placeholder="paste your personal API key" autocomplete="off">
+      <span id="settingsNexusKeyStatus" class="muted"></span>
+    </div>
+    <p class="muted">Stored as plain text in the <code>config.json</code> file. Not encrypted, anyone with access to this machine/user account could read it directly from the file.</p>
+    <div class="view-actions">
+      <button id="settingsClearNexusKeyBtn" class="btn btn--ghost btn--small">Clear stored key</button>
     </div>
   </div>
-  <div class="field-group">
-    <label class="field-label" for="settingsDownloadsInput">Vortex downloads folder <span class="field-required">(required)</span></label>
-    <div class="path-input-row">
-      <input id="settingsDownloadsInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Downloads\skyrimse">
-      <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsDownloadsInput">Browse&hellip;</button>
+
+  <!-- Rebuild Collection -->
+  <div class="settings-group">
+    <div class="settings-group__header">
+      <h2>Rebuild Collection</h2>
+      <p class="muted">Fast direct-extraction staging rebuilds.</p>
+    </div>
+
+    <h3 class="settings-section-title">Backup path</h3>
+    <div class="field-group">
+      <label class="field-label" for="settingsBackupRootInput">Backup root folder <span class="muted">(optional, only needed if backups are turned on below)</span></label>
+      <div class="path-input-row">
+        <input id="settingsBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Mod Extraction\Vortex-Rebuild-Backups">
+        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsBackupRootInput">Browse&hellip;</button>
+      </div>
+    </div>
+
+    <h3 class="settings-section-title">Download Missing Archives</h3>
+    <div class="field-group">
+      <label class="checkbox">
+        <input type="checkbox" id="settingsDownloadMissingInput">
+        Download missing archives automatically during rebuild
+      </label>
+    </div>
+    <p class="muted">
+      When enabled, Rebuild Collection will automatically download any mod archive it can't find in
+      your downloads folder directly from Nexus before extracting it, instead of skipping that mod.
+    </p>
+    <div class="callout callout--warning">
+      Automated downloads only work for Nexus <strong>Premium</strong> accounts -- Nexus's API refuses
+      this for free accounts by design, the same way Vortex's own client refuses to auto-download for
+      non-Premium users. This respects Nexus's ad-supported download model: free-tier users must
+      download the archive manually from the Nexus website (which shows ads) and let Vortex install
+      it. If your account is not Premium, this tool won't attempt anything else on your behalf -- it
+      will just skip the mod as it does today, with a note in the run log telling you to download and
+      reinstall it yourself via Vortex.
+    </div>
+
+    <div class="field-group">
+      <label class="checkbox">
+        <input type="checkbox" id="settingsForceExtractMismatchInput">
+        Automatically force-extract off-site mods when a downloaded file doesn't exactly match
+      </label>
+    </div>
+    <p class="muted">
+      When enabled, Force Extract will automatically extract any off-site mod archive that you have
+      downloaded, instead of skipping that mod. Note: Vortex might show this a new mod and ask for you
+      to import, make sure you do.
+    </p>
+
+    <h3 class="settings-section-title">Performance</h3>
+    <p class="muted">Rebuild Collection extracts mods one at a time by default. Raising this runs several extractions in parallel (each is its own independent process) -- faster for large collections, at the cost of more simultaneous disk/CPU use.</p>
+    <div class="field-group">
+      <label class="field-label" for="settingsConcurrencyInput">Concurrent extractions (1-8)</label>
+      <input id="settingsConcurrencyInput" class="input input--small" type="number" min="1" max="8" step="1">
+    </div>
+
+    <h3 class="settings-section-title">Backups</h3>
+    <p class="muted">A backup is a full copy of every mod's current staging folder, made just before rebuilding it. For larger collections this option could consume a large amount of disk space.</p>
+    <div class="field-group">
+      <label class="field-label" for="settingsMaxBackupsInput">Number of backups to keep per collection (0 = off (suggested); 1-3 = keep only the N most recent; blank = unlimited, requires manual deletion)</label>
+      <input id="settingsMaxBackupsInput" class="input input--small" type="number" min="0" max="3" step="1" placeholder="unlimited">
+    </div>
+    <div class="view-actions">
+      <button id="settingsDeleteBackupsBtn" class="btn btn--ghost btn--small">Delete all backups</button>
+      <span id="settingsDeleteBackupsStatus" class="muted"></span>
     </div>
   </div>
-  <div class="field-group">
-    <label class="field-label" for="settingsBackupRootInput">Backup root folder <span class="muted">(Rebuild Collection -- optional, only needed if backups are turned on below)</span></label>
-    <div class="path-input-row">
-      <input id="settingsBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Mod Extraction\Vortex-Rebuild-Backups">
-      <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsBackupRootInput">Browse&hellip;</button>
+
+  <!-- Update Collection -->
+  <div class="settings-group">
+    <div class="settings-group__header">
+      <h2>Update Collection</h2>
+      <p class="muted">Tool used to preserve the ignore/disable status while updating a collection.</p>
     </div>
-  </div>
-  <div class="field-group">
-    <label class="field-label" for="settingsSyncBackupRootInput">Backups folder <span class="muted">(Update Collection)</span> <span class="field-required">(required)</span></label>
-    <div class="path-input-row">
-      <input id="settingsSyncBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\collection-sync">
-      <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsSyncBackupRootInput">Browse&hellip;</button>
+
+    <h3 class="settings-section-title">Paths</h3>
+    <div class="field-group">
+      <label class="field-label" for="settingsSyncBackupRootInput">Backups folder <span class="field-required">(required)</span></label>
+      <div class="path-input-row">
+        <input id="settingsSyncBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\collection-sync">
+        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsSyncBackupRootInput">Browse&hellip;</button>
+      </div>
     </div>
-  </div>
-  <div class="field-group">
-    <label class="field-label" for="settingsStateInput">Vortex database path (leave blank to auto-detect)</label>
-    <div class="path-input-row">
-      <input id="settingsStateInput" class="input input--wide" type="text" placeholder="auto-detected under %APPDATA%\Vortex\state.v2">
-      <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsStateInput">Browse&hellip;</button>
+    <div class="field-group">
+      <label class="field-label" for="settingsStateInput">Vortex database path (leave blank to auto-detect)</label>
+      <div class="path-input-row">
+        <input id="settingsStateInput" class="input input--wide" type="text" placeholder="auto-detected under %APPDATA%\Vortex\state.v2">
+        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsStateInput">Browse&hellip;</button>
+      </div>
     </div>
-  </div>
+    <div class="field-group">
+      <label class="checkbox">
+        <input type="checkbox" id="settingsHideVortexVersionWarningInput">
+        Don't warn me at startup if my installed Vortex version is untested
+      </label>
+    </div>
+    <p class="muted">Un-check this to see the "Vortex version not tested" popup again the next time you open this tool.</p>
 
-  <h2 class="settings-section-title">Download Missing Archives</h2>
-  <div class="field-group">
-    <label class="checkbox">
-      <input type="checkbox" id="settingsDownloadMissingInput">
-      Download missing archives automatically during rebuild
-    </label>
-  </div>
-  <p class="muted">
-    When enabled, Rebuild Collection will automatically download any mod archive it can't find in
-    your downloads folder directly from Nexus before extracting it, instead of skipping that mod.
-  </p>
-  <div class="callout callout--warning">
-    Automated downloads only work for Nexus <strong>Premium</strong> accounts -- Nexus's API refuses
-    this for free accounts by design, the same way Vortex's own client refuses to auto-download for
-    non-Premium users. This respects Nexus's ad-supported download model: free-tier users must
-    download the archive manually from the Nexus website (which shows ads) and let Vortex install
-    it. If your account is not Premium, this tool won't attempt anything else on your behalf -- it
-    will just skip the mod as it does today, with a note in the run log telling you to download and
-    reinstall it yourself via Vortex.
-  </div>
+    <h3 class="settings-section-title">Collection snapshot backups</h3>
+    <p class="muted">Collection backups created from the 'Create Backup' option.</p>
+    <div class="view-actions">
+      <button id="settingsSyncDeleteBackupsBtn" class="btn btn--ghost btn--small">Delete all backups</button>
+      <span id="settingsSyncDeleteBackupsStatus" class="muted"></span>
+    </div>
 
-  <div class="field-group">
-    <label class="checkbox">
-      <input type="checkbox" id="settingsForceExtractMismatchInput">
-      Automatically force-extract off-site mods when a downloaded file doesn't exactly match
-    </label>
-  </div>
-  <p class="muted">
-    When enabled, Force Extract will automatically extract any off-site mod archive that you have
-    downloaded, instead of skipping that mod. Note: Vortex might show this a new mod and ask for you
-    to import, make sure you do.
-  </p>
-
-  <h2 class="settings-section-title">Performance</h2>
-  <p class="muted">Rebuild Collection extracts mods one at a time by default. Raising this runs several extractions in parallel (each is its own independent process) -- faster for large collections, at the cost of more simultaneous disk/CPU use.</p>
-  <div class="field-group">
-    <label class="field-label" for="settingsConcurrencyInput">Concurrent extractions (1-8)</label>
-    <input id="settingsConcurrencyInput" class="input input--small" type="number" min="1" max="8" step="1">
-  </div>
-
-  <h2 class="settings-section-title">Server</h2>
-  <p class="muted">Changes here require the server restart. This server has no login/authentication of its own, so leave the host as <code>127.0.0.1</code> unless you specifically want another device on your network to reach it.</p>
-  <div class="field-group">
-    <label class="field-label" for="settingsServerPortInput">Port</label>
-    <input id="settingsServerPortInput" class="input input--small" type="number" min="1" max="65535" step="1">
-  </div>
-  <div class="field-group" style="margin-bottom: 16px;">
-    <label class="field-label" for="settingsServerHostInput">Host / IP address to bind to</label>
-    <input id="settingsServerHostInput" class="input input--small" type="text" placeholder="127.0.0.1">
-  </div>
-  <div class="callout callout--warning">
-    Only change the host if you understand the risk: anything other than <code>127.0.0.1</code> or <code>localhost</code> exposes this tool -- with full read/write access to your mod files and Vortex state -- to your whole network, with no password protecting it.
-  </div>
-  <div class="field-group">
-    <label class="checkbox">
-      <input type="checkbox" id="settingsAutoOpenInput">
-      Automatically open a browser tab when the server starts
-    </label>
-  </div>
-
-  <h2 class="settings-section-title">NexusMods</h2>
-  <p class="muted">To obtain your Nexus API key, go to <a href="https://www.nexusmods.com/settings/api-keys" target="_blank" rel="noopener">nexusmods.com/settings/api-keys</a> and scroll to the bottom of the page, under "Personal API Key".</p>
-  <div class="field-group">
-    <label class="field-label" for="settingsNexusKeyInput">API key</label>
-    <input id="settingsNexusKeyInput" class="input input--wide" type="password" placeholder="paste your personal API key" autocomplete="off">
-    <span id="settingsNexusKeyStatus" class="muted"></span>
-  </div>
-  <p class="muted">Stored as plain text in the <code>config.json</code> file. Not encrypted, anyone with access to this machine/user account could read it directly from the file.</p>
-  <div class="view-actions">
-    <button id="settingsClearNexusKeyBtn" class="btn btn--ghost btn--small">Clear stored key</button>
-  </div>
-
-  <h2 class="settings-section-title">Backups</h2>
-  <p class="muted">A backup is a full copy of every mod's current staging folder, made just before rebuilding it. For larger collections this option could consume a large amount of disk space.</p>
-  <div class="field-group">
-    <label class="field-label" for="settingsMaxBackupsInput">Number of backups to keep per collection (0 = off (suggested); 1-3 = keep only the N most recent; blank = unlimited, requires manual deletion)</label>
-    <input id="settingsMaxBackupsInput" class="input input--small" type="number" min="0" max="3" step="1" placeholder="unlimited">
-  </div>
-  <div class="view-actions">
-    <button id="settingsDeleteBackupsBtn" class="btn btn--ghost btn--small">Delete all backups</button>
-    <span id="settingsDeleteBackupsStatus" class="muted"></span>
+    <h3 class="settings-section-title">Vortex database backups</h3>
+    <p class="muted"><strong>Delete all backups</strong> removes them permanently. <strong>Restore</strong> lets you bring your database back to an earlier backup if something goes wrong.</p>
+    <div class="view-actions">
+      <button id="settingsStateDeleteBackupsBtn" class="btn btn--ghost btn--small">Delete all backups</button>
+      <button id="settingsStateRestoreBtn" class="btn btn--ghost btn--small">Restore</button>
+      <span id="settingsStateDeleteBackupsStatus" class="muted"></span>
+    </div>
   </div>
 
   <div class="view-actions">
@@ -571,6 +700,43 @@
     </div>
   </div>
 </div>
+
+<div id="settingsSyncDeleteBackupsModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Delete all collection snapshot backups?</h2>
+    <p id="settingsSyncDeleteBackupsModalText"></p>
+    <div class="modal-actions">
+      <button id="settingsSyncDeleteBackupsCancelBtn" class="btn btn--ghost">Cancel</button>
+      <button id="settingsSyncDeleteBackupsConfirmBtn" class="btn btn--primary">Delete All</button>
+    </div>
+  </div>
+</div>
+
+<div id="settingsStateDeleteBackupsModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Delete all Vortex database backups?</h2>
+    <p id="settingsStateDeleteBackupsModalText"></p>
+    <div class="modal-actions">
+      <button id="settingsStateDeleteBackupsCancelBtn" class="btn btn--ghost">Cancel</button>
+      <button id="settingsStateDeleteBackupsConfirmBtn" class="btn btn--primary">Delete All</button>
+    </div>
+  </div>
+</div>
+
+<div id="settingsStateRestoreModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Restore a Vortex database backup</h2>
+    <p>Vortex must be fully closed. This overwrites Vortex's <em>current</em> live database with the
+      backup you pick below -- a fresh safety backup of the current state is taken automatically
+      first, so this itself can be undone by restoring that one afterward.</p>
+    <select id="settingsStateRestoreSelect" class="select"></select>
+    <p id="settingsStateRestoreEmpty" class="muted hidden">No Vortex database backups found.</p>
+    <div class="modal-actions">
+      <button id="settingsStateRestoreCancelBtn" class="btn btn--ghost">Cancel</button>
+      <button id="settingsStateRestoreConfirmBtn" class="btn btn--primary">Restore</button>
+    </div>
+  </div>
+</div>
 </section>
 
 <section id="area-reports" class="tool-area hidden">
@@ -582,6 +748,7 @@
   <div class="view-actions">
     <button id="reports-sub-stats" class="btn btn--primary btn--small">Stats Report</button>
     <button id="reports-sub-workthrough" class="btn btn--ghost btn--small">Work Through Report</button>
+    <button id="reports-sub-updatecompare" class="btn btn--ghost btn--small">Update Compare Report</button>
   </div>
 
   <div id="reports-sub-area-stats">
@@ -628,6 +795,24 @@
   <p class="muted" id="wtProgress"></p>
   <div class="summary-badges" id="wtBadges"></div>
   <div id="wtList"></div>
+  </div>
+
+  <div id="reports-sub-area-updatecompare" class="hidden">
+  <div class="view-actions">
+    <button id="updateCompareBackBtn" class="btn btn--nav btn--back">&larr; Back to Update Collection</button>
+  </div>
+  <!-- Informational, not warning -- these are plain next-steps to follow, nothing is wrong. Same
+       .callout--info + numbered-steps pattern as Update Collection's own "Next steps in Vortex"
+       callouts (see index.html's syncBackupNextSteps). -->
+  <div class="callout callout--info" id="updateComparePlaceholder">
+    <div class="callout__title">&#9432; No report generated yet</div>
+    <ol>
+      <li>Go to <strong>Update Collection</strong> and select the collection from the dropdown at the top.</li>
+      <li>Click <strong>Restore Backup</strong> and choose the backup you want to compare against.</li>
+      <li>Scroll down to step 4, <strong>Compare</strong>, and click <strong>Generate Report</strong>.</li>
+    </ol>
+  </div>
+  <iframe id="updateCompareFrame" class="hidden" title="Update Compare Report" style="width: 100%; height: 75vh; border: 1px solid var(--border); border-radius: var(--radius); margin-top: 12px;"></iframe>
   </div>
 </main>
 </section>

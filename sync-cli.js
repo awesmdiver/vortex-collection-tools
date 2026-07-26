@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-// CLI entry point. For an interactive menu instead, run menu.js (or run this
-// tool with no subcommand).
+// CLI entry point. The web UI (web/public/sync-app.js's Update Collection tab) is the primary,
+// recommended way to run this flow -- this flag-based CLI is kept for scripting/automation use.
+// (The interactive terminal menu that used to accompany this has been archived -- see
+// terminal-flow-archive/, gitignored -- this project is 100% web-UI-driven now.)
 //
 // Keeps mods you've marked "Ignore" in an installed Vortex collection
 // ignored across an update, and auto-disables (or, when there's no plugin to
@@ -51,6 +53,13 @@ function parseArgs(argv) {
 
 function stagingDirOf(args) {
   return args['staging-dir'] || lib.loadConfig().stagingDir;
+}
+
+// Surfaces lib.js's identityDriftWarning (see its own comment there) prominently, distinct from the
+// normal "removed by the collection author"/"not found installed" output above it -- a schema-drift
+// false-positive reads as ordinary removal otherwise, hiding a real tool/Vortex incompatibility.
+function printIdentityWarningIfAny(identityWarning) {
+  if (identityWarning) console.log(`\n⚠ WARNING: ${identityWarning}`);
 }
 
 async function warnIfVortexVersionUntested(stateDir) {
@@ -334,24 +343,32 @@ async function cmdApplyIgnores(args) {
   const snapshot = lib.loadBackup(backupPath);
 
   if (!apply) {
-    const changed = await lib.withStateDb(stateDir, async (db) => {
+    const { changed, unmatched, identityWarning } = await lib.withStateDb(stateDir, async (db) => {
       const rules = await lib.getRules(db, modId);
-      return lib.applyIgnoresToRules(rules, snapshot.ignored).changed;
+      return lib.applyIgnoresToRules(rules, snapshot.ignored);
     });
     console.log(`DRY RUN — ${changed.length} rule(s) would be set to ignored:true for "${modId}":`);
     for (const c of changed) console.log(`  - ${c.name}`);
+    if (unmatched.length > 0) {
+      console.log(`${unmatched.length} ignored mod(s) from the backup were not found (removed by the collection author):`);
+      for (const u of unmatched) console.log(`  - ${u.name}`);
+    }
+    printIdentityWarningIfAny(identityWarning);
     console.log('\nRe-run with --apply to actually write this to Vortex\'s live state (Vortex must be fully closed).');
     return;
   }
 
   await warnIfVortexVersionUntested(stateDir);
   console.log('Writing directly to Vortex\'s live state database (a full backup is taken first)...');
-  const { changed, backupDir } = await lib.withLiveStateDb(stateDir, async (db) => ({
-    changed: await lib.writeIgnoredFlags(db, modId, snapshot.ignored),
-  }));
+  const { changed, unmatched, backupDir, identityWarning } = await lib.withLiveStateDb(stateDir, async (db) => await lib.writeIgnoredFlags(db, modId, snapshot.ignored));
   console.log(`State backup taken at: ${backupDir}`);
   console.log(`${changed.length} rule(s) set to ignored:true for "${modId}":`);
   for (const c of changed) console.log(`  - ${c.name}`);
+  if (unmatched.length > 0) {
+    console.log(`${unmatched.length} ignored mod(s) from the backup were not found (removed by the collection author):`);
+    for (const u of unmatched) console.log(`  - ${u.name}`);
+  }
+  printIdentityWarningIfAny(identityWarning);
   console.log('\nYou can now reopen Vortex and click "Resume" on the collection.');
 }
 
@@ -376,7 +393,7 @@ async function cmdApplyDisables(args) {
   }
 
   if (!apply) {
-    const matches = await lib.withStateDb(stateDir, (db) => lib.findCurrentModIds(db, snapshot.disabled));
+    const { results: matches, identityWarning } = await lib.withStateDb(stateDir, (db) => lib.findCurrentModIdsChecked(db, snapshot.disabled));
     console.log(`DRY RUN — found ${matches.length}/${snapshot.disabled.length} disabled mod(s) now installed:`);
     for (const m of matches) console.log(`  - ${m.matchedRef.name}  [${m.vortexModId}]`);
     if (matches.length < snapshot.disabled.length) {
@@ -385,17 +402,19 @@ async function cmdApplyDisables(args) {
       console.log(`\n${missing.length} not found installed yet (Resume may still be running, or they weren't part of this revision):`);
       for (const m of missing) console.log(`  - ${m.name}`);
     }
+    printIdentityWarningIfAny(identityWarning);
     console.log('\nRe-run with --apply to set enabled:false on these in Vortex\'s live state (Vortex must be fully closed).');
     return;
   }
 
   await warnIfVortexVersionUntested(stateDir);
   console.log('Writing directly to Vortex\'s live state database (a full backup is taken first)...');
-  const { changed, backupDir } = await lib.withLiveStateDb(stateDir, async (db) => {
-    const matches = await lib.findCurrentModIds(db, snapshot.disabled);
-    return { changed: await lib.writeDisabledFlags(db, profileId, matches) };
+  const { changed, backupDir, identityWarning } = await lib.withLiveStateDb(stateDir, async (db) => {
+    const { results: matches, identityWarning } = await lib.findCurrentModIdsChecked(db, snapshot.disabled);
+    return { changed: await lib.writeDisabledFlags(db, profileId, matches), identityWarning };
   });
   console.log(`State backup taken at: ${backupDir}`);
+  printIdentityWarningIfAny(identityWarning);
   console.log(`${changed.length} mod(s) set to disabled:`);
   for (const c of changed) console.log(`  - ${c.name}  [${c.vortexModId}]`);
 }

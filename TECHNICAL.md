@@ -314,11 +314,15 @@ convention at all (that only decides which picker dropdown a collection shows up
 > ⚠️ **Not stable yet — still being reviewed and improved.** Rebuild Collection is the well-tested
 > part of this toolkit right now; treat everything below as in-progress.
 
+The web UI (Update Collection tab) is the primary, recommended way to run this flow. A flag-based
+CLI also exists for scripting/automation:
 ```
-node sync-menu.js      # interactive terminal menu (recommended)
-node sync-cli.js <command> [options]   # flag-based CLI (list-collections, backup, apply-ignores,
-                                        # apply-disables, compare, list-backups, ...)
+node sync-cli.js <command> [options]   # list-collections, backup, apply-ignores,
+                                        # apply-disables, compare, list-backups, ...
 ```
+(The interactive terminal menu that used to accompany this — `sync-menu.js` — has been archived to
+`terminal-flow-archive/`, gitignored, kept only as a reference for a possible future non-web-based
+flow; this project is 100% web-UI-driven now.)
 
 Three-phase, human-in-the-loop workflow (Vortex itself performs the actual mod installation — this
 tool only brackets that step):
@@ -337,6 +341,87 @@ tool only brackets that step):
 
 See `lib/vortex-sync/lib.js` for the full implementation and `lib/sync-runner.js` for the
 framework-agnostic orchestration shared by the CLI, terminal menu, and web UI.
+
+### Vortex version compatibility check
+
+A standalone popup (`#vortexVersionWarningModal`, wired in `web/public/shell.js`) checks once at
+every app startup whether the currently-installed Vortex (read via `app###appVersion` in state.v2)
+is one this tool's live writes have actually been tested against
+(`TESTED_VORTEX_VERSIONS` in `lib/vortex-sync/lib.js`). Previously this check only ran inside Apply
+Ignores' Preview step; decoupled to app-startup since it's a whole-app compatibility question, not
+specific to one step. `GET /api/sync/vortex-version-check` (`web/sync-routes.js`) reports
+`{vortexRunning}` if Vortex is open at that moment (skipped silently, re-checked next launch — not
+an error) or `{vortexVersion, versionTested}` otherwise. A "Don't show this again" checkbox on the
+popup persists `hideVortexVersionWarning` to `config.json`; also exposed as its own toggle under
+Settings → Update Collection, so it can be turned back on without hand-editing the file.
+
+Separately, `assertRulesShapeKnown()` (also in `lib/vortex-sync/lib.js`) is a real, already-wired
+structural tripwire: it refuses any live write if a mod's `rules` array (or an individual rule)
+doesn't match the shape this tool expects, with a "Vortex's state layout may have changed" error —
+this catches an actual schema change under the version check's radar (e.g. a not-yet-tested version
+that happens to still report a familiar `appVersion` but has changed the data shape underneath).
+`writeDisabledFlags()` has an equivalent inline guard on the one value it writes (`modState###...
+###enabled` must be exactly `"true"`/`"false"`).
+
+### Identity-drift detection (matching, not writing, is the real risk surface)
+
+The two live-write functions above already refuse outright on an unfamiliar OUTER shape, so neither
+can silently write garbage. The actual gap was narrower: the INNER identity fields used to figure
+out *which* mod a rule/ref refers to (`reference.fileMD5`, `reference.repo.modId`,
+`attributes###fileMD5`, etc. — see `identityKeys()`) were read with no validation at all. If Vortex
+ever renamed one of those fields, every read of it would silently come back `undefined`, matching
+would silently degrade to "matches nothing", and that gets reported today as "removed by the
+collection author" / "not found installed" — a plausible-sounding but WRONG explanation for what's
+actually a tool/Vortex incompatibility, not real removal.
+
+`identityDriftWarning()` (`lib/vortex-sync/lib.js`) closes this: given a batch of identities freshly
+read from LIVE state (never from a backup — a historical snapshot being sparse is normal), it flags
+the situation as suspicious once ≥80% of ≥3 candidates come back with zero identity fields at all
+(md5, tag, and modId+fileId all missing) — high enough to tolerate a handful of genuinely
+bare-identity mods (some real off-site mods lack this data) without false-triggering on an ordinary
+collection. Wired into both matching functions:
+- `applyIgnoresToRules()` — candidates are every CURRENT rule's identity (the collection you're
+  updating TO), returned as `identityWarning` alongside `changed`/`unmatched`.
+- `findCurrentModIdsChecked()` — a new function alongside the original, unchanged
+  `findCurrentModIds()` (kept exactly as-is since Rebuild Collection's `state-query-worker.js` and
+  `sync-cli.js`'s own direct calls depend on its bare-array return; changing that contract would have
+  risked the well-tested Rebuild Collection flow for an Update-Collection-only feature). Candidates
+  are every id actually found under `persistent###mods###<game>###` during the full-scan fallback —
+  confirmed real installed mods, not merely "some ref didn't match yet" (which is normal/expected
+  when Resume hasn't finished installing a dependent mod).
+
+Surfaced distinctly everywhere a result reaches a person — never blended into the normal
+"removed"/"not found" text: `sync-app.js` shows it in the same `.callout--critical` box used for real
+errors; `sync-cli.js` prints it as its own `⚠ WARNING:` line, separate from the dry-run/apply output
+above it.
+
+### Compare Report (`lib/vortex-sync/report.js`)
+
+Restyled 2026-07-25 to match the other two Reports sub-tabs (Stats Report, Work Through Report)
+exactly, per explicit direction that all three should look and feel the same. Was previously a fully
+separate, self-contained HTML document with its own inline CSS/light-mode-only look and several
+stacked tables (Added by author, Removed by author, Removed-ignored, Disabled-kept, Unmatched) —
+now:
+- Reuses `/styles.css` directly (no duplicated app-header/nav — it renders inside an `<iframe>`
+  already sitting under the app's own Reports chrome, see `stats-app.js`'s `showUpdateCompareReport`)
+  and a small inline bootstrap that reads `localStorage.getItem('theme')` so it follows the user's
+  explicit light/dark choice, not just OS preference (localStorage is shared across same-origin
+  documents, including this iframe).
+- All 5 mod categories (Added/Removed by author, Marked Ignored, Kept-Disabled, Not Found Anymore —
+  plus Needs Manual Disable when `outPath` is set) are ONE combined, filterable `.plan-table` with a
+  Status column, driven by clickable `.summary-badges`/`.badge--clickable` — same exact mechanism and
+  inline-script pattern as `sync-routes.js`'s `renderIgnoredDisabledReport` and `stats-app.js`'s Current
+  Issues badges, not a new one-off pattern. New generic `.badge--info/success/warning/critical/neutral`
+  and `.status-pill--info/success/warning/critical/neutral` CSS variants (styles.css) back this — reuse
+  these for any future report needing the same four-color severity language on a badge/pill instead of
+  inventing per-status colors.
+- `modRules removed` (only ever meaningful when `outPath` is set, i.e. never for the web UI's own
+  Compare button) is no longer shown unconditionally — it's gated behind `outPath` now, consistent
+  with its sibling outPath-only stats (Plugins auto-disabled, Needs Manual Disable), rather than
+  displaying a permanently-zero, unexplained number.
+- All body copy rewritten per the `plain-language-writer` skill (dropped "collection.json has no
+  per-mod enabled/disabled field", "confirmed against Vortex's own source", and similar internal
+  implementation detail that had leaked into user-facing text).
 
 ## Safety notes
 
@@ -400,6 +485,28 @@ rather than needing a second, separately-maintained HTML copy of the same wordin
 function (or its same parsing convention) for any future shared plain-text/HTML message pair,
 rather than inventing a new one-off format.
 
+**Modals carry the same severity convention too, not just callouts** (added 2026-07-25) — a blocking
+modal (something the user genuinely cannot proceed past, e.g. "Vortex is currently running" or
+"Can't reach the server") gets the same icon + color token as its matching callout severity, applied
+to the modal box's border and `<h2>` instead of a full-width callout: `.modal--warning` /
+`.modal--critical` (see `web/public/styles.css`). Markup: `<div class="modal modal--{severity}">` with
+`<h2>&#9888; {title}</h2>` — same triangle-alert icon as warning/critical callouts, no separate icon
+shape. "Vortex is running" is `.modal--warning` (a resolvable gate, matching the callout table's own
+classification above) — "Can't reach the server" is `.modal--critical` (a real failure, nothing works
+until it's fixed). Real examples: `#vortexRunningModal`, `#serverUnreachableModal`.
+
+**Prefer a shared centered modal over a top-level banner for a blocking, page-wide condition**
+(added 2026-07-25, replacing the old per-tool-area `#vortexBanner`/`#syncVortexBanner`) — a banner
+sitting at the top of a long page is easy to trigger completely off-screen if the user has scrolled
+down into a later step, with nothing visible to explain why an action silently didn't work (confirmed
+live, twice, before this fix). A modal is fixed/centered, so it's always seen regardless of scroll
+position, and the user's scroll position is preserved once they dismiss it — no scroll-to-top hack
+needed. Use a top-level banner instead only when the condition is genuinely **non-blocking** and the
+user should be able to keep working elsewhere on the page while it's visible (e.g.
+`#settingsFirstRunBanner`, `#syncBackupRootMissingBanner` — an advisory nudge, not something that
+halts every other action). If in doubt: can the user still do something useful elsewhere on this
+page right now? If no, use the modal. If yes, a banner is fine.
+
 **Known inconsistency, not yet fixed** — several existing `.callout--warning` uses in this app
 aren't actually warnings under the table above; they're informational/instructional and should
 eventually become `.callout--info` (e.g. the "Next steps in Vortex" boxes, the first-run Settings
@@ -428,6 +535,21 @@ Vortex's real installer source, the way `vortex-source-refs.json`/`check-vortex-
 already do for the extraction side) before any design is attempted.
 
 Other open items, not yet started:
+- **Refresh `TESTED_VORTEX_VERSIONS`** (low priority — deprioritized 2026-07-25; the identity-drift
+  detector below covers the actual risk this was meant to guard against, so this is now a nice-to-
+  have accuracy improvement, not a safety gap): researched Vortex's own GitHub source
+  (`Nexus-Mods/Vortex`) to see whether it has a better DB-incompatibility signal than an app-version
+  allowlist. Findings: Vortex's own migration system (`src/renderer/src/util/migrate.ts`) isn't a
+  monotonic schema-version counter either — it's per-migration `minVersion` semver gates plus an
+  already-applied-migration-ids ledger (`state.app.migrations`), checked against the same
+  `state.app.appVersion` this tool already reads. So the allowlist approach is directionally the
+  right idea, just stale: current Vortex HEAD is 2.4.0-beta.2 (this tool's list still stops at
+  2.3.0), and two real persisted-state-shape fixes shipped since — `moveDomainFolders_2_1` (2.1.0
+  beta.4→beta.5, a `download.game` domain bug) and `healStoragePathNames_2_4` (2.4.0 beta.1→beta.2,
+  CDN storage paths polluting mod/download names) — neither is a `rules`-array change specifically,
+  but confirms Vortex does still change persisted shapes between betas. Bump the allowlist to
+  include 2.4.0-beta.1/.2 once actually exercised against them, and periodically re-diff against
+  Vortex's `CHANGELOG.md`.
 - **Multi-profile validation**: both tools should operate on/show data from whichever Vortex profile
   is currently ENABLED when more than one profile exists, not blend across profiles. Update
   Collection is already explicitly profile-aware (`profileId` is a first-class concept throughout
@@ -440,8 +562,18 @@ Other open items, not yet started:
   for a shared mod. Wants a "last collection wins" option with an explicit warning/confirm step
   (never silent), possibly a dedicated page listing every mod currently blocked this way with a
   manual per-mod "extract anyway" button. Not designed yet.
-- **`sync-cli.js`/`sync-menu.js` refactor** to call `lib/sync-runner.js` (they still call
-  `lib/vortex-sync/lib.js` directly) — pure cleanup, functionally unaffected, low priority.
+- **`sync-cli.js` refactor** to call `lib/sync-runner.js` (it still calls `lib/vortex-sync/lib.js`
+  directly) — pure cleanup, functionally unaffected, low priority.
+- **Background watchdog process** so the server can actually be restarted from the web UI even when
+  it's crashed/died outright (today's "can't reach the server" message, added 2026-07-25, can only
+  ever tell the user to relaunch `start-server.bat` themselves — nothing can be listening to receive
+  an HTTP "restart" request if the process is fully dead). A watchdog would need: (1) to become the
+  new thing the user actually starts/stops instead of `node web/server.js` directly, since otherwise
+  it can't tell "user closed it on purpose" apart from "it crashed, relaunch it" and would just
+  resurrect the server every time someone tries to shut it down; (2) a real stop mechanism (a "Stop
+  Server" web UI control, most likely) for the watchdog to listen for, since a fully hidden/no-window
+  process has no window to close and no console to Ctrl+C; (3) some way to still see server console
+  output for real debugging, which a fully hidden window loses. Not designed or scoped yet.
 - **Multi-game support**: this whole project is hardcoded to `GAME_ID = 'skyrimse'` throughout
   (`lib/vortex-sync/lib.js` and beyond) — Vortex's own state.v2 is shared across every game it
   manages, not just Skyrim SE (confirmed live: a real install had a genuine, unrelated Dragon's
@@ -456,6 +588,13 @@ Other open items, not yet started:
   Enabled, Endorsed/not, install-failed, etc.) — currently scoped narrowly to what Update Collection
   itself actually tracks/acts on. Raised as a "maybe in the future" idea, not designed or scoped yet
   — needs a real discussion on which statuses are worth surfacing and why before building it.
+- ~~**No web UI to restore the automatic full state.v2 backup.**~~ — done. Settings page's Update
+  Collection group ("Vortex database backups" subsection) now has a "Restore…" button next to
+  "Delete all backups" -- lists available backups by timestamp (`GET /api/sync/state-backups`),
+  restores the chosen one (`POST /api/sync/restore-state`), gated server-side exactly like every
+  other live-state write here (Vortex must be closed). Kept distinctly named/located from the
+  unrelated "Restore Backup" button on the Update Collection page itself (that one restores a
+  collection's ignore/disable snapshot, not the live database).
 - ~~**Self-contained release packaging**~~ — done, see the main README's "Getting a release without
   installing anything" section. A literal single-.exe (Node SEA / `pkg`) was considered and
   rejected: `classic-level`'s native addon and this project's read/write-next-to-the-app-folder
@@ -486,13 +625,18 @@ Other open items, not yet started:
 
 ```
 Vortex-Collection-Tools/
+├── CLAUDE.md                                             — standing instructions for Claude Code in this repo
+├── DESIGN.md                                             — UI/UX design guide: colors, components, voice,
+│                                                            "every report must look the same" rule
 ├── config.json (gitignored), config.example.json      — single unified settings file, see lib/app-config.js
 ├── rebuild-collection.js, extract-mod.js, compare-output.js, smoke-test-collection.js,
 │   snapshot-collection-staging.js, download-collection.js, check-vortex-source-drift.js,
 │   sandbox-test-rebuild.js                              — safe A/B concurrency testing, see section above
 │   sandbox-test-download.js                             — safe archive-download testing, see section above
 ├── start-server.bat, start-server.ps1                    — double-click launchers (npm install on first run, then start + auto-open browser)
-├── sync-cli.js, sync-menu.js
+├── sync-cli.js                                            — flag-based CLI for Update Collection (scripting/automation)
+├── terminal-flow-archive/ (gitignored, not pushed to GitHub) — sync-menu.js, the old interactive
+│   terminal menu; kept only as a reference for a possible future non-web-based flow
 ├── vortex-source-refs.json
 ├── lib/
 │   ├── app-config.js                                     — the unified config.json reader/writer
@@ -517,5 +661,7 @@ Vortex-Collection-Tools/
 │   └── public/ (index.html, app.js, sync-app.js, settings-app.js, stats-app.js,
 │       work-through-app.js, shell.js, styles.css)
 ├── logs/ (gitignored)      — Rebuild Collection run logs
-└── reports/ (gitignored)   — Update Collection HTML reports
+└── reports/ (gitignored)   — HTML reports written by the archived terminal-flow-archive/sync-menu.js
+                              only; the web UI's own Compare report renders directly to the browser
+                              response instead, nothing written to disk
 ```

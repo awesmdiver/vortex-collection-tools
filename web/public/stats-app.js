@@ -33,6 +33,17 @@ async function api(method, path) {
   return data;
 }
 
+// This page has no Vortex-running concerns of its own (Reports only ever reads log/state files this
+// tool already owns), so the only thing worth checking for is the server being fully unreachable --
+// same shared shell.js modal every other page uses.
+function handleStatsApiError(e, retryFn) {
+  if (isServerUnreachableError(e)) {
+    showServerUnreachableError(retryFn);
+    return true;
+  }
+  return false;
+}
+
 function fmtMs(ms) {
   if (ms == null) return '--';
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
@@ -55,7 +66,9 @@ async function loadOverview(period) {
   try {
     data = await api('GET', `/api/stats/overview?period=${encodeURIComponent(period)}`);
   } catch (e) {
-    $g('statsOverviewMeta').textContent = `Failed to load: ${e.message}`;
+    if (!handleStatsApiError(e, () => loadOverview(period))) {
+      $g('statsOverviewMeta').textContent = `Failed to load: ${e.message}`;
+    }
     return;
   }
 
@@ -114,7 +127,9 @@ async function loadIssues() {
   try {
     issuesData = await api('GET', '/api/stats/issues');
   } catch (e) {
-    listEl.textContent = `Failed to load: ${e.message}`;
+    if (!handleStatsApiError(e, loadIssues)) {
+      listEl.textContent = `Failed to load: ${e.message}`;
+    }
     return;
   }
   renderIssuesBadges();
@@ -209,7 +224,9 @@ async function loadCollectionHistory(collectionModId) {
   try {
     data = await api('GET', `/api/rebuild/logs/${encodeURIComponent(collectionModId)}`);
   } catch (e) {
-    body.appendChild(el('tr', {}, [el('td', { colspan: '8' }, `Failed to load: ${e.message}`)]));
+    if (!handleStatsApiError(e, () => loadCollectionHistory(collectionModId))) {
+      body.appendChild(el('tr', {}, [el('td', { colspan: '8' }, `Failed to load: ${e.message}`)]));
+    }
     return;
   }
   for (const log of data.logs || []) {
@@ -239,23 +256,42 @@ function loadStatsPageOnce() {
   loadIssues();
 }
 
-// Reports area now has two inner sub-tabs -- only ever these two, so a small flat toggle is enough
-// (no need for shell.js's TOOL_AREAS-style array). Stats Report is the default on first entry,
-// matching this area's exact behavior before the Work Through Report split.
+// Reports area now has three inner sub-tabs -- still few enough that a small flat toggle is
+// simpler than shell.js's TOOL_AREAS-style array. Stats Report is the default on first entry,
+// matching this area's exact behavior before the Work Through Report/Update Compare Report splits.
+const REPORTS_SUB_TABS = ['stats', 'workthrough', 'updatecompare'];
+const REPORTS_SUB_TAB_LABELS = { stats: 'Reports > Stats Report', workthrough: 'Reports > Work Through Report', updatecompare: 'Reports > Update Compare Report' };
 function showReportsSubTab(id) {
-  if (typeof setPageLabel === 'function') setPageLabel(id === 'stats' ? 'Reports > Stats Report' : 'Reports > Work Through Report');
-  $g('reports-sub-area-stats').classList.toggle('hidden', id !== 'stats');
-  $g('reports-sub-area-workthrough').classList.toggle('hidden', id !== 'workthrough');
-  $g('reports-sub-stats').classList.toggle('btn--primary', id === 'stats');
-  $g('reports-sub-stats').classList.toggle('btn--ghost', id !== 'stats');
-  $g('reports-sub-workthrough').classList.toggle('btn--primary', id === 'workthrough');
-  $g('reports-sub-workthrough').classList.toggle('btn--ghost', id !== 'workthrough');
+  if (typeof setPageLabel === 'function') setPageLabel(REPORTS_SUB_TAB_LABELS[id] || 'Reports');
+  for (const tab of REPORTS_SUB_TABS) {
+    $g(`reports-sub-area-${tab}`).classList.toggle('hidden', tab !== id);
+    $g(`reports-sub-${tab}`).classList.toggle('btn--primary', tab === id);
+    $g(`reports-sub-${tab}`).classList.toggle('btn--ghost', tab !== id);
+  }
   if (id === 'stats') loadStatsPageOnce();
-  else if (typeof loadWorkThroughPageOnce === 'function') loadWorkThroughPageOnce();
+  else if (id === 'workthrough' && typeof loadWorkThroughPageOnce === 'function') loadWorkThroughPageOnce();
 }
-$g('reports-sub-stats').addEventListener('click', () => showReportsSubTab('stats'));
-$g('reports-sub-workthrough').addEventListener('click', () => showReportsSubTab('workthrough'));
+for (const tab of REPORTS_SUB_TABS) {
+  $g(`reports-sub-${tab}`).addEventListener('click', () => showReportsSubTab(tab));
+}
 document.getElementById('nav-reports').addEventListener('click', () => showReportsSubTab('stats'));
+
+// Called by sync-app.js's Generate Report button (sync-app.js loads BEFORE this file, so it can't
+// see inside this IIFE otherwise -- same "deliberate seam" as showReportsSubTab/window.setPageLabel
+// elsewhere in this project). Embeds the report at `url` in an iframe instead of window.open()'ing
+// a separate tab -- shows it inline, under Reports, like Stats/Work Through Report.
+function showUpdateCompareReport(url) {
+  if (typeof showToolArea === 'function') showToolArea('reports');
+  showReportsSubTab('updatecompare');
+  $g('updateComparePlaceholder').classList.add('hidden');
+  const frame = $g('updateCompareFrame');
+  frame.classList.remove('hidden');
+  frame.src = url;
+}
+$g('updateCompareBackBtn').addEventListener('click', () => {
+  if (typeof showToolArea === 'function') showToolArea('sync');
+});
+window.showUpdateCompareReport = showUpdateCompareReport;
 
 // The one deliberate seam: shell.js (loaded BEFORE this file) calls this by name on a deep-link
 // (?reports=... / clicking the Reports nav tab), and it can't see inside this IIFE otherwise.

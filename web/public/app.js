@@ -141,29 +141,17 @@ async function api(method, path, body) {
   return data;
 }
 
-// ---------- Vortex-blocked banner ----------
-
-function showVortexBanner() { $('vortexBanner').classList.remove('hidden'); }
-function hideVortexBanner() { $('vortexBanner').classList.add('hidden'); }
-
-// Which action to re-run when "Retry" is clicked -- confirmed live this was hardcoded to always
-// re-run loadCollections(), regardless of what actually failed. A "vortex is running" error hit
-// while on the Plan view (e.g. after a Workshop fetch's auto-navigate-to-plan) left the view stuck
-// showing just its header (back button + title), and clicking Retry silently refreshed the
-// invisible collections-picker view instead of re-attempting the plan -- looked like Retry did
-// nothing at all. Defaults to loadCollections for the one call site (loadCollections' own error
-// handler) that doesn't set anything more specific.
-let pendingVortexRetry = loadCollections;
-
-$('vortexRetryBtn').addEventListener('click', () => {
-  hideVortexBanner();
-  pendingVortexRetry();
-});
+// ---------- Vortex-blocked modal ----------
+// shell.js's showVortexRunningModal/hideVortexRunningModal -- a shared, centered modal used by every
+// page (see that file's own comment for why this replaced the old per-area #vortexBanner).
 
 function handleApiError(e, retryFn) {
+  if (isServerUnreachableError(e)) {
+    showServerUnreachableError(retryFn || loadCollections);
+    return true;
+  }
   if (e.status === 409 && e.body && e.body.error === 'vortex-running') {
-    pendingVortexRetry = retryFn || loadCollections;
-    showVortexBanner();
+    showVortexRunningModal(retryFn || loadCollections);
     return true;
   }
   return false;
@@ -346,7 +334,7 @@ $('workshopFetchBtn').addEventListener('click', async () => {
   const slug = $('workshopSlugInput').value.trim();
   const revisionNumber = $('workshopRevSelect').value;
   if (!slug) { statusEl.textContent = 'Enter the collection id first.'; return; }
-  if (!revisionNumber) { statusEl.textContent = 'Look up and select a published revision first.'; return; }
+  if (!revisionNumber) { statusEl.textContent = 'Look up and select a revision first.'; return; }
   const btn = $('workshopFetchBtn');
   btn.disabled = true;
   statusEl.textContent = 'Fetching…';
@@ -515,7 +503,7 @@ async function refreshVortexData() {
   let count;
   try {
     ({ count } = await api('POST', '/api/rebuild/vortex-data/refresh'));
-    hideVortexBanner();
+    hideVortexRunningModal();
   } catch (e) {
     btn.disabled = false;
     if (!handleApiError(e, refreshVortexData)) showErrorModal(e.message, 'Could not load Vortex data');
@@ -572,7 +560,7 @@ async function openPlan(collectionModId, name, resumeLogPath) {
 
   try {
     await api('POST', '/api/rebuild/plan', { collectionModId, resumeLogPath });
-    hideVortexBanner();
+    hideVortexRunningModal();
   } catch (e) {
     $('planLoading').classList.add('hidden');
     if (!handleApiError(e, () => openPlan(collectionModId, name, resumeLogPath))) showErrorModal(e.message, 'Could not load plan');
@@ -772,9 +760,9 @@ $('resumeToggle').addEventListener('change', (e) => {
 function backupConfirmText(cfg) {
   if (!cfg.backupRoot || cfg.maxBackupsToKeep === 0) return '';
   if (cfg.maxBackupsToKeep == null) {
-    return "A backup of every affected mod's current staging folder will be made before the mods are rebuilt. These backups are stored indefinitely and require manual deletion.";
+    return "This tool will back up every affected mod's current staging folder before rebuilding it. These backups stay until you delete them yourself.";
   }
-  return `A backup of every affected mod's current staging folder will be made before the mods are rebuilt, and kept for up to ${cfg.maxBackupsToKeep} most recent run(s).`;
+  return `This tool will back up every affected mod's current staging folder before rebuilding it, keeping up to ${cfg.maxBackupsToKeep} most recent run(s).`;
 }
 
 // Shared by the two Start Rebuild buttons AND the auto-continue path from "Downloaded and Start
@@ -965,10 +953,10 @@ function handleRunEvent(frame) {
         // Settings, but there's nowhere to put them) -- styled distinctly from the plain, expected
         // "disabled" case so it doesn't read as "working as intended".
         if (frame.skippedReason === 'not-configured') {
-          noticeTextEl.textContent = 'Skipped -- backups are turned on, but no backup folder is configured. Open Settings to fix this.';
+          noticeTextEl.textContent = "Skipped -- backups are turned on, but no backup folder is configured. Open 'Settings' to fix this.";
           noticeTextEl.classList.add('path-row__value--warning');
         } else {
-          noticeTextEl.textContent = 'Skipped (disabled in Settings)';
+          noticeTextEl.textContent = "Skipped (disabled in 'Settings')";
           noticeTextEl.classList.remove('path-row__value--warning');
         }
         revealBtn.classList.add('hidden');

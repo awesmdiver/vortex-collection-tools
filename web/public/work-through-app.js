@@ -56,6 +56,17 @@ async function api(method, path, body) {
   return data;
 }
 
+// This page has no Vortex-running concerns of its own (Work Through Report only ever reads/writes
+// log files and its own small state file), so the only thing worth checking for is the server being
+// fully unreachable -- same shared shell.js modal every other page uses.
+function handleWtApiError(e, retryFn) {
+  if (isServerUnreachableError(e)) {
+    showServerUnreachableError(retryFn);
+    return true;
+  }
+  return false;
+}
+
 function fmtDate(iso) {
   return iso ? new Date(iso).toLocaleString() : '--';
 }
@@ -98,7 +109,9 @@ async function loadWorkThroughList() {
   try {
     wtData = await api('GET', '/api/work-through/list');
   } catch (e) {
-    $g('wtList').textContent = `Failed to load: ${e.message}`;
+    if (!handleWtApiError(e, loadWorkThroughList)) {
+      $g('wtList').textContent = `Failed to load: ${e.message}`;
+    }
     return;
   }
   renderWtBadges();
@@ -279,7 +292,7 @@ async function resolveMismatch(logFile, m, resolveMode, buttons) {
     await api('POST', `/api/rebuild/logs/${encodeURIComponent(logFile)}/resolve-mismatch`, { modId: m.modId, fileId: m.fileId, name: m.name, resolveMode });
     await loadWorkThroughList(); // re-fetch in place -- preserves filter/expand state, unlike a full reload
   } catch (e) {
-    showErrorModal(`Failed: ${e.message}`);
+    if (!handleWtApiError(e)) showErrorModal(`Failed: ${e.message}`);
     buttons.forEach((b) => { b.disabled = false; });
   }
 }
@@ -291,7 +304,7 @@ async function retryDownload(logFile, m, buttons) {
     if (!data.ok) throw new Error(data.error || 'Download failed.');
     await loadWorkThroughList();
   } catch (e) {
-    showErrorModal(`Failed: ${e.message}`);
+    if (!handleWtApiError(e)) showErrorModal(`Failed: ${e.message}`);
     await loadWorkThroughList(); // the route may have already persisted an updated detail message either way
   }
 }
@@ -305,7 +318,7 @@ async function forceExtractOffSite(logFile, m, buttons) {
     if (!data.ok) throw new Error(data.error || 'Extraction failed.');
     await loadWorkThroughList();
   } catch (e) {
-    showErrorModal(`Failed: ${e.message}`);
+    if (!handleWtApiError(e)) showErrorModal(`Failed: ${e.message}`);
     buttons.forEach((b) => { b.disabled = false; b.textContent = 'Force Extract Anyway'; });
   }
 }
@@ -318,7 +331,7 @@ async function deleteArchiveCandidate(logFile, m, filePath, buttons) {
     if (!data.ok) throw new Error(data.error || 'Delete failed.');
     await loadWorkThroughList();
   } catch (e) {
-    showErrorModal(`Failed: ${e.message}`);
+    if (!handleWtApiError(e)) showErrorModal(`Failed: ${e.message}`);
     buttons.forEach((b) => { b.disabled = false; b.textContent = 'Delete'; });
   }
 }
@@ -330,7 +343,7 @@ async function retryExtraction(logFile, m, buttons) {
     if (!data.ok) throw new Error(data.error || 'Retry failed.');
     await loadWorkThroughList();
   } catch (e) {
-    showErrorModal(`Failed: ${e.message}`);
+    if (!handleWtApiError(e)) showErrorModal(`Failed: ${e.message}`);
     buttons.forEach((b) => { b.disabled = false; b.textContent = 'Retry Extraction'; });
   }
 }
@@ -344,7 +357,7 @@ async function importOffSite(logFile, m, buttons) {
     if (!data.ok) throw new Error(data.error || 'Import failed.');
     await loadWorkThroughList();
   } catch (e) {
-    showErrorModal(`Failed: ${e.message}`);
+    if (!handleWtApiError(e)) showErrorModal(`Failed: ${e.message}`);
     buttons.forEach((b) => { b.disabled = false; b.textContent = originalText; });
   }
 }
@@ -357,7 +370,7 @@ async function toggleCompleted(m, checked, row, checkbox) {
     renderWtProgress();
   } catch (e) {
     checkbox.checked = !checked; // revert
-    showErrorModal(`Failed: ${e.message}`);
+    if (!handleWtApiError(e)) showErrorModal(`Failed: ${e.message}`);
   }
 }
 
