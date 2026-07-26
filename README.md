@@ -12,6 +12,41 @@ run locally — nothing is sent anywhere else. It covers two jobs:
   marked as Ignored or Disabled. This restores that for you, so you don't have to redo it by hand
   every single update.
 
+## Why you'd want this
+
+If you manage a large mod collection in Vortex (say, 1,000+ mods), you already know how slow and
+fragile it gets at that size. Vortex works fine for smaller setups, but at scale it freezes, forgets
+your settings, and burns hours on installs and updates. This tool runs alongside Vortex to fix its
+biggest pain points and hand you that time back.
+
+**Rebuilds mods at full speed.** Extracting and unpacking a big collection inside Vortex takes
+hours, freezes constantly, and can even run your PC out of memory. This tool extracts the same
+files — including FOMOD installer choices — outside of Vortex, at full speed. Turn on parallel
+extraction (up to 8 mods at once) under Settings to cut that time down further, typically 2-3x
+faster depending on your drive.
+
+**Downloads missing mods for you.** Rebuilding or updating used to mean manually hunting down
+missing archive files on Nexus one by one. If you have Nexus Premium, this tool detects what's
+missing and downloads the exact version your collection needs automatically.
+
+**Keeps your Ignored/Disabled choices.** Updating a collection in Vortex forgets which mods you'd
+marked Ignored or Disabled — it reinstalls everything, and you're left digging through a list of
+1,900+ mods to find and turn off the same 35 again. This tool snapshots those choices before the
+update and restores them automatically once it's done. No manual cleanup.
+
+**Leaves your Ghost files alone.** Vortex marks disabled files with a `.ghost` extension.
+Reinstalling a mod normally wipes these out or creates confusing duplicates. This tool detects
+`.ghost` files and leaves them untouched, so your custom file tweaks survive a reinstall.
+
+**Shows you exactly what changed.** Every step previews what it's about to do before it touches
+anything real, and the Compare Report gives you a clear, color-coded summary of what was kept,
+disabled, added, or removed by the collection author — so you know exactly what happened before you
+go back into the game.
+
+Your time should go toward playing, not watching progress bars or redoing settings Vortex wiped
+out. This tool does the heavy lifting and remembers your setup, so updating a collection stops
+being a chore.
+
 ## Getting a release without installing anything
 
 Grab the zip from the [Releases page](../../releases). It comes with everything bundled — its own
