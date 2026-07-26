@@ -40,8 +40,17 @@ if (-not (Test-Path "node_modules")) {
     }
 }
 
+Write-Host "======================================================================" -ForegroundColor Cyan
+Write-Host " Keep this window open while you use the app in your browser." -ForegroundColor Cyan
+Write-Host " To stop the server when you're done, do ANY of these:" -ForegroundColor Cyan
+Write-Host "   - Press Ctrl+C in this window" -ForegroundColor Cyan
+Write-Host "   - Click the X to close this window" -ForegroundColor Cyan
+Write-Host "   - Run stop.bat (from anywhere)" -ForegroundColor Cyan
+Write-Host " All three shut it down the same safe way." -ForegroundColor Cyan
+Write-Host "======================================================================" -ForegroundColor Cyan
+Write-Host ""
+
 Write-Host "Starting Vortex Collection Tools..."
 & $nodeExe web/server.js
 Write-Host ""
-Write-Host "Server stopped."
-Read-Host "Press Enter to exit"
+Read-Host "Server stopped. Press Enter to close this window"

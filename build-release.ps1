@@ -135,9 +135,12 @@ Full details (what each tool does, command-line usage, troubleshooting): see REA
 TECHNICAL.md in this folder.
 "@ | Set-Content (Join-Path $stageDir "START HERE.txt") -Encoding UTF8
 
-# 6. Zip it.
+# 6. Zip it into github-releases/ (never loose at the project root -- see docs/DESIGN-GUIDE.md's
+#    "Release packaging" section for why it's named that and not "release(s)").
 Write-Host "Creating zip..."
-$outZip = Join-Path $root "$releaseName.zip"
+$releasesDir = Join-Path $root "github-releases"
+New-Item -ItemType Directory -Path $releasesDir -Force | Out-Null
+$outZip = Join-Path $releasesDir "$releaseName.zip"
 if (Test-Path $outZip) { Remove-Item $outZip -Force }
 Compress-Archive -Path (Join-Path $stageDir "*") -DestinationPath $outZip -CompressionLevel Optimal
 

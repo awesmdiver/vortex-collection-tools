@@ -4,7 +4,7 @@ reports/
 
 # Release zip built by build-release.ps1 -- a build artifact uploaded directly to the GitHub
 # release, never committed to source.
-VortexCollectionTools-v*-win-x64.zip
+github-releases/
 
 # Archived interactive terminal menu (sync-menu.js) -- this project is 100% web-UI-driven now;
 # kept on disk only as a reference/fallback for a possible future non-web-based flow, never pushed

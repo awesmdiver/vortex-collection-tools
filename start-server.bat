@@ -43,6 +43,16 @@ if not exist "node_modules" (
     )
 )
 
+echo ======================================================================
+echo  Keep this window open while you use the app in your browser.
+echo  To stop the server when you're done, do ANY of these:
+echo    - Press Ctrl+C in this window
+echo    - Click the X to close this window
+echo    - Run stop.bat (from anywhere)
+echo  All three shut it down the same safe way.
+echo ======================================================================
+echo.
+
 echo Starting Vortex Collection Tools...
 "%NODE_EXE%" web\server.js
 echo.
