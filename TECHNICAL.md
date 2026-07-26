@@ -363,9 +363,6 @@ convention at all (that only decides which picker dropdown a collection shows up
 
 ## Update Collection
 
-> ⚠️ **Not stable yet — still being reviewed and improved.** Rebuild Collection is the well-tested
-> part of this toolkit right now; treat everything below as in-progress.
-
 The web UI (Update Collection tab) is the primary, recommended way to run this flow. A flag-based
 CLI also exists for scripting/automation:
 ```

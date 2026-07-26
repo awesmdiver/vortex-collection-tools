@@ -1,10 +1,6 @@
 # Vortex Collection Tools
 
-> ⚠️ **Update Collection is not stable yet.** It's still being actively reviewed and improved, and
-> hasn't had the same testing as Rebuild Collection. Please stick to **Rebuild Collection** for now
-> — that's the part we'd love your help testing. If you want to poke at Update Collection anyway,
-> back up your Vortex state first (the tool does this automatically, but a second, independent
-> backup never hurts) and expect rough edges.
+![Vortex Collection Tools](assets/banner.png)
 
 A toolkit for managing your Vortex-installed Skyrim SE mod collections, with a simple web page you
 run locally — nothing is sent anywhere else. It covers two jobs:
@@ -14,7 +10,7 @@ run locally — nothing is sent anywhere else. It covers two jobs:
   directly from your downloaded mod archives and puts it back the way it should be.
 - **Update Collection** — when you update a collection in Vortex, it forgets which mods you'd
   marked as Ignored or Disabled. This restores that for you, so you don't have to redo it by hand
-  every single update. *(Not ready for testing yet — see the warning above.)*
+  every single update.
 
 ## Getting a release without installing anything
 
@@ -37,6 +33,8 @@ alongside it (that's the server; closing it stops the app). Full instructions ar
 - After you have rebuilt a collection, Vortex will likely show an **"External Changes"** prompt the
   next time you open it, for anything that got rebuilt. That's expected — go ahead and click
   through it ("Use newer file" / "Save all changes").
+- **Update Collection writes directly to Vortex's database.** It takes a full backup automatically
+  before every write, but keeping a second, independent backup of your own never hurts.
 
 ## Found a problem, or have feedback?
 
