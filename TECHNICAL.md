@@ -14,6 +14,58 @@ npm run web
 Opens `http://127.0.0.1:4321` with a top-level nav for both tool areas plus **Settings**. Terminal
 CLI access is also available (see below) for either flow without the web UI.
 
+## Building a release package
+
+`build-release.ps1` (project root) builds the self-contained zip attached to each GitHub release
+(`VortexCollectionTools-v<version>-win-x64.zip`) — the one the README tells testers to download,
+unzip, and double-click `start-server.bat` from, with nothing else to install. This exists because
+the first release (v0.1.0) had its zip assembled by hand, ephemerally, with no repeatable process
+left behind — v0.2.0 hit exactly that problem, so this script exists to make sure it never happens
+again.
+
+```
+.\build-release.ps1                              # uses package.json's current version, latest pinned Node/7-Zip
+.\build-release.ps1 -NodeVersion 24.18.0 -SevenZipRelease 26.02   # pin explicitly if needed
+```
+
+**Assumes nothing is pre-installed on the machine running it** — no Node.js, no 7-Zip, nothing
+beyond what every Windows install already has (`git`, `npm` for the *current* checkout used to run
+the script itself, and `msiexec`). What it does, in order:
+1. Copies every `git ls-files`-tracked file into a clean staging folder (gitignored files —
+   `config.json`, `logs/`, the archived `terminal-flow-archive/`, etc. — are correctly excluded
+   automatically, since that's the same source list `git` itself uses).
+2. Runs `npm ci --omit=dev` inside the staged copy — a clean, reproducible install matching
+   `package-lock.json` exactly, including `classic-level`'s prebuilt native binding.
+3. Downloads a portable Node.js runtime (`nodejs.org/dist`) and copies just `node.exe` (+ its
+   LICENSE) into `node/` — `start-server.bat` looks for exactly this path.
+4. Downloads 7-Zip's official installer **MSI** (`github.com/ip7z/7zip/releases`) and extracts it
+   via `msiexec /a <msi> /qn TARGETDIR=...` — an "administrative install" that just unpacks files to
+   a folder, installs/registers nothing. This is the key trick that avoids a chicken-and-egg
+   problem: `msiexec` ships with every Windows install, so no 7-Zip needs to already exist to get
+   `7z.exe`/`7z.dll` out of the official package. (7-Zip's separate "extra" download — a plain `.7z`
+   archive — only contains the lighter `7za.exe`/`7za.dll`, which drops RAR support and other
+   codecs; `lib/sevenzip.js` specifically expects the full `7z.exe`/`7z.dll` from the real
+   installer, so that lighter package is the wrong source.) Copies `7z.exe`/`7z.dll` (+ License.txt)
+   into `tools/7-Zip/` — `lib/sevenzip.js`'s own bundled-path check looks for exactly this path,
+   ahead of any system-installed 7-Zip.
+5. Writes `START HERE.txt` (plain-language quick start, referenced by the README and release
+   notes).
+6. Zips the whole staged folder to `VortexCollectionTools-v<version>-win-x64.zip` at the project
+   root.
+
+Smoke-test before shipping a release built this way: launch the bundled copy on a spare port
+(`node\node.exe web\server.js --port <spare> --no-open` from inside the staged/zipped folder) and
+confirm `GET /api/settings` responds — proves the bundled Node actually runs the real server, not
+just that the files exist. `tools\7-Zip\7z.exe` with no arguments printing its version/usage banner
+is enough to confirm that binary isn't corrupted.
+
+**Known minor inefficiency, not worth fixing yet**: `classic-level`'s prebuilt native bindings for
+every platform (Linux, macOS, Android, 32-bit) ship inside `node_modules/classic-level/prebuilds/`
+even though this release is Windows-x64-only — a few extra MB of dead weight per release. Pruning
+non-`win32-x64` prebuild folders after `npm ci` would trim this, but adds a real risk of breaking
+`classic-level`'s own platform-detection if its lookup logic ever expects the other folders to at
+least exist; not worth that risk for a few MB.
+
 ## Settings & configuration
 
 Every path (staging/downloads/backup-root/Vortex database) and the Nexus API key live in a single
@@ -595,11 +647,11 @@ Other open items, not yet started:
   other live-state write here (Vortex must be closed). Kept distinctly named/located from the
   unrelated "Restore Backup" button on the Update Collection page itself (that one restores a
   collection's ignore/disable snapshot, not the live database).
-- ~~**Self-contained release packaging**~~ — done, see the main README's "Getting a release without
-  installing anything" section. A literal single-.exe (Node SEA / `pkg`) was considered and
-  rejected: `classic-level`'s native addon and this project's read/write-next-to-the-app-folder
-  assumptions (config.json, logs, backups) both fight a packaged snapshot's read-only filesystem
-  model.
+- ~~**Self-contained release packaging**~~ — done, see **Building a release package** above
+  (`build-release.ps1`) and the main README's "Getting a release without installing anything"
+  section. A literal single-.exe (Node SEA / `pkg`) was considered and rejected: `classic-level`'s
+  native addon and this project's read/write-next-to-the-app-folder assumptions (config.json, logs,
+  backups) both fight a packaged snapshot's read-only filesystem model.
 - **Possible web-UI "Dry Run" option**: the CLI has a real `--dry-run` flag, but the web UI's own
   "View Collection" → Plan → "Start Rebuild" flow already shows a full preview before anything is
   touched, so there's no separate dry-run *mode* to opt into there today. Not needed right now, but

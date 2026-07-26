@@ -2,6 +2,10 @@ node_modules/
 logs/
 reports/
 
+# Release zip built by build-release.ps1 -- a build artifact uploaded directly to the GitHub
+# release, never committed to source.
+VortexCollectionTools-v*-win-x64.zip
+
 # Archived interactive terminal menu (sync-menu.js) -- this project is 100% web-UI-driven now;
 # kept on disk only as a reference/fallback for a possible future non-web-based flow, never pushed
 # to GitHub or bundled into a release package. sync-cli.js (the flag-based CLI) is unaffected and
