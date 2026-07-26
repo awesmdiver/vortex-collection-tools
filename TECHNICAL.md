@@ -50,8 +50,8 @@ the script itself, and `msiexec`). What it does, in order:
    ahead of any system-installed 7-Zip.
 5. Writes `START HERE.txt` (plain-language quick start, referenced by the README and release
    notes).
-6. Zips the whole staged folder to `VortexCollectionTools-v<version>-win-x64.zip` at the project
-   root.
+6. Zips the whole staged folder to `github-releases\VortexCollectionTools-v<version>-win-x64.zip`
+   (gitignored — a build artifact, not committed to source).
 
 Smoke-test before shipping a release built this way: launch the bundled copy on a spare port
 (`node\node.exe web\server.js --port <spare> --no-open` from inside the staged/zipped folder) and

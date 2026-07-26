@@ -122,6 +122,23 @@ function main() {
         }, 150);
     });
 
+    // Used by stop.ps1/stop.bat for a clean shutdown (vs. Ctrl+C/closing the window, which work
+    // equally well). Same graceful-close-with-grace-period pattern as restart-server above, minus
+    // the respawn.
+    app.post('/api/shutdown', (req, res) => {
+        res.json({ ok: true, message: 'Shutting down' });
+        setTimeout(() => {
+            let done = false;
+            const finish = () => {
+                if (done) return;
+                done = true;
+                process.exit(0);
+            };
+            server.close(finish);
+            setTimeout(finish, 2000);
+        }, 150);
+    });
+
     server = app.listen(config.port, config.host, () => {
         // A browser can't navigate to 0.0.0.0 -- that only means "all interfaces" as a bind
         // address. Always open/print a real loopback URL for local browsing; the bind-address line

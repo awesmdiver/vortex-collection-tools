@@ -2,81 +2,134 @@
 
 ![Vortex Collection Tools](assets/banner.png)
 
-A toolkit for managing your Vortex-installed Skyrim SE mod collections, with a simple web page you
-run locally — nothing is sent anywhere else. It covers two jobs:
+> **Rebuild a broken Vortex collection at full speed, and stop losing your Ignored/Disabled mods every time you update one — all from a simple local web page.**
 
-- **Rebuild Collection** — if a collection's mods have gotten corrupted, gone missing, or you just
-  want a much faster full reinstall than Vortex's own "Resume" step, this re-extracts everything
-  directly from your downloaded mod archives and puts it back the way it should be.
-- **Update Collection** — when you update a collection in Vortex, it forgets which mods you'd
-  marked as Ignored or Disabled. This restores that for you, so you don't have to redo it by hand
-  every single update.
+---
 
-## Why you'd want this
+## ⚡ Overview
 
-If you manage a large mod collection in Vortex (say, 1,000+ mods), you already know how slow and
-fragile it gets at that size. Vortex works fine for smaller setups, but at scale it freezes, forgets
-your settings, and burns hours on installs and updates. This tool runs alongside Vortex to fix its
-biggest pain points and hand you that time back.
+Vortex works fine for a small mod list, but at real scale (1,000+ mods) it freezes, forgets your
+settings, and burns hours on installs and updates. Vortex Collection Tools runs alongside Vortex to
+fix its two biggest pain points: rebuilding a collection when files go missing or corrupted, and
+updating a collection without losing track of every mod you'd marked Ignored or Disabled.
 
-**Rebuilds mods at full speed.** Extracting and unpacking a big collection inside Vortex takes
-hours, freezes constantly, and can even run your PC out of memory. This tool extracts the same
-files — including FOMOD installer choices — outside of Vortex, at full speed. Turn on parallel
-extraction (up to 8 mods at once) under Settings to cut that time down further, typically 2-3x
-faster depending on your drive.
+### 📋 At a Glance
 
-**Downloads missing mods for you.** Rebuilding or updating used to mean manually hunting down
-missing archive files on Nexus one by one. If you have Nexus Premium, this tool detects what's
-missing and downloads the exact version your collection needs automatically.
+| Feature | Details |
+| :--- | :--- |
+| **Requirements** | A local web page you run yourself — nothing is sent anywhere else. Release zip bundles its own Node.js and 7-Zip, nothing else to install |
+| **Performance Impact** | Rebuilds run 2-3x faster with parallel extraction (up to 8 mods at once) |
+| **Safety** | Every live database write takes a full backup automatically first; never touches your Skyrim save files |
+| **Compatibility** | Vortex-managed Skyrim SE mod collections |
 
-**Keeps your Ignored/Disabled choices.** Updating a collection in Vortex forgets which mods you'd
-marked Ignored or Disabled — it reinstalls everything, and you're left digging through a list of
-1,900+ mods to find and turn off the same 35 again. This tool snapshots those choices before the
-update and restores them automatically once it's done. No manual cleanup.
+---
 
-**Leaves your Ghost files alone.** Vortex marks disabled files with a `.ghost` extension.
-Reinstalling a mod normally wipes these out or creates confusing duplicates. This tool detects
-`.ghost` files and leaves them untouched, so your custom file tweaks survive a reinstall.
+## ✨ Key Features
 
-**Shows you exactly what changed.** Every step previews what it's about to do before it touches
-anything real, and the Compare Report gives you a clear, color-coded summary of what was kept,
-disabled, added, or removed by the collection author — so you know exactly what happened before you
-go back into the game.
+* **Rebuilds mods at full speed:** Extracting a big collection inside Vortex takes hours and can
+  even run your PC out of memory. This tool extracts the same files — including FOMOD installer
+  choices — outside of Vortex, at full speed. ⚡ Turn on parallel extraction (up to 8 mods at once)
+  under Settings to cut that time down further, typically 2-3x faster depending on your drive.
+* **Downloads missing mods for you:** No more manually hunting down missing archive files on Nexus
+  one by one. If you have Nexus Premium, this tool detects what's missing and downloads the exact
+  version your collection needs, automatically.
+* **Keeps your Ignored/Disabled choices:** Updating a collection in Vortex normally forgets which
+  mods you'd marked Ignored or Disabled, leaving you to dig through a list of 1,900+ mods to turn
+  off the same 35 again. This tool snapshots those choices before the update and restores them
+  automatically once it's done — no manual cleanup.
+* **Fixes broken and missing files instantly:** Whether caused by accidental deletion, Windows
+  errors, or an unexpected Vortex deployment hiccup, this tool identifies missing or corrupted
+  files and extracts fresh copies straight from your archives to get mods working again.
+* **Leaves your Ghost files alone:** Vortex marks disabled files with a `.ghost` extension.
+  Reinstalling a mod normally wipes these out or creates confusing duplicates — this tool detects
+  `.ghost` files and leaves them untouched, so your custom file tweaks survive a reinstall.
+* **Shows you exactly what changed:** Every step previews what it's about to do before it touches
+  anything real, and the Compare Report gives you a clear, color-coded summary of what was kept,
+  disabled, added, or removed by the collection author.
 
-Your time should go toward playing, not watching progress bars or redoing settings Vortex wiped
-out. This tool does the heavy lifting and remembers your setup, so updating a collection stops
-being a chore.
+---
 
-## Getting a release without installing anything
+## 📦 Getting Started
 
-Grab the zip from the [Releases page](../../releases). It comes with everything bundled — its own
-copy of Node.js and 7-Zip — so there's nothing else to install:
+1. **Download the zip** from the [Releases page](../../releases) and unzip it anywhere.
+2. **Close Vortex completely.**
+3. **Double-click `start-server.bat`.** A console window stays open while it runs — that window
+   staying open **is** how you know the server's running; don't close it while you're using the
+   app.
+4. **Set your paths.** Your browser opens to the app automatically — first time through, it'll ask
+   for your staging/downloads folders under **Settings**. Do that once and you're set.
 
-1. Download the zip from the latest release and unzip it anywhere.
-2. Close Vortex.
-3. Double-click `start-server.bat`.
-4. Your browser opens to the app automatically. First time through, it'll ask you to set your
-   staging/downloads folders under **Settings** — do that once and you're set.
+When you're done, stop the server with `stop.bat` (from anywhere), Ctrl+C in the console window, or
+just clicking that window's **X** button — all three shut it down the same clean way.
 
-No Node.js, no 7-Zip, no command line. When you're done, just close the console window that opened
-alongside it (that's the server; closing it stops the app). Full instructions are also in
-`START HERE.txt` inside the zip.
+> [!TIP]
+> The release zip bundles its own Node.js and 7-Zip — there's no command line and nothing else to
+> install. Full instructions are also in `START HERE.txt` inside the zip.
 
-## A few things worth knowing
+---
 
-- **Vortex needs to be fully closed** before running either tool.
-- After you have rebuilt a collection, Vortex will likely show an **"External Changes"** prompt the
-  next time you open it, for anything that got rebuilt. That's expected — go ahead and click
-  through it ("Use newer file" / "Save all changes").
-- **Update Collection writes directly to Vortex's database.** It takes a full backup automatically
-  before every write, but keeping a second, independent backup of your own never hurts.
+## ⚠️ Important Notes
 
-## Found a problem, or have feedback?
+> [!WARNING]
+> Vortex must be fully closed before running either tool — both flows check for this and refuse
+> to continue otherwise.
 
-Please open an issue on GitHub — include what you were doing, what you expected, and what actually
-happened (a screenshot helps a lot).
+> [!NOTE]
+> After you rebuild a collection, Vortex will likely show an **"External Changes"** prompt the next
+> time you open it, for anything that got rebuilt. That's expected — go ahead and click through it
+> ("Use newer file" / "Save all changes").
 
-## Want to dig into the technical details?
+> [!CAUTION]
+> Update Collection writes directly to Vortex's live database. It takes a full backup automatically
+> before every write, but keeping a second, independent backup of your own never hurts.
+
+---
+
+## ❓ Frequently Asked Questions
+
+* **Q: Does this touch my Skyrim save files?**
+  > **No.** This tool only works with Vortex's mod staging folder and its own database — it never
+  > reads or writes your Skyrim saves.
+
+---
+
+* **Q: What happens if something crashes mid-run?**
+  > **It's isolated, so nothing else goes down with it.** Every database read/write runs in its own
+  > short-lived worker process. If that worker crashes, it only affects that one operation — not
+  > the rest of the app.
+
+---
+
+* **Q: Does Rebuild Collection write to Vortex's database?**
+  > **No.** Rebuild Collection only ever touches your mod staging folder, using a crash-safe
+  > swap so an interruption never leaves a half-extracted mod in place. Only Update Collection
+  > writes to Vortex's database, and always backs it up in full first.
+
+---
+
+* **Q: What if I don't have Nexus Premium?**
+  > **Everything still works** — you'll just need to download any missing archive manually from
+  > the Nexus website and let Vortex install it, the same as you would without this tool.
+  > Automatic downloads are a Nexus API restriction for free accounts, not a limitation of this
+  > tool.
+
+---
+
+* **Q: I found a bug, or have feedback — what do I do?**
+  > **Open an issue on GitHub.** Include what you were doing, what you expected, and what actually
+  > happened — a screenshot helps a lot.
+
+---
+
+## 🛠️ Technical Details & Contributions
 
 Building from source, command-line usage, how things work under the hood, and the project's
 internals all live in [`TECHNICAL.md`](TECHNICAL.md).
+
+---
+
+## 🤝 Credits
+
+* **Vortex** ([Nexus Mods](https://www.nexusmods.com/about/vortex/)) — the mod manager this tool
+  reads and writes alongside.
+* **Nexus Mods API** — used for automatic missing-archive downloads (Premium accounts only).
