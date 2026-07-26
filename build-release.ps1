@@ -9,13 +9,21 @@
 # archived terminal-flow-archive/, etc.) is correctly excluded automatically, no separate exclude
 # list to keep in sync.
 #
-# Usage: .\build-release.ps1 [-NodeVersion 24.18.0]
-# Requires: git, npm, and 7-Zip already installed locally (used only to extract the downloaded
-# 7-Zip "extra" package -- a .7z archive can't be extracted without 7-Zip itself).
+# Usage:
+#   .\build-release.ps1                                  # bundles whatever's CURRENTLY latest
+#   .\build-release.ps1 -NodeVersion 24.18.0 -SevenZipRelease 26.02   # pin explicitly if ever needed
+#
+# Node/7-Zip versions default to "whatever is latest right now" (queried live), NOT a hardcoded
+# string -- a hardcoded default here would go stale exactly the way this whole script exists to
+# prevent. Pass either param explicitly to pin a specific version instead (e.g. to reproduce an
+# older release exactly).
+#
+# Requires: git, npm, and an internet connection. Nothing else needs to be pre-installed -- see the
+# 7-Zip section below for how it avoids needing 7-Zip itself to unpack 7-Zip.
 
 param(
-    [string]$NodeVersion = "24.18.0",
-    [string]$SevenZipRelease = "26.02"
+    [string]$NodeVersion,
+    [string]$SevenZipRelease
 )
 
 $ErrorActionPreference = "Stop"
@@ -24,6 +32,17 @@ $version = (Get-Content (Join-Path $root "package.json") -Raw | ConvertFrom-Json
 $releaseName = "VortexCollectionTools-v$version-win-x64"
 $work = Join-Path $env:TEMP "vct-release-build"
 $stageDir = Join-Path $work $releaseName
+
+if (-not $NodeVersion) {
+    Write-Host "No -NodeVersion given -- looking up the current Node.js LTS..."
+    $nodeIndex = Invoke-RestMethod -Uri "https://nodejs.org/dist/index.json"
+    $NodeVersion = ($nodeIndex | Where-Object { $_.lts } | Select-Object -First 1).version -replace '^v', ''
+}
+if (-not $SevenZipRelease) {
+    Write-Host "No -SevenZipRelease given -- looking up the current 7-Zip release..."
+    $ghRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/ip7z/7zip/releases/latest" -Headers @{ "User-Agent" = "vortex-collection-tools-build-release" }
+    $SevenZipRelease = $ghRelease.tag_name
+}
 
 Write-Host "Building $releaseName (bundling Node v$NodeVersion, 7-Zip $SevenZipRelease)..."
 
