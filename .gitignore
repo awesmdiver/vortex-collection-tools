@@ -2,6 +2,12 @@ node_modules/
 logs/
 reports/
 
+# Archived interactive terminal menu (sync-menu.js) -- this project is 100% web-UI-driven now;
+# kept on disk only as a reference/fallback for a possible future non-web-based flow, never pushed
+# to GitHub or bundled into a release package. sync-cli.js (the flag-based CLI) is unaffected and
+# stays tracked/active.
+terminal-flow-archive/
+
 # Personal data — mod lists, staging paths, full state.v2 snapshots, and the Nexus API key.
 # lib/vortex-sync/state-backups/ in particular can contain Vortex's stored
 # Nexus API tokens (under the "confidential" state namespace) — never commit or share this.

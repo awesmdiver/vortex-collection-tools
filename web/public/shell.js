@@ -24,6 +24,91 @@ function setPageLabel(label) {
 }
 window.setPageLabel = setPageLabel;
 
+// A fetch() that can't even connect (the server process is fully down, nothing listening at all)
+// rejects with a plain TypeError -- no HTTP status, unlike a normal 4xx/5xx response, which every
+// page's own api() helper already turns into an Error with .status set before it ever reaches a
+// caller. Each page checks this itself (own api() helper, own try/catch shape) rather than this file
+// wrapping fetch for them -- same "each area owns its own state" convention as everything else here.
+function isServerUnreachableError(e) {
+  return e instanceof TypeError;
+}
+window.isServerUnreachableError = isServerUnreachableError;
+
+// retryFn: what "Try Again" should re-run -- same pattern as app.js's own pendingVortexRetry, just
+// one level up so every page can share it instead of each reimplementing this exact modal.
+let pendingServerUnreachableRetry = null;
+function showServerUnreachableError(retryFn) {
+  pendingServerUnreachableRetry = retryFn || null;
+  document.getElementById('serverUnreachableModal').classList.remove('hidden');
+}
+window.showServerUnreachableError = showServerUnreachableError;
+document.getElementById('serverUnreachableCloseBtn').addEventListener('click', () => {
+  document.getElementById('serverUnreachableModal').classList.add('hidden');
+});
+document.getElementById('serverUnreachableRetryBtn').addEventListener('click', () => {
+  document.getElementById('serverUnreachableModal').classList.add('hidden');
+  if (pendingServerUnreachableRetry) pendingServerUnreachableRetry();
+});
+
+// Replaces the old #vortexBanner (Rebuild Collection) / #syncVortexBanner (Update Collection) --
+// each was scroll-to-top-on-show since neither was fixed/sticky, meaning triggering it moved the
+// user away from wherever they were. A shared centered modal (same shape as
+// showServerUnreachableError above) never depends on scroll position at all, so the user keeps
+// their place on the page. hideVortexRunningModal is exported too -- callers that already know an
+// action just succeeded (so any earlier "Vortex is running" modal from a prior failed attempt is
+// now stale) can dismiss it without waiting for the user to click Close themselves.
+let pendingVortexRunningRetry = null;
+function showVortexRunningModal(retryFn) {
+  pendingVortexRunningRetry = retryFn || null;
+  document.getElementById('vortexRunningModal').classList.remove('hidden');
+}
+function hideVortexRunningModal() {
+  document.getElementById('vortexRunningModal').classList.add('hidden');
+}
+window.showVortexRunningModal = showVortexRunningModal;
+window.hideVortexRunningModal = hideVortexRunningModal;
+document.getElementById('vortexRunningCloseBtn').addEventListener('click', hideVortexRunningModal);
+document.getElementById('vortexRunningRetryBtn').addEventListener('click', () => {
+  hideVortexRunningModal();
+  if (pendingVortexRunningRetry) pendingVortexRunningRetry();
+});
+
+// Startup-only "is your installed Vortex one this tool has actually been tested against" warning --
+// decoupled from Apply Ignores' Preview flow (where this used to live) since it's a whole-app
+// question, not specific to any one step. Runs on EVERY load, not just the default-landing routing
+// branch further below (a deep link via ?area=/?reports= is still an app startup). Vortex running at
+// startup, or the settings fetch itself failing, both just quietly skip -- re-checked next launch,
+// never blocks the page over this.
+function showVortexVersionWarning(vortexVersion) {
+  const text = document.getElementById('vortexVersionWarningText');
+  text.textContent = vortexVersion
+    ? `This tool has been tested against Vortex 2.3.0-beta.1 and 2.3.0 -- you're running Vortex ${vortexVersion}.`
+    : 'This tool has been tested against Vortex 2.3.0-beta.1 and 2.3.0 -- your installed version could not be detected.';
+  document.getElementById('vortexVersionWarningModal').classList.remove('hidden');
+}
+document.getElementById('vortexVersionWarningCloseBtn').addEventListener('click', () => {
+  document.getElementById('vortexVersionWarningModal').classList.add('hidden');
+  if (document.getElementById('vortexVersionWarningDontShowInput').checked) {
+    fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hideVortexVersionWarning: true }),
+    }).catch(() => {});
+  }
+});
+fetch('/api/settings')
+  .then((r) => r.json())
+  .then((cfg) => {
+    if (cfg.hideVortexVersionWarning) return;
+    return fetch('/api/sync/vortex-version-check')
+      .then((r) => r.json())
+      .then((check) => {
+        if (check.vortexRunning || check.versionTested) return;
+        showVortexVersionWarning(check.vortexVersion);
+      });
+  })
+  .catch(() => {});
+
 const AREA_LABELS = { rebuild: 'Rebuild Collection', sync: 'Update Collection', settings: 'Settings', reports: 'Reports' };
 
 function showToolArea(id) {
@@ -62,10 +147,17 @@ for (const a of TOOL_AREAS) {
   });
 }
 
+// Maps the URL's own ?reports= spelling to stats-app.js's internal sub-tab id (REPORTS_SUB_TABS) --
+// 'work-through' (hyphenated, readable in a URL) becomes 'workthrough' (no separator, matching this
+// project's own div-id/element-id convention throughout); 'updatecompare' already matches as-is.
+// Anything else (including no param at all) falls back to 'stats', the default sub-tab.
+const REPORTS_SUB_TAB_URL_MAP = { 'work-through': 'workthrough', updatecompare: 'updatecompare' };
+
 // Lets any OTHER page (the standalone log-view page's own header nav, in particular) link straight
-// into a specific area/sub-tab via ?area=rebuild|sync|settings|reports or ?reports=work-through|
-// stats -- same mechanism as the "Back to Reports" case below, just generalized to all four areas
-// instead of Reports only. showToolArea/showReportsSubTab calls are deferred to DOMContentLoaded:
+// into a specific area/sub-tab via ?area=rebuild|sync|settings|reports or
+// ?reports=work-through|updatecompare|stats -- same mechanism as the "Back to Reports" case below,
+// just generalized to all four areas instead of Reports only. showToolArea/showReportsSubTab calls
+// are deferred to DOMContentLoaded:
 // showReportsSubTab is defined in stats-app.js, loaded AFTER this file -- calling it here directly
 // (synchronously, at this script's own top-level execution time) was confirmed live to silently
 // no-op, since that script's <script> tag hasn't run yet at this point (the tab area switched with
@@ -79,7 +171,7 @@ const jumpArea = params.get('area');
 if (reportsSubTab) {
   document.addEventListener('DOMContentLoaded', () => {
     showToolArea('reports');
-    showReportsSubTab(reportsSubTab === 'work-through' ? 'workthrough' : 'stats');
+    showReportsSubTab(REPORTS_SUB_TAB_URL_MAP[reportsSubTab] || 'stats');
   });
 } else if (jumpArea && TOOL_AREAS.includes(jumpArea)) {
   document.addEventListener('DOMContentLoaded', () => showToolArea(jumpArea));

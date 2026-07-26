@@ -1,9 +1,10 @@
 'use strict';
 // Thin Express handlers for the Update Collection flow -- all real logic lives in
-// lib/sync-runner.js (shared with sync-cli.js/sync-menu.js). Each of these phases is a single
-// atomic backend operation (not a multi-step loop), so plain async request/response is used rather
-// than SSE -- see web/sync-lock.js's own comment for why. Nothing destructive happens without a
-// fresh Vortex-closed check, mirroring the Rebuild Collection flow's gate exactly.
+// lib/sync-runner.js (this project is 100% web-UI-driven; sync-cli.js still calls
+// lib/vortex-sync/lib.js directly instead, see TECHNICAL.md's Future Work). Each of these phases is
+// a single atomic backend operation (not a multi-step loop), so plain async request/response is used
+// rather than SSE -- see web/sync-lock.js's own comment for why. Nothing destructive happens without
+// a fresh Vortex-closed check, mirroring the Rebuild Collection flow's gate exactly.
 
 const express = require('express');
 const fs = require('fs');
@@ -117,6 +118,24 @@ function createSyncRouter(config) {
         res.json({ running: syncLib.isVortexRunning() });
     });
 
+    // Standalone Vortex-version compatibility check -- run once at app startup (shell.js), NOT tied
+    // to Apply Ignores' Preview flow (it used to be; decoupled per explicit request, since "is this
+    // Vortex install one this tool was actually tested against" is a whole-app question, not
+    // specific to any one step). Vortex running is a normal, common state to load this app in, not
+    // an error -- reported as vortexRunning: true so the startup check can just skip silently and
+    // re-check on next launch, instead of surfacing a scary error for an entirely expected condition.
+    router.get('/vortex-version-check', async (req, res) => {
+        if (syncLib.isVortexRunning()) return res.json({ vortexRunning: true });
+        try {
+            const { version, tested } = await runner.checkVortexVersionCompat(state);
+            res.json({ vortexRunning: false, vortexVersion: version, versionTested: tested });
+        } catch {
+            // Anything else (e.g. no state.v2 yet on a brand new Vortex install) -- treat as
+            // "nothing to warn about" rather than erroring the whole page load over it.
+            res.json({ vortexRunning: false, vortexVersion: null, versionTested: true });
+        }
+    });
+
     router.get('/profiles', async (req, res) => {
         if (vortexRunningGate(res)) return;
         try {
@@ -201,17 +220,17 @@ function createSyncRouter(config) {
         }
     });
 
-    // Phase 2 dry-run -- read-only, safe to call any time. Reports the Vortex-version-compat check
-    // alongside so the UI can warn before the real apply, not just after.
+    // Phase 2 dry-run -- read-only, safe to call any time. The Vortex-version-compat check used to
+    // be run again here too, but that's now a standalone startup check (GET /vortex-version-check,
+    // surfaced once at app load by shell.js) rather than something re-checked on every Preview click.
     router.post('/apply-ignores/preview', async (req, res) => {
         const { modId, backupPath } = req.body || {};
         if (!modId || !backupPath) return res.status(400).json({ error: 'modId and backupPath are required.' });
         if (vortexRunningGate(res)) return;
         try {
             const snapshot = runner.loadBackup(backupPath);
-            const changed = await runner.previewApplyIgnores({ stateDir: state, modId, ignoredRefs: snapshot.ignored });
-            const { version, tested } = await runner.checkVortexVersionCompat(state);
-            res.json({ changed, vortexVersion: version, versionTested: tested });
+            const { changed, unmatched, identityWarning } = await runner.previewApplyIgnores({ stateDir: state, modId, ignoredRefs: snapshot.ignored });
+            res.json({ changed, unmatched, identityWarning });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
@@ -253,10 +272,10 @@ function createSyncRouter(config) {
                 res.json({ matches: [], missing: [], nothingToDo: true });
                 return;
             }
-            const matches = await runner.previewApplyDisables({ stateDir: state, disabledRefs: snapshot.disabled });
+            const { matches, identityWarning } = await runner.previewApplyDisables({ stateDir: state, disabledRefs: snapshot.disabled });
             const foundNames = new Set(matches.map((m) => m.matchedRef.name));
             const missing = snapshot.disabled.filter((d) => !foundNames.has(d.name));
-            res.json({ matches, missing, nothingToDo: false });
+            res.json({ matches, missing, nothingToDo: false, identityWarning });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
@@ -317,6 +336,47 @@ function createSyncRouter(config) {
             res.status(500).json({ error: e.message });
         } finally {
             syncLock.release();
+        }
+    });
+
+    // ---------- Settings page: backup cleanup ----------
+    // Two SEPARATE backup stores, each gets its own info+delete pair -- mirrors Rebuild Collection's
+    // own /api/settings/backups-info + /delete-backups pattern exactly, just split in two since
+    // these are genuinely different things (one is small manual snapshots, the other is automatic
+    // full-DB safety copies) rather than one combined button.
+
+    // Collection snapshot backups (syncBackupRoot) -- the ignored/disabled-mod JSON files created via
+    // "Create Backup" in step 1. Same "not configured yet" shape as GET /backups above.
+    router.get('/backups-info', (req, res) => {
+        if (!syncBackupRoot) return res.json({ backupRoot: null, count: 0 });
+        res.json({ backupRoot: syncBackupRoot, count: runner.listBackups(syncBackupRoot).length });
+    });
+    router.post('/delete-backups', (req, res) => {
+        if (!syncBackupRoot) return res.status(400).json({ error: 'No Update Collection backups folder is configured.' });
+        const backups = runner.listBackups(syncBackupRoot);
+        for (const b of backups) fs.rmSync(b.filePath, { force: true });
+        res.json({ deletedCount: backups.length });
+    });
+
+    // State.v2 safety backups (lib/vortex-sync/state-backups/, gitignored, fixed location -- not
+    // user-configurable) -- full copies of Vortex's live database, taken automatically before every
+    // write (see lib.js's backupLiveState). Deleting these is always safe on its own terms (they're
+    // a defensive safety net, never read by the normal workflow unless a restore is actually needed
+    // via POST /restore-state above) -- no Vortex-closed gate needed, this never touches live state.
+    router.get('/state-backups-info', (req, res) => {
+        try {
+            res.json({ count: runner.listStateBackups().length });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+    router.post('/delete-state-backups', (req, res) => {
+        try {
+            const backups = runner.listStateBackups();
+            for (const b of backups) fs.rmSync(b.dir, { recursive: true, force: true });
+            res.json({ deletedCount: backups.length });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
         }
     });
 
