@@ -27,6 +27,11 @@ offsite-import-map.json
 lib/vortex-sync/backups/
 lib/vortex-sync/state-backups/
 
+# Update Collection's snapshot backups (syncBackupRoot in config.json) -- personal collection
+# state, nested here since the 2026-07-26 F:\Claude Workspace reorg moved it from a sibling
+# "Config files" folder outside the project into this project's own tree.
+collection-backups/
+
 # OS
 Thumbs.db
 .DS_Store
