@@ -18,6 +18,7 @@ const REQUIRED_FIELDS = [
   { key: 'staging', inputId: 'settingsStagingInput', label: 'Vortex staging folder' },
   { key: 'downloads', inputId: 'settingsDownloadsInput', label: 'Vortex downloads folder' },
   { key: 'syncBackupRoot', inputId: 'settingsSyncBackupRootInput', label: 'Backups folder (Update Collection)' },
+  { key: 'cleanupExcludeListDir', inputId: 'settingsCleanupExcludeListDirInput', label: 'Exclude list location (Vortex Scrub)' },
 ];
 
 async function settingsApi(method, path, body) {
@@ -72,6 +73,7 @@ async function loadSettings() {
   $g('settingsSyncBackupRootInput').value = cfg.syncBackupRoot || '';
   $g('settingsStateInput').value = cfg.state || '';
   $g('settingsLogsDirInput').value = cfg.logsDir || '';
+  $g('settingsCleanupExcludeListDirInput').value = cfg.cleanupExcludeListDir || '';
   $g('settingsMaxBackupsInput').value = cfg.maxBackupsToKeep != null ? cfg.maxBackupsToKeep : '';
   $g('settingsMaxStateBackupsInput').value = cfg.maxStateBackupsToKeep != null ? cfg.maxStateBackupsToKeep : '';
   $g('settingsConcurrencyInput').value = cfg.concurrentExtractions || 1;
@@ -84,6 +86,16 @@ async function loadSettings() {
   $g('settingsNexusKeyStatus').textContent = cfg.hasNexusApiKey
     ? 'A key is already stored -- leave blank to keep it, or type a new one to replace it.'
     : 'No key stored yet.';
+  // Exclude-list CONTENTS live in their own data file now (lib/cleanup-exclude-store.js), not in
+  // config.json -- fetched separately. Gracefully empty if cleanupExcludeListDir isn't set yet.
+  try {
+    const ignored = await settingsApi('GET', '/api/cleanup/ignored');
+    renderCleanupIgnoredList('staging', ignored.staging || []);
+    renderCleanupIgnoredList('archives', ignored.archives || []);
+  } catch {
+    renderCleanupIgnoredList('staging', []);
+    renderCleanupIgnoredList('archives', []);
+  }
   settingsDirty = false;
 }
 
@@ -229,6 +241,7 @@ async function saveSettings() {
       syncBackupRoot: $g('settingsSyncBackupRootInput').value,
       state: $g('settingsStateInput').value,
       logsDir: $g('settingsLogsDirInput').value,
+      cleanupExcludeListDir: $g('settingsCleanupExcludeListDirInput').value,
       maxBackupsToKeep: $g('settingsMaxBackupsInput').value === '' ? null : Number($g('settingsMaxBackupsInput').value),
       maxStateBackupsToKeep: $g('settingsMaxStateBackupsInput').value === '' ? null : Number($g('settingsMaxStateBackupsInput').value),
       concurrentExtractions: Number($g('settingsConcurrencyInput').value) || 1,
@@ -508,3 +521,104 @@ $g('settingsStateRevealPreRestoreBtn').addEventListener('click', () => {
   const p = $g('settingsStateRevealPreRestoreBtn').dataset.path;
   if (p) settingsApi('POST', '/api/rebuild/reveal', { targetPath: p }).catch(() => {});
 });
+
+// ---------- Vortex Scrub exclude list ----------
+// Lets the user maintain (view/remove/manually add) the "known-safe, don't ask again" list that
+// Vortex Scrub's (Utilities area) needsReview "Exclude" actions write to
+// (lib/cleanup-exclude-store.js). Same checkbox + bulk-action convention as Vortex Scrub's own
+// exception lists, for consistency (confirmed 2026-07-27: a lone Remove button per row wasn't
+// wanted -- checkboxes + Remove Selected/Remove All instead), inside a <details> disclosure so a
+// long-since-grown list doesn't dominate the Settings page by default. Immediate actions, same as
+// Delete all backups -- no Save Settings needed.
+
+// "Select all" checkbox: removed 2026-07-27 as redundant with Remove All, then put back the same
+// day once the user actually tried a large list -- select-all-then-uncheck-a-few beats checking 20
+// boxes individually when you want most-but-not-all removed. Same reasoning applied back to Vortex
+// Scrub's own lists.
+const CLEANUP_IGNORED_IDS = {
+  staging: {
+    list: 'settingsCleanupIgnoredStagingList', empty: 'settingsCleanupIgnoredStagingEmpty',
+    count: 'settingsCleanupIgnoredStagingCount', selectAll: 'settingsCleanupIgnoredStagingSelectAllInput',
+    removeSelected: 'settingsCleanupIgnoredStagingRemoveSelectedBtn', removeAll: 'settingsCleanupIgnoredStagingRemoveAllBtn',
+  },
+  archives: {
+    list: 'settingsCleanupIgnoredArchivesList', empty: 'settingsCleanupIgnoredArchivesEmpty',
+    count: 'settingsCleanupIgnoredArchivesCount', selectAll: 'settingsCleanupIgnoredArchivesSelectAllInput',
+    removeSelected: 'settingsCleanupIgnoredArchivesRemoveSelectedBtn', removeAll: 'settingsCleanupIgnoredArchivesRemoveAllBtn',
+  },
+};
+let cleanupIgnoredNames = { staging: [], archives: [] };
+
+function updateCleanupRemoveSelectedEnabled(kind) {
+  const ids = CLEANUP_IGNORED_IDS[kind];
+  const anyChecked = !!document.querySelector(`#${ids.list} .cleanup-ignored-check:checked`);
+  $g(ids.removeSelected).disabled = !anyChecked;
+}
+
+function renderCleanupIgnoredList(kind, names) {
+  cleanupIgnoredNames[kind] = names;
+  const ids = CLEANUP_IGNORED_IDS[kind];
+  const listEl = $g(ids.list);
+  listEl.innerHTML = '';
+  $g(ids.empty).classList.toggle('hidden', names.length > 0);
+  $g(ids.count).textContent = names.length;
+  for (const name of names) {
+    const li = document.createElement('li');
+    const label = document.createElement('label');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'cleanup-ignored-check';
+    checkbox.dataset.name = name;
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(' ' + name));
+    li.appendChild(label);
+    listEl.appendChild(li);
+  }
+  $g(ids.selectAll).checked = false;
+  updateCleanupRemoveSelectedEnabled(kind);
+}
+
+async function removeCleanupIgnored(kind, names) {
+  if (names.length === 0) return;
+  const statusEl = $g('settingsCleanupStatus');
+  try {
+    const { list } = await settingsApi('POST', '/api/cleanup/ignored/remove', { kind, names });
+    renderCleanupIgnoredList(kind, list);
+    statusEl.textContent = `Removed ${names.length} item${names.length === 1 ? '' : 's'} -- they'll be re-evaluated on the next scan.`;
+  } catch (e) {
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+  }
+}
+
+for (const kind of ['staging', 'archives']) {
+  const ids = CLEANUP_IGNORED_IDS[kind];
+  $g(ids.selectAll).addEventListener('change', (ev) => {
+    document.querySelectorAll(`#${ids.list} .cleanup-ignored-check`).forEach((cb) => { cb.checked = ev.target.checked; });
+    updateCleanupRemoveSelectedEnabled(kind);
+  });
+  $g(ids.list).addEventListener('change', (ev) => {
+    if (ev.target.classList.contains('cleanup-ignored-check')) updateCleanupRemoveSelectedEnabled(kind);
+  });
+  $g(ids.removeSelected).addEventListener('click', () => {
+    const names = [...document.querySelectorAll(`#${ids.list} .cleanup-ignored-check:checked`)].map((cb) => cb.dataset.name);
+    removeCleanupIgnored(kind, names);
+  });
+  $g(ids.removeAll).addEventListener('click', () => removeCleanupIgnored(kind, cleanupIgnoredNames[kind]));
+}
+
+async function addCleanupIgnored(kind, inputId) {
+  const input = $g(inputId);
+  const name = input.value.trim();
+  if (!name) return;
+  const statusEl = $g('settingsCleanupStatus');
+  try {
+    const { list } = await settingsApi('POST', '/api/cleanup/exclude', { kind, names: [name] });
+    renderCleanupIgnoredList(kind, list);
+    input.value = '';
+    statusEl.textContent = `Added "${name}" to the exclude list.`;
+  } catch (e) {
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+  }
+}
+$g('settingsCleanupAddStagingBtn').addEventListener('click', () => addCleanupIgnored('staging', 'settingsCleanupAddStagingInput'));
+$g('settingsCleanupAddArchiveBtn').addEventListener('click', () => addCleanupIgnored('archives', 'settingsCleanupAddArchiveInput'));

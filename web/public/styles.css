@@ -212,6 +212,16 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .sync-result-list { list-style: none; margin: 10px 0 0; padding: 0; font-size: 13.5px; }
 .sync-result-list li { padding: 4px 0; border-bottom: 1px solid var(--border); }
 .sync-result-list li:last-child { border-bottom: none; }
+/* Every "Select all" + checkbox-list section in the app needs the SAME 20px indent under "Select
+   all" (confirmed 2026-07-27: not a one-off, the intended look everywhere this pattern is used).
+   It only happens automatically when the list sits inside a .callout (".callout ul" already sets
+   padding-left: 20px there, e.g. the Clean Up report's "Action Needed" list) -- everywhere else
+   (a modal, a <details> disclosure, plain page content) needs it set explicitly here, since
+   .sync-result-list itself is zero-padding. */
+#cleanupResultsList,
+#cleanupCrossCheckList,
+#settingsCleanupIgnoredStagingList,
+#settingsCleanupIgnoredArchivesList { padding-left: 20px; }
 /* "+N more / Show less" toggle -- same collapsed-by-default convention as Rebuild Collection's own
    long file lists (.file-list-toggle), just its own class since that one is scoped under
    .detail-cell and this list isn't nested inside one. */

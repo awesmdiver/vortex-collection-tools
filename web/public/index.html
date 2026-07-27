@@ -27,6 +27,7 @@
     <button id="nav-sync" class="nav-tab">Update Collection</button>
     <button id="nav-rules-generator" class="nav-tab">Rules Generator</button>
     <button id="nav-reports" class="nav-tab">Reports</button>
+    <button id="nav-utilities" class="nav-tab">Utilities</button>
   </nav>
   <div class="app-header__right">
     <div id="headerMeta" class="app-header__meta"></div>
@@ -763,6 +764,61 @@
     </div>
   </div>
 
+  <!-- Vortex Scrub (Utilities area) -->
+  <div class="settings-group">
+    <div class="settings-group__header">
+      <h2>Vortex Scrub</h2>
+      <p class="muted">Folders and archives you've confirmed are safe to keep -- they won't show up as "Action Needed" in Vortex Scrub anymore.</p>
+    </div>
+
+    <h3 class="settings-section-title">Exclude list location</h3>
+    <div class="field-group">
+      <label class="field-label" for="settingsCleanupExcludeListDirInput">Folder to store the exclude list in <span class="field-required">(required)</span></label>
+      <div class="path-input-row">
+        <input id="settingsCleanupExcludeListDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\clean-up-exclude-list">
+        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsCleanupExcludeListDirInput">Browse&hellip;</button>
+      </div>
+    </div>
+    <p class="muted">Excluding/adding/removing items below takes effect immediately once this is set -- no need to hit Save Settings for those, only for this path itself (requires a restart).</p>
+
+    <h3 class="settings-section-title">Excluded staging folders</h3>
+    <details id="settingsCleanupIgnoredStagingDetails">
+      <summary>Show excluded folders (<span id="settingsCleanupIgnoredStagingCount">0</span>)</summary>
+      <div class="field-group" style="margin: 8px 0;">
+        <label><input type="checkbox" id="settingsCleanupIgnoredStagingSelectAllInput"> Select all</label>
+      </div>
+      <ul id="settingsCleanupIgnoredStagingList" class="sync-result-list"></ul>
+      <p id="settingsCleanupIgnoredStagingEmpty" class="muted hidden">None excluded yet.</p>
+      <div class="view-actions">
+        <button id="settingsCleanupIgnoredStagingRemoveSelectedBtn" class="btn btn--ghost btn--small" disabled>Remove Selected</button>
+        <button id="settingsCleanupIgnoredStagingRemoveAllBtn" class="btn btn--ghost btn--small">Remove All</button>
+      </div>
+    </details>
+    <div class="path-input-row" style="margin-top: 12px;">
+      <input id="settingsCleanupAddStagingInput" class="input input--wide" type="text" placeholder="Exact staging folder name">
+      <button id="settingsCleanupAddStagingBtn" class="btn btn--ghost btn--small">Add</button>
+    </div>
+
+    <h3 class="settings-section-title">Excluded archives</h3>
+    <details id="settingsCleanupIgnoredArchivesDetails">
+      <summary>Show excluded archives (<span id="settingsCleanupIgnoredArchivesCount">0</span>)</summary>
+      <div class="field-group" style="margin: 8px 0;">
+        <label><input type="checkbox" id="settingsCleanupIgnoredArchivesSelectAllInput"> Select all</label>
+      </div>
+      <ul id="settingsCleanupIgnoredArchivesList" class="sync-result-list"></ul>
+      <p id="settingsCleanupIgnoredArchivesEmpty" class="muted hidden">None excluded yet.</p>
+      <div class="view-actions">
+        <button id="settingsCleanupIgnoredArchivesRemoveSelectedBtn" class="btn btn--ghost btn--small" disabled>Remove Selected</button>
+        <button id="settingsCleanupIgnoredArchivesRemoveAllBtn" class="btn btn--ghost btn--small">Remove All</button>
+      </div>
+    </details>
+    <div class="path-input-row" style="margin-top: 12px;">
+      <input id="settingsCleanupAddArchiveInput" class="input input--wide" type="text" placeholder="Exact archive file name (extension optional -- matched either way)">
+      <button id="settingsCleanupAddArchiveBtn" class="btn btn--ghost btn--small">Add</button>
+    </div>
+    <span id="settingsCleanupStatus" class="muted"></span>
+  </div>
+
   <div class="view-actions">
     <button id="settingsSaveBtn" class="btn btn--primary">Save Settings</button>
     <span id="settingsSaveStatus" class="muted"></span>
@@ -838,9 +894,10 @@
 <div id="settingsStateRestoreModal" class="modal-overlay hidden">
   <div class="modal">
     <h2>Restore a Vortex database backup</h2>
-    <p>Vortex must be fully closed. This overwrites Vortex's <em>current</em> live database with the
-      backup you pick below -- a fresh safety backup of the current state is taken automatically
-      first, so this itself can be undone by restoring that one afterward.</p>
+    <div class="callout callout--warning">
+      <div class="callout__title">&#9888; Make sure Vortex is completely closed before continuing!</div>
+      <p>This process will replace Vortex's database with the backup you choose below. Don't worry, though—we'll automatically create a fresh safety backup of your current setup first, so you can easily undo this anytime by restoring that new backup.</p>
+    </div>
     <select id="settingsStateRestoreSelect" class="select"></select>
     <p id="settingsStateRestoreEmpty" class="muted hidden">No Vortex database backups found.</p>
     <div class="modal-actions">
@@ -964,6 +1021,119 @@
     <p class="muted">These mods were upgraded to a newer version in the new collection, but the older version is also still installed in Vortex. If you don't need it anymore, removing or disabling it there should clear up any leftover conflicts you see.</p>
     <ul id="rgReportLeftoverList" class="sync-result-list"></ul>
   </div>
+  </div>
+
+</main>
+</section>
+
+<section id="area-utilities" class="tool-area hidden">
+<main class="app-main">
+  <div class="view-header">
+    <h1>Utilities</h1>
+  </div>
+
+  <h2 class="settings-section-title">Vortex Scrub</h2>
+  <p class="muted">Want to clean up your folders and reclaim disk space? If you're tired of guessing whether your archive or staging folders still contain unused Vortex mods, Vortex Scrub is here to help! Easily tidy up your setup and free up valuable storage in just a few clicks.</p>
+
+  <div class="callout callout--warning">
+    <div class="callout__title">&#9888; Quick heads-up before you start!</div>
+    <p>Make sure Vortex isn't currently installing or downloading any mods before you start, so your results stay accurate and you don't run into any glitches.</p>
+  </div>
+
+  <div class="view-actions">
+    <button id="cleanupScanArchivesBtn" class="btn btn--primary btn--small">Scan Archives</button>
+    <button id="cleanupScanStagingBtn" class="btn btn--ghost btn--small">Scan Staging</button>
+    <span id="cleanupEmpty" class="muted hidden"></span>
+  </div>
+
+  <div id="cleanupNotConfigured" class="empty-row hidden"></div>
+  <div id="cleanupCriticalError" class="callout callout--critical hidden"></div>
+  <div id="cleanupLoading" class="loading-row hidden"><span class="spinner"></span> Scanning&hellip;</div>
+
+  <!-- Shown FIRST, above the confident exceptions below -- these are folders/archives whose names
+       don't match Vortex's own download-naming pattern, so this tool can't confidently tell a real
+       orphan apart from a deliberate no-archive-by-design "fake mod" (DynDOLOD/BodySlide/PGPatcher/
+       Pandora/TexGen output, or a user's own patch folder). Never bulk-deleted by default. -->
+  <div id="cleanupNeedsReview" class="callout callout--warning hidden">
+    <div class="callout__title" id="cleanupNeedsReviewTitle"></div>
+    <p id="cleanupNeedsReviewMeta"></p>
+    <div class="field-group" style="margin-bottom: 8px;">
+      <label><input type="checkbox" id="cleanupNeedsReviewSelectAllInput"> Select all</label>
+    </div>
+    <ul id="cleanupNeedsReviewList" class="sync-result-list"></ul>
+    <div class="view-actions">
+      <button id="cleanupNeedsReviewDeleteCheckedBtn" class="btn btn--primary btn--small" disabled>Delete Checked</button>
+      <button id="cleanupNeedsReviewDeleteAllBtn" class="btn btn--ghost btn--small">Delete All</button>
+      <button id="cleanupNeedsReviewExcludeCheckedBtn" class="btn btn--primary btn--small" disabled>Exclude Checked</button>
+      <button id="cleanupNeedsReviewExcludeAllBtn" class="btn btn--ghost btn--small">Exclude All</button>
+    </div>
+  </div>
+
+  <div id="cleanupResults" class="hidden">
+    <h2 class="settings-section-title" id="cleanupResultsTitle"></h2>
+    <p class="muted" id="cleanupResultsMeta"></p>
+    <div class="field-group" style="margin-bottom: 8px;">
+      <label><input type="checkbox" id="cleanupSelectAllInput"> Select all</label>
+    </div>
+    <ul id="cleanupResultsList" class="sync-result-list"></ul>
+    <div class="view-actions">
+      <button id="cleanupDeleteSelectedBtn" class="btn btn--primary btn--small" disabled>Delete Selected</button>
+      <button id="cleanupDeleteAllBtn" class="btn btn--ghost btn--small">Delete All</button>
+    </div>
+  </div>
+
+  <!-- Archives-only (confirmed 2026-07-27: a staging folder always shows Enabled/Disabled in
+       Vortex, never Uninstalled/Never Installed). Informational, not a warning -- nothing is wrong,
+       this is just a pointer. Deliberately NOT a list/delete UI here (see cleanup-scan.js's own
+       scanArchives comment for why: Vortex's Mods table groups/absorbs multiple download-versions of
+       the same mod in ways not worth reproducing exactly here) -- Vortex's own Mods table (Status
+       filter) is the real source of truth for which specific mods these are. -->
+  <div id="cleanupUninstalledNotice" class="callout callout--info hidden">
+    <div class="callout__title">&#9432; Uninstalled Mods Detected</div>
+    <p>We found a few mods that Vortex has flagged as uninstalled (or never installed at all). For the best results, it is recommended to open Vortex to review these mods manually and delete any leftover archives you no longer want to keep.</p>
+  </div>
+
+  <!-- Same-section as their trigger buttons above (both live in area-utilities), so this never hits
+       the hidden-ancestor modal bug documented near wtConfirmModal below -- only cross-section
+       triggering does. -->
+  <div id="cleanupDeleteConfirmModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>Delete these permanently?</h2>
+      <p id="cleanupDeleteConfirmModalText"></p>
+      <div class="modal-actions">
+        <button id="cleanupDeleteConfirmCancelBtn" class="btn btn--ghost">Cancel</button>
+        <button id="cleanupDeleteConfirmOkBtn" class="btn btn--primary">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shared by all four needsReview actions (Delete Checked/Delete All/Exclude Checked/Exclude
+       All) -- title/text/confirm-label are set dynamically per action before this is shown. -->
+  <div id="cleanupReviewConfirmModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2 id="cleanupReviewConfirmModalTitle"></h2>
+      <p id="cleanupReviewConfirmModalText"></p>
+      <div class="modal-actions">
+        <button id="cleanupReviewConfirmCancelBtn" class="btn btn--ghost">Cancel</button>
+        <button id="cleanupReviewConfirmOkBtn" class="btn btn--primary"></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="cleanupCrossCheckModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2 id="cleanupCrossCheckModalTitle"></h2>
+      <p id="cleanupCrossCheckModalMeta"></p>
+      <div class="field-group" style="margin-bottom: 8px;">
+        <label><input type="checkbox" id="cleanupCrossCheckSelectAllInput" checked> Select all</label>
+      </div>
+      <ul id="cleanupCrossCheckList" class="sync-result-list"></ul>
+      <div class="modal-actions">
+        <button id="cleanupCrossCheckSkipBtn" class="btn btn--ghost">Skip</button>
+        <button id="cleanupCrossCheckDeleteSelectedBtn" class="btn btn--primary">Delete Selected</button>
+        <button id="cleanupCrossCheckDeleteAllBtn" class="btn btn--primary">Delete All</button>
+      </div>
+    </div>
   </div>
 </main>
 </section>
@@ -1094,5 +1264,6 @@
 <script src="work-through-app.js"></script>
 <script src="rules-generator-app.js"></script>
 <script src="reports-rulesgen-app.js"></script>
+<script src="cleanup-app.js"></script>
 </body>
 </html>
