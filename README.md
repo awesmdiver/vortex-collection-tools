@@ -1,6 +1,6 @@
 # Vortex Collection Tools
 
-![Vortex Collection Tools](assets/banner.png)
+![Vortex Collection Tools](assets/readme-banner.png)
 
 > **Rebuild a broken Vortex collection at full speed, and stop losing your Ignored/Disabled mods every time you update one — all from a simple local web page.**
 
