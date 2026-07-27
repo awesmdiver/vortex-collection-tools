@@ -4,8 +4,8 @@
 //
 // Usage: node compare-output.js <output-mod-dir> <real-staging-mod-dir>
 
-const { buildManifest } = require('./lib/hash-manifest');
-const { diffManifests } = require('./lib/diff-manifests');
+const { buildManifest } = require('../lib/hash-manifest');
+const { diffManifests } = require('../lib/diff-manifests');
 
 const [, , outputDir, stagingDir] = process.argv;
 if (!outputDir || !stagingDir) {

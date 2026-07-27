@@ -10,9 +10,11 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const runner = require('../lib/collection-runner');
+const { createPauseController } = require('../lib/pause-controller');
 const { findSevenZip } = require('../lib/sevenzip');
 const nexusDownload = require('../lib/nexus-collection-download');
 const nexusModDownload = require('../lib/nexus-mod-download');
+const { statusLabel } = require('./public/status-labels');
 const appConfig = require('../lib/app-config');
 const { pickOpenFileAsync } = require('../lib/vortex-sync/win-dialog');
 const runState = require('./run-state');
@@ -26,7 +28,7 @@ function createRouter(config) {
     const { staging, downloads, state, backupRoot } = config;
     const syncLib = runner.loadSyncLib();
     const sevenZipExe = findSevenZip();
-    const logsDir = path.join(__dirname, '..', 'logs');
+    const logsDir = appConfig.getLogsDir('rebuild-collection');
 
     // Shared by /retry-download and /import-offsite -- a FAILED_EXTRACTION_* row with
     // archiveNotFound is the SAME underlying problem as SKIP_NO_ARCHIVE (the archive genuinely isn't
@@ -45,6 +47,11 @@ function createRouter(config) {
     // (surfaced to the caller, not silently dropped); absent key = never attempted at all.
     const syncStateCache = new Map();
     let vortexDataLoadedAt = null;
+    // The current run's pause controller (lib/pause-controller.js) -- one per active run, created
+    // fresh in POST /runs and cleared once that run ends (any way it ends), same lifecycle as
+    // runState's own single-run session. null whenever no run is active, or the active run has no
+    // pause support (shouldn't happen via this router, but defensive).
+    let currentPauseController = null;
     // Vortex-tracked collections with no collection.json at all (never published, or published but
     // only the Workshop copy kept locally) -- populated by /vortex-data/refresh, surfaced by
     // /collections as an explicit "can't extract these, here's why" note instead of silence.
@@ -86,10 +93,16 @@ function createRouter(config) {
         return latest;
     }
 
+    // 'paused' (a deliberate stop, confirmed via the pause popup) is resumable exactly like
+    // 'in-progress'/'halted-critical' -- none of the actual resume machinery (loadResumeLog,
+    // buildPlan's resumed-mod short-circuit) inspects this top-level runStatus at all, it only
+    // reads per-mod statuses inside the log's own mods[] array, which a paused log already has
+    // complete and correct. 'paused-discarded' (see /logs/:filename/discard-pause below)
+    // deliberately does NOT match here -- that's the whole point of discarding.
     function findResumableLog(collectionModId) {
         const latest = findLatestRealLog(collectionModId);
         if (!latest) return null;
-        if (latest.log.runStatus !== 'in-progress' && latest.log.runStatus !== 'halted-critical') return null;
+        if (latest.log.runStatus !== 'in-progress' && latest.log.runStatus !== 'halted-critical' && latest.log.runStatus !== 'paused') return null;
         return {
             path: latest.path,
             runStatus: latest.log.runStatus,
@@ -471,6 +484,9 @@ function createRouter(config) {
             if (e.code === 'RUN_ACTIVE') return res.status(409).json({ error: 'run-active', message: e.message });
             throw e;
         }
+        // Fresh controller per run, cleared in every exit path below (normal completion,
+        // halted-critical, paused, or error) -- see lib/pause-controller.js.
+        currentPauseController = createPauseController();
         res.status(202).json({ runId });
 
         // Detached background task -- the response has already been sent; everything from here
@@ -555,6 +571,7 @@ function createRouter(config) {
                 if (rebuildQueue.length === 0) {
                     runner.writeLog(logPath, currentLog('completed'));
                     runState.emit({ type: 'run-complete', runStatus: 'completed', summary: runner.summarize(modEntries), totalMods: modEntries.length, logPath, backupRunDir: null, openFomodMods: runner.getOpenFomodMods(modEntries) });
+                    currentPauseController = null;
                     return;
                 }
 
@@ -603,10 +620,10 @@ function createRouter(config) {
 
                 const rebuildStart = Date.now();
                 runState.emit({ type: 'phase', phase: 'rebuilding' });
-                const { haltedCritical } = await runner.runRebuild({
+                const { haltedCritical, pausedConfirmed } = await runner.runRebuild({
                     rebuildQueue, collectionJsonPath: collectionInfo.collectionJsonPath,
                     downloadsDir: downloads, stagingDir: staging, modEntries,
-                    concurrency: concurrentExtractions,
+                    concurrency: concurrentExtractions, pauseController: currentPauseController,
                     onModStart: (mod) => runState.emit({ type: 'mod-start', modName: mod.name }),
                     onModComplete: (entry) => {
                         runState.emit({ type: 'mod-complete', ...entry });
@@ -618,16 +635,84 @@ function createRouter(config) {
                 });
                 phaseDurationsMs.rebuildMs = Date.now() - rebuildStart;
 
+                // Deliberately paused (confirmed, not just requested) -- a distinct branch from the
+                // normal completed/halted-critical outcomes below. Same writeLog/currentLog pattern,
+                // just a new runStatus value; findResumableLog() already recognizes it as resumable,
+                // and run-state.js's emit() already treats 'paused' as a done event, releasing the
+                // single-run guard so a different collection can be started while this one waits.
+                if (pausedConfirmed) {
+                    runner.writeLog(logPath, currentLog('paused'));
+                    runState.emit({
+                        type: 'paused', summary: runner.summarize(modEntries),
+                        totalMods: modEntries.length, logPath, backupRunDir,
+                    });
+                    currentPauseController = null;
+                    return;
+                }
+
                 const finalRunStatus = haltedCritical ? 'halted-critical' : 'completed';
                 runner.writeLog(logPath, currentLog(finalRunStatus));
                 runState.emit({
                     type: 'run-complete', runStatus: finalRunStatus, summary: runner.summarize(modEntries),
                     totalMods: modEntries.length, logPath, backupRunDir, openFomodMods: runner.getOpenFomodMods(modEntries),
                 });
+                currentPauseController = null;
             } catch (e) {
                 runState.emit({ type: 'run-error', message: e.message });
+                currentPauseController = null;
             }
         })();
+    });
+
+    // ---- Pause/cancel/confirm -- lib/pause-controller.js's state machine, driving the
+    // pauseController runRebuild() now accepts. See TECHNICAL.md for the full design (why Cancel
+    // must truly resume full concurrency, not just dismiss a popup). ----
+
+    router.post('/runs/current/pause', (req, res) => {
+        if (!currentPauseController) return res.status(404).json({ error: 'No active run to pause.' });
+        currentPauseController.requestPause();
+        runState.emit({ type: 'pause-requested', inFlight: currentPauseController.getInFlightCount() });
+        res.json({ ok: true, inFlight: currentPauseController.getInFlightCount() });
+    });
+
+    router.post('/runs/current/cancel-pause', (req, res) => {
+        if (!currentPauseController) return res.status(404).json({ error: 'No active run to cancel a pause on.' });
+        currentPauseController.cancelPause();
+        runState.emit({ type: 'pause-cancelled' });
+        res.json({ ok: true });
+    });
+
+    router.post('/runs/current/confirm-pause', (req, res) => {
+        if (!currentPauseController) return res.status(404).json({ error: 'No active run to confirm a pause on.' });
+        try {
+            currentPauseController.confirmPause();
+        } catch (e) {
+            return res.status(409).json({ error: e.message });
+        }
+        res.json({ ok: true });
+    });
+
+    // Stops offering a paused collection for resume WITHOUT touching any files -- confirmed with
+    // the user: keep the log (and everything it recorded) for history in Browse Logs/Stats Report,
+    // just flip its runStatus to something findResumableLog() doesn't recognize. Same filename
+    // validation pattern as every other /logs/:filename/* route in this file.
+    router.post('/logs/:filename/discard-pause', (req, res) => {
+        const { filename } = req.params;
+        if (!/^rebuild-.+\.json$/.test(filename)) return res.status(400).json({ error: 'Invalid log filename.' });
+        const full = path.join(logsDir, filename);
+        if (path.dirname(full) !== logsDir) return res.status(400).json({ error: 'Invalid log filename.' });
+        let log;
+        try {
+            log = JSON.parse(fs.readFileSync(full, 'utf8'));
+        } catch {
+            return res.status(404).json({ error: 'Log file not found.' });
+        }
+        if (log.runStatus !== 'paused') {
+            return res.status(400).json({ error: `This log's status is "${log.runStatus}", not "paused" -- refusing to touch it.` });
+        }
+        log.runStatus = 'paused-discarded';
+        runner.writeLog(full, log);
+        res.json({ ok: true });
     });
 
     router.get('/logs/:collectionModId', (req, res) => {
@@ -702,7 +787,7 @@ function createRouter(config) {
         // timezone with zero extra work (no need to detect/pass timezone explicitly).
         const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString() : '');
         const badges = Object.entries(log.summary || {})
-            .map(([status, count]) => `<span class="badge badge--${status.toLowerCase()} badge--clickable" data-status="${esc(status)}"><span class="badge__count">${count}</span> ${esc(status)}</span>`)
+            .map(([status, count]) => `<span class="badge badge--${status.toLowerCase()} badge--clickable" data-status="${esc(status)}"><span class="badge__count">${count}</span> ${esc(statusLabel(status))}</span>`)
             .join('') + `<span class="badge badge--show-all" data-status="">Show all</span>`;
         // Downloaded-archives recap -- only present when the "download missing archives" setting
         // was on for this run. A successful download that went on to rebuild is just a normal
@@ -881,7 +966,7 @@ function createRouter(config) {
                 : isAmbiguous
                 ? `<div class="ambiguous-candidates">${ambiguousCandidateRows(m)}</div>`
                 : '';
-            return `<tr data-status="${esc(m.status)}"><td>${modNameCell(m.name, m.modId)}</td><td><span class="status-pill status-pill--${m.status.toLowerCase()}">${esc(m.status)}</span></td><td class="detail-cell">${detail}</td><td class="extraction-cell">${extractionCell}</td></tr>`;
+            return `<tr data-status="${esc(m.status)}"><td>${modNameCell(m.name, m.modId)}</td><td><span class="status-pill status-pill--${m.status.toLowerCase()}">${esc(statusLabel(m.status))}</span></td><td class="detail-cell">${detail}</td><td class="extraction-cell">${extractionCell}</td></tr>`;
         };
         // Ignored/optional-not-installed mods carry no action at all -- same reasoning as the live
         // plan table: put them last so the mods that actually matter aren't buried.
@@ -1046,7 +1131,7 @@ document.getElementById('logTableBody').addEventListener('click', async (e) => {
   const row = btn.closest('tr');
   const filename = document.getElementById('logTableBody').dataset.filename;
   const name = btn.dataset.name;
-  if (!await showConfirmModal('Warning: this file does not exactly match what this collection recorded (a different repack/edition). Extract it anyway? Vortex may prompt you to import it as a new mod afterward -- accept that prompt if so.')) return;
+  if (!await showConfirmModal("Warning: this file doesn't exactly match what this collection recorded (a different repack/edition). Extract it anyway? Vortex may prompt you to import it as a new mod afterward -- accept that prompt if so.")) return;
   btn.disabled = true;
   btn.textContent = 'Extracting…';
   try {

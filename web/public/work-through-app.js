@@ -147,7 +147,7 @@ function renderWtBadges() {
     const badge = el('span', {
       class: `badge badge--clickable badge--${status.toLowerCase()}${active ? ' badge--filter-active' : ''}`,
       'data-status': status,
-    }, [el('span', { class: 'badge__count' }, String(count)), ' ' + status]);
+    }, [el('span', { class: 'badge__count' }, String(count)), ' ' + statusLabel(status)]);
     badge.addEventListener('click', () => {
       wtStatusFilter = active ? null : status;
       renderWtBadges();
@@ -208,7 +208,7 @@ function renderWtList() {
 }
 
 function modRowEl(m, c) {
-  const pill = el('span', { class: 'status-pill status-pill--' + m.status.toLowerCase() }, m.status);
+  const pill = el('span', { class: 'status-pill status-pill--' + m.status.toLowerCase() }, statusLabel(m.status));
   // Name gets the only flex:1 in this row -- it absorbs all the leftover space, so whatever comes
   // after it (buttons, checkbox+note, the delete-duplicate list) lands at the SAME right-hand edge
   // on every row in this list regardless of how long the name or status pill text is. Confirmed
@@ -284,8 +284,8 @@ function modRowEl(m, c) {
 
 async function resolveMismatch(logFile, m, resolveMode, buttons) {
   const message = resolveMode === 'all'
-    ? 'Warning: this will fully replace this mod within the staging environment. Continue?'
-    : 'Warning: this will keep all modified files currently staged and will replace all other files and restore any missing files. Continue?';
+    ? "Warning: this will fully replace this mod's staging folder. Continue?"
+    : 'Warning: this keeps your modified files as they are, replaces everything else, and restores any missing files. Continue?';
   if (!await showConfirmModal(message)) return;
   buttons.forEach((b) => { b.disabled = true; });
   try {
@@ -310,7 +310,7 @@ async function retryDownload(logFile, m, buttons) {
 }
 
 async function forceExtractOffSite(logFile, m, buttons) {
-  const message = 'Warning: this file does not exactly match what this collection recorded (a different repack/edition). Extract it anyway? Vortex may prompt you to import it as a new mod afterward -- accept that prompt if so.';
+  const message = "Warning: this file doesn't exactly match what this collection recorded (a different repack/edition). Extract it anyway? Vortex may prompt you to import it as a new mod afterward -- accept that prompt if so.";
   if (!await showConfirmModal(message)) return;
   buttons.forEach((b) => { b.disabled = true; b.textContent = 'Extracting…'; });
   try {

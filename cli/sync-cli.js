@@ -29,7 +29,7 @@
 // `apply-ignores --apply` does, via withLiveStateDb.
 
 const fs = require('fs');
-const lib = require('./lib/vortex-sync/lib');
+const lib = require('../lib/vortex-sync/lib');
 
 function parseArgs(argv) {
   const args = { _: [] };

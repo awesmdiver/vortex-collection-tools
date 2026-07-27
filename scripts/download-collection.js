@@ -14,7 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
-const appConfig = require('./lib/app-config');
+const appConfig = require('../lib/app-config');
 
 function resolveApiKey() {
     const configured = appConfig.loadConfig().nexusApiKey;

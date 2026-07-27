@@ -87,6 +87,20 @@ html, body {
   line-height: 1.5;
 }
 
+/* Global scrollbar styling -- requirement for every scrollable region in this app (confirmed
+   2026-07-26): matches Vortex's own grey, rounded scrollbar instead of the browser's default
+   stark-white one. Chromium/Electron-only (::-webkit-scrollbar has no Firefox equivalent), which
+   is fine -- this app only ever runs in a Chromium-based browser or Vortex's own Electron shell. */
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--neutral);
+  border-radius: 8px;
+  border: 3px solid var(--bg);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--text-muted); }
+
 .hidden { display: none !important; }
 .muted { color: var(--text-muted); }
 /* Small "?" help marker -- native title attribute gives a browser tooltip on hover, no JS/modal
@@ -135,7 +149,20 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   justify-self: start;
 }
 .app-header__logo { font-size: 20px; opacity: 0.85; }
-.app-header__meta { color: var(--text-muted); font-size: 13px; justify-self: end; text-align: right; }
+.app-header__right { display: flex; align-items: center; gap: 14px; justify-self: end; }
+.app-header__meta { color: var(--text-muted); font-size: 13px; text-align: right; }
+/* Settings lives here instead of the main nav row -- it's a one-and-done config page, not a
+   workflow tab you switch between like the others, so it gets a small icon at the header's far
+   right instead of competing for space as a text tab. Shares .nav-tab so shell.js's generic
+   TOOL_AREAS click-handling/active-state code (which toggles .nav-tab--active by element id)
+   still works unmodified -- only the visual treatment differs, via this class overriding it below. */
+.settings-gear-btn {
+  font-size: 19px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  line-height: 1;
+}
+.settings-gear-btn.nav-tab--active { background: var(--surface-2); color: var(--accent); font-weight: normal; }
 
 /* Top-level tool-area nav (shell.js) */
 .app-nav { display: flex; gap: 6px; }
@@ -205,6 +232,19 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .view-header { margin-bottom: 22px; }
 .view-header h1 { font-size: 22px; margin: 6px 0 4px; }
 .view-header p { margin: 4px 0; }
+
+/* Settings page header -- keeps the intro line and the server action buttons on one row, same
+   space-between/flex-wrap idea as .progress-header-row, so a narrow window wraps the buttons
+   below the text instead of clipping/overlapping them. */
+.settings-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.settings-header-row p { margin: 4px 0; }
+.settings-header-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
 .btn--back { margin-bottom: 10px; }
 
@@ -368,6 +408,29 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .badge--warning { background: var(--warning-bg); color: var(--warning); }
 .badge--critical { background: var(--danger-bg); color: var(--danger); }
 .badge--neutral { background: var(--neutral-bg); color: var(--neutral); }
+/* Rules Generator's section headers reuse .badge's pill shape/color directly (confirmed with the
+   user 2026-07-26: "Needs your input" should mimic its own summary-badge color) instead of a
+   separate one-off style. .badge normally lives inside .summary-badges, a flex row where each pill
+   is a flex ITEM sized to its own content -- a bare heading has no such container, so plain
+   `display:flex` (a block-level box) would stretch the pill across the whole section. This override
+   keeps it shrink-to-fit, and restores heading-scale text size over .badge's smaller default. */
+h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
+/* Rules Generator section header + "Expand all" button on the same line, button right-justified.
+   The header row now owns the vertical rhythm (28px/10px, 20px top for the very first one) instead
+   of the bare h2 -- wrapping the h2 in this row would otherwise confuse .settings-section-title's
+   own :first-of-type rule (each wrapped h2 becomes the only h2 under ITS OWN parent, so every one
+   would incorrectly match :first-of-type once wrapped). Explicit per-id margins here sidestep that
+   instead of fighting the cascade. */
+.rg-section-header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.rg-section-header-row .settings-section-title { margin: 0; }
+#rgReadySectionHeaderRow { margin: 20px 0 10px; }
+#rgReviewSectionHeaderRow { margin: 28px 0 10px; }
+/* "Expand all" / "Collapse all" -- follows the "Nothing to do" badge's muted/neutral color on
+   purpose (confirmed with the user 2026-07-26), regardless of which section it's attached to, so it
+   never competes visually with that section's own success/warning-colored pill. It's a real
+   <button> (needs a click handler, unlike the other pill-styled badges which are just <span>s), so
+   reset the couple of button-specific UA defaults .badge doesn't already cover. */
+.rg-section-header-row button.badge { font-family: inherit; }
 /* Same generic severities for a table's own Status column pill (as opposed to the clickable filter
    badge above the table) -- one color language for "this row is an info/neutral/warning/critical
    item" used in both places at once. */
@@ -461,6 +524,64 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   color: var(--text-muted); font-weight: 600;
 }
 .settings-group .settings-section-title:first-of-type { margin-top: 4px; }
+/* Rules Generator's review list: one radio-pair choice inside a .settings-group card, when a rule
+   could point at either an original mod or its new-collection counterpart. See DESIGN.md's
+   "Rules Generator review choice" note. */
+.rg-choice-row { margin: 12px 0; padding-top: 12px; border-top: 1px solid var(--border); }
+.rg-choice-row:first-of-type { border-top: none; padding-top: 0; }
+/* Rules Generator's expanded per-mod rule table: indented under its card header so the
+   header-vs-rules hierarchy reads at a glance, and a narrow rule-type dropdown (before/after/???/
+   never-together-with is all it ever needs to fit -- .select--small's 460px default is sized for
+   free-text selects elsewhere in the app, not a 4-word fixed vocabulary like this one). */
+.rg-ready-card .plan-table-wrap { margin-left: 28px; margin-top: 4px; }
+.rg-rule-type-select { width: 150px; flex: none; }
+/* Anomaly review cards (Needs your input) reuse the exact same collapsed-header/expand pattern as
+   Ready to copy cards above -- added 2026-07-26 so "Expand all" has real collapsed state to act on
+   for this list too, not just Ready to copy. Same indent convention as .plan-table-wrap. */
+.rg-anomaly-card__body { margin-left: 28px; margin-top: 4px; }
+.rg-anomaly-card__body .checkbox { margin: 4px 0; }
+/* "Copying from X" -- opens the read-only reference view in a real separate window, same
+   accent-colored no-underline treatment as .mod-name-link elsewhere, but its own class since the
+   content is client-rendered in-app data, not an external Nexus link. */
+.rg-mod-link { color: var(--accent); text-decoration: none; cursor: pointer; }
+.rg-mod-link:hover { text-decoration: underline; }
+.rg-choice-row p { margin: 0 0 6px; font-weight: 600; }
+.rg-choice-row .checkbox { margin: 4px 0; }
+/* Vortex's own "N conflicting file(s)" indicator, mirrored on each rule row. Muted/plain while the
+   count is still loading or comes back zero (nothing to click); once a real count is in, it swaps
+   to accent-colored + clickable, same look as .rg-mod-link, and opens .rg-conflict-popover below. */
+.rg-conflict-count { font-size: 12.5px; }
+.rg-conflict-count--muted { color: var(--text-muted); }
+.rg-conflict-count--clickable { color: var(--accent); cursor: pointer; }
+.rg-conflict-count--clickable:hover { text-decoration: underline; }
+/* Small anchored popup listing the actual conflicting file paths -- "just like Vortex" per the
+   user's own screenshot: a lightweight box near the click point, not a full modal/window. Reuses
+   the app's own global scrollbar styling for its file list, same as every other scroll region. */
+.rg-conflict-popover {
+  position: fixed;
+  z-index: 60;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 10px 12px;
+  max-width: 420px;
+  min-width: 220px;
+}
+.rg-conflict-popover__title { font-weight: 600; font-size: 13px; margin: 0 0 6px; }
+.rg-conflict-popover__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+  overflow-x: auto;
+  font-size: 12.5px;
+  font-family: var(--mono, monospace);
+}
+/* No wrap -- a long path stays on one line and scrolls horizontally (the popover's own scrollbar,
+   same grey global styling) rather than wrapping mid-path, confirmed live 2026-07-26 looked wrong. */
+.rg-conflict-popover__list li { padding: 2px 0; white-space: nowrap; }
 /* Two short fields side by side (Port/Host, the two backup-cleanup rows) -- stacks on narrow
    screens via the existing 640px breakpoint below. */
 .settings-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
@@ -590,6 +711,19 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .checkbox input { width: 16px; height: 16px; accent-color: var(--accent); }
 
 .view-actions { display: flex; align-items: center; gap: 14px; margin-top: 8px; margin-bottom: 20px; }
+
+/* Keeps Pause anchored on the same row as the phase text regardless of whether the backup/download
+   notice rows below it are shown -- those rows appearing/disappearing must not shift the button. */
+.progress-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 4px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.progress-header-row .phase-indicator { margin-top: 0; }
 
 /* Phase indicator */
 .phase-indicator {

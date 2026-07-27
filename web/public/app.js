@@ -1,19 +1,8 @@
 'use strict';
 
-const STATUS_TEXT = {
-  REBUILT: 'Rebuilt',
-  REBUILD: 'Will rebuild',
-  REBUILD_QUEUED: 'Queued',
-  SKIP_IGNORED: 'Ignored',
-  SKIP_NO_ARCHIVE: 'No archive',
-  SKIP_OPTIONAL_NOT_INSTALLED: 'Optional, not installed',
-  SKIP_OPEN_FOMOD: 'Open FOMOD',
-  FAILED_MISMATCH_NOT_TOUCHED: 'Mismatch (not touched)',
-  FAILED_EXTRACTION_NOT_TOUCHED: 'Extraction failed (not touched)',
-  FAILED_EXTRACTION_NO_PRIOR_DATA: 'Extraction failed (still missing)',
-  CRITICAL_MANUAL_RESTORE_NEEDED: 'CRITICAL',
-  pending: 'In progress…',
-};
+// STATUS_TEXT/statusLabel now live in status-labels.js (loaded before this file in index.html) --
+// shared with stats-app.js, work-through-app.js, and rebuild-routes.js's standalone report, so
+// there's one translation table instead of four.
 
 const state = {
   collectionModId: null,
@@ -25,6 +14,11 @@ const state = {
   // fresh plan-ready frame arrives so we only auto-open the confirm modal if the off-site mod(s) are
   // actually gone now, instead of blindly proceeding into a rebuild that would just skip them again.
   pendingOffSiteRecheck: false,
+  // Mod names currently extracting -- populated from the same 'mod-start'/'mod-complete' SSE events
+  // already used to update the live progress table, purely for the Pause popup's live countdown
+  // ("N extraction(s) still finishing"). Not the authoritative "is it safe to confirm" signal --
+  // that's the server's own 'paused' event, see pauseModalOkBtn's handler below.
+  inFlightMods: new Set(),
 };
 
 // ---------- tiny helpers ----------
@@ -367,6 +361,21 @@ $('workshopViewNexusBtn').addEventListener('click', () => {
   window.open(nexusCollectionUrl(slug, revisionNumber), '_blank');
 });
 
+// Vortex's own installed-collection folder-naming convention: <name>-<nexusModId>-<revisionNumber>-
+// <timestamp> -- a collection's "version" (unlike a regular mod's) is always a bare revision
+// integer with no dots, so the revision is reliably the middle one of the trailing 3 numeric
+// segments, and the timestamp (Unix seconds) is the last. Confirmed live 2026-07-27 against real,
+// known collections (see sync-app.js's own copy of this same helper for the full verification
+// writeup) -- kept as its own local copy here rather than shared, same "self-contained per file"
+// convention already used throughout this project (el()/$g() etc. are duplicated per file too).
+function extractRevisionInfo(modId) {
+  const match = /-(\d+)-(\d+)-(\d+)$/.exec(modId || '');
+  if (!match) return { revision: null, installedAt: null };
+  const timestampSeconds = Number(match[3]);
+  const installedAt = Number.isFinite(timestampSeconds) ? new Date(timestampSeconds * 1000) : null;
+  return { revision: match[2], installedAt };
+}
+
 async function loadCollections() {
   $('collectionPickerLoading').classList.remove('hidden');
   $('vortexDataBox').classList.add('hidden');
@@ -386,6 +395,7 @@ async function loadCollections() {
     }
 
     collectionsById = new Map(collections.map((c) => [c.modId, c]));
+    renderPausedCollectionsCallout(collections);
     const cachedCount = collections.filter((c) => c.vortexDataCached).length;
     renderVortexDataStatus(vortexDataLoadedAt, cachedCount, collections.length);
     $('vortexDataBox').classList.remove('hidden');
@@ -397,8 +407,14 @@ async function loadCollections() {
     select.innerHTML = '';
     select.appendChild(el('option', { value: '' }, 'Select collection…'));
     for (const c of collections) {
+      const { revision, installedAt } = extractRevisionInfo(c.modId);
+      let revisionText = '';
+      if (revision) {
+        revisionText = `, Rev ${revision}`;
+        if (installedAt) revisionText += ` (${installedAt.toLocaleDateString()})`;
+      }
       const lastExtracted = c.lastExtracted ? ` — Last extracted: ${new Date(c.lastExtracted).toLocaleString()}` : '';
-      const label = `${c.vortexDataCached ? '✓ ' : ''}${c.name} (${c.modCount} mods)${lastExtracted}${c.resumableLog ? ' — Resumable' : ''}`;
+      const label = `${c.vortexDataCached ? '✓ ' : ''}${c.name} (${c.modCount} mods${revisionText})${lastExtracted}${c.resumableLog ? ' — Resumable' : ''}`;
       select.appendChild(el('option', { value: c.modId }, label));
     }
     if (previousModId && collections.some((c) => c.modId === previousModId)) {
@@ -413,6 +429,70 @@ async function loadCollections() {
     }
   }
 }
+
+// ---------- Paused collections callout (home page) ----------
+// Built entirely from the same per-collection resumableLog data loadCollections() already fetches
+// -- no separate endpoint. A collection only counts here once its resumableLog.runStatus is
+// specifically 'paused' (a deliberate stop, confirmed via the pause popup) -- 'in-progress'/
+// 'halted-critical' logs are still resumable too, but those are unplanned interruptions, not
+// something to proactively prompt about the same way.
+let pausedCollections = [];
+
+function renderPausedCollectionsCallout(collections) {
+  pausedCollections = collections.filter((c) => c.resumableLog?.runStatus === 'paused');
+  const callout = $('pausedCollectionsCallout');
+  if (pausedCollections.length === 0) {
+    callout.classList.add('hidden');
+    return;
+  }
+  callout.classList.remove('hidden');
+  $('pausedCollectionsStatus').textContent = '';
+
+  const select = $('pausedCollectionsSelect');
+  if (pausedCollections.length === 1) {
+    select.classList.add('hidden');
+    $('pausedCollectionsTitle').textContent = `Paused extraction found: ${pausedCollections[0].name}`;
+  } else {
+    select.classList.remove('hidden');
+    $('pausedCollectionsTitle').textContent = `${pausedCollections.length} paused extractions found`;
+    const previousModId = select.value;
+    select.innerHTML = '';
+    for (const c of pausedCollections) {
+      select.appendChild(el('option', { value: c.modId }, c.name));
+    }
+    if (previousModId && pausedCollections.some((c) => c.modId === previousModId)) {
+      select.value = previousModId;
+    }
+  }
+}
+
+function selectedPausedCollection() {
+  if (pausedCollections.length === 1) return pausedCollections[0];
+  return pausedCollections.find((c) => c.modId === $('pausedCollectionsSelect').value) || pausedCollections[0];
+}
+
+// Reuses openPlan() directly -- the exact function the existing "Resume from previous incomplete
+// run" checkbox already calls once the user checks it manually; this just skips straight there.
+// explicitResume=true: the user already asked to resume by clicking this button, so the Plan page
+// shouldn't also make them tick a checkbox to confirm the same thing -- see renderPlan().
+$('resumePausedBtn').addEventListener('click', () => {
+  const c = selectedPausedCollection();
+  if (!c) return;
+  openPlan(c.modId, c.name, c.resumableLog.path, true);
+});
+
+$('discardPausedBtn').addEventListener('click', async () => {
+  const c = selectedPausedCollection();
+  if (!c) return;
+  const filename = c.resumableLog.path.split(/[\\/]/).pop();
+  $('pausedCollectionsStatus').textContent = 'Discarding…';
+  try {
+    await api('POST', `/api/rebuild/logs/${encodeURIComponent(filename)}/discard-pause`);
+    await loadCollections(); // refreshes the callout too -- shrinks or disappears as appropriate
+  } catch (e) {
+    $('pausedCollectionsStatus').textContent = `Failed: ${e.message}`;
+  }
+});
 
 $('viewPlanBtn').addEventListener('click', () => {
   const modId = $('collectionSelect').value;
@@ -547,9 +627,13 @@ document.querySelectorAll('[data-action="back-to-picker"]').forEach((b) => b.add
 
 let planEventSource = null;
 
-async function openPlan(collectionModId, name, resumeLogPath) {
+async function openPlan(collectionModId, name, resumeLogPath, explicitResume = false) {
   state.collectionModId = collectionModId;
   state.resumeLogPath = resumeLogPath || null;
+  // Set only by the paused-collections callout's Resume button -- the user already asked to resume
+  // by clicking it, so renderPlan() below skips the checkbox and just confirms it plainly instead
+  // of asking them to also tick a box for the same thing.
+  state.explicitResume = explicitResume;
   showView('plan');
   $('planTitle').textContent = name;
   $('planLoading').classList.remove('hidden');
@@ -614,11 +698,38 @@ function handlePlanEvent(frame) {
 }
 
 function renderPlan(plan) {
-  $('planTitle').textContent = `${plan.collectionInfo.name} (${plan.collectionInfo.totalModsInCollection} mods)`;
+  // Once resume is actually active (not just available), the header switches to a progress-style
+  // count -- "X of Y mods" -- so it's obvious at a glance how much of the collection is already done.
+  // Y here is the actionable total (done + still to go), NOT the collection's raw mod count --
+  // ignored/FOMOD/optional/no-archive mods never get rebuilt at all, so counting them in Y would
+  // make this number disagree with the "N mods left to go" line just below it.
+  const resumeActive = !!(plan.resumableLog && state.resumeLogPath);
+  const doneCount = plan.summary?.REBUILT || 0;
+  const remainingCount = plan.summary?.REBUILD || 0;
+  $('planTitle').textContent = resumeActive
+    ? `${plan.collectionInfo.name} (${doneCount} of ${doneCount + remainingCount} mods)`
+    : `${plan.collectionInfo.name} (${plan.collectionInfo.totalModsInCollection} mods)`;
 
   if (plan.resumableLog) {
     $('resumeBox').classList.remove('hidden');
-    $('resumeMeta').textContent = `(${plan.resumableLog.runStatus}, ${new Date(plan.resumableLog.finishedAt || Date.now()).toLocaleString()})`;
+    const modsLeft = remainingCount === 1 ? '1 mod left' : `${remainingCount} mods left`;
+    const pausedDate = new Date(plan.resumableLog.finishedAt || Date.now()).toLocaleString();
+    if (state.explicitResume) {
+      // Came from the paused-collections callout's Resume button -- the user already told us to
+      // resume, so just confirm it plainly instead of also asking them to tick a checkbox.
+      $('resumeToggleLabel').classList.add('hidden');
+      $('resumeStatic').classList.remove('hidden');
+      $('resumeStaticMeta').textContent = `— ${modsLeft} to go (paused ${pausedDate})`;
+    } else {
+      $('resumeToggleLabel').classList.remove('hidden');
+      $('resumeStatic').classList.add('hidden');
+      $('resumeMeta').textContent = `(${modsLeft}, paused ${pausedDate})`;
+    }
+  } else {
+    // Re-hide on a fresh plan with no resumable log -- otherwise this stays stuck on screen with
+    // stale content from a previously-viewed collection (same class of bug already fixed for
+    // openFomodSection above).
+    $('resumeBox').classList.add('hidden');
   }
 
   const summaryEl = $('planSummary');
@@ -663,7 +774,7 @@ function renderPlan(plan) {
         // A same-size candidate file exists but fails the md5 check -- more alarming than a plain
         // "nothing downloaded yet", and NOT auto-resolved by re-planning (no button here per design;
         // resolving this happens post-run on the log/Work Through Report page).
-        li.appendChild(el('div', { class: 'mismatch-note archive-link-row' }, 'a new file was found but does not match what is expected by this collection'));
+        li.appendChild(el('div', { class: 'mismatch-note archive-link-row' }, "a new file was found but doesn't match what this collection expects"));
       } else if (m.sourceUrl) {
         li.appendChild(el('div', { class: 'archive-link-row' }, el('a', { class: 'archive-link', href: m.sourceUrl, target: '_blank', rel: 'noopener noreferrer' }, m.sourceUrl)));
       } else {
@@ -839,6 +950,8 @@ function startProgressView() {
   $('downloadNotice').classList.add('hidden');
   $('progressTableBody').innerHTML = '';
   state.progressRows.clear();
+  state.inFlightMods.clear();
+  $('pauseModal').classList.add('hidden');
 
   for (const r of state.plan.rebuildQueue) {
     const row = el('tr', {}, [
@@ -972,6 +1085,8 @@ function handleRunEvent(frame) {
     }
     case 'mod-start':
       updateProgressRow(frame.modName, 'pending', 'Extracting…');
+      state.inFlightMods.add(frame.modName);
+      updatePauseModalCount();
       break;
     case 'mod-complete': {
       let detail = frame.detail || '';
@@ -981,6 +1096,8 @@ function handleRunEvent(frame) {
       if (frame.sharedWithNote) detail = (detail ? detail + '\n\n' : '') + `Already included in:\n${frame.sharedWithNote.join('\n')}`;
       if (frame.archiveName && frame.status !== 'REBUILT') detail = (detail ? detail + ' — ' : '') + `Archive: ${frame.archiveName}`;
       updateProgressRow(frame.name, frame.status, detail);
+      state.inFlightMods.delete(frame.name);
+      updatePauseModalCount();
       break;
     }
     case 'critical-halt':
@@ -989,11 +1106,82 @@ function handleRunEvent(frame) {
     case 'run-complete':
       finishProgressView(frame);
       break;
+    case 'paused':
+      onRunPaused();
+      break;
     case 'run-error':
       showErrorModal(frame.message, 'Run error');
       showView('picker');
       break;
   }
+}
+
+// ---------- Pause extraction ----------
+// See TECHNICAL.md's pause/resume design section. OK enables from the CLIENT's own live
+// state.inFlightMods count (updated above as mod-start/mod-complete events arrive) -- the server
+// has no "drained" event of its own until confirm-pause is actually called, so this is the earliest
+// honest signal available. Confirming is still gated server-side too (pause-controller.js rejects
+// confirmPause() if its own in-flight counter isn't really 0), so a stale/wrong client count just
+// means a rejected confirm and a re-shown wait state, never a bad write.
+function updatePauseModalCount() {
+  const modal = $('pauseModal');
+  if (modal.classList.contains('hidden')) return; // not open -- nothing to update
+  const n = state.inFlightMods.size;
+  const okBtn = $('pauseModalOkBtn');
+  if (n > 0) {
+    $('pauseModalText').textContent = `Waiting for ${n} extraction${n === 1 ? '' : 's'} currently in progress to finish. No new ones will start.`;
+    okBtn.disabled = true;
+  } else {
+    $('pauseModalText').textContent = "All extractions have finished. Click OK to confirm the pause -- you'll be able to resume this collection later from the Choose a Collection page.";
+    okBtn.disabled = false;
+  }
+}
+
+$('pauseRebuildBtn').addEventListener('click', async () => {
+  try {
+    await api('POST', '/api/rebuild/runs/current/pause');
+  } catch (e) {
+    showErrorModal(e.message, 'Could not pause');
+    return;
+  }
+  $('pauseModal').classList.remove('hidden');
+  updatePauseModalCount();
+});
+
+$('pauseModalCancelBtn').addEventListener('click', async () => {
+  // Closes immediately -- per the user's own confirmed design, extraction continues at full
+  // concurrency right away, the same as if Pause had never been clicked. No need to wait for a
+  // server round-trip before hiding the popup.
+  $('pauseModal').classList.add('hidden');
+  try {
+    await api('POST', '/api/rebuild/runs/current/cancel-pause');
+  } catch (e) {
+    showErrorModal(e.message, 'Could not cancel the pause');
+  }
+});
+
+$('pauseModalOkBtn').addEventListener('click', async () => {
+  $('pauseModalOkBtn').disabled = true;
+  $('pauseModalText').textContent = 'Confirming…';
+  try {
+    await api('POST', '/api/rebuild/runs/current/confirm-pause');
+  } catch (e) {
+    // A real race (a mod finished a beat after the client's own count read 0) -- surface it and
+    // let the wait state resume rather than silently retrying.
+    showErrorModal(e.message, 'Could not confirm the pause');
+    updatePauseModalCount();
+    return;
+  }
+  // Don't navigate away yet -- wait for the server's own 'paused' SSE event (fired once the log is
+  // actually written to disk), so the picker's paused-collection callout is guaranteed to see it
+  // the moment we get there. onRunPaused() below handles the rest.
+});
+
+function onRunPaused() {
+  if (state.eventSource) { state.eventSource.close(); state.eventSource = null; }
+  $('pauseModal').classList.add('hidden');
+  showView('picker');
+  loadCollections();
 }
 
 let pendingCritical = null;
@@ -1035,18 +1223,16 @@ function finishProgressView(frame) {
     $('summaryOpenFomodSection').classList.add('hidden');
   }
 
-  $('backupPath').textContent = frame.backupRunDir || '(nothing backed up)';
-  $('logPath').textContent = frame.logPath;
+  // No raw path shown here -- the View Log/Reveal buttons represent the location, so the path
+  // itself only needs to live in a dataset attribute, never in visible text. Backup-folder access
+  // isn't shown on this completion screen at all -- that lives only in Settings (Reveal/Restore).
   const logFilename = frame.logPath.split(/[\\/]/).pop();
   $('viewLogLink').href = `/api/rebuild/logs/view/${encodeURIComponent(logFilename)}`;
+  $('revealLogBtn').dataset.path = frame.logPath;
 }
 
-document.querySelector('[data-action="reveal-backup"]').addEventListener('click', () => {
-  const p = $('backupPath').textContent;
-  if (p && p !== '(nothing backed up)') api('POST', '/api/rebuild/reveal', { targetPath: p }).catch(() => {});
-});
-document.querySelector('[data-action="reveal-log"]').addEventListener('click', () => {
-  const p = $('logPath').textContent;
+$('revealLogBtn').addEventListener('click', () => {
+  const p = $('revealLogBtn').dataset.path;
   if (p) api('POST', '/api/rebuild/reveal', { targetPath: p }).catch(() => {});
 });
 $('revealProgressBackupBtn').addEventListener('click', () => {

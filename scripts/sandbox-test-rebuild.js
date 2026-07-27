@@ -38,7 +38,12 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 
-const appConfig = require('./lib/app-config');
+const appConfig = require('../lib/app-config');
+
+// This script itself lives in scripts/, but the sandbox server it spawns (web/server.js) and the
+// logs/ directory it reads back from are both project-root-relative -- same PROJECT_ROOT
+// convention lib/rebuild-mod.js already uses for its own extract-mod.js child-process spawn.
+const PROJECT_ROOT = path.join(__dirname, '..');
 
 function parseArgs(argv) {
     const args = { collectionModId: null, sandbox: null, port: 4322, concurrency: null, keepServer: false };
@@ -134,8 +139,8 @@ async function main() {
     let serverProcess = null;
     try {
         console.log(`Starting sandbox server on port ${args.port}, staging="${sandboxResolved}"...`);
-        serverProcess = spawn(process.execPath, [path.join(__dirname, 'web', 'server.js'), '--port', String(args.port), '--staging', sandboxResolved, '--no-open'], {
-            cwd: __dirname, stdio: 'ignore',
+        serverProcess = spawn(process.execPath, [path.join(PROJECT_ROOT, 'web', 'server.js'), '--port', String(args.port), '--staging', sandboxResolved, '--no-open'], {
+            cwd: PROJECT_ROOT, stdio: 'ignore',
         });
 
         const up = await waitForServer(args.port, 15000);
@@ -153,7 +158,7 @@ async function main() {
         const finished = await waitForRunDone(args.port, 30 * 60 * 1000); // 30 min ceiling
         if (!finished) throw new Error('Run did not finish within 30 minutes.');
 
-        const logPath = findLatestLog(path.join(__dirname, 'logs'), args.collectionModId);
+        const logPath = findLatestLog(path.join(PROJECT_ROOT, 'logs'), args.collectionModId);
         if (!logPath) throw new Error('Run finished but no matching log file was found.');
         const log = JSON.parse(fs.readFileSync(logPath, 'utf8'));
         console.log('\n===== Result =====');

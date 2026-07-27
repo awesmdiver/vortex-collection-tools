@@ -82,7 +82,7 @@ async function loadOverview(period) {
     // Informational only (not clickable) -- unlike the Plan/log-view pages, there's no single flat
     // mod table at this aggregate level to filter, so these are just totals, same visual style.
     badgesEl.appendChild(el('span', { class: 'badge badge--' + status.toLowerCase() }, [
-      el('span', { class: 'badge__count' }, String(count)), ' ' + status,
+      el('span', { class: 'badge__count' }, String(count)), ' ' + statusLabel(status),
     ]));
   }
 
@@ -148,7 +148,7 @@ function renderIssuesBadges() {
     const badge = el('span', {
       class: `badge badge--clickable badge--${status.toLowerCase()}${active ? ' badge--filter-active' : ''}`,
       'data-status': status,
-    }, [el('span', { class: 'badge__count' }, String(count)), ' ' + status]);
+    }, [el('span', { class: 'badge__count' }, String(count)), ' ' + statusLabel(status)]);
     // Toggle, not just a one-way filter set -- click an active badge again to clear it, same as
     // clicking "Show all" below (both are valid ways to reset).
     badge.addEventListener('click', () => {
@@ -207,7 +207,7 @@ function renderIssuesList() {
     if (isExpanded) {
       for (const m of modsToShow) {
         card.appendChild(el('div', { class: 'file-list' }, [
-          el('span', { class: 'status-pill status-pill--' + m.status.toLowerCase() }, m.status),
+          el('span', { class: 'status-pill status-pill--' + m.status.toLowerCase() }, statusLabel(m.status)),
           ' ' + m.name,
         ]));
       }
@@ -259,8 +259,8 @@ function loadStatsPageOnce() {
 // Reports area now has three inner sub-tabs -- still few enough that a small flat toggle is
 // simpler than shell.js's TOOL_AREAS-style array. Stats Report is the default on first entry,
 // matching this area's exact behavior before the Work Through Report/Update Compare Report splits.
-const REPORTS_SUB_TABS = ['stats', 'workthrough', 'updatecompare'];
-const REPORTS_SUB_TAB_LABELS = { stats: 'Reports > Stats Report', workthrough: 'Reports > Work Through Report', updatecompare: 'Reports > Update Compare Report' };
+const REPORTS_SUB_TABS = ['stats', 'workthrough', 'updatecompare', 'rulesgen'];
+const REPORTS_SUB_TAB_LABELS = { stats: 'Reports > Stats Report', workthrough: 'Reports > Work Through Report', updatecompare: 'Reports > Update Compare Report', rulesgen: 'Reports > Rules Generator Report' };
 function showReportsSubTab(id) {
   if (typeof setPageLabel === 'function') setPageLabel(REPORTS_SUB_TAB_LABELS[id] || 'Reports');
   for (const tab of REPORTS_SUB_TABS) {
@@ -270,6 +270,7 @@ function showReportsSubTab(id) {
   }
   if (id === 'stats') loadStatsPageOnce();
   else if (id === 'workthrough' && typeof loadWorkThroughPageOnce === 'function') loadWorkThroughPageOnce();
+  else if (id === 'rulesgen' && typeof loadRulesGenReportPageOnce === 'function') loadRulesGenReportPageOnce();
 }
 for (const tab of REPORTS_SUB_TABS) {
   $g(`reports-sub-${tab}`).addEventListener('click', () => showReportsSubTab(tab));

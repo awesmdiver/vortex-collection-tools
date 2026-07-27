@@ -25,10 +25,13 @@
   <nav class="app-nav">
     <button id="nav-rebuild" class="nav-tab">Rebuild Collection</button>
     <button id="nav-sync" class="nav-tab">Update Collection</button>
-    <button id="nav-settings" class="nav-tab">Settings</button>
+    <button id="nav-rules-generator" class="nav-tab">Rules Generator</button>
     <button id="nav-reports" class="nav-tab">Reports</button>
   </nav>
-  <div id="headerMeta" class="app-header__meta"></div>
+  <div class="app-header__right">
+    <div id="headerMeta" class="app-header__meta"></div>
+    <button id="nav-settings" class="settings-gear-btn nav-tab" title="Settings">&#9881;</button>
+  </div>
 </header>
 
 <!-- Shown by shell.js's showServerUnreachableError() whenever ANY page's api() call fails at the
@@ -95,6 +98,20 @@
       <p class="muted">Rebuilds an already-installed collection's staging folder directly, instead of through Vortex's slower archive install process.</p>
     </div>
     <div id="collectionPickerLoading" class="loading-row"><span class="spinner"></span> Loading installed collections&hellip;</div>
+
+    <!-- Shown whenever 1+ collections have a deliberately-paused extraction waiting to be resumed
+         -- built entirely from the same per-collection resumableLog data the picker's own <select>
+         already gets (see loadCollections() in app.js), filtered to runStatus === 'paused'. -->
+    <div id="pausedCollectionsCallout" class="callout callout--warning hidden">
+      <div class="callout__title" id="pausedCollectionsTitle"></div>
+      <p class="muted">Pick up right where you left off, or discard the paused state if you don't need to resume it.</p>
+      <div class="collection-picker">
+        <select id="pausedCollectionsSelect" class="select hidden"></select>
+        <button id="resumePausedBtn" class="btn btn--primary">Resume</button>
+        <button id="discardPausedBtn" class="btn btn--ghost">Discard</button>
+        <span id="pausedCollectionsStatus" class="muted"></span>
+      </div>
+    </div>
 
     <div id="vortexDataBox" class="vortex-data-box hidden">
       <div id="vortexDataStatus" class="vortex-data-box__status"></div>
@@ -174,10 +191,11 @@
 
     <div id="planContent" class="hidden">
       <div id="resumeBox" class="resume-box hidden">
-        <label class="checkbox">
+        <label id="resumeToggleLabel" class="checkbox">
           <input type="checkbox" id="resumeToggle">
           <span>Resume from previous incomplete run <span id="resumeMeta" class="muted"></span></span>
         </label>
+        <div id="resumeStatic" class="hidden">Resuming from previous run <span id="resumeStaticMeta" class="muted"></span></div>
       </div>
 
       <div id="planSummary" class="summary-badges"></div>
@@ -239,11 +257,30 @@
     </div>
   </div>
 
+  <!-- Pause confirm/status popup -- opened by the Pause button in view-progress below. OK starts
+       disabled and only enables once the server confirms every in-flight extraction has actually
+       finished (not just when the client's own count happens to read 0), so this genuinely reflects
+       what's safe rather than a guess. Cancel is always available and immediately restores full
+       concurrency (see TECHNICAL.md's pause/resume design section). -->
+  <div id="pauseModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>Pause extraction</h2>
+      <p id="pauseModalText"></p>
+      <div class="modal-actions">
+        <button id="pauseModalCancelBtn" class="btn btn--ghost">Cancel</button>
+        <button id="pauseModalOkBtn" class="btn btn--primary" disabled>OK</button>
+      </div>
+    </div>
+  </div>
+
   <!-- View: live progress -->
   <section id="view-progress" class="view hidden">
     <div class="view-header">
       <h1 id="progressTitle">Rebuilding&hellip;</h1>
-      <div id="phaseIndicator" class="phase-indicator"></div>
+      <div class="progress-header-row">
+        <div id="phaseIndicator" class="phase-indicator"></div>
+        <button id="pauseRebuildBtn" class="btn btn--primary">Pause</button>
+      </div>
       <div id="backupNotice" class="path-row hidden">
         <span class="path-row__label">Backup</span>
         <code id="backupNoticeText" class="path-row__value"></code>
@@ -280,17 +317,14 @@
       <ul id="summaryOpenFomodList"></ul>
     </div>
 
+    <!-- Backup-folder access lives only in Settings (Reveal/Restore), never on this completion
+         screen -- confirmed 2026-07-27: "no one would ever need to access the backup folder from
+         the completion page." -->
     <div class="path-rows">
       <div class="path-row">
-        <span class="path-row__label">Backup folder</span>
-        <code id="backupPath" class="path-row__value"></code>
-        <button class="btn btn--ghost btn--small" data-action="reveal-backup">Reveal</button>
-      </div>
-      <div class="path-row">
         <span class="path-row__label">Log file</span>
-        <code id="logPath" class="path-row__value"></code>
         <a id="viewLogLink" class="btn btn--ghost btn--small">View Log</a>
-        <button class="btn btn--ghost btn--small" data-action="reveal-log">Reveal</button>
+        <button id="revealLogBtn" class="btn btn--ghost btn--small">Reveal</button>
       </div>
     </div>
   </section>
@@ -304,7 +338,7 @@
 <main class="app-main">
   <div class="view-header">
     <h1>Update Collection</h1>
-    <p class="muted">This feature allows you to retain the mods you have marked as <strong>Ignored</strong> or <strong>Disabled</strong> after you have performed an Update to the collection. This helps reduce the amount of mod management you have to do after a collection is updated.</p>
+    <p class="muted">You can keep your <strong>Ignored</strong> and <strong>Disabled</strong> mods marked that way even after updating the collection -- less mod cleanup for you afterward.</p>
   </div>
 
   <div id="syncBackupRootMissingBanner" class="callout callout--warning hidden">
@@ -312,22 +346,29 @@
   </div>
 
   <div class="collection-picker">
-    <select id="syncProfileSelect" class="select select--small"></select>
-    <select id="syncCollectionSelect" class="select">
-      <option value="">-- Select Collection --</option>
-    </select>
+    <div style="display: flex; flex-direction: column; gap: 4px;">
+      <span class="field-label">Profile</span>
+      <select id="syncProfileSelect" class="select select--small"></select>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 4px;">
+      <span class="field-label">Collection</span>
+      <select id="syncCollectionSelect" class="select">
+        <option value="">-- Select Collection --</option>
+      </select>
+    </div>
   </div>
   <div id="syncCollectionEmpty" class="empty-row hidden"></div>
 
   <div class="view-actions">
-    <button id="syncListModsBtn" class="btn btn--ghost" disabled>List Ignored/Disabled</button>
+    <button id="syncListModsBtn" class="btn btn--ghost" disabled>Show Ignored & Disabled</button>
   </div>
 
   <div class="callout callout--warning">
-    <div class="callout__title">&#9888; Before you start</div>
+    <div class="callout__title">&#9888; Quick heads-up before you start!</div>
     <ul>
-      <li>Make sure every mod you want to keep is marked <strong>Ignored</strong> or <strong>Disabled</strong> in Vortex first -- this tool only preserves whatever is already set, it doesn't set anything for you.</li>
-      <li>If a mod is marked <strong>Ignored</strong> because you don't want it anymore, make sure it's also removed (deleted) within Vortex. <strong>Ignored</strong> only stops Vortex from reinstalling it later -- it doesn't remove or disable a mod that's already active.</li>
+      <li><strong>Close Vortex first:</strong> Make sure Vortex is completely closed before you proceed so your updates save cleanly.</li>
+      <li><strong>Mark your mods first:</strong> Make sure any mod you want to keep is already marked as <strong>Ignored</strong> or <strong>Disabled</strong> in Vortex. This tool only saves what's currently set&mdash;it won't change statuses for you!</li>
+      <li><strong>Delete unwanted mods:</strong> If you marked a mod as <strong>Ignored</strong> to get rid of it, be sure to actually remove (delete) it in Vortex too. Setting a mod to <strong>Ignored</strong> just stops Vortex from reinstalling it later, but won't disable or remove an active mod.</li>
     </ul>
   </div>
 
@@ -341,7 +382,7 @@
     <div class="view-actions">
       <button id="syncBackupBtn" class="btn btn--primary" disabled>Create Backup</button>
       <button id="syncRestoreBackupBtn" class="btn btn--ghost" disabled>Restore Backup</button>
-      <span class="help-marker" title="You would use Restore Backup if you have created a backup before updating the collection in Vortex but did not continue to step 2. This allows to restore the backup you created and move to step 2 without having to create a new backup.">?</span>
+      <span class="help-marker" title="You would use Restore Backup if you have created a backup before updating the collection in Vortex but didn't continue to step 2. This lets you restore the backup you created and move to step 2, without having to create a new one.">?</span>
       <span id="syncBackupStatus" class="muted"></span>
     </div>
     <!-- Same triangle-alert icon this app already uses for warnings -- confirmed against Vortex's
@@ -353,7 +394,7 @@
          fresh too, not just this one id patched in place. -->
     <div id="syncCollectionStaleError" class="callout callout--critical hidden">
       <div class="callout__title">&#9888; Collection out of date</div>
-      <p>The version of the collection you are attempting to create a backup for is no longer available. You will need to refresh this collection.</p>
+      <p>The version you're backing up isn't available anymore -- refresh this collection to continue.</p>
       <div class="view-actions">
         <button id="syncCollectionStaleRetryBtn" class="btn btn--ghost">Retry</button>
       </div>
@@ -361,11 +402,21 @@
     <!-- Filled in dynamically by showCriticalCallout() in sync-app.js when a step fails for real
          (e.g. the crash/can't-read-write-Vortex's-database error). -->
     <div id="syncBackupCriticalError" class="callout callout--critical hidden"></div>
+    <!-- Filled in dynamically by buildBackupRatioWarning() in sync-app.js -- a nudge, not a
+         blocker, for when the ignored/disabled count captured looks disproportionate for the
+         collection's size (e.g. hundreds of mods disabled that were probably meant to be re-enabled
+         first). Never prevents moving on to the next step. -->
+    <div id="syncBackupRatioWarning" class="callout callout--warning hidden"></div>
+    <!-- Filled in dynamically by sync-app.js's checkBackupFreshness() -- a follow-up, best-effort
+         check that runs automatically right after a successful backup, comparing Vortex's database
+         two different ways to see if it looks like Vortex closed before saving its very latest
+         changes. Never blocks anything; stays hidden entirely if the check couldn't run. -->
+    <div id="syncBackupFreshnessWarning" class="callout callout--warning hidden"></div>
     <!-- Informational, not warning -- these are plain next-steps to follow, nothing is wrong. -->
     <div id="syncBackupNextSteps" class="callout callout--info hidden">
       <div class="callout__title">&#9432; Next steps in Vortex</div>
       <ol>
-        <li>Click <strong>Update</strong> on '<span id="syncCollectionNameSpan"></span>'.</li>
+        <li>Open Vortex and click <strong>Update</strong> on '<span id="syncCollectionNameSpan"></span>'.</li>
         <li>When prompted, click <strong>Download Update</strong>.</li>
         <li>If a 'Remove mods from old revision?' screen appears, choose an option.</li>
         <li>On the '<span id="syncGameNameSpan">collection</span> added' screen, choose <strong>Later</strong> -- NOT <strong>Install Now</strong>.</li>
@@ -378,8 +429,8 @@
          -- Apply Ignores/Apply Disables (steps 2-3) would have nothing to do either way, so the
          careful Later-not-Install-Now/Refresh choreography above isn't needed for this collection. -->
     <div id="syncBackupNothingToDoInfo" class="callout callout--success hidden">
-      <div class="callout__title">&#10003; Nothing to do here</div>
-      <p>There are no ignored or disabled mods for this collection, so there's nothing to carry over. Update it normally in Vortex -- no need to come back here afterward.</p>
+      <div class="callout__title">&#10003; You're all set!</div>
+      <p>You don't have any ignored or disabled mods right now, so there's nothing to do here. Enjoy your game!</p>
     </div>
   </div>
 
@@ -387,14 +438,17 @@
     <div class="sync-phase__header">
       <span class="sync-phase__num">2</span>
       <h2>Apply Ignores</h2>
-      <span class="muted">Run <strong>AFTER</strong> you have done the step above, updated Vortex, and it is closed.</span>
+      <span class="muted">Run this only <strong>AFTER</strong> you've completed the steps above, updated the collection, and closed Vortex.</span>
     </div>
-    <p>Changes the Status of the mods in Vortex of the updated collection back to Ignored to prevent them from being downloaded and installed when you resume the Update.</p>
+    <p>Sets the updated collection's mods back to Ignored in Vortex, so they don't get downloaded and installed when you resume the update.</p>
     <div class="field-group">
-      <label class="field-label" for="syncNewModIdInput">Updated Vortex collection id</label>
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <label class="field-label" for="syncNewModIdInput">Updated Vortex collection id</label>
+        <span class="help-marker" title="If we couldn't automatically find the collection ID, no worries! Just open your staging folder and locate the folder for that collection—the folder name is your collection ID.">?</span>
+      </div>
       <input id="syncNewModIdInput" class="input" type="text" placeholder="e.g. My-Collection-123456-2-...">
-      <span class="muted">If you know the id of the collection after doing the Update, you can enter it here.
-        Otherwise, leave blank for the current id to be obtained upon pressing the Preview button.</span>
+      <span class="muted">If you know the updated collection's id, enter it here.
+        Otherwise, leave it blank and we'll grab the current id when you click Preview.</span>
     </div>
     <div class="view-actions">
       <button id="syncIgnoresPreviewBtn" class="btn btn--ghost">Preview</button>
@@ -408,9 +462,14 @@
       <div class="callout__title">&#9432; Next steps in Vortex</div>
       <ol>
         <li>Reopen Vortex and click <strong>Resume</strong> on the collection.</li>
-        <li>Once it finishes, close Vortex completely.</li>
-        <li>Continue to step 3, 'Apply Disables' below.</li>
+        <li id="syncResumeCloseVortexStep">Once it finishes, close Vortex completely.</li>
+        <li id="syncResumeStep3Text">Continue to step 3, 'Apply Disables' below.</li>
       </ol>
+    </div>
+    <div id="syncResumeAlmostThere" class="callout callout--info hidden">
+      <div class="callout__title">&#9432; You're almost there!</div>
+      <p>Don't forget to open Vortex to review your collections and make any quick adjustments. Be sure to check your plugins to make sure everything is enabled properly, and run a quick check for missing masters.</p>
+      <p>If everything looks good, happy gaming!</p>
     </div>
   </div>
 
@@ -418,9 +477,9 @@
     <div class="sync-phase__header">
       <span class="sync-phase__num">3</span>
       <h2>Apply Disables</h2>
-      <span class="muted">Run <strong>AFTER</strong> you have resumed the installation of the update and Vortex is closed.</span>
+      <span class="muted">Run this only <strong>AFTER</strong> you've resumed the installation of the update and closed Vortex.</span>
     </div>
-    <p>Changes the Status in Vortex of the updated mods back to Disabled.</p>
+    <p>Sets the updated mods back to Disabled in Vortex.</p>
     <div class="view-actions">
       <button id="syncDisablesPreviewBtn" class="btn btn--ghost">Preview</button>
       <button id="syncDisablesApplyBtn" class="btn btn--primary" disabled>Apply</button>
@@ -440,7 +499,7 @@
       <span class="sync-phase__num">4</span>
       <h2>Compare <span class="muted">(optional, anytime)</span></h2>
     </div>
-    <p>Generates a report of the changes you just performed during the update of the collection.</p>
+    <p>Generates a report showing what changed during the update.</p>
     <div class="view-actions">
       <button id="syncCompareBtn" class="btn btn--ghost">Generate Report</button>
     </div>
@@ -479,7 +538,14 @@
 <main class="app-main">
   <div class="view-header">
     <h1>Settings</h1>
-    <p class="muted">You will need to provide the details below to be able to Rebuild or Update your Collections.</p>
+    <div class="settings-header-row">
+      <p class="muted">Set up your paths and preferences here once — every tool on this site uses them.</p>
+      <div class="settings-header-actions">
+        <button id="settingsRestartServerBtn" class="btn btn--ghost btn--small">Restart Server</button>
+        <button id="settingsStopServerBtn" class="btn btn--ghost btn--small">Stop Server</button>
+      </div>
+    </div>
+    <p id="settingsServerActionStatus" class="muted hidden"></p>
   </div>
 
   <div id="settingsFirstRunBanner" class="callout callout--warning hidden">
@@ -494,7 +560,6 @@
   <div class="settings-group">
     <div class="settings-group__header">
       <h2>General</h2>
-      <p class="muted">Shared by both Rebuild Collection and Update Collection.</p>
     </div>
 
     <h3 class="settings-section-title">Appearance</h3>
@@ -523,6 +588,46 @@
         <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsDownloadsInput">Browse&hellip;</button>
       </div>
     </div>
+    <div class="field-group">
+      <label class="field-label" for="settingsStateInput">Vortex database path (leave blank to auto-detect)</label>
+      <div class="path-input-row">
+        <input id="settingsStateInput" class="input input--wide" type="text" placeholder="auto-detected under %APPDATA%\Vortex\state.v2">
+        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsStateInput">Browse&hellip;</button>
+      </div>
+    </div>
+
+    <h3 class="settings-section-title">Vortex database backups</h3>
+    <p class="muted">Shared by both Update Collection and Rules Generator, since both write to Vortex's database. <strong>Delete all backups</strong> removes them permanently. <strong>Restore</strong> lets you bring your database back to an earlier backup if something goes wrong.</p>
+    <div class="field-group">
+      <label class="field-label" for="settingsMaxStateBackupsInput">Number of backups to keep (blank = unlimited, requires manual deletion)</label>
+      <input id="settingsMaxStateBackupsInput" class="input input--small" type="number" min="1" step="1" placeholder="unlimited">
+    </div>
+    <div class="view-actions">
+      <button id="settingsStateDeleteBackupsBtn" class="btn btn--ghost btn--small">Delete all backups</button>
+      <button id="settingsStateRestoreBtn" class="btn btn--ghost btn--small">Restore</button>
+      <span id="settingsStateDeleteBackupsStatus" class="muted"></span>
+    </div>
+    <div id="settingsStateRestoreResultActions" class="view-actions hidden">
+      <span class="muted">Restored backup</span>
+      <button id="settingsStateRevealRestoredBtn" class="btn btn--ghost btn--small">Reveal</button>
+      <span class="muted" title="A safety backup taken automatically right before this restore, in case you need to undo it">Safety backup</span>
+      <button id="settingsStateRevealPreRestoreBtn" class="btn btn--ghost btn--small">Reveal</button>
+    </div>
+
+    <h3 class="settings-section-title">Logs</h3>
+    <p class="muted">Where this app's run logs are stored. Each tool that keeps logs gets its own subfolder here. Leave blank to use the built-in default. Path changes require a server restart.</p>
+    <div class="field-group">
+      <label class="field-label" for="settingsLogsDirInput">Log file location</label>
+      <div class="path-input-row">
+        <input id="settingsLogsDirInput" class="input input--wide" type="text" placeholder="Default: this app's own logs folder">
+        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsLogsDirInput">Browse&hellip;</button>
+      </div>
+    </div>
+    <div class="view-actions">
+      <button id="settingsOpenLogsBtn" class="btn btn--ghost btn--small">Open Logs Folder</button>
+      <button id="settingsDeleteLogsBtn" class="btn btn--ghost btn--small">Delete all logs</button>
+      <span id="settingsDeleteLogsStatus" class="muted"></span>
+    </div>
 
     <h3 class="settings-section-title">Server</h3>
     <p class="muted">Changes here require the server restart. This server has no login/authentication of its own, so leave the host as <code>127.0.0.1</code> unless you specifically want another device on your network to reach it.</p>
@@ -537,7 +642,8 @@
       </div>
     </div>
     <div class="callout callout--warning" style="margin-top: 14px;">
-      Only change the host if you understand the risk: anything other than <code>127.0.0.1</code> or <code>localhost</code> exposes this tool -- with full read/write access to your mod files and Vortex state -- to your whole network, with no password protecting it.
+      <div class="callout__title">&#9888; Important Security Warning</div>
+      Only change the host if you know what you're doing! Setting this to anything other than <code>127.0.0.1</code> or <code>localhost</code> exposes this tool—and gives full read and write access to your mod files and Vortex state—to everyone on your local network without password protection.
     </div>
     <div class="field-group">
       <label class="checkbox">
@@ -556,6 +662,13 @@
     <p class="muted">Stored as plain text in the <code>config.json</code> file. Not encrypted, anyone with access to this machine/user account could read it directly from the file.</p>
     <div class="view-actions">
       <button id="settingsClearNexusKeyBtn" class="btn btn--ghost btn--small">Clear stored key</button>
+    </div>
+
+    <div class="field-group" style="margin-top: 14px;">
+      <label class="checkbox">
+        <input type="checkbox" id="settingsHideVortexVersionWarningInput">
+        Don't warn me at startup if my installed Vortex version is untested
+      </label>
     </div>
   </div>
 
@@ -604,8 +717,8 @@
     </div>
     <p class="muted">
       When enabled, Force Extract will automatically extract any off-site mod archive that you have
-      downloaded, instead of skipping that mod. Note: Vortex might show this a new mod and ask for you
-      to import, make sure you do.
+      downloaded, instead of skipping that mod. Note: Vortex might show this as a new mod and ask you
+      to import it -- make sure you do.
     </p>
 
     <h3 class="settings-section-title">Performance</h3>
@@ -642,33 +755,11 @@
         <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsSyncBackupRootInput">Browse&hellip;</button>
       </div>
     </div>
-    <div class="field-group">
-      <label class="field-label" for="settingsStateInput">Vortex database path (leave blank to auto-detect)</label>
-      <div class="path-input-row">
-        <input id="settingsStateInput" class="input input--wide" type="text" placeholder="auto-detected under %APPDATA%\Vortex\state.v2">
-        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsStateInput">Browse&hellip;</button>
-      </div>
-    </div>
-    <div class="field-group" style="margin-top: 14px;">
-      <label class="checkbox">
-        <input type="checkbox" id="settingsHideVortexVersionWarningInput">
-        Don't warn me at startup if my installed Vortex version is untested
-      </label>
-    </div>
-
     <h3 class="settings-section-title">Collection snapshot backups</h3>
     <p class="muted">Collection backups created from the 'Create Backup' option.</p>
     <div class="view-actions">
       <button id="settingsSyncDeleteBackupsBtn" class="btn btn--ghost btn--small">Delete all backups</button>
       <span id="settingsSyncDeleteBackupsStatus" class="muted"></span>
-    </div>
-
-    <h3 class="settings-section-title">Vortex database backups</h3>
-    <p class="muted"><strong>Delete all backups</strong> removes them permanently. <strong>Restore</strong> lets you bring your database back to an earlier backup if something goes wrong.</p>
-    <div class="view-actions">
-      <button id="settingsStateDeleteBackupsBtn" class="btn btn--ghost btn--small">Delete all backups</button>
-      <button id="settingsStateRestoreBtn" class="btn btn--ghost btn--small">Restore</button>
-      <span id="settingsStateDeleteBackupsStatus" class="muted"></span>
     </div>
   </div>
 
@@ -689,6 +780,17 @@
   </div>
 </div>
 
+<div id="settingsStopServerModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Stop the server?</h2>
+    <p>This shuts the server down completely. You'll need to run <code>start-server.bat</code> (or <code>start-server.ps1</code>) yourself to use this app again.</p>
+    <div class="modal-actions">
+      <button id="settingsStopServerCancelBtn" class="btn btn--ghost">Cancel</button>
+      <button id="settingsStopServerConfirmBtn" class="btn btn--primary">Stop Server</button>
+    </div>
+  </div>
+</div>
+
 <div id="settingsDeleteBackupsModal" class="modal-overlay hidden">
   <div class="modal">
     <h2>Delete all backups?</h2>
@@ -696,6 +798,17 @@
     <div class="modal-actions">
       <button id="settingsDeleteBackupsCancelBtn" class="btn btn--ghost">Cancel</button>
       <button id="settingsDeleteBackupsConfirmBtn" class="btn btn--primary">Delete All</button>
+    </div>
+  </div>
+</div>
+
+<div id="settingsDeleteLogsModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Delete all logs?</h2>
+    <p id="settingsDeleteLogsModalText"></p>
+    <div class="modal-actions">
+      <button id="settingsDeleteLogsCancelBtn" class="btn btn--ghost">Cancel</button>
+      <button id="settingsDeleteLogsConfirmBtn" class="btn btn--primary">Delete All</button>
     </div>
   </div>
 </div>
@@ -748,6 +861,7 @@
     <button id="reports-sub-stats" class="btn btn--primary btn--small">Stats Report</button>
     <button id="reports-sub-workthrough" class="btn btn--ghost btn--small">Work Through Report</button>
     <button id="reports-sub-updatecompare" class="btn btn--ghost btn--small">Update Compare Report</button>
+    <button id="reports-sub-rulesgen" class="btn btn--ghost btn--small">Rules Generator Report</button>
   </div>
 
   <div id="reports-sub-area-stats">
@@ -813,7 +927,120 @@
   </div>
   <iframe id="updateCompareFrame" class="hidden" title="Update Compare Report" style="width: 100%; height: 75vh; border: 1px solid var(--border); border-radius: var(--radius); margin-top: 12px;"></iframe>
   </div>
+
+  <div id="reports-sub-area-rulesgen" class="hidden">
+  <p class="muted">See what's already set up correctly between two collections, and what still needs a look.</p>
+
+  <div class="collection-picker">
+    <select id="rgReportOldSelect" class="select">
+      <option value="">-- Original collection --</option>
+    </select>
+    <select id="rgReportNewSelect" class="select">
+      <option value="">-- New collection --</option>
+    </select>
+    <button id="rgReportGenerateBtn" class="btn btn--primary" disabled>Generate Report</button>
+  </div>
+  <div id="rgReportEmpty" class="empty-row hidden"></div>
+
+  <div id="rgReportCriticalError" class="callout callout--critical hidden"></div>
+  <div id="rgReportLoading" class="loading-row hidden"><span class="spinner"></span> Reading Vortex's database&hellip;</div>
+
+  <div id="rgReportResults" class="hidden">
+    <div class="summary-badges" id="rgReportSummaryBadges"></div>
+    <p class="muted" id="rgReportResolvedNote"></p>
+
+    <h2 class="settings-section-title badge badge--success">Completed</h2>
+    <p class="muted">These mods already have their rules set up correctly.</p>
+    <ul id="rgReportCompletedList" class="sync-result-list"></ul>
+
+    <h2 class="settings-section-title badge badge--warning">Exceptions</h2>
+    <p class="muted">These need a bit more attention before everything's fully resolved.</p>
+
+    <h3 class="settings-section-title">Needs a decision</h3>
+    <p class="muted">More than one mod in the original collection could be the real match for these &mdash; head to Rules Generator to pick the right one for each.</p>
+    <ul id="rgReportNeedsDecisionList" class="sync-result-list"></ul>
+
+    <h3 class="settings-section-title">Old version still installed</h3>
+    <p class="muted">These mods were upgraded to a newer version in the new collection, but the older version is also still installed in Vortex. If you don't need it anymore, removing or disabling it there should clear up any leftover conflicts you see.</p>
+    <ul id="rgReportLeftoverList" class="sync-result-list"></ul>
+  </div>
+  </div>
 </main>
+</section>
+
+<section id="area-rules-generator" class="tool-area hidden">
+<main class="app-main">
+  <div class="view-header">
+    <h1>Rules Generator</h1>
+    <p class="muted">Copies conflict rules from a mod in your original collection onto its higher-resolution counterpart in a new collection, so you don't have to resolve the same conflicts twice. Review what would change below, then apply it to Vortex whenever you're ready.</p>
+  </div>
+
+  <div class="collection-picker">
+    <select id="rgOldCollectionSelect" class="select">
+      <option value="">-- Original collection --</option>
+    </select>
+    <select id="rgNewCollectionSelect" class="select">
+      <option value="">-- New collection --</option>
+    </select>
+    <button id="rgAnalyzeBtn" class="btn btn--primary" disabled>Find matching rules</button>
+  </div>
+  <div id="rgEmpty" class="empty-row hidden"></div>
+
+  <div id="rgCriticalError" class="callout callout--critical hidden"></div>
+  <div id="rgLoading" class="loading-row hidden"><span class="spinner"></span> Reading Vortex's database&hellip;</div>
+
+  <div id="rgResults" class="hidden">
+    <div class="summary-badges" id="rgSummaryBadges"></div>
+
+    <div class="view-actions" style="margin-bottom: 20px;">
+      <button id="rgApplyBtn" class="btn btn--primary">Apply to Vortex</button>
+      <span id="rgApplyStatus" class="muted"></span>
+    </div>
+
+    <!-- Success, not info -- the write genuinely completed at this point. Kept separate from
+         rgApplyStatus (which is only for transient in-progress/error text) so it persists on
+         screen instead of being overwritten by the next status update. No backup-folder mention
+         here -- backup folder access (Reveal/Restore) lives only in Settings, never on a
+         completion screen (confirmed 2026-07-27: "no one would ever need to access the backup
+         folder from the completion page"). -->
+    <div id="rgApplyDoneInfo" class="callout callout--success hidden" style="margin-bottom: 20px;">
+      <div class="callout__title">&#10003; Complete</div>
+      <p id="rgApplyDoneText"></p>
+    </div>
+
+    <div class="rg-section-header-row" id="rgReadySectionHeaderRow">
+      <h2 id="rgReadySectionTitle" class="settings-section-title badge badge--success">Ready to copy</h2>
+      <button id="rgExpandAllReadyBtn" type="button" class="badge badge--neutral badge--clickable">Expand all</button>
+    </div>
+    <p class="muted">We matched these mods with high confidence based on their names and existing rules. Feel free to click any mod to check or edit its rules&mdash;just like in Vortex's rule editor. Anything pointing to an older version of a mod has already been automatically updated to point to the new one!</p>
+    <div id="rgReadyList"></div>
+
+    <div class="rg-section-header-row" id="rgReviewSectionHeaderRow">
+      <h2 id="rgReviewSectionTitle" class="settings-section-title badge badge--warning">Needs your input</h2>
+      <button id="rgExpandAllReviewBtn" type="button" class="badge badge--neutral badge--clickable">Expand all</button>
+    </div>
+    <p class="muted">More than one mod in the original collection could be the real match for these &mdash; pick the right one for each. Nothing here is guessed automatically.</p>
+    <div id="rgReviewList"></div>
+
+    <h2 id="rgNoLinkSectionTitle" class="settings-section-title badge badge--neutral">Nothing to do</h2>
+    <p class="muted">Added to the new collection with no relationship to anything in the original one &mdash; nothing needed here.</p>
+    <ul id="rgNoLinkList" class="sync-result-list"></ul>
+  </div>
+</main>
+
+<!-- Same shared "message + Cancel/Confirm" shape as Update Collection's own syncApplyConfirmModal
+     -- this one gates the "Apply to Vortex" write specifically. -->
+<div id="rgApplyConfirmModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Confirm</h2>
+    <p id="rgApplyConfirmModalText"></p>
+    <div class="modal-actions">
+      <button id="rgApplyConfirmModalCancel" class="btn btn--ghost">Cancel</button>
+      <button id="rgApplyConfirmModalOk" class="btn btn--primary">Confirm</button>
+    </div>
+  </div>
+</div>
+
 </section>
 
 <!-- Outside every .tool-area on purpose, same reason as #unsavedChangesModal below -- these were
@@ -858,11 +1085,14 @@
   </div>
 </div>
 
+<script src="status-labels.js"></script>
 <script src="shell.js"></script>
 <script src="app.js"></script>
 <script src="sync-app.js"></script>
 <script src="settings-app.js"></script>
 <script src="stats-app.js"></script>
 <script src="work-through-app.js"></script>
+<script src="rules-generator-app.js"></script>
+<script src="reports-rulesgen-app.js"></script>
 </body>
 </html>
