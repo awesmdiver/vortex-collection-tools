@@ -18,7 +18,7 @@
 const { execFileSync } = require('child_process');
 const path = require('path');
 
-const refs = require('./vortex-source-refs.json').refs;
+const refs = require('../vortex-source-refs.json').refs;
 
 function latestCommitFor(repo, filePath) {
     const out = execFileSync(

@@ -25,6 +25,7 @@ const { createSyncRouter } = require('./sync-routes');
 const { createSettingsRouter } = require('./settings-routes');
 const { createStatsRouter } = require('./stats-routes');
 const { createWorkThroughRouter } = require('./work-through-routes');
+const { createRulesGeneratorRouter } = require('./rules-generator-routes');
 const { loadSyncLib } = require('../lib/collection-runner');
 const appConfig = require('../lib/app-config');
 
@@ -92,6 +93,7 @@ function main() {
     app.use('/api/settings', createSettingsRouter());
     app.use('/api/stats', createStatsRouter());
     app.use('/api/work-through', createWorkThroughRouter());
+    app.use('/api/rules-generator', createRulesGeneratorRouter(config));
 
     // Settings page's "Restart Now" button -- spawns a fresh, fully independent instance of this
     // same server (same args this one was launched with, forcing --no-open since a browser tab is
@@ -109,8 +111,13 @@ function main() {
                 done = true;
                 const respawnArgs = process.argv.slice(2).filter((a) => a !== '--no-open');
                 respawnArgs.push('--no-open');
+                // windowsHide: true -- without it, a detached console-subsystem process (node.exe)
+                // spawned on Windows gets its own new console window, which flashes visibly on
+                // screen for a moment before settling into the background. Confirmed live 2026-07-27:
+                // the respawned server (and, before this fix, the browser-opening cmd.exe spawn
+                // below) both did this on every Settings-triggered restart.
                 spawn(process.execPath, [__filename, ...respawnArgs], {
-                    cwd: process.cwd(), stdio: 'ignore', detached: true,
+                    cwd: process.cwd(), stdio: 'ignore', detached: true, windowsHide: true,
                 }).unref();
                 process.exit(0);
             };
@@ -159,7 +166,7 @@ function main() {
             console.log(`(bound to ${config.host} -- REACHABLE FROM THE NETWORK. This server has no authentication; anyone who can reach it has full control of your mod files.)`);
         }
         if (config.open) {
-            spawn('cmd.exe', ['/c', 'start', '', browseUrl], { stdio: 'ignore', detached: true }).unref();
+            spawn('cmd.exe', ['/c', 'start', '', browseUrl], { stdio: 'ignore', detached: true, windowsHide: true }).unref();
         }
     });
 

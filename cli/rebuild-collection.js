@@ -19,11 +19,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const runner = require('./lib/collection-runner');
-const { selectFromList, confirm, requireVortexClosed, closeInteractive } = require('./lib/interactive');
-const { findSevenZip } = require('./lib/sevenzip');
-const appConfig = require('./lib/app-config');
-const nexusModDownload = require('./lib/nexus-mod-download');
+const runner = require('../lib/collection-runner');
+const { selectFromList, confirm, requireVortexClosed, closeInteractive } = require('../lib/interactive');
+const { findSevenZip } = require('../lib/sevenzip');
+const appConfig = require('../lib/app-config');
+const nexusModDownload = require('../lib/nexus-mod-download');
 
 let syncLib;
 try {
@@ -152,12 +152,13 @@ async function main() {
     }
 
     const runTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const logPath = path.join(__dirname, 'logs', `rebuild-${collectionInfo.modId}-${runTimestamp}.json`);
+    const logsDir = appConfig.getLogsDir('rebuild-collection');
+    const logPath = path.join(logsDir, `rebuild-${collectionInfo.modId}-${runTimestamp}.json`);
     const startedAt = new Date().toISOString();
 
     const { modEntries, rebuildQueue } = await runner.buildPlan({
         removedMods, keptMods, knownVortexModIds, resumed, otherVersionsByModId, sharedWithCollectionsByKey,
-        downloadsDir: args.downloads, stagingDir: args.staging, sevenZipExe, logsDir: path.join(__dirname, 'logs'),
+        downloadsDir: args.downloads, stagingDir: args.staging, sevenZipExe, logsDir,
         downloadMissingArchivesEnabled: fileConfig.downloadMissingArchives,
     });
 
@@ -225,7 +226,7 @@ async function main() {
             if (downloadedMods.length > 0) {
                 const newItems = await runner.reclassifyDownloadedMods({
                     downloadedMods, modEntries, knownVortexModIds, otherVersionsByModId, sharedWithCollectionsByKey,
-                    downloadsDir: args.downloads, stagingDir: args.staging, sevenZipExe, logsDir: path.join(__dirname, 'logs'),
+                    downloadsDir: args.downloads, stagingDir: args.staging, sevenZipExe, logsDir,
                 });
                 rebuildQueue.push(...newItems);
             }

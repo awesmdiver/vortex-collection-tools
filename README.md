@@ -10,8 +10,9 @@
 
 Vortex works fine for a small mod list, but at real scale (1,000+ mods) it freezes, forgets your
 settings, and burns hours on installs and updates. Vortex Collection Tools runs alongside Vortex to
-fix its two biggest pain points: rebuilding a collection when files go missing or corrupted, and
-updating a collection without losing track of every mod you'd marked Ignored or Disabled.
+fix its biggest pain points: rebuilding a collection when files go missing or corrupted, updating a
+collection without losing track of every mod you'd marked Ignored or Disabled, and keeping your
+custom mod-order rules intact when a collection gets updated.
 
 ### 📋 At a Glance
 
@@ -30,6 +31,9 @@ updating a collection without losing track of every mod you'd marked Ignored or 
   even run your PC out of memory. This tool extracts the same files — including FOMOD installer
   choices — outside of Vortex, at full speed. ⚡ Turn on parallel extraction (up to 8 mods at once)
   under Settings to cut that time down further, typically 2-3x faster depending on your drive.
+* **Pause a rebuild and pick it up later:** Extracting 1,000+ mods can take a while. Pause partway
+  through, close the app, and resume right where you left off whenever you're ready — nothing
+  already finished gets redone.
 * **Downloads missing mods for you:** No more manually hunting down missing archive files on Nexus
   one by one. If you have Nexus Premium, this tool detects what's missing and downloads the exact
   version your collection needs, automatically.
@@ -37,6 +41,11 @@ updating a collection without losing track of every mod you'd marked Ignored or 
   mods you'd marked Ignored or Disabled, leaving you to dig through a list of 1,900+ mods to turn
   off the same 35 again. This tool snapshots those choices before the update and restores them
   automatically once it's done — no manual cleanup.
+* **Rebuilds your custom mod-order rules after an update:** Updating a collection can leave the
+  "load after"-style rules you'd set up pointing at nothing. Rules Generator matches your old rules
+  to their counterparts in the updated collection automatically — even auto-updating a rule that
+  used to point at an older version of a mod — so you're not manually re-linking hundreds of mods
+  by hand.
 * **Fixes broken and missing files instantly:** Whether caused by accidental deletion, Windows
   errors, or an unexpected Vortex deployment hiccup, this tool identifies missing or corrupted
   files and extracts fresh copies straight from your archives to get mods working again.
@@ -80,8 +89,9 @@ just clicking that window's **X** button — all three shut it down the same cle
 > ("Use newer file" / "Save all changes").
 
 > [!CAUTION]
-> Update Collection writes directly to Vortex's live database. It takes a full backup automatically
-> before every write, but keeping a second, independent backup of your own never hurts.
+> Update Collection and Rules Generator's **Apply to Vortex** step both write directly to Vortex's
+> live database. Each takes a full backup automatically before every write, but keeping a second,
+> independent backup of your own never hurts.
 
 ---
 
@@ -102,8 +112,9 @@ just clicking that window's **X** button — all three shut it down the same cle
 
 * **Q: Does Rebuild Collection write to Vortex's database?**
   > **No.** Rebuild Collection only ever touches your mod staging folder, using a crash-safe
-  > swap so an interruption never leaves a half-extracted mod in place. Only Update Collection
-  > writes to Vortex's database, and always backs it up in full first.
+  > swap so an interruption never leaves a half-extracted mod in place. Update Collection and Rules
+  > Generator's **Apply to Vortex** step are the only two that write to Vortex's database, and both
+  > always back it up in full first.
 
 ---
 

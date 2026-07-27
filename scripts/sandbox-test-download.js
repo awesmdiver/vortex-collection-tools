@@ -28,10 +28,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const runner = require('./lib/collection-runner');
-const { locateArchive } = require('./lib/archive-locator');
-const nexusModDownload = require('./lib/nexus-mod-download');
-const appConfig = require('./lib/app-config');
+const runner = require('../lib/collection-runner');
+const { locateArchive } = require('../lib/archive-locator');
+const nexusModDownload = require('../lib/nexus-mod-download');
+const appConfig = require('../lib/app-config');
 
 function parseArgs(argv) {
     const args = { collectionModId: null, sandboxDownloads: null, modName: null, allMissing: false, clean: false };

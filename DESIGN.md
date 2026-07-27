@@ -77,6 +77,18 @@ Outside of that four-color system, plain grey (`--text-muted` / `.muted`) is for
 text with **no severity implied at all** — most of this app's body copy. Never invent a one-off color
 for a status; pick one of the four above, or use plain muted grey if nothing is actually wrong.
 
+## Header nav ordering and Settings' icon treatment (2026-07-26)
+
+Main nav order (left to right): Rebuild Collection, Update Collection, Rules Generator, Reports.
+**Settings is not in this row** — it's a one-and-done config page, not a workflow tab you switch
+between like the others, so it lives as a small gear icon (`.settings-gear-btn`, reusing the same
+`&#9881;` glyph as the header's own logo) at the header's far right, in a `.app-header__right`
+wrapper alongside the page-label breadcrumb. It still shares the `.nav-tab`/`id="nav-settings"`
+plumbing shell.js's generic `TOOL_AREAS` loop expects (click handling, active-state toggling) —
+only the visual treatment differs. When adding a new top-level workflow area, add it to the main
+nav row in this same left-to-right ordering convention (newest addition goes right of Update
+Collection, before Reports) — Settings is the one and only exception that goes in the icon slot.
+
 ## Core components — reuse these, don't reinvent them
 
 - **Buttons**: `.btn--primary` (the one action to take on this screen), `.btn--ghost` (secondary /
@@ -109,7 +121,21 @@ for a status; pick one of the four above, or use plain muted grey if nothing is 
 - **Tables**: `.plan-table` inside `.plan-table-wrap`, always — every data table in this app, no
   exceptions, including inside a server-rendered report loaded in an iframe.
 - **Forms**: `.field-group` + `.field-label` above an `.input`/`.select` variant; `.checkbox` for any
-  toggle.
+  toggle (works for a radio `<input>` too — same flex-row + accent-color styling, no
+  checkbox-specific shape is forced).
+- **In-app reference link**: `.rg-mod-link` — accent-colored, underline-on-hover only, opens a
+  read-only reference view in a real separate window (`window.open('', ...)` + a directly-written
+  document, since there's no static URL to point at — the content comes from data already in memory
+  client-side) rather than navigating anywhere. Updated 2026-07-26: this used to open an in-page
+  modal overlay; the user clarified they want a genuine separate OS-level window so it can stay open
+  alongside the tool for comparison, same as `.mod-name-link`'s external-link windows below — just
+  with client-rendered content instead of a server URL. The two link classes stay visually distinct
+  (different styling) since their content source differs, but both now share the same "force a real
+  window, not a tab" mechanism.
+- **Rules Generator review choice**: `.rg-choice-row` inside a `.settings-group` card — one
+  radio-pair choice ("which of these two is right?"), used whenever a rule could point at either
+  an original-collection mod or its new-collection counterpart. Reuse this for any future
+  "pick between two known options" choice rather than inventing another pattern.
 - **Links**: `.mod-name-link` / `.archive-link` (accent-colored, no underline for mod-name links, no
   default browser purple/blue) for anything that links out (typically to Nexus).
 
@@ -147,6 +173,16 @@ document.querySelectorAll('.mod-name-link').forEach((a) => {
 Any new external link added to this app (a mod page, a Nexus profile, anything leaving the app)
 should copy this exact `.mod-name-link` + click-handler pattern rather than a bare `target="_blank"`
 anchor — that's what actually produces a separate window instead of a tab.
+
+**Gotcha confirmed live (2026-07-26): drop `noopener` for a window you need to keep writing into.**
+`.mod-name-link` gets away with `noopener` because it only ever sets a static `href` and never touches
+the window again afterward. `.rg-mod-link` (Rules Generator's "Current rules for X" reference view,
+`rgOpenOldRulesWindow` in `rules-generator-app.js`) has no URL — it opens a blank window and writes
+generated HTML into it via the returned reference (`win.document.write(...)`). With `noopener` set,
+Chrome still opens the window but hands script back `null` for the reference — the window pops open
+and stays permanently blank, since `document.write()` never gets a chance to run. Any future
+"open a window and write dynamic content into it" case (as opposed to "open a window at a known URL")
+must omit `noopener` for the same reason.
 
 ## Reports must be indistinguishable from each other
 

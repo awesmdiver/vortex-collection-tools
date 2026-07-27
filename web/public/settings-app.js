@@ -71,7 +71,9 @@ async function loadSettings() {
   $g('settingsBackupRootInput').value = cfg.backupRoot || '';
   $g('settingsSyncBackupRootInput').value = cfg.syncBackupRoot || '';
   $g('settingsStateInput').value = cfg.state || '';
+  $g('settingsLogsDirInput').value = cfg.logsDir || '';
   $g('settingsMaxBackupsInput').value = cfg.maxBackupsToKeep != null ? cfg.maxBackupsToKeep : '';
+  $g('settingsMaxStateBackupsInput').value = cfg.maxStateBackupsToKeep != null ? cfg.maxStateBackupsToKeep : '';
   $g('settingsConcurrencyInput').value = cfg.concurrentExtractions || 1;
   $g('settingsServerPortInput').value = cfg.serverPort || 4321;
   $g('settingsServerHostInput').value = cfg.serverHost || '127.0.0.1';
@@ -142,9 +144,62 @@ async function restartServerAndWait(newOrigin) {
     if (target === location.origin) location.reload();
     else location.href = target;
   } else {
-    statusEl.textContent = 'Server did not come back within 20s -- check the terminal it was started from.';
+    statusEl.textContent = "Server didn't come back within 20s -- check the terminal it was started from.";
   }
 }
+
+// ---------- Header: Restart Server / Stop Server ----------
+// Standalone versions of the same restart mechanics above, for when the user just wants to pick up
+// a server-side code change (or a hung state) with nothing in Settings actually changed -- the
+// Save-triggered restart flow above only ever fires when result.restartRequired comes back true,
+// which never happens here. Reuses waitForServerBack (already defined above) but reports to this
+// header's own status line/buttons rather than the Save button's, since that's what the user
+// actually clicked.
+function setServerActionStatus(text) {
+  const el = $g('settingsServerActionStatus');
+  el.textContent = text;
+  el.classList.toggle('hidden', !text);
+}
+
+$g('settingsRestartServerBtn').addEventListener('click', async () => {
+  $g('settingsRestartServerBtn').disabled = true;
+  $g('settingsStopServerBtn').disabled = true;
+  setServerActionStatus('Restarting server…');
+  try {
+    await settingsApi('POST', '/api/settings/restart-server');
+  } catch {
+    // The connection can drop/reset mid-response once the server actually starts closing --
+    // expected here, not a real failure. Proceed to polling regardless.
+  }
+  const backUp = await waitForServerBack(20000, location.origin);
+  if (backUp) {
+    setServerActionStatus('Server restarted.');
+    location.reload();
+  } else {
+    $g('settingsRestartServerBtn').disabled = false;
+    $g('settingsStopServerBtn').disabled = false;
+    setServerActionStatus("Server didn't come back within 20s -- check the terminal it was started from.");
+  }
+});
+
+$g('settingsStopServerBtn').addEventListener('click', () => {
+  $g('settingsStopServerModal').classList.remove('hidden');
+});
+$g('settingsStopServerCancelBtn').addEventListener('click', () => {
+  $g('settingsStopServerModal').classList.add('hidden');
+});
+$g('settingsStopServerConfirmBtn').addEventListener('click', async () => {
+  $g('settingsStopServerModal').classList.add('hidden');
+  $g('settingsRestartServerBtn').disabled = true;
+  $g('settingsStopServerBtn').disabled = true;
+  setServerActionStatus('Stopping server…');
+  try {
+    await settingsApi('POST', '/api/shutdown');
+  } catch {
+    // Same expected mid-shutdown connection drop as the restart flow above.
+  }
+  setServerActionStatus('Server stopped. Run start-server.bat (or start-server.ps1) to use this app again.');
+});
 
 // ---------- Save ----------
 // Extracted into a plain function (not just the button's click handler) so shell.js's "unsaved
@@ -173,7 +228,9 @@ async function saveSettings() {
       backupRoot: $g('settingsBackupRootInput').value,
       syncBackupRoot: $g('settingsSyncBackupRootInput').value,
       state: $g('settingsStateInput').value,
+      logsDir: $g('settingsLogsDirInput').value,
       maxBackupsToKeep: $g('settingsMaxBackupsInput').value === '' ? null : Number($g('settingsMaxBackupsInput').value),
+      maxStateBackupsToKeep: $g('settingsMaxStateBackupsInput').value === '' ? null : Number($g('settingsMaxStateBackupsInput').value),
       concurrentExtractions: Number($g('settingsConcurrencyInput').value) || 1,
       serverPort: Number($g('settingsServerPortInput').value) || 4321,
       serverHost: $g('settingsServerHostInput').value,
@@ -266,11 +323,11 @@ $g('settingsDeleteBackupsBtn').addEventListener('click', async () => {
       return;
     }
     if (count === 0) {
-      statusEl.textContent = `No backups found in "${backupRoot}".`;
+      statusEl.textContent = 'No backups found.';
       return;
     }
     $g('settingsDeleteBackupsModalText').textContent =
-      `This will permanently delete ${count} backup${count === 1 ? '' : 's'} from "${backupRoot}".`;
+      `This will permanently delete ${count} backup${count === 1 ? '' : 's'}.`;
     $g('settingsDeleteBackupsModal').classList.remove('hidden');
   } catch (e) {
     if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
@@ -286,6 +343,45 @@ $g('settingsDeleteBackupsConfirmBtn').addEventListener('click', async () => {
   try {
     const { deletedCount } = await settingsApi('POST', '/api/settings/delete-backups');
     statusEl.textContent = deletedCount > 0 ? `Deleted ${deletedCount} backup${deletedCount === 1 ? '' : 's'}.` : 'Nothing to delete.';
+  } catch (e) {
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+  }
+});
+
+// ---------- Logs (Open Logs Folder / Delete all logs) ----------
+$g('settingsOpenLogsBtn').addEventListener('click', async () => {
+  const statusEl = $g('settingsDeleteLogsStatus');
+  try {
+    await settingsApi('POST', '/api/settings/open-logs-folder');
+  } catch (e) {
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+  }
+});
+$g('settingsDeleteLogsBtn').addEventListener('click', async () => {
+  const statusEl = $g('settingsDeleteLogsStatus');
+  try {
+    const { count } = await settingsApi('GET', '/api/settings/logs-info');
+    if (count === 0) {
+      statusEl.textContent = 'No logs found.';
+      return;
+    }
+    $g('settingsDeleteLogsModalText').textContent =
+      `This will permanently delete ${count} log file${count === 1 ? '' : 's'}.`;
+    $g('settingsDeleteLogsModal').classList.remove('hidden');
+  } catch (e) {
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+  }
+});
+$g('settingsDeleteLogsCancelBtn').addEventListener('click', () => {
+  $g('settingsDeleteLogsModal').classList.add('hidden');
+});
+$g('settingsDeleteLogsConfirmBtn').addEventListener('click', async () => {
+  const statusEl = $g('settingsDeleteLogsStatus');
+  $g('settingsDeleteLogsModal').classList.add('hidden');
+  statusEl.textContent = 'Deleting…';
+  try {
+    const { deletedCount } = await settingsApi('POST', '/api/settings/delete-logs');
+    statusEl.textContent = deletedCount > 0 ? `Deleted ${deletedCount} log file${deletedCount === 1 ? '' : 's'}.` : 'Nothing to delete.';
   } catch (e) {
     if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
   }
@@ -389,13 +485,26 @@ $g('settingsStateRestoreConfirmBtn').addEventListener('click', async () => {
   const backupDir = $g('settingsStateRestoreSelect').value;
   if (!backupDir) return;
   $g('settingsStateRestoreModal').classList.add('hidden');
+  $g('settingsStateRestoreResultActions').classList.add('hidden');
   statusEl.textContent = 'Restoring…';
   try {
     const { restoredFrom, preRestoreBackupDir } = await settingsApi('POST', '/api/sync/restore-state', { backupDir });
-    statusEl.textContent = `Restored from "${restoredFrom}". The database as it was just before this restore was itself backed up to "${preRestoreBackupDir}".`;
+    // No raw paths in the status text -- the Reveal buttons below represent each location instead.
+    statusEl.textContent = 'Restored successfully. A safety backup of your database from right before this restore was also saved.';
+    $g('settingsStateRevealRestoredBtn').dataset.path = restoredFrom;
+    $g('settingsStateRevealPreRestoreBtn').dataset.path = preRestoreBackupDir;
+    $g('settingsStateRestoreResultActions').classList.remove('hidden');
   } catch (e) {
     // Server already returns a clear, complete message either way (including the 409
     // vortex-running case) -- no special-casing needed here.
     if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
   }
+});
+$g('settingsStateRevealRestoredBtn').addEventListener('click', () => {
+  const p = $g('settingsStateRevealRestoredBtn').dataset.path;
+  if (p) settingsApi('POST', '/api/rebuild/reveal', { targetPath: p }).catch(() => {});
+});
+$g('settingsStateRevealPreRestoreBtn').addEventListener('click', () => {
+  const p = $g('settingsStateRevealPreRestoreBtn').dataset.path;
+  if (p) settingsApi('POST', '/api/rebuild/reveal', { targetPath: p }).catch(() => {});
 });

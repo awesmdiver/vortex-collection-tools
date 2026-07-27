@@ -11,8 +11,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const runner = require('./lib/collection-runner');
-const appConfig = require('./lib/app-config');
+const runner = require('../lib/collection-runner');
+const appConfig = require('../lib/app-config');
 
 const fileConfig = appConfig.loadConfig();
 
@@ -55,7 +55,7 @@ async function main() {
         state, collectionModId: args.collectionModId, collection: collectionInfo.collection,
     });
 
-    const sevenZipExe = require('./lib/sevenzip').findSevenZip();
+    const sevenZipExe = require('../lib/sevenzip').findSevenZip();
     const { rebuildQueue } = await runner.buildPlan({
         removedMods, keptMods, knownVortexModIds, resumed: null,
         downloadsDir: args.downloads, stagingDir: args.staging, sevenZipExe,

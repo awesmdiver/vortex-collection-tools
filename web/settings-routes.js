@@ -7,9 +7,26 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 const express = require('express');
 const appConfig = require('../lib/app-config');
 const { pickFolderAsync } = require('../lib/vortex-sync/win-dialog');
+
+// Every log file this project writes (currently only Rebuild Collection's) follows this exact
+// name shape -- same pattern used everywhere else a log filename is validated (rebuild-routes.js).
+// "Delete all logs" only ever removes files matching this, never a blind wipe of the whole folder,
+// in case a custom logsDir root is ever pointed at a folder shared with something else.
+const LOG_FILE_PATTERN = /^rebuild-.+\.json$/;
+
+function listLogFiles(dir) {
+    let entries;
+    try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+        return [];
+    }
+    return entries.filter((e) => e.isFile() && LOG_FILE_PATTERN.test(e.name)).map((e) => e.name);
+}
 
 // Every real backup-run folder this project ever creates is named "<collectionModId>-<runTimestamp>"
 // (see lib/collection-runner.js's runBackup(), and pruneOldBackups()'s own "<collectionModId>-"
@@ -29,7 +46,7 @@ function listBackupRunDirs(backupRoot) {
     return entries.filter((e) => e.isDirectory() && BACKUP_RUN_DIR_PATTERN.test(e.name)).map((e) => e.name);
 }
 
-const PATH_FIELDS = ['staging', 'downloads', 'backupRoot', 'syncBackupRoot', 'state'];
+const PATH_FIELDS = ['staging', 'downloads', 'backupRoot', 'syncBackupRoot', 'state', 'logsDir'];
 // No sensible blank/default state for these three -- Rebuild Collection can't scan a collection
 // without staging/downloads, and Update Collection can't save a backup without somewhere real
 // (not "wherever this project happens to think is a good place") to put it. backupRoot/state are
@@ -69,6 +86,19 @@ function createSettingsRouter() {
             } else {
                 const n = Number(raw);
                 patch.maxBackupsToKeep = Number.isFinite(n) ? Math.min(3, Math.max(0, Math.floor(n))) : null;
+            }
+        }
+        // Separate field, separate backup store (see app-config.js's own comment) -- null/blank
+        // means unlimited, same shape as maxBackupsToKeep, but no "0 = off" state since these
+        // backups aren't optional. Minimum of 1 if a number is given at all (0 would silently
+        // delete every safety backup right after it's taken, defeating the point).
+        if ('maxStateBackupsToKeep' in body) {
+            const raw = body.maxStateBackupsToKeep;
+            if (raw === null || raw === '' || raw === undefined) {
+                patch.maxStateBackupsToKeep = null;
+            } else {
+                const n = Number(raw);
+                patch.maxStateBackupsToKeep = Number.isFinite(n) ? Math.max(1, Math.floor(n)) : null;
             }
         }
         // Always a plain 1-8 integer -- unlike maxBackupsToKeep, there's no meaningful "unlimited"
@@ -152,6 +182,37 @@ function createSettingsRouter() {
             fs.rmSync(path.join(backupRoot, name), { recursive: true, force: true });
         }
         res.json({ deletedCount: dirs.length });
+    });
+
+    // Read-only count for the "Delete all logs" confirmation dialog, same reasoning as
+    // /backups-info above. Only Rebuild Collection writes logs today (getLogsDir('rebuild-collection')
+    // resolves to a flat logs/ folder in the default, unconfigured case) -- a future tool that starts
+    // logging should get its own subdir name here too, see TECHNICAL.md.
+    router.get('/logs-info', (req, res) => {
+        const logsRoot = appConfig.getLogsRoot();
+        const logsDir = appConfig.getLogsDir('rebuild-collection');
+        res.json({ logsRoot, count: listLogFiles(logsDir).length });
+    });
+
+    // Deletes every real log file under Rebuild Collection's logs subfolder -- permanent, no undo.
+    // Only touches files matching LOG_FILE_PATTERN; anything else in the folder is left alone.
+    router.post('/delete-logs', (req, res) => {
+        const logsDir = appConfig.getLogsDir('rebuild-collection');
+        const files = listLogFiles(logsDir);
+        for (const name of files) {
+            fs.rmSync(path.join(logsDir, name), { force: true });
+        }
+        res.json({ deletedCount: files.length });
+    });
+
+    // Opens the logs root folder itself in Explorer (navigates INTO it), unlike the Reveal buttons
+    // elsewhere in this app which select a specific file/folder within ITS parent -- there's no
+    // single file to select here, just "show me where these live."
+    router.post('/open-logs-folder', (req, res) => {
+        const logsRoot = appConfig.getLogsRoot();
+        fs.mkdirSync(logsRoot, { recursive: true });
+        spawn(`explorer.exe "${logsRoot}"`, { shell: true, detached: true, stdio: 'ignore' }).unref();
+        res.json({ ok: true });
     });
 
     return router;

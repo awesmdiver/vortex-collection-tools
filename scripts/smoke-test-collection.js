@@ -14,11 +14,16 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const { loadCollection } = require('./lib/collection-parser');
-const { locateArchive } = require('./lib/archive-locator');
-const { buildManifest } = require('./lib/hash-manifest');
-const { diffManifests } = require('./lib/diff-manifests');
-const appConfig = require('./lib/app-config');
+const { loadCollection } = require('../lib/collection-parser');
+const { locateArchive } = require('../lib/archive-locator');
+const { buildManifest } = require('../lib/hash-manifest');
+const { diffManifests } = require('../lib/diff-manifests');
+const appConfig = require('../lib/app-config');
+
+// extract-mod.js lives in lib/ (spawned as an isolated child process, same convention as
+// lib/rebuild-mod.js's own real spawn) -- this script itself lives in scripts/, so both the
+// spawned path and the cwd it's spawned with need to be project-root-relative, not __dirname-relative.
+const PROJECT_ROOT = path.join(__dirname, '..');
 
 const fileConfig = appConfig.loadConfig();
 
@@ -81,8 +86,8 @@ async function main() {
             fs.rmSync(outputDir, { recursive: true, force: true });
             execFileSync(
                 process.execPath,
-                ['extract-mod.js', mod.name, '--collection', args.collection, '--downloads', args.downloads, '--output', args.output],
-                { cwd: __dirname, stdio: 'pipe' }
+                ['lib/extract-mod.js', mod.name, '--collection', args.collection, '--downloads', args.downloads, '--output', args.output],
+                { cwd: PROJECT_ROOT, stdio: 'pipe' }
             );
 
             const ours = buildManifest(outputDir);

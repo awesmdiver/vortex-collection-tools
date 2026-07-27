@@ -15,14 +15,14 @@
 // `null`). All aggregation here must tolerate that identically to `null` and never assume presence.
 
 const express = require('express');
-const path = require('path');
 const { readAllLogs, getCurrentIssues } = require('../lib/log-aggregation');
+const appConfig = require('../lib/app-config');
 
 const PERIOD_DAYS = { '7d': 7, '30d': 30 };
 
 function createStatsRouter() {
     const router = express.Router();
-    const logsDir = path.join(__dirname, '..', 'logs');
+    const logsDir = appConfig.getLogsDir('rebuild-collection');
 
     router.get('/overview', (req, res) => {
         const period = req.query.period;

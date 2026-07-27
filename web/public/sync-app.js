@@ -120,11 +120,13 @@ function handleSyncApiError(e, targetEl, retryFn) {
     return true;
   }
   if (e.status === 409 && e.body && e.body.error === 'vortex-running') {
-    if (targetEl) {
-      showCriticalCallout(targetEl, 'Vortex is currently running. Close it completely, then retry.');
-    } else {
-      showVortexRunningModal(retryFn);
-    }
+    // Always the shared modal, same as isServerUnreachableError right above -- confirmed 2026-07-27:
+    // this used to fall back to an inline callout (styled critical/red, since that's the only style
+    // the target element's own CSS class supports) whenever a targetEl was passed, which made the
+    // exact same "Vortex is running" condition look like two different severities depending on
+    // which call site hit it. Nothing is actually wrong here (no error, no data at risk) -- it's a
+    // normal precondition, same category as the shared modal already treats it (modal--warning).
+    showVortexRunningModal(retryFn);
     return true;
   }
   return false;
@@ -183,6 +185,7 @@ function resetIgnoresDisablesPreviewState() {
   renderSyncList('syncIgnoresList', [], () => '');
   hideCriticalCallout($s('syncIgnoresCriticalError'));
   $s('syncResumeNextSteps').classList.add('hidden');
+  $s('syncResumeAlmostThere').classList.add('hidden');
   $s('syncDisablesApplyBtn').disabled = true;
   setSyncStatus($s('syncDisablesStatus'), PREVIEW_REQUIRED_HINT);
   renderSyncList('syncDisablesList', [], () => '');
@@ -210,10 +213,17 @@ function resetSyncStepsForNewCollection() {
   $s('syncBackupNothingToDoInfo').classList.add('hidden');
   hideCriticalCallout($s('syncBackupCriticalError'));
   $s('syncCollectionStaleError').classList.add('hidden');
-  // Deliberately NOT touched here -- this field is never pre-populated from currentCollection.modId
-  // (that id is exactly what Vortex reassigns the moment the collection is updated to a newer
-  // revision, so pre-filling it would show a stale id as if it were still correct). The ONLY place
-  // that ever writes into this field is the Preview handler below, and only when it's blank.
+  renderBackupRatioWarning(0, 0, null);
+  renderBackupFreshnessWarning(null);
+  // Cleared to blank, never pre-filled with a value -- confirmed live 2026-07-27: a collection id
+  // typed/auto-filled for a DIFFERENT collection was still sitting in this field after switching to
+  // a new one, which would have silently run Apply Ignores against the wrong collection entirely.
+  // Blank is the correct reset target: it's the field's own "figure out the current id for me"
+  // state (see the Preview handler below), not a value we could pre-populate ourselves -- the right
+  // id is exactly what Vortex reassigns the moment a collection is updated, so filling in anything
+  // here ourselves could just as easily show a stale id as if it were still correct.
+  $s('syncNewModIdInput').value = '';
+  modIdIsAutoFilled = false;
   resetIgnoresDisablesPreviewState();
 }
 
@@ -238,6 +248,27 @@ async function refreshCurrentCollectionModId() {
   return { oldModId, newModId: match.modId, changed };
 }
 
+// Vortex's own installed-collection folder-naming convention: <name>-<nexusModId>-<revisionNumber>-
+// <timestamp> -- a collection's "version" (unlike a regular mod's) is always a bare revision
+// integer with no dots, so the revision is reliably the middle one of the trailing 3 numeric
+// segments, and the timestamp (Unix seconds) is the last. Confirmed live 2026-07-27 against two
+// real, known collections (the user's own "GTS Legacy Lite", folder
+// "GTS-Legacy-Lite-740011-38-1784372126", confirmed revision 38; "GTS Community Edition", folder
+// "...-745517-90-1784965974", confirmed revision 90 AND its timestamp independently confirmed to
+// convert to 7/25/2026, matching what the user already knew) and consistent across every other
+// installed collection's folder name seen this session. This is when VORTEX downloaded/installed
+// this specific revision, not necessarily the exact moment the collection author published it on
+// Nexus (there could be a gap if the user updated some time after publishing) -- close enough for
+// this purpose, and the only signal available without an extra live Nexus API call per collection.
+// Returns null fields (never a wrong guess) if the folder name doesn't match this shape.
+function extractRevisionInfo(modId) {
+  const match = /-(\d+)-(\d+)-(\d+)$/.exec(modId || '');
+  if (!match) return { revision: null, installedAt: null };
+  const timestampSeconds = Number(match[3]);
+  const installedAt = Number.isFinite(timestampSeconds) ? new Date(timestampSeconds * 1000) : null;
+  return { revision: match[2], installedAt };
+}
+
 async function loadSyncCollections() {
   try {
     const { collections } = await syncApi('GET', '/api/sync/collections');
@@ -252,7 +283,13 @@ async function loadSyncCollections() {
     }
     $s('syncCollectionEmpty').classList.add('hidden');
     for (const c of collections) {
-      select.appendChild(elS('option', { value: c.modId }, `${c.name} (${c.modCount} mods)`));
+      const { revision, installedAt } = extractRevisionInfo(c.modId);
+      let revisionText = '';
+      if (revision) {
+        revisionText = `, Rev ${revision}`;
+        if (installedAt) revisionText += ` (${installedAt.toLocaleDateString()})`;
+      }
+      select.appendChild(elS('option', { value: c.modId }, `${c.name} (${c.modCount} mods${revisionText})`));
     }
   } catch (e) {
     if (!handleSyncApiError(e, null, loadSyncCollections)) {
@@ -441,10 +478,71 @@ $s('syncListModsBtn').addEventListener('click', () => {
 
 // ---------- Phase 1: Backup (run BEFORE clicking Update in Vortex) ----------
 
+// A nudge, not a blocker -- confirmed live 2026-07-27: a real backup captured 685 disabled mods out
+// of 884 total (the user had simply forgotten to re-enable a big batch before backing up). The count
+// itself is never wrong, just easy to not notice is disproportionate, so anything over this share of
+// the collection gets called out inline rather than silently accepted. 3% chosen against real data
+// points from the user's own collections (40 ignored out of ~1900 is normal/expected; 685 of 884
+// disabled clearly wasn't).
+const BACKUP_RATIO_WARNING_THRESHOLD = 0.03;
+
+// Returns null when nothing looks disproportionate (the common case) or total is unknown (a very
+// old/unreadable collection.json -- see sync-routes.js's totalCount), otherwise a ready-to-render
+// warning message covering whichever of ignored/disabled tripped the threshold.
+function buildBackupRatioWarning(ignoredCount, disabledCount, totalCount) {
+  if (!totalCount) return null;
+  const flagged = [
+    { label: 'Disabled', count: disabledCount },
+    { label: 'Ignored', count: ignoredCount },
+  ].filter((f) => f.count / totalCount > BACKUP_RATIO_WARNING_THRESHOLD);
+  if (flagged.length === 0) return null;
+  const pct = (count) => Math.round((count / totalCount) * 100);
+  const parts = flagged.map((f) => `${f.count} of your ${totalCount} mods (${pct(f.count)}%) marked **${f.label}**`);
+  return `That's ${parts.join(' and ')} -- a bigger share than usual. If that's not what you meant, hop back into Vortex and fix it up before moving on to the next step.`;
+}
+
+function renderBackupRatioWarning(ignoredCount, disabledCount, totalCount) {
+  const el = $s('syncBackupRatioWarning');
+  const message = buildBackupRatioWarning(ignoredCount, disabledCount, totalCount);
+  if (!message) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="callout__title">&#9888; Double-check this</div>${renderCriticalMessage(message)}`;
+  el.classList.remove('hidden');
+}
+
+function renderBackupFreshnessWarning(message) {
+  const el = $s('syncBackupFreshnessWarning');
+  if (!message) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="callout__title">&#9888; Double-check this</div>${renderCriticalMessage(message)}`;
+  el.classList.remove('hidden');
+}
+
+// Fire-and-forget, called right after a backup already succeeded -- deliberately never awaited by
+// the click handler below, since this is a bonus check that must never delay "Backup created!" from
+// showing. Confirmed live 2026-07-27: Vortex can close before finishing its own save, leaving mods
+// that were just re-enabled/disabled still showing their OLD status in the numbers captured above.
+// See TECHNICAL.md's WAL-exclusion write-up and sync-runner.js's checkBackupFreshness for the full
+// mechanism -- this never changes the backup's actual saved numbers, only adds a warning on top.
+async function checkBackupFreshnessAsync(collectionModId, profileId) {
+  try {
+    const result = await syncApi('POST', '/api/sync/backup/check-freshness', { collectionModId, profileId });
+    if (result.checked && result.stale) {
+      renderBackupFreshnessWarning(
+        "Vortex may have closed before saving your most recent changes, so this might not be fully up to date. " +
+        "Reopen Vortex, wait a few seconds (or click **Refresh** on the 'Added Collections' page), close it again, " +
+        'and run **Create Backup** once more to be sure.'
+      );
+    }
+  } catch {
+    // Best-effort only -- never surface an error for this (see checkBackupFreshness's own comment).
+  }
+}
+
 $s('syncBackupBtn').addEventListener('click', async () => {
   const statusEl = $s('syncBackupStatus');
   $s('syncCollectionStaleError').classList.add('hidden');
   hideCriticalCallout($s('syncBackupCriticalError'));
+  renderBackupRatioWarning(0, 0, null);
+  renderBackupFreshnessWarning(null);
   if (!currentCollection) { setSyncStatus(statusEl, 'Choose a collection first.'); return; }
   const collectionModId = currentCollection.modId;
   const profileId = $s('syncProfileSelect').value || undefined;
@@ -455,11 +553,13 @@ $s('syncBackupBtn').addEventListener('click', async () => {
   try {
     const result = await syncApi('POST', '/api/sync/backup', { collectionModId, profileId });
     setSyncStatus(statusEl, result.ignoredCount === 0 && result.disabledCount === 0
-      ? 'Backup created — no ignored or disabled mods for this collection, nothing to preserve.'
-      : `Backup created — ${result.ignoredCount} ignored mod(s), ${result.disabledCount} disabled mod(s) captured. Continue to step 2, 'Apply Ignores' below.`);
+      ? "Backup created! No ignored or disabled mods were found for this collection, so there's nothing extra to save."
+      : `Backup created! We saved ${result.ignoredCount} ignored mod(s) (and ${result.disabledCount} disabled mod(s)). Check out the "Next steps in Vortex" section below to finish setting things up.`);
+    renderBackupRatioWarning(result.ignoredCount, result.disabledCount, result.totalCount);
     showBackupNextSteps(result.ignoredCount, result.disabledCount);
     await loadSyncBackups();
     currentBackup = mostRecentBackupFor(currentCollection.name);
+    checkBackupFreshnessAsync(collectionModId, profileId);
   } catch (e) {
     // Rare, real case: the collection moved on to a newer revision since this page loaded --
     // reloading is the only real fix (everything on this page needs to be re-read fresh, not just
@@ -534,7 +634,6 @@ $s('syncIgnoresPreviewBtn').addEventListener('click', async () => {
   if (!backup) { setSyncStatus(statusEl, 'Create a backup in Step 1 first, or restore a backup to use an existing one.'); return; }
   setSyncStatus(statusEl, 'Checking…');
   $s('syncIgnoresApplyBtn').disabled = true;
-  let refreshNote = '';
   try {
     // A BLANK field, OR one still holding OUR OWN previous auto-fill (never edited by the user
     // since), means "figure out the current collection id for me" -- pulled fresh every time,
@@ -554,7 +653,6 @@ $s('syncIgnoresPreviewBtn').addEventListener('click', async () => {
       modId = resolved.newModId;
       modIdInput.value = modId;
       modIdIsAutoFilled = true;
-      refreshNote = ' (collection id detected automatically)';
     }
     const result = await syncApi('POST', '/api/sync/apply-ignores/preview', { modId, backupPath: backup.filePath });
     // Combined into one list, newly-ignored first then any removed-by-the-author ones -- so the
@@ -568,7 +666,6 @@ $s('syncIgnoresPreviewBtn').addEventListener('click', async () => {
     if (result.unmatched?.length > 0) {
       text += ` ${result.unmatched.length} mod(s) removed by the update.`;
     }
-    text += refreshNote;
     setSyncStatus(statusEl, text);
     // Distinct from the normal "removed by the update" explanation above -- see lib.js's
     // identityDriftWarning: this means the "removed"/"unmatched" counts above may not reflect real
@@ -593,12 +690,12 @@ $s('syncIgnoresApplyBtn').addEventListener('click', async () => {
   const count = lastIgnoresChangedCount;
   const collectionName = currentCollection?.name || modId;
   const confirmed = await showSyncApplyConfirmModal(
-    `This sets ${count} mod(s) to ignored for the collection "${collectionName}". A full backup is taken first, then this writes directly to Vortex's database.`
+    `Sets ${count} mod(s) to ignored for the "${collectionName}" collection. We'll take a full backup first, then write the changes directly to Vortex.`
   );
   if (!confirmed) return;
   const btn = $s('syncIgnoresApplyBtn');
   btn.disabled = true;
-  setSyncStatus(statusEl, "Writing to Vortex's live state…");
+  setSyncStatus(statusEl, "Writing to Vortex's database…");
   try {
     const result = await syncApi('POST', '/api/sync/apply-ignores/apply', { modId, backupPath: backup.filePath });
     const changedItems = result.changed.map((c) => ({ name: c.name, removed: false }));
@@ -609,7 +706,23 @@ $s('syncIgnoresApplyBtn').addEventListener('click', async () => {
     doneText += ' Vortex database was updated and backed up.';
     setSyncStatus(statusEl, doneText);
     if (result.identityWarning) showCriticalCallout($s('syncIgnoresCriticalError'), result.identityWarning);
+    // Step 3 (Apply Disables) has nothing to do when this backup captured zero disabled mods to
+    // begin with -- already known from the backup's own content (currentBackup.disabled, loaded
+    // with the rest of the backup list), no need to wait for the user to click Preview in Step 3
+    // just to find out. Same "captured no disabled mods" signal apply-disables/preview already uses.
+    // The "close Vortex completely" step only matters as a hand-off into that skipped Step 3, so it
+    // gets hidden too in that case, not just reworded -- otherwise it'd be a pointless instruction
+    // with nothing after it to close Vortex FOR. Hiding an <ol> item renumbers the rest
+    // automatically, so this correctly becomes "2. You can skip..." rather than staying "3.".
+    // With nothing left to do in THIS tool, syncResumeAlmostThere's own callout closes out the flow
+    // with a plain reminder to double-check things in Vortex itself before actually playing.
+    const nothingToDisable = (backup.disabled?.length ?? 0) === 0;
+    $s('syncResumeCloseVortexStep').classList.toggle('hidden', nothingToDisable);
+    $s('syncResumeStep3Text').textContent = nothingToDisable
+      ? "You can skip Step 3 since you don't have any mods to disable."
+      : "Continue to step 3, 'Apply Disables' below.";
     $s('syncResumeNextSteps').classList.remove('hidden');
+    $s('syncResumeAlmostThere').classList.toggle('hidden', !nothingToDisable);
   } catch (e) {
     setSyncStatus(statusEl, '');
     if (!handleSyncApiError(e, $s('syncIgnoresCriticalError'))) {
@@ -654,16 +767,16 @@ $s('syncDisablesApplyBtn').addEventListener('click', async () => {
   const statusEl = $s('syncDisablesStatus');
   hideCriticalCallout($s('syncDisablesCriticalError'));
   if (!backup) return;
-  if (!backup.profileId) { setSyncStatus(statusEl, 'This backup has no profile recorded -- cannot apply disables.'); return; }
+  if (!backup.profileId) { setSyncStatus(statusEl, "This backup has no profile recorded -- can't apply disables."); return; }
   const disablesCount = $s('syncDisablesList').children.length;
   const disablesCollectionName = currentCollection?.name || backup.collectionName || '';
   const disablesConfirmed = await showSyncApplyConfirmModal(
-    `This sets ${disablesCount} mod(s) to disabled for the collection "${disablesCollectionName}". A full backup is taken first, then this writes directly to Vortex's database.`
+    `Sets ${disablesCount} mod(s) to disabled for the "${disablesCollectionName}" collection. We'll take a full backup first, then write the changes directly to Vortex.`
   );
   if (!disablesConfirmed) return;
   const btn = $s('syncDisablesApplyBtn');
   btn.disabled = true;
-  setSyncStatus(statusEl, "Writing to Vortex's live state…");
+  setSyncStatus(statusEl, "Writing to Vortex's database…");
   try {
     const result = await syncApi('POST', '/api/sync/apply-disables/apply', { profileId: backup.profileId, backupPath: backup.filePath });
     renderSyncList('syncDisablesList', result.changed, (c) => c.name);

@@ -34,7 +34,10 @@ function startRun({ runId, collectionModId }) {
 function emit(event) {
     // Runs use a richer set of "this is done" markers than the generic session's default
     // `event.done` -- translate them here so sse-session.js stays free of run-specific knowledge.
-    const done = event.type === 'run-complete' || event.type === 'run-error';
+    // 'paused' (a confirmed pause, not just a pause-requested/pause-cancelled blip) is a done event
+    // too -- it releases the single-run guard so a DIFFERENT collection can be started while this
+    // one sits paused, which is exactly the point of supporting more than one paused collection.
+    const done = event.type === 'run-complete' || event.type === 'run-error' || event.type === 'paused';
     session.emit({ ...event, done, error: event.type === 'run-error' });
 }
 

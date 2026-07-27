@@ -17,9 +17,9 @@
 // when related.
 
 const express = require('express');
-const path = require('path');
 const { getCurrentIssues } = require('../lib/log-aggregation');
 const { makeKey, setCompleted, pruneToKeys } = require('../lib/work-through-state');
+const appConfig = require('../lib/app-config');
 
 // A FAILED_EXTRACTION_* row with archiveNotFound is the SAME underlying problem as SKIP_NO_ARCHIVE
 // (the archive genuinely isn't there), just discovered later, at actual extraction time instead of
@@ -62,7 +62,7 @@ function resolveKindFor(m) {
 
 function createWorkThroughRouter() {
     const router = express.Router();
-    const logsDir = path.join(__dirname, '..', 'logs');
+    const logsDir = appConfig.getLogsDir('rebuild-collection');
 
     router.get('/list', (req, res) => {
         const { collections } = getCurrentIssues(logsDir);

@@ -214,10 +214,31 @@ function createSyncRouter(config) {
         try {
             const snapshot = await runner.captureBackupSnapshot({ stateDir: state, stagingDir: staging, collectionModId, profileId });
             const filePath = runner.saveBackupSnapshot(snapshot, syncBackupRoot);
-            res.json({ ok: true, filePath, ignoredCount: snapshot.ignored.length, disabledCount: snapshot.disabled.length });
+            // oldMods is the full collection.json member list (null only if it couldn't be read) --
+            // the denominator the UI needs to flag an ignored/disabled COUNT that's fine on its own
+            // but way out of proportion for the collection's actual size (see sync-app.js's
+            // buildBackupRatioWarning).
+            res.json({
+                ok: true, filePath,
+                ignoredCount: snapshot.ignored.length,
+                disabledCount: snapshot.disabled.length,
+                totalCount: snapshot.oldMods ? snapshot.oldMods.length : null,
+            });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
+    });
+
+    // Best-effort follow-up ONLY -- meant to be called right after /backup succeeds. Never throws a
+    // real error to the client (see runner.checkBackupFreshness's own comment): worst case is
+    // { checked: false }, which the UI just treats as "no freshness warning to show", not a failure.
+    // No vortexRunningGate -- if Vortex somehow got reopened between the two calls, the underlying
+    // read just fails and checkBackupFreshness swallows it the same as any other error.
+    router.post('/backup/check-freshness', async (req, res) => {
+        const { collectionModId, profileId } = req.body || {};
+        if (!collectionModId) return res.status(400).json({ error: 'collectionModId is required.' });
+        const result = await runner.checkBackupFreshness({ stateDir: state, collectionModId, profileId });
+        res.json(result);
     });
 
     // Phase 2 dry-run -- read-only, safe to call any time. The Vortex-version-compat check used to

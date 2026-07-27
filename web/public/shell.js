@@ -5,7 +5,7 @@
 // index.html; this only toggles which one is visible. app.js and sync-app.js each own their own
 // internal view-state exactly as before -- this file knows nothing about either.
 
-const TOOL_AREAS = ['rebuild', 'sync', 'settings', 'reports'];
+const TOOL_AREAS = ['rebuild', 'sync', 'settings', 'reports', 'rules-generator'];
 let currentArea = null;
 
 // "What page am I on" was genuinely hard to tell across several of this app's pages -- confirmed
@@ -109,7 +109,7 @@ fetch('/api/settings')
   })
   .catch(() => {});
 
-const AREA_LABELS = { rebuild: 'Rebuild Collection', sync: 'Update Collection', settings: 'Settings', reports: 'Reports' };
+const AREA_LABELS = { rebuild: 'Rebuild Collection', sync: 'Update Collection', settings: 'Settings', reports: 'Reports', 'rules-generator': 'Rules Generator' };
 
 function showToolArea(id) {
   currentArea = id;
@@ -118,6 +118,11 @@ function showToolArea(id) {
     document.getElementById(`nav-${a}`).classList.toggle('nav-tab--active', a === id);
   }
   setPageLabel(AREA_LABELS[id] || '');
+  // Every area shares the same page-level scroll (no per-area scroll container -- see styles.css),
+  // so switching areas otherwise leaves you at whatever scrollY the PREVIOUS area was at instead of
+  // landing at the top of the new one. Confirmed live 2026-07-27: clicking the Settings nav icon
+  // while scrolled partway down another page dropped you mid-Settings instead of at its top.
+  window.scrollTo(0, 0);
 }
 
 // Resolves 'save' or 'discard' -- shown only when navigating away from Settings with unsaved
