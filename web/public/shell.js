@@ -5,7 +5,7 @@
 // index.html; this only toggles which one is visible. app.js and sync-app.js each own their own
 // internal view-state exactly as before -- this file knows nothing about either.
 
-const TOOL_AREAS = ['rebuild', 'sync', 'settings', 'reports', 'rules-generator'];
+const TOOL_AREAS = ['rebuild', 'sync', 'settings', 'reports', 'rules-generator', 'utilities'];
 let currentArea = null;
 
 // "What page am I on" was genuinely hard to tell across several of this app's pages -- confirmed
@@ -109,7 +109,7 @@ fetch('/api/settings')
   })
   .catch(() => {});
 
-const AREA_LABELS = { rebuild: 'Rebuild Collection', sync: 'Update Collection', settings: 'Settings', reports: 'Reports', 'rules-generator': 'Rules Generator' };
+const AREA_LABELS = { rebuild: 'Rebuild Collection', sync: 'Update Collection', settings: 'Settings', reports: 'Reports', 'rules-generator': 'Rules Generator', utilities: 'Utilities' };
 
 function showToolArea(id) {
   currentArea = id;

@@ -1373,141 +1373,224 @@ Verified: the slice/delete logic against 5 synthetic backup folders correctly ke
 deleted the 3 oldest; the real, no-op case (`maxToKeep` set to the actual current count) against the
 9 real backups this session's own testing had accumulated correctly deleted zero.
 
+## Vortex Scrub (Utilities area)
+
+Finds staging folders and downloaded archives Vortex has no real relationship with anymore --
+inevitable after heavy testing/reinstalling (`Utilities > Vortex Scrub`, `lib/cleanup-scan.js` +
+`web/cleanup-routes.js` + `web/public/cleanup-app.js`). Originally built under Reports and named
+"Clean Up report" (this section keeps that old name in a few internal identifiers below,
+e.g. `lib/cleanup-scan.js`, `#cleanupResultsList` -- renaming those has no user-facing effect and
+wasn't done); moved to its own top-level **Utilities** nav area and renamed **Vortex Scrub**
+2026-07-27, per this project's own pre-existing "New Utilities section" idea (see the old **Future
+work** entry, now in the workspace `TODO.md`) -- it *does things* (delete/exclude), unlike
+everything actually left under Reports, which is read-only.
+
+**Triggered by a real, live example** (2026-07-27): the user found mods in Vortex's own list showing
+their raw modId-version-timestamp as the display name (e.g.
+`College Curriculum - Faction Requirement-79929-1-0-0-1670095062`) instead of a friendly name.
+Confirmed via `diagnostics/inspect-mod-by-name.js` (see that file's own header for a real bug it
+surfaced along the way) against the live `state.v2`: Vortex had silently auto-adopted the
+unrecognized staging folder into a bare `mods###` entry -- `installationPath` = the folder name,
+`state: "installed"`, `type: ""` -- with **no `archiveId`, no `attributes.customFileName`, no
+`attributes.collectionSlug`, no download record, no rich metadata of any kind**. Compared side by
+side against a normal, properly-linked mod (`Alchemy Station Variants - FOMOD`), which has all of
+those. That comparison is exactly what "no relationship with a downloaded mod or collection" means
+in code below.
+
+**Orphan criteria** (`lib/cleanup-scan.js`):
+- **Scan Staging**: a staging-dir folder is an exception if either (a) no `mods###skyrimse###`
+  entry has this `installationPath` at all, or (b) one does, but has no `archiveId` AND no
+  `attributes###collectionSlug` (the ghost-mod case above).
+- **Scan Archives**: a downloads-dir file is an exception if no `downloads###files###` entry has
+  this `localPath`, regardless of that download's own `state` (a record referencing the filename
+  means Vortex knows about it, complete or not). Files still mid-download are skipped entirely via
+  Vortex's own `__vortex_tmp_` prefix (`TEMP_DOWNLOAD_PREFIX`,
+  `Nexus-Mods/Vortex`'s `download_management/util/downloadNames.ts`) -- they legitimately have no
+  download record yet and are not orphans.
+
+**Confidence split -- exceptions vs. needsReview** (added 2026-07-27, same session, after a live
+test against real data caught this before it shipped): criterion (b) above -- "has a mod entry but
+no archive/collection" -- cannot tell a truly-abandoned mod apart from a deliberate,
+no-archive-by-design "fake mod" a generator tool creates. Confirmed live: running Scan Staging for
+real flagged not just the College Curriculum example but also `DynDOLOD Output`, `TexGen Output`,
+`PGPatcher Output`, `Pandora Output`, `My Patches Output`, `Ini-Settings Output`, and several
+`vortex_collection_*` folders (Vortex's own internal Workshop-tab storage) -- all share the exact
+same no-archive/no-collection signature as a genuine orphan, but deleting any of them would silently
+break LOD/bodies/patches with no Vortex-level warning (they're not collection members, so the user's
+stated "Vortex would flag it" safety net does not cover this case). The user's own fix, applied
+directly: Vortex's download-naming convention always ends a name in
+`-<modId>-<version parts>-<10-digit unix timestamp>` (`RECOGNIZED_DOWNLOAD_NAME_PATTERN`,
+`/-\d+(?:-\d+)*-\d{10}$/`) -- a hand-named tool-output folder never does. So every orphan candidate
+now splits into:
+- **`exceptions`** -- name matches the download-naming pattern -- confident, goes through the normal
+  bulk Delete Selected/Delete All flow described below.
+- **`needsReview`** -- name does NOT match -- shown in its own "Action Needed: Unrecognized
+  Folders/Archives Found" callout, ABOVE the confident list, with its own checkbox list and four
+  actions: Delete Checked, Delete All, Exclude Checked, Exclude All -- every one of the four still
+  goes through a confirmation dialog, per the user's explicit "if in doubt, ask -- never silently
+  assume either delete or keep."
+- **`vortex_collection_*`** folders are hard-excluded from BOTH buckets entirely (never shown as a
+  candidate of any kind) -- reuses the exact `/^vortex_collection_/i` pattern already established
+  elsewhere in this project (`vortex-sync/lib.js`, `state-query-worker.js`).
+- **Deliberately conservative, on purpose**: a real download whose version string contains letters
+  (e.g. `"1.0RC2"`) also won't match `RECOGNIZED_DOWNLOAD_NAME_PATTERN` and lands in `needsReview`
+  instead of `exceptions` -- a false negative here just means one more manual confirmation click, the
+  safe direction. The dangerous direction (wrongly treating a real tool-output folder as
+  confidently-safe-to-bulk-delete) is what this split exists to prevent.
+
+**A second, distinct `needsReview` label -- "Possible manual download?"** (confirmed real
+2026-07-27): Vortex has a SECOND naming shape for archives that reach the downloads folder outside
+its own "Download with Manager" flow (the user manually downloaded from Nexus's website, or moved a
+file straight into the folder) -- space-separated, ending in an ISO-ish timestamp plus a random
+alphanumeric suffix (`"Portalmaster 186656 1.0 2026-07-27T19-43Z hfH9s6oFY.rar"`,
+`MANUAL_DOWNLOAD_NAME_PATTERN`, `/\d{4}-\d{2}-\d{2}T\d{2}-\d{2}Z [A-Za-z0-9]+$/`). Confirmed this
+shape can ALSO appear on a genuinely Vortex-tracked download (`"Variadic Collision Dynamics..."`
+earlier this same session had a real `downloads###` record) -- it's a naming-convention hint, not
+proof of being an orphan. Only applied to items ALREADY in `needsReview` (no `downloads###`/mod
+record at all): those get an inline `-- Possible manual download?` label instead of the generic
+"unrecognized format" framing, since the likely real-world cause differs from a hand-named
+tool-output folder (DynDOLOD Output, etc.) -- still goes through the exact same Delete/Exclude
+actions and confirmation, just better-explained. Confirmed rare/edge-case by the user themselves, so
+kept as a lightweight per-item label (`item.hint`) rather than a separate section or bucket.
+
+**Permanent exclude list** -- once the user confirms a `needsReview` item is legitimate (e.g. their
+own `DynDOLOD Output`) via Exclude Checked/All, its exact name is added to a list and filtered out
+of every future scan entirely -- it won't even reach the `needsReview` bucket again.
+
+- **Storage location is user-chosen, not baked in** (`lib/cleanup-exclude-store.js`, a
+  `{staging: [...], archives: [...]}` JSON file named `exclude-list.json`, living in whatever folder
+  `config.json`'s `cleanupExcludeListDir` points at). This field is a **required** path, no
+  built-in-default fallback, mirroring Update Collection's `syncBackupRoot` treatment rather than
+  `backupRoot`/`logsDir`/`state`'s "optional, falls back to a default" one -- standing rule
+  confirmed by the user 2026-07-27 (see `feedback_user_configurable_storage_paths` memory): every
+  NEW data location this project adds must be a path the user explicitly picks, never a silent
+  default, going forward (the three pre-existing optional ones weren't retrofitted). Like
+  `staging`/`downloads`/`backupRoot`, only the FOLDER is baked into the startup `config` object
+  (`web/server.js`) and requires a restart to change -- the list file's actual CONTENTS are always
+  read fresh per-request (`excludeStore.load`), so adding/removing entries never needs a restart.
+- **Archive-side matching is extension-agnostic** (fixed 2026-07-27, caught by the user asking
+  "if I add the full file name including the extension, is it handled correctly?"): comparing raw
+  filenames would silently fail to match if a user typed an exclude entry without its `.7z`/`.rar`
+  extension (an easy, unannounced mistake via Settings' manual Add field -- the report's own
+  Exclude action always sends the full name with extension, so only manual entry was ever at risk).
+  Fixed by stripping the extension on BOTH sides before comparing
+  (`scanArchives`'s `ignored = new Set(ignoredNames.map(stripExt))`, compared against
+  `stripExt(file)`) -- matches regardless of whether the stored entry has an extension or not.
+  Verified with a real throwaway file: excluding by base name alone correctly suppressed the
+  extensioned file from the exceptions list.
+- **Settings UI** (`web/public/settings-app.js`): each side (staging/archives) is an expandable
+  `<details>` disclosure showing a live count in its `<summary>`, with the SAME checkbox +
+  Remove-Selected/Remove-All convention as Vortex Scrub's own exception lists (confirmed
+  2026-07-27: a lone "Remove" button per row wasn't wanted -- consistency with its own
+  pattern was). `POST /api/cleanup/ignored/remove` accepts a `names` array for bulk removal (kept
+  singular `name` too, unused by any current caller). Reuses `POST /api/cleanup/exclude` for the
+  manual "Add" field (same route the report's own Exclude actions call).
+
+**Cross-scan follow-up is a name match FIRST, then a real re-validation against Vortex's state --
+not name matching alone** (name-matching convention confirmed the same way as above; the
+re-validation requirement found live 2026-07-27, a real near-miss): after a delete from either
+side, the other location is checked for files/folders sharing that same exact base name (Vortex
+always names a staging folder identically to its source archive's filename minus the extension,
+even when a friendly `customFileName` exists). **A name match alone used to be treated as proof,
+but isn't** -- confirmed via a real case: deleting the ghost-mod staging folder
+`Andrealletius' Renaming Project` cross-matched `Andrealletius' Renaming Project.zip` in the
+downloads folder purely by name, and the "delete this too?" prompt would have offered to delete it
+-- but that archive turned out to have a genuine, real `downloads###files###...` record (a
+separate, actually-Vortex-tracked download that just happens to share the same base name by
+coincidence). The user clicked Skip; had they clicked Delete, a legitimate archive would have been
+deleted. Fixed: `crossCheck` is now async and re-validates every name-matched candidate against
+Vortex's real state (the same per-side orphan check `scanStaging`/`scanArchives` already use)
+before including it in the results -- a name match is now necessary but not sufficient, exactly
+like it should have been from the start. Requires Vortex closed, same as the scans themselves
+(previously cross-check had no state dependency at all).
+
+**No backup/quarantine before delete** -- confirmed explicitly with the user: these are always
+Vortex-recoverable (re-download from Nexus, or re-extract via Rebuild Collection), and if something
+deleted actually still mattered AS A COLLECTION MEMBER, Vortex itself would flag the affected
+collection as incomplete. That safety net does NOT cover non-collection "fake mods" like generator
+tool output -- exactly why the confidence split above exists, so those get an extra human
+confirmation step instead of being silently trusted the same as a real collection-member orphan. A
+plain confirmation dialog before every delete is still required and never skipped regardless of
+which bucket (mirrors `web/public/settings-app.js`'s "Delete all backups" flow: fetch a real count
+first, bake it into the confirm text, no vague "are you sure?").
+
+**"Uninstalled Mods Detected" notice (Scan Archives only, added 2026-07-27)**: a lightweight,
+informational (not warning) callout shown above the results when `scanArchives` finds any archive
+that Vortex fully recognizes (a real `downloads###files###` record exists) but where no
+currently-installed mod actually uses that download anymore. Confirmed scope explicitly by the user:
+this has no staging equivalent -- "if a mod is extracted, it would show either enabled or disabled,
+never uninstalled." Triggered by a real, verified example: the user asked to check
+`OWL - NordwarUA Variants Patch-50057-1-2-1622411906` in the live `state.v2` and expected it flagged
+"uninstalled" -- confirmed via direct queries: no `mods###` entry exists for that modId at all, but
+its `downloads###files###UHZEYK94mi-z` record still exists with a **stale** `installed###modId`
+back-reference to the deleted mod.
+
+- **Detection is a reverse lookup, never trusting the download's own `installed` field**: a
+  download's `installed###modId` can go stale (the mod it names was later uninstalled/removed, and
+  Vortex never clears the download's own back-reference). The robust check instead asks "does ANY
+  `mods###skyrimse###<modId>###archiveId` currently equal this download's id?" (`usedArchiveIds`, a
+  `Set` built once per scan from every mod's own `archiveId`) -- confirmed against the real OWL
+  example: no mod anywhere referenced `UHZEYK94mi-z` via `archiveId`, proving it's genuinely orphaned
+  regardless of what its own stale field claims. A real, separate bug caught live the same day: the
+  raw `archiveId` value in `state.v2` is JSON-encoded (a quoted string), same as `installationPath`/
+  `localPath` elsewhere in this function -- comparing it unparsed against a download's own bare key id
+  silently never matched ANYTHING, flagging every archive as orphaned (including known-good installed
+  mods like `(0) Alchemy Station Variants - FOMOD`). Fixed by `JSON.parse`-ing it, matching the
+  convention already used for every other field in `readModsAndDownloads`.
+- **This started as a full per-archive list with friendly metadata (name/author/version) and its own
+  Delete Selected/Delete All UI, matched against Vortex's own Uninstalled/Never-Installed status --
+  scaled back to a plain boolean + static notice after a live investigation the same day.** The
+  detection logic above is correct and was verified end-to-end, but the exact COUNT could never match
+  what Vortex's own Mods table displays, and chasing that turned out to be a rabbit hole not worth
+  the complexity:
+  - Confirmed via Vortex's real source (`ModList.tsx`): a download only becomes a virtual row at all
+    if `state === 'finished'` AND its `game` field includes the current game mode -- reproduced this
+    exactly (`countsAsModRow` in `readModsAndDownloads`), but it changed the count by zero on the
+    user's real data (every flagged archive already passed both checks), so it wasn't the actual
+    explanation for an early over-count (96 archives found vs. the user's real 56 shown in Vortex).
+  - The REAL explanation, confirmed by reading Vortex's grouping code (`modGrouping.ts`): the Mods
+    table runs every mod/download through `groupMods(..., {groupBy: 'file'})`, which groups by
+    `attributes.modId` first, then by `fileMatch` (same `newestFileId`, or same `logicalFileName`
+    minus its version substring), then folds any non-enabled entries in that group onto whichever one
+    IS enabled via `byEnabled`. Net effect: an old, unused download of a mod you still have installed
+    under a newer file gets folded into that mod's own row as a version-choice in its dropdown (the
+    "113 (default)" / "111 (default)" picker the user showed a screenshot of for `GTS - Anniversary
+    Edition Full Upgrade Patch`) -- it is NOT shown as its own separate "Uninstalled" row at all.
+    Reproducing this exactly would mean re-implementing Vortex's full modId+file+enabled grouping
+    algorithm here, purely to make a number match a UI simplification that Vortex itself applies for
+    display purposes, not because those files are actually "the same thing" for a disk-cleanup tool.
+  - The user's own call after seeing this (2026-07-27): "the way Vortex handles these uninstall mods
+    is a mess... let's not go down this rabbit hole." Only ~3 mods in their real 4580+ archive library
+    ever actually show a version dropdown, confirming the exact-match problem was disproportionate to
+    the value of solving it.
+- **Final shape**: `scanArchives` returns a single `hasUninstalledArchives: boolean` (archives-only;
+  no per-item list, no metadata, no delete/exclude action here). The UI shows a plain
+  `callout--info` box, `#cleanupUninstalledNotice`, with static copy pointing the user to Vortex's own
+  Mods table Status filter (Uninstalled / Never Installed) as the actual source of truth for which
+  specific mods these are and what to do about them -- this tool's job stops at "there's something
+  worth checking," not at reproducing Vortex's own status page.
+
+**Full-DB iteration, no range-bounded prefix scan**: `readModsAndDownloads` uses an unbounded
+`db.iterator()` + regex match, mirroring `state-query-worker.js`'s `buildModVersionIndex` exactly.
+This is deliberate, not an oversight -- a `lt: prefix + '#'` bound looks like the obvious
+optimization but is a real trap: LevelDB/ClassicLevel key comparison is byte-lexicographic, and `#`
+(0x23) sorts BEFORE almost every real key-segment character (digits/letters are all higher), so that
+bound silently excludes nearly everything. Hit this exact bug while building
+`diagnostics/inspect-mod-by-name.js` during this feature's own research -- an early version reported
+0 of 4583 real mod entries because of it, fixed by switching to `gte: prefix` + a manual
+`startsWith`-then-`break` (or, here, no bound at all).
+
+**Delete route path safety**: `web/cleanup-routes.js`'s `/delete` resolves every given name against
+the configured staging/downloads root and confirms the result still lives DIRECTLY under that root
+(`path.dirname(full) === path.resolve(root)`) before ever calling `fs.rmSync` -- a malformed or
+crafted name (e.g. `../../something`) can never escape to an arbitrary filesystem path.
+
 ## Future work
 
-Eventually replacing Vortex's own slow "Resume" install step with this project's fast direct
-extraction, for the Update Collection flow too — so collection updates become as fast as rebuilds
-already are. Independently re-raised twice now (once during this project's own early design, once
-again later after noticing the "Resume is the slow step" wording on the Update Collection page) --
-a second, independent read on the same idea is a good sign it's worth pursuing seriously, not just
-a one-off thought. The likely division of labor: Rebuild Collection's engine does the actual
-SLOW part (archive extraction, FOMOD choice replay) directly to the staging folder -- the part
-this project already does fast -- while Vortex itself still handles anything this project doesn't
-replicate today (live FOMOD installer PROMPTS for a genuinely new mod with no prior recorded
-choices, and critically, registering the result as a tracked mod entry in its own state database).
-Real, unsolved blocker: Rebuild Collection's engine only ever touches the staging filesystem, with
-zero awareness of Vortex's state database; Vortex itself must still register any new/changed
-staging folder as a tracked mod entry (state-DB record, correct per-profile enabled state,
-load-order integration) — today only Vortex's own "Resume" step does this, and nothing in this
-project creates a brand-new mod entry from scratch. This needs its own research spike (reading
-Vortex's real installer source, the way `vortex-source-refs.json`/`check-vortex-source-drift.js`
-already do for the extraction side) before any design is attempted.
-
-Other open items, not yet started:
-- **`TESTED_VORTEX_VERSIONS` refreshed for 2.4.0** (2026-07-27, prompted by the user updating their
-  own Vortex to 2.4.0 stable): full re-diff of `Nexus-Mods/Vortex`'s real GitHub history from 2.3.0
-  through 2.4.0 stable (CHANGELOG.md + every PR merged in that range), specifically checking for
-  anything touching `persistent.mods`/`.rules`/`.profiles`/`.downloads` shape. Findings:
-  - Exactly one new migration since 2.3.0 — `healStoragePathNames_2_4` (2.4.0 beta.1→beta.2, `doQuery:
-    false` so it's silent, no dialog — matches the user's own "no migration of any kind" observation).
-    Repairs VALUES only: a beta.1 regression (LAZ-807) leaked CDN storage-path prefixes
-    (`"5c/d3/1f/<guid> - Friendly Name"`) into mod `customFileName`/`logicalFileName`/`modName`
-    attributes and a download's `modInfo.name`; the migration strips the prefix back off. Confirmed
-    by reading `healStoragePathNames.ts` directly — it never touches the shape of `mods`, `rules`,
-    `profiles`, or `downloads`, only string values on already-existing fields, and Vortex applies it
-    itself before this tool (or anything else) ever reads the DB.
-  - `healInvalidKeys` (LAZ-788, main-process, every launch): a defensive LevelDB self-heal for keys
-    containing invalid UTF-8 bytes (unrelated bug elsewhere writing corrupt keys). Runs inside Vortex
-    itself, never changes data shape, and this project doesn't do byte-level key validation of its
-    own — nothing to change here.
-  - Everything else that shipped in 2.4.0 (collection install-session tracking/`persistent
-    .transactions` + `loadOrder` fixes for LAZ-497/630/483, a Nexus GraphQL query filter for
-    mod-to-mod requirements, `deterministicReferenceTag`/`referenceTagScheme` for collection.json's
-    OWN `reference.tag` at install time, a `removeMods` import fix in a React view) touches state
-    this project never reads (`loadOrder`, `persistent.transactions`) or fields scoped to
-    collection-authoring/install-time matching (collection.json's `reference.tag`), not the
-    persisted per-mod `rules` array this project actually reads/writes.
-  - **No code changes needed beyond the allowlist bump** — `TESTED_VORTEX_VERSIONS` now includes
-    `2.4.0-beta.1`, `2.4.0-beta.2`, `2.4.0` (`lib/vortex-sync/lib.js`), and the `shell.js` startup
-    warning text was updated to match. This bump is source-research-based, not yet live-exercised
-    against a real 2.4.0 `state.v2` the way 2.3.0 was (see the comment in `lib.js` right above the
-    array) — re-confirm live next time Create Backup / Apply Ignores / Rules Generator actually run
-    against this user's now-2.4.0 install.
-  - The local `Vortex` source clone (`F:\Claude Workspace\vortex-tools\Vortex`) was fast-forwarded to
-    upstream `master` and pushed to our fork (`awesmdiver/Vortex`) as part of this check.
-- **Multi-profile validation**: both tools should operate on/show data from whichever Vortex profile
-  is currently ENABLED when more than one profile exists, not blend across profiles. Update
-  Collection is already explicitly profile-aware (`profileId` is a first-class concept throughout
-  its own code); Rebuild Collection's side looks murkier (`state-query-worker.js`'s
-  `buildModVersionIndex` collects every profile a mod is enabled in, with no apparent "current
-  profile" scoping). Can't be fully tested yet — needs a second real Vortex profile to validate
-  against.
-- **Extend the Create-Backup freshness check to Apply Ignores/Apply Disables previews and Rules
-  Generator** (see "Confirmed live (2026-07-27)... Fixed (2026-07-27)..." above — Create Backup's
-  `checkBackupFreshness` is done; the same WAL-vs-safe comparison technique is directly reusable
-  wherever else `withStateDb` reads ignored/disabled/rules data, but isn't wired up yet anywhere else).
-- **Cross-collection FOMOD-choice divergence**: currently always refuses
-  (`FAILED_MISMATCH_NOT_TOUCHED`) when two collections recorded genuinely different install choices
-  for a shared mod. Wants a "last collection wins" option with an explicit warning/confirm step
-  (never silent), possibly a dedicated page listing every mod currently blocked this way with a
-  manual per-mod "extract anyway" button. Not designed yet.
-- **Rules Generator report, Phase 2**: today's report (see "Rules Generator Report (Completed /
-  Exceptions)" above) can't confirm the leftover-old-install mods are actually ENABLED in the active
-  profile (no per-profile state read yet) or that they genuinely file-conflict with anything (would
-  need a real filesystem scan against every new-collection member — too expensive to run for every
-  report). Phase 2 candidates: read per-profile mod-enabled state (same DB area
-  `state-query-worker.js`'s `buildModVersionIndex` already touches for a different purpose) to
-  upgrade "still installed" to "still installed AND enabled"; and/or a persisted log per Apply run
-  (today's report is always computed fresh live, nothing is saved) so history can be browsed the way
-  Stats Report browses Rebuild Collection's history.
-- **`sync-cli.js` refactor** to call `lib/sync-runner.js` (it still calls `lib/vortex-sync/lib.js`
-  directly) — pure cleanup, functionally unaffected, low priority.
-- **Background watchdog process** so the server can actually be restarted from the web UI even when
-  it's crashed/died outright (today's "can't reach the server" message, added 2026-07-25, can only
-  ever tell the user to relaunch `start-server.bat` themselves — nothing can be listening to receive
-  an HTTP "restart" request if the process is fully dead). A watchdog would need: (1) to become the
-  new thing the user actually starts/stops instead of `node web/server.js` directly, since otherwise
-  it can't tell "user closed it on purpose" apart from "it crashed, relaunch it" and would just
-  resurrect the server every time someone tries to shut it down; (2) a real stop mechanism (a "Stop
-  Server" web UI control, most likely) for the watchdog to listen for, since a fully hidden/no-window
-  process has no window to close and no console to Ctrl+C; (3) some way to still see server console
-  output for real debugging, which a fully hidden window loses. Not designed or scoped yet.
-- **Multi-game support**: this whole project is hardcoded to `GAME_ID = 'skyrimse'` throughout
-  (`lib/vortex-sync/lib.js` and beyond) — Vortex's own state.v2 is shared across every game it
-  manages, not just Skyrim SE (confirmed live: a real install had a genuine, unrelated Dragon's
-  Dogma 2 profile sitting in the same database, correctly filtered out of `listProfiles()` rather
-  than treated as corrupted). Supporting other games would mean threading a `gameId` parameter
-  through instead of the current hardcoded constant — real scope, not started, only worth doing if
-  this tool is ever meant to cover games besides Skyrim SE.
-- Backup-before-rebuild deliberately stayed sequential when extraction went concurrent (see
-  **Concurrent extraction** above) — revisit only if it's ever an actual bottleneck; it's off by
-  default already.
-- **Ignored/Disabled report could show every Vortex mod status**, not just Ignored/Disabled (e.g.
-  Enabled, Endorsed/not, install-failed, etc.) — currently scoped narrowly to what Update Collection
-  itself actually tracks/acts on. Raised as a "maybe in the future" idea, not designed or scoped yet
-  — needs a real discussion on which statuses are worth surfacing and why before building it.
-- ~~**No web UI to restore the automatic full state.v2 backup.**~~ — done. Settings page's Update
-  Collection group ("Vortex database backups" subsection) now has a "Restore…" button next to
-  "Delete all backups" -- lists available backups by timestamp (`GET /api/sync/state-backups`),
-  restores the chosen one (`POST /api/sync/restore-state`), gated server-side exactly like every
-  other live-state write here (Vortex must be closed). Kept distinctly named/located from the
-  unrelated "Restore Backup" button on the Update Collection page itself (that one restores a
-  collection's ignore/disable snapshot, not the live database).
-- ~~**Self-contained release packaging**~~ — done, see **Building a release package** above
-  (`build-release.ps1`) and the main README's "Getting a release without installing anything"
-  section. A literal single-.exe (Node SEA / `pkg`) was considered and rejected: `classic-level`'s
-  native addon and this project's read/write-next-to-the-app-folder assumptions (config.json, logs,
-  backups) both fight a packaged snapshot's read-only filesystem model.
-- **Possible web-UI "Dry Run" option**: the CLI has a real `--dry-run` flag, but the web UI's own
-  "View Collection" → Plan → "Start Rebuild" flow already shows a full preview before anything is
-  touched, so there's no separate dry-run *mode* to opt into there today. Not needed right now, but
-  worth reconsidering if testers end up wanting an explicit "just preview, don't even show me the
-  Start Rebuild button yet" option in Settings.
-- **New "Utilities" section** (top-level nav area, alongside Rebuild Collection/Update
-  Collection/Settings/Reports) — a home for standalone maintenance tools that don't belong to either
-  main workflow. First utility: **delete unused staging folders and/or archives** — find staging
-  mod-folders and/or downloaded archives that no longer correspond to anything any installed
-  collection actually references, and let the user review/delete them. Not designed yet (needs
-  real thought on what "unused" means precisely — e.g. cross-referencing every installed
-  collection's `collection.json` against staging/downloads contents — and what the review/confirm
-  UI looks like before deleting anything real).
-- **Callout icon/classification pass**: the target convention is now documented (see **Callout
-  severity conventions** above) and `.callout--info`/`.callout--warning`/`.callout--critical` all
-  exist — but most of the app hasn't been migrated to it yet. Needs a real inventory pass: list
-  every existing callout/banner/status message in the app and reclassify each into the right
-  severity, fixing the several `.callout--warning` uses that aren't actually warnings under the
-  documented convention (e.g. the "Next steps in Vortex" instructional boxes, the first-run
-  Settings welcome banner — both informational, not warnings). Not started.
+Tracked in the workspace `TODO.md` (not duplicated here — confirmed 2026-07-27, one place to check
+instead of two) under `vortex-tools/vortex-collection-tools`, split into "ready to work on" and
+"still just ideas" groups. The "New Utilities section" idea that used to live in this section is
+done -- see **Vortex Scrub (Utilities area)** above.
 
 ## Project structure
 
@@ -1579,15 +1662,20 @@ Vortex-Collection-Tools/
 │   ├── rules-generator.js, rules-generator-runner.js, rules-generator-worker.js — Rules Generator's core
 │   │   logic, isolated-worker orchestration, and worker entry point
 │   ├── pause-controller.js                                — Rebuild Collection pause/resume state machine
+│   ├── cleanup-scan.js, cleanup-exclude-store.js            — Vortex Scrub's scan/cross-check/delete logic
+│   │                                                          and its exclude-list data file reader/writer
 │   └── vortex-sync/                                          — Update Collection's engine
 │       ├── lib.js, report.js, win-dialog.js (incl. the async pickFolderAsync used by Settings' Browse buttons)
 │       ├── backups/ (gitignored), state-backups/ (gitignored)
 ├── web/
 │   ├── server.js, rebuild-routes.js, sync-routes.js, settings-routes.js, stats-routes.js,
-│   │   work-through-routes.js, rules-generator-routes.js, run-state.js, sync-run-state.js, sse-session.js
+│   │   work-through-routes.js, rules-generator-routes.js, cleanup-routes.js, run-state.js,
+│   │   sync-run-state.js, sse-session.js
 │   └── public/ (index.html, app.js, sync-app.js, settings-app.js, stats-app.js,
-│       work-through-app.js, rules-generator-app.js, reports-rulesgen-app.js, status-labels.js,
-│       shell.js, styles.css)
+│       work-through-app.js, rules-generator-app.js, reports-rulesgen-app.js, cleanup-app.js,
+│       status-labels.js, shell.js, styles.css)
+├── diagnostics/            — permanent, reusable read-only diagnostics (wal-inclusion-check.js,
+│                              inspect-mod-by-name.js) -- see each file's own header for what it's for
 ├── logs/ (gitignored)      — Rebuild Collection run logs
 └── reports/ (gitignored)   — HTML reports written by the archived terminal-flow-archive/sync-menu.js
                               only; the web UI's own Compare report renders directly to the browser

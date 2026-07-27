@@ -138,6 +138,19 @@ Collection, before Reports) — Settings is the one and only exception that goes
   "pick between two known options" choice rather than inventing another pattern.
 - **Links**: `.mod-name-link` / `.archive-link` (accent-colored, no underline for mod-name links, no
   default browser purple/blue) for anything that links out (typically to Nexus).
+- **Checkbox list + Select all + bulk action(s)** (confirmed 2026-07-27, Clean Up report/Settings'
+  exclude list): a "Select all" checkbox in its own `.field-group` sitting ABOVE and OUTSIDE the
+  `<ul class="sync-result-list">` of per-item checkboxes, with the bulk action button(s) (Delete
+  All / Remove All / etc.) below the list. The list of items should sit **visibly indented** under
+  "Select all" — `.sync-result-list` itself is zero-padding (`padding: 0`) so this indent is NOT
+  automatic; it only happens for free when the list happens to sit inside a `.callout` (which adds
+  its own `.callout ul { padding-left: 20px }`). Outside a callout, add an explicit
+  `padding-left: 20px` on that list's own id/class to match (see `#cleanupResultsList` in
+  styles.css) — confirmed 2026-07-27 the two need to look identical, not just "close enough."
+  Don't drop "Select all" just because an "All" button already exists nearby: they solve different
+  problems (confirmed the hard way, added/removed/re-added same day) — "All" is fastest for
+  all-or-nothing, but "select all, then uncheck the few you want to keep" is the faster path once
+  a list is long and you want to act on *most* of it.
 
 ## External links open in a separate window, not a tab
 

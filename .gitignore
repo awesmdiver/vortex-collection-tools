@@ -32,6 +32,10 @@ lib/vortex-sync/state-backups/
 # "Config files" folder outside the project into this project's own tree.
 collection-backups/
 
+# Clean Up report's exclude-list data file (cleanupExcludeListDir in config.json, defaulted here
+# to a project-relative folder during testing) -- personal, install-specific folder/archive names.
+clean-up-exclude-list/
+
 # OS
 Thumbs.db
 .DS_Store

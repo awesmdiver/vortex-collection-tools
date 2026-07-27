@@ -14,5 +14,6 @@
   "hideVortexVersionWarning": false,
   "serverPort": 4321,
   "serverHost": "127.0.0.1",
-  "autoOpenBrowser": true
+  "autoOpenBrowser": true,
+  "cleanupExcludeListDir": null
 }

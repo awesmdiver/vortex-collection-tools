@@ -46,13 +46,16 @@ function listBackupRunDirs(backupRoot) {
     return entries.filter((e) => e.isDirectory() && BACKUP_RUN_DIR_PATTERN.test(e.name)).map((e) => e.name);
 }
 
-const PATH_FIELDS = ['staging', 'downloads', 'backupRoot', 'syncBackupRoot', 'state', 'logsDir'];
-// No sensible blank/default state for these three -- Rebuild Collection can't scan a collection
-// without staging/downloads, and Update Collection can't save a backup without somewhere real
-// (not "wherever this project happens to think is a good place") to put it. backupRoot/state are
-// deliberately NOT required: backupRoot only matters if maxBackupsToKeep is turned on (0 = off,
-// the default), and state auto-detects a real default under %APPDATA%.
-const REQUIRED_PATH_FIELDS = ['staging', 'downloads', 'syncBackupRoot'];
+const PATH_FIELDS = ['staging', 'downloads', 'backupRoot', 'syncBackupRoot', 'state', 'logsDir', 'cleanupExcludeListDir'];
+// No sensible blank/default state for these four -- Rebuild Collection can't scan a collection
+// without staging/downloads, Update Collection can't save a backup without somewhere real (not
+// "wherever this project happens to think is a good place") to put it, and Clean Up's exclude list
+// gets the same treatment (standing rule confirmed 2026-07-27: every new data location this project
+// adds must be a user-chosen path, never a silent built-in default -- unlike backupRoot/logsDir/
+// state below, which predate that rule and weren't retrofitted). backupRoot/state are deliberately
+// NOT required: backupRoot only matters if maxBackupsToKeep is turned on (0 = off, the default),
+// and state auto-detects a real default under %APPDATA%.
+const REQUIRED_PATH_FIELDS = ['staging', 'downloads', 'syncBackupRoot', 'cleanupExcludeListDir'];
 // Server bind settings -- like the paths above, these are only read once at process startup
 // (web/server.js), so changing any of them needs the same restart-required treatment.
 const SERVER_FIELDS = ['serverPort', 'serverHost', 'autoOpenBrowser'];
