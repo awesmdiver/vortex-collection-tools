@@ -1394,21 +1394,37 @@ Vortex's real installer source, the way `vortex-source-refs.json`/`check-vortex-
 already do for the extraction side) before any design is attempted.
 
 Other open items, not yet started:
-- **Refresh `TESTED_VORTEX_VERSIONS`** (low priority — deprioritized 2026-07-25; the identity-drift
-  detector below covers the actual risk this was meant to guard against, so this is now a nice-to-
-  have accuracy improvement, not a safety gap): researched Vortex's own GitHub source
-  (`Nexus-Mods/Vortex`) to see whether it has a better DB-incompatibility signal than an app-version
-  allowlist. Findings: Vortex's own migration system (`src/renderer/src/util/migrate.ts`) isn't a
-  monotonic schema-version counter either — it's per-migration `minVersion` semver gates plus an
-  already-applied-migration-ids ledger (`state.app.migrations`), checked against the same
-  `state.app.appVersion` this tool already reads. So the allowlist approach is directionally the
-  right idea, just stale: current Vortex HEAD is 2.4.0-beta.2 (this tool's list still stops at
-  2.3.0), and two real persisted-state-shape fixes shipped since — `moveDomainFolders_2_1` (2.1.0
-  beta.4→beta.5, a `download.game` domain bug) and `healStoragePathNames_2_4` (2.4.0 beta.1→beta.2,
-  CDN storage paths polluting mod/download names) — neither is a `rules`-array change specifically,
-  but confirms Vortex does still change persisted shapes between betas. Bump the allowlist to
-  include 2.4.0-beta.1/.2 once actually exercised against them, and periodically re-diff against
-  Vortex's `CHANGELOG.md`.
+- **`TESTED_VORTEX_VERSIONS` refreshed for 2.4.0** (2026-07-27, prompted by the user updating their
+  own Vortex to 2.4.0 stable): full re-diff of `Nexus-Mods/Vortex`'s real GitHub history from 2.3.0
+  through 2.4.0 stable (CHANGELOG.md + every PR merged in that range), specifically checking for
+  anything touching `persistent.mods`/`.rules`/`.profiles`/`.downloads` shape. Findings:
+  - Exactly one new migration since 2.3.0 — `healStoragePathNames_2_4` (2.4.0 beta.1→beta.2, `doQuery:
+    false` so it's silent, no dialog — matches the user's own "no migration of any kind" observation).
+    Repairs VALUES only: a beta.1 regression (LAZ-807) leaked CDN storage-path prefixes
+    (`"5c/d3/1f/<guid> - Friendly Name"`) into mod `customFileName`/`logicalFileName`/`modName`
+    attributes and a download's `modInfo.name`; the migration strips the prefix back off. Confirmed
+    by reading `healStoragePathNames.ts` directly — it never touches the shape of `mods`, `rules`,
+    `profiles`, or `downloads`, only string values on already-existing fields, and Vortex applies it
+    itself before this tool (or anything else) ever reads the DB.
+  - `healInvalidKeys` (LAZ-788, main-process, every launch): a defensive LevelDB self-heal for keys
+    containing invalid UTF-8 bytes (unrelated bug elsewhere writing corrupt keys). Runs inside Vortex
+    itself, never changes data shape, and this project doesn't do byte-level key validation of its
+    own — nothing to change here.
+  - Everything else that shipped in 2.4.0 (collection install-session tracking/`persistent
+    .transactions` + `loadOrder` fixes for LAZ-497/630/483, a Nexus GraphQL query filter for
+    mod-to-mod requirements, `deterministicReferenceTag`/`referenceTagScheme` for collection.json's
+    OWN `reference.tag` at install time, a `removeMods` import fix in a React view) touches state
+    this project never reads (`loadOrder`, `persistent.transactions`) or fields scoped to
+    collection-authoring/install-time matching (collection.json's `reference.tag`), not the
+    persisted per-mod `rules` array this project actually reads/writes.
+  - **No code changes needed beyond the allowlist bump** — `TESTED_VORTEX_VERSIONS` now includes
+    `2.4.0-beta.1`, `2.4.0-beta.2`, `2.4.0` (`lib/vortex-sync/lib.js`), and the `shell.js` startup
+    warning text was updated to match. This bump is source-research-based, not yet live-exercised
+    against a real 2.4.0 `state.v2` the way 2.3.0 was (see the comment in `lib.js` right above the
+    array) — re-confirm live next time Create Backup / Apply Ignores / Rules Generator actually run
+    against this user's now-2.4.0 install.
+  - The local `Vortex` source clone (`F:\Claude Workspace\vortex-tools\Vortex`) was fast-forwarded to
+    upstream `master` and pushed to our fork (`awesmdiver/Vortex`) as part of this check.
 - **Multi-profile validation**: both tools should operate on/show data from whichever Vortex profile
   is currently ENABLED when more than one profile exists, not blend across profiles. Update
   Collection is already explicitly profile-aware (`profileId` is a first-class concept throughout
