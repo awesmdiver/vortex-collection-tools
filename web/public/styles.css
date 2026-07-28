@@ -339,10 +339,6 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   justify-content: space-between;
   gap: 14px;
   flex-wrap: wrap;
-  /* Breathing room before the rail/Pinned group below -- confirmed 2026-07-28 the header row and
-     the layout below it read too cramped without it, especially once the buttons wrap onto their
-     own line under a narrow window. */
-  margin-bottom: 28px;
 }
 .settings-header-row p { margin: 4px 0; }
 /* margin-left: auto keeps these pinned to the right edge of whichever flex line they're on --
