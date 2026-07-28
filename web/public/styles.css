@@ -1012,6 +1012,10 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    cards) -- these two cards are one continuous "search setup" flow, not separate page sections, so
    the gap between them should read closer together, matching the mockup's own 16px card margin. */
 #afIndexCard, #afSearchCard { margin: 0 0 16px; }
+/* Breathing room between the mode radios and the search input row below them -- they were touching
+   directly with zero gap (.field-group has no margin-bottom of its own, and adding one there would
+   ripple into the other 30+ .field-group uses across Settings/modals). Scoped to this one card. */
+#afSearchCard .field-group { margin-bottom: 12px; }
 
 /* Selectable results tables -- the standard for any long, paginated, checkbox-selectable list (see
    DESIGN.md's "Selectable results tables" section). First used by Archive Finder's search results
