@@ -19,6 +19,9 @@ const REQUIRED_FIELDS = [
   { key: 'downloads', inputId: 'settingsDownloadsInput', label: 'Vortex downloads folder' },
   { key: 'syncBackupRoot', inputId: 'settingsSyncBackupRootInput', label: 'Backups folder (Update Collection)' },
   { key: 'cleanupExcludeListDir', inputId: 'settingsCleanupExcludeListDirInput', label: 'Exclude list location (Vortex Scrub)' },
+  { key: 'skyrimDataDir', inputId: 'settingsSkyrimDataDirInput', label: 'Skyrim Data folder (Missing Masters)' },
+  { key: 'pluginsListDir', inputId: 'settingsPluginsListDirInput', label: 'Plugins.txt location (Missing Masters)' },
+  { key: 'dummyMastersOutputDir', inputId: 'settingsDummyMastersOutputDirInput', label: 'Dummy Masters output folder (Missing Masters)' },
 ];
 
 async function settingsApi(method, path, body) {
@@ -74,6 +77,9 @@ async function loadSettings() {
   $g('settingsStateInput').value = cfg.state || '';
   $g('settingsLogsDirInput').value = cfg.logsDir || '';
   $g('settingsCleanupExcludeListDirInput').value = cfg.cleanupExcludeListDir || '';
+  $g('settingsSkyrimDataDirInput').value = cfg.skyrimDataDir || '';
+  $g('settingsPluginsListDirInput').value = cfg.pluginsListDir || '';
+  $g('settingsDummyMastersOutputDirInput').value = cfg.dummyMastersOutputDir || '';
   $g('settingsMaxBackupsInput').value = cfg.maxBackupsToKeep != null ? cfg.maxBackupsToKeep : '';
   $g('settingsMaxStateBackupsInput').value = cfg.maxStateBackupsToKeep != null ? cfg.maxStateBackupsToKeep : '';
   $g('settingsConcurrencyInput').value = cfg.concurrentExtractions || 1;
@@ -242,6 +248,9 @@ async function saveSettings() {
       state: $g('settingsStateInput').value,
       logsDir: $g('settingsLogsDirInput').value,
       cleanupExcludeListDir: $g('settingsCleanupExcludeListDirInput').value,
+      skyrimDataDir: $g('settingsSkyrimDataDirInput').value,
+      pluginsListDir: $g('settingsPluginsListDirInput').value,
+      dummyMastersOutputDir: $g('settingsDummyMastersOutputDirInput').value,
       maxBackupsToKeep: $g('settingsMaxBackupsInput').value === '' ? null : Number($g('settingsMaxBackupsInput').value),
       maxStateBackupsToKeep: $g('settingsMaxStateBackupsInput').value === '' ? null : Number($g('settingsMaxStateBackupsInput').value),
       concurrentExtractions: Number($g('settingsConcurrencyInput').value) || 1,

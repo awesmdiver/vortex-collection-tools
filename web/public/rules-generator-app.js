@@ -28,7 +28,7 @@ async function rgApi(method, path, body) {
 
 function rgShowCriticalError(message) {
   const el = $rg('rgCriticalError');
-  el.innerHTML = `<div class="callout__title">&#9888; Couldn't do that</div><p>${escHtmlRg(message)}</p>`;
+  el.innerHTML = `<div class="callout__title">🛑 Couldn't do that</div><p>${escHtmlRg(message)}</p>`;
   el.classList.remove('hidden');
 }
 function rgHideCriticalError() {
@@ -49,6 +49,13 @@ function rgHandleError(e) {
 }
 
 let rgLastResult = null;
+// Which summary section is currently isolated -- null shows all three (Ready to copy/Needs your
+// input/Nothing to do), matching this app's established "click a badge to filter, click again (or
+// Show all) to clear" convention elsewhere (Stats Report, Work Through Report, etc.). Unlike those
+// reports (one shared table, rows carry data-status), this page has three separate sections with
+// no shared row structure -- so filtering here means showing only the matching SECTION, not rows.
+let rgSectionFilter = null;
+const RG_SECTION_IDS = { ready: 'rgReadySection', review: 'rgReviewSection', nolink: 'rgNoLinkSection' };
 
 async function rgLoadPickers() {
   try {
@@ -435,6 +442,28 @@ function rgRenderReviewList() {
   rgSyncExpandAllButtonLabel('rgExpandAllReviewBtn', anomalies.map((a) => a.modKey), rgExpandedAnomalies);
 }
 
+// Rebuilds the 3 summary badges + "Show all", reflecting rgSectionFilter's current value, then
+// shows/hides the 3 section containers to match -- called on every fresh analysis AND every filter
+// toggle (the badges' own active/inactive styling needs to update either way). Wording/case here
+// must match each section's own header exactly (Ready to copy / Needs your input / Nothing to do)
+// -- confirmed live 2026-07-26 these had silently drifted (lowercase, and "need" instead of "Needs").
+function rgRenderSummaryBadges() {
+  const result = rgLastResult;
+  const badgeHtml = (section, cls, count, label) => {
+    const active = rgSectionFilter === section;
+    return `<span class="badge ${cls} badge--clickable${active ? ' badge--filter-active' : ''}" data-section="${section}"><span class="badge__count">${count}</span> ${label}</span>`;
+  };
+  $rg('rgSummaryBadges').innerHTML = [
+    badgeHtml('ready', 'badge--success', result.mapping.length, 'Ready to copy'),
+    badgeHtml('review', 'badge--warning', result.anomalies.length, 'Needs your input'),
+    badgeHtml('nolink', 'badge--neutral', result.noLinkFound.length, 'Nothing to do'),
+    `<span class="badge badge--show-all${rgSectionFilter === null ? ' badge--filter-active' : ''}">Show all</span>`,
+  ].join('');
+  for (const [section, id] of Object.entries(RG_SECTION_IDS)) {
+    $rg(id).classList.toggle('hidden', rgSectionFilter !== null && rgSectionFilter !== section);
+  }
+}
+
 function rgRender(result) {
   rgLastResult = result;
   // Flat name lookup by modKey across everything the analysis touched, so every render helper
@@ -452,17 +481,15 @@ function rgRender(result) {
   rgLastResult.oldMembersLookup = result.oldMembers;
   rgLastResult.newMembersLookup = result.newMembers;
 
-  // Every mapped item is ready -- remapping to a counterpart happens automatically now (confirmed
-  // 2026-07-26), so the only thing left needing a manual choice is an anomaly (which OLD mod this
-  // new mod even links to in the first place, when more than one candidate rule exists).
-  // Wording/case here must match each section's own header exactly (Ready to copy / Needs your
-  // input / Nothing to do) -- confirmed live 2026-07-26 these had silently drifted (lowercase, and
-  // "need" instead of "Needs").
-  $rg('rgSummaryBadges').innerHTML = [
-    `<span class="badge badge--success badge--clickable" data-target-id="rgReadySectionTitle"><span class="badge__count">${result.mapping.length}</span> Ready to copy</span>`,
-    `<span class="badge badge--warning badge--clickable" data-target-id="rgReviewSectionTitle"><span class="badge__count">${result.anomalies.length}</span> Needs your input</span>`,
-    `<span class="badge badge--neutral badge--clickable" data-target-id="rgNoLinkSectionTitle"><span class="badge__count">${result.noLinkFound.length}</span> Nothing to do</span>`,
-  ].join('');
+  rgSectionFilter = null; // fresh analysis -- always start showing all three sections
+  rgRenderSummaryBadges();
+
+  // Disabled, not just relying on the existing click-time preview check (which already catches
+  // this safely -- see rgOpenApplyConfirm's totalRulesWritten===0 message) -- confirmed 2026-07-27:
+  // a clearly-disabled button is a better signal than letting someone click it and read a message
+  // explaining nothing happened. 0 ready + 0 needing input means there is nothing this button could
+  // possibly do right now.
+  $rg('rgApplyBtn').disabled = result.mapping.length === 0 && result.anomalies.length === 0;
 
   rgRenderReadyList();
   rgRenderReviewList();
@@ -566,13 +593,21 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $rg('rgApplyConfirmModalOk').addEventListener('click', rgConfirmApply);
 
-  // Same "click a summary badge, jump to that section" convention as Stats Report's Issues badges
-  // (stats-app.js), just scrolling to a heading here instead of filtering a list in place.
+  // Same "click a badge, filter to just that" convention as Stats Report's Issues badges
+  // (stats-app.js) -- converted 2026-07-27 from a "scroll to that heading" jump (the three sections
+  // stayed visible either way) to an actual filter (isolates one section, click again or Show all
+  // to clear), for consistency with every other report in this app.
   $rg('rgSummaryBadges').addEventListener('click', (e) => {
-    const badge = e.target.closest('.badge--clickable');
+    if (e.target.closest('.badge--show-all')) {
+      rgSectionFilter = null;
+      rgRenderSummaryBadges();
+      return;
+    }
+    const badge = e.target.closest('.badge--clickable[data-section]');
     if (!badge) return;
-    const target = document.getElementById(badge.dataset.targetId);
-    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const section = badge.dataset.section;
+    rgSectionFilter = rgSectionFilter === section ? null : section;
+    rgRenderSummaryBadges();
   });
 
   // Event delegation on the stable container -- the ready list is fully rebuilt on every
