@@ -618,7 +618,12 @@ async function refreshVortexData() {
 }
 $('refreshVortexDataBtn').addEventListener('click', refreshVortexData);
 
-document.querySelectorAll('[data-action="back-to-picker"]').forEach((b) => b.addEventListener('click', () => {
+// Covers both the plain <button>s (logs/plan/summary's old "Back to Collections" spot, now unused)
+// and the tool-eyebrow's own area-segment link (DESIGN.md's "Tool page breadcrumb" section) -- the
+// breadcrumb replaces the old in-flow back buttons, all pointing at this same handler. preventDefault
+// is needed now that some triggers are real <a href="#"> elements, not just <button>s.
+document.querySelectorAll('[data-action="back-to-picker"]').forEach((b) => b.addEventListener('click', (e) => {
+  e.preventDefault();
   showView('picker');
   loadCollections();
 }));

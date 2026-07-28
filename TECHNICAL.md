@@ -2940,6 +2940,66 @@ Scrub, and Archive Finder (both cards) all checked for even, consistent breathin
 stacking. Also spot-checked in light theme (Vortex Scrub) -- no regression, since `--stack-gap` isn't
 a themed value.
 
+## Breadcrumb eyebrow on every view, not just tool-hero landings (2026-07-28)
+
+The first `.tool-eyebrow` rollout (see "Tool page breadcrumb eyebrow" above) only reached each
+tool's own `.tool-hero` landing view. DESIGN.md's "Tool page breadcrumb" section calls for it on
+**every view within a tool**, and for the breadcrumb's area segment to fully replace the old
+in-flow `.btn--nav.btn--back` "← Back to X" controls, not coexist with them.
+
+**Full inventory (every view/sub-view in the app)**, audited before touching anything:
+
+| Area | View | Had eyebrow? | Had a back button? | Action |
+|---|---|---|---|---|
+| Home | (single) | N/A -- excluded by design (it IS Home) | -- | none |
+| Settings | (single) | N/A -- excluded by design (reached directly via the gear icon, like Home) | -- | none |
+| Rebuild Collection | `view-picker` (landing) | yes, plain text | no | none |
+| Rebuild Collection | `view-logs` | no | yes (`back-to-picker`) | eyebrow added, button removed |
+| Rebuild Collection | `view-plan` | no | yes (`back-to-picker`) | eyebrow added, button removed |
+| Rebuild Collection | `view-progress` | no | no | eyebrow added |
+| Rebuild Collection | `view-summary` | no | yes (`back-to-picker`) | eyebrow added, button removed |
+| Update Collection | single page, all 4 `.sync-phase` steps | yes | no | none -- already fully compliant (the "steps" are stacked cards on one page, not separate views, so one eyebrow at the top already covers all of them) |
+| Reports | `sub-area-stats` | yes | no | none |
+| Reports | `sub-area-workthrough` | yes | no | none |
+| Reports | `sub-area-updatecompare` | yes | yes (`updateCompareBackBtn`, → Update Collection) | **kept + flagged** -- a genuine cross-tool jump, not "back to Reports' own landing" |
+| Reports | `sub-area-rulesgen` | yes | no | none |
+| Rules Generator | single page | yes | no | none |
+| Utilities | `sub-area-scrub` | yes | no | none |
+| Utilities | `sub-area-archivefinder` | yes | yes (`afCloseTreeBtn`, "Back to results") | **kept + flagged** -- the tree panel is an in-place content swap inside the SAME view (not a separate routed view), so it's outside the eyebrow model entirely; removing it would leave no way to close the tree |
+| Utilities | `sub-area-missingmasters` | yes | no | none |
+
+Only Rebuild Collection needed real work -- every other area's tool-hero-first-pass eyebrow already
+happened to cover its one true "view," since Update Collection/Rules Generator/each Reports and
+Utilities sub-tab are single continuous pages, not separate routed sub-views the way Rebuild
+Collection's picker/logs/plan/progress/summary are.
+
+**New markup pattern for a non-landing view**: `<div class="tool-eyebrow"><a
+class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><a
+class="tool-eyebrow__area" href="#" data-action="back-to-picker">Rebuild Collection</a></div>` --
+the area segment is now a real link (new `.tool-eyebrow__area` class, identical
+color/hover/underline treatment to `.tool-eyebrow__home`) on every view except the landing view
+itself, where it stays plain text (matching DESIGN.md: "on the tool's own landing view it's just
+the current location, not a link").
+
+**Reused the existing `back-to-picker` wiring rather than inventing a new mechanism**: the area-link
+carries the same `data-action="back-to-picker"` attribute the old buttons used, so `app.js`'s
+existing `document.querySelectorAll('[data-action="back-to-picker"]')` handler picks up the new
+`<a>` elements automatically -- it now also calls `e.preventDefault()`, needed since some triggers
+are real anchors now (harmless no-op for the plain `<button>`s that also still match, though none
+remain after this change).
+
+**Verified live** (2026-07-28, `npm run web`, against real Vortex data, read-only the whole time --
+selected a real collection, opened its logs view and its plan view, no rebuild actually started):
+`view-logs` shows `HOME › REBUILD COLLECTION` with no back button, clicking "Rebuild Collection"
+returns to the picker with the previously-selected collection still selected and the list
+freshly reloaded (identical behavior to the old button); `view-plan` shows the same eyebrow through
+its full loading sequence (progress bar, per-mod classify ticker) and once loaded, with "Start
+Rebuild" and the results table below it; clicking "Home" from a deep view (`view-logs`) returns to
+the Home area correctly. Also reconfirmed the two kept exceptions still work exactly as before:
+Reports' Update Compare page shows both `HOME › REPORTS` AND its own "← Back to Update Collection"
+button side by side (no conflict); Archive Finder's tree panel still opens/closes via its own "Back
+to results" button, entirely independent of the page's own `HOME › UTILITIES` eyebrow above it.
+
 ## Future work
 
 Tracked in the workspace `TODO.md` (not duplicated here — confirmed 2026-07-27, one place to check

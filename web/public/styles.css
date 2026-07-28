@@ -279,13 +279,18 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 /* Tool page breadcrumb eyebrow (see DESIGN.md's "Tool page breadcrumb" section) -- with the old
    five-tab nav gone (Home replaced it), the tool-hero title alone no longer names which tool a
    user is in (it's a value pitch, e.g. "Skip Re-Resolving Conflicts You Already Fixed", not the
-   tool's name). Sits directly above .tool-hero__title on every tool page except Home/Settings. */
+   tool's name). Sits above every VIEW within a tool now, not just the landing tool-hero (2026-07-28)
+   -- every view except Home/Settings gets one, directly above its own heading. */
 .tool-eyebrow {
   font-size: 12px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase;
   color: var(--text-muted); margin: 0 0 8px; display: flex; align-items: center; gap: 8px;
 }
-.tool-eyebrow__home { color: var(--accent); text-decoration: none; cursor: pointer; }
-.tool-eyebrow__home:hover { color: var(--accent-hover); text-decoration: underline; }
+/* .tool-eyebrow__home always returns to Home. .tool-eyebrow__area is the SAME link treatment for
+   the area segment, used only on a tool's deeper views (not its own landing, where the area name is
+   plain text -- see the "is-current" comment at each usage) -- it replaces the old in-flow
+   ".btn--nav.btn--back" controls entirely (2026-07-28's "breadcrumb replaces back buttons" decision). */
+.tool-eyebrow__home, .tool-eyebrow__area { color: var(--accent); text-decoration: none; cursor: pointer; }
+.tool-eyebrow__home:hover, .tool-eyebrow__area:hover { color: var(--accent-hover); text-decoration: underline; }
 .tool-eyebrow__sep { opacity: 0.5; }
 
 /* Home landing page -- card-based launcher for every tool (see DESIGN.md's "Home / landing page"
