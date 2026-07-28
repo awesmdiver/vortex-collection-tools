@@ -263,6 +263,10 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    friendly what/why sentence or two. See DESIGN.md's "Tool intro banner" section -- first shipped on
    Missing Masters 2026-07-27, meant to be reused by every tool page's own intro over time. */
 .tool-hero { margin-bottom: 20px; }
+/* Inside Settings' own header row the tool-hero sits beside the Restart/Stop Server buttons, not
+   stacked above other page content -- the row's own gap already provides spacing, so the usual
+   bottom margin would just double it up. */
+.settings-header-row .tool-hero { margin-bottom: 0; }
 .tool-hero__title { font-size: 22px; margin: 0 0 8px; }
 .tool-hero__body { margin: 0; color: var(--text); font-size: 14px; line-height: 1.6; }
 
@@ -326,10 +330,12 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 
 /* Settings page header -- keeps the intro line and the server action buttons on one row, same
    space-between/flex-wrap idea as .progress-header-row, so a narrow window wraps the buttons
-   below the text instead of clipping/overlapping them. */
+   below the text instead of clipping/overlapping them. align-items: flex-start (not center) since
+   2026-07-28's tool-hero replaced the old single-line subtitle with a two-line title+body block --
+   centering that taller block against the button row reads oddly. */
 .settings-header-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
   flex-wrap: wrap;
@@ -623,6 +629,55 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
   color: var(--text-muted); font-weight: 600;
 }
 .settings-group .settings-section-title:first-of-type { margin-top: 4px; }
+
+/* Settings two-pane layout (see DESIGN.md's "Settings -- two-pane category layout" section) -- a
+   sticky category rail on the left, one category's .settings-group card(s) on the right, replacing
+   the old single long scroll of every card stacked together. */
+.settings-layout { display: grid; grid-template-columns: 224px 1fr; gap: 24px; align-items: start; }
+.settings-rail { position: sticky; top: 92px; display: flex; flex-direction: column; gap: 3px; }
+.settings-rail__row { position: relative; }
+.settings-rail__item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 34px 9px 12px; border-radius: 8px; border: 1px solid transparent;
+  background: transparent; color: var(--text-muted); cursor: pointer;
+  font-family: inherit; font-size: 14px; text-align: left; width: 100%;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.settings-rail__item:hover { background: var(--surface-2); color: var(--text); }
+.settings-rail__item.active { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+.settings-rail__icon { font-size: 16px; width: 20px; text-align: center; flex: none; }
+/* The pin star only appears on hover (or once pinned) -- same "don't clutter every row all the
+   time" reasoning as Vortex Scrub's own row-hover affordances elsewhere in this app. */
+.settings-rail__pin {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 26px; border-radius: 6px; border: 1px solid transparent;
+  background: transparent; color: var(--text-muted); cursor: pointer; font-size: 15px; line-height: 1;
+  display: grid; place-items: center; opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+.settings-rail__row:hover .settings-rail__pin { opacity: 0.75; }
+.settings-rail__pin:hover { opacity: 1; color: var(--accent); background: var(--surface-2); }
+.settings-rail__pin.on { opacity: 1; color: var(--accent); }
+.settings-rail__group {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);
+  font-weight: 600; padding: 0 12px; margin: 4px 0 2px;
+}
+.settings-rail__divider { height: 1px; background: var(--border); margin: 8px 6px 4px; }
+.settings-pane { display: none; }
+.settings-pane.active { display: block; }
+/* Pins to the bottom of the content pane regardless of which category is open -- Save Settings is
+   always in reach without scrolling back up, same idea as .progress-header-row further up. */
+.settings-save-bar {
+  position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--border);
+  padding: 14px 0 6px; display: flex; align-items: center; gap: 12px; justify-content: flex-end;
+  margin-top: 6px;
+}
+.save-hint { color: var(--text-muted); font-size: 13px; margin-right: auto; }
+@media (max-width: 820px) {
+  .settings-layout { grid-template-columns: 1fr; }
+  .settings-rail { position: static; flex-direction: row; flex-wrap: wrap; }
+}
+
 /* Rules Generator's review list: one radio-pair choice inside a .settings-group card, when a rule
    could point at either an original mod or its new-collection counterpart. See DESIGN.md's
    "Rules Generator review choice" note. */
