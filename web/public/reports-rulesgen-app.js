@@ -100,6 +100,32 @@ function rgReportUpdateGenerateButton() {
   $g('rgReportGenerateBtn').disabled = !($g('rgReportOldSelect').value && $g('rgReportNewSelect').value);
 }
 
+// Which section is currently isolated -- null shows both (Completed/Exceptions), matching this
+// app's established "click a badge to filter, click again (or Show all) to clear" convention
+// elsewhere (Stats Report, Work Through Report, Rules Generator's own summary badges). Converted
+// 2026-07-27 from plain non-clickable badges, for consistency with those.
+let rgReportSectionFilter = null;
+let rgReportLastCounts = { completed: 0, exceptions: 0 };
+const RG_REPORT_SECTION_IDS = { completed: 'rgReportCompletedSection', exceptions: 'rgReportExceptionsSection' };
+
+function rgReportRenderBadges() {
+  const badges = $g('rgReportSummaryBadges');
+  badges.innerHTML = '';
+  const activeCompleted = rgReportSectionFilter === 'completed';
+  const activeExceptions = rgReportSectionFilter === 'exceptions';
+  const completedBadge = el('span', { class: `badge badge--success badge--clickable${activeCompleted ? ' badge--filter-active' : ''}`, 'data-section': 'completed' },
+    [el('span', { class: 'badge__count' }, String(rgReportLastCounts.completed)), ' Completed']);
+  const exceptionsBadge = el('span', { class: `badge badge--warning badge--clickable${activeExceptions ? ' badge--filter-active' : ''}`, 'data-section': 'exceptions' },
+    [el('span', { class: 'badge__count' }, String(rgReportLastCounts.exceptions)), ' Exceptions']);
+  const showAll = el('span', { class: `badge badge--show-all${rgReportSectionFilter === null ? ' badge--filter-active' : ''}` }, 'Show all');
+  badges.appendChild(completedBadge);
+  badges.appendChild(exceptionsBadge);
+  badges.appendChild(showAll);
+  for (const [section, id] of Object.entries(RG_REPORT_SECTION_IDS)) {
+    $g(id).classList.toggle('hidden', rgReportSectionFilter !== null && rgReportSectionFilter !== section);
+  }
+}
+
 async function rgReportGenerate() {
   $g('rgReportCriticalError').classList.add('hidden');
   $g('rgReportResults').classList.add('hidden');
@@ -114,13 +140,12 @@ async function rgReportGenerate() {
     const report = await rgReportApi('POST', '/api/rules-generator/report', { oldCollectionKey, newCollectionKey, anomalyOverrides: {} });
     $g('rgReportLoading').classList.add('hidden');
 
-    const completedCount = report.completed.length + report.resolvedAnomalyCount;
-    const exceptionsCount = report.exceptions.unresolvedAnomalies.length + report.exceptions.leftoverOldInstalls.length;
-
-    const badges = $g('rgReportSummaryBadges');
-    badges.innerHTML = '';
-    badges.appendChild(el('span', { class: 'badge badge--success' }, [el('span', { class: 'badge__count' }, String(completedCount)), ' Completed']));
-    badges.appendChild(el('span', { class: 'badge badge--warning' }, [el('span', { class: 'badge__count' }, String(exceptionsCount)), ' Exceptions']));
+    rgReportLastCounts = {
+      completed: report.completed.length + report.resolvedAnomalyCount,
+      exceptions: report.exceptions.unresolvedAnomalies.length + report.exceptions.leftoverOldInstalls.length,
+    };
+    rgReportSectionFilter = null; // fresh report -- always start showing both sections
+    rgReportRenderBadges();
 
     $g('rgReportResolvedNote').textContent = report.resolvedAnomalyCount > 0
       ? `That includes ${report.resolvedAnomalyCount} mod(s) where you'd already picked the right match yourself.`
@@ -166,4 +191,16 @@ document.addEventListener('DOMContentLoaded', () => {
   $g('rgReportOldSelect').addEventListener('change', rgReportUpdateGenerateButton);
   $g('rgReportNewSelect').addEventListener('change', rgReportUpdateGenerateButton);
   $g('rgReportGenerateBtn').addEventListener('click', rgReportGenerate);
+  $g('rgReportSummaryBadges').addEventListener('click', (e) => {
+    if (e.target.closest('.badge--show-all')) {
+      rgReportSectionFilter = null;
+      rgReportRenderBadges();
+      return;
+    }
+    const badge = e.target.closest('.badge--clickable[data-section]');
+    if (!badge) return;
+    const section = badge.dataset.section;
+    rgReportSectionFilter = rgReportSectionFilter === section ? null : section;
+    rgReportRenderBadges();
+  });
 });

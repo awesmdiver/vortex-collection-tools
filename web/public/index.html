@@ -43,7 +43,7 @@
      button here -- if nothing's listening, there's no process left to receive that request. -->
 <div id="serverUnreachableModal" class="modal-overlay hidden">
   <div class="modal modal--critical">
-    <h2>&#9888; Can't reach the server</h2>
+    <h2>🛑 Can't reach the server</h2>
     <p>The server isn't responding -- it may have stopped running. Close and reopen <code>start-server.bat</code> to restart it.</p>
     <div class="modal-actions">
       <button id="serverUnreachableCloseBtn" class="btn btn--ghost">Close</button>
@@ -59,7 +59,7 @@
      keep your place on the page instead of being scrolled away from it. -->
 <div id="vortexRunningModal" class="modal-overlay hidden">
   <div class="modal modal--warning">
-    <h2>&#9888; Vortex is currently running</h2>
+    <h2>⚠️ Vortex is currently running</h2>
     <p>Close Vortex completely, then try again.</p>
     <div class="modal-actions">
       <button id="vortexRunningCloseBtn" class="btn btn--ghost">Close</button>
@@ -75,7 +75,7 @@
      already checked "Don't show this again" (persisted to config.json). -->
 <div id="vortexVersionWarningModal" class="modal-overlay hidden">
   <div class="modal modal--warning">
-    <h2>&#9888; Vortex version not tested</h2>
+    <h2>⚠️ Vortex version not tested</h2>
     <p id="vortexVersionWarningText">This tool has been tested against Vortex 2.3.0-beta.1 and 2.3.0.</p>
     <p>Vortex occasionally changes how it stores its data between versions. Proceed carefully, and double-check the results here against what you see in Vortex.</p>
     <label class="checkbox">
@@ -128,10 +128,10 @@
     <div id="collectionEmpty" class="empty-row hidden"></div>
 
     <div id="workshopOnlySection" class="callout callout--warning hidden">
-      <div class="callout__title">&#9888; Workshop-only collections found (can't be extracted here)</div>
+      <div class="callout__title">⚠️ Workshop-only collections found (can't be extracted here)</div>
       <p>These are tracked in Vortex but have no <code>collection.json</code> -- either never published, or published but only the Workshop copy is kept locally. If it's been published to Nexus, this tool can fetch that published <code>collection.json</code> directly -- no need to download it through Vortex.</p>
       <div class="callout callout--warning">
-        <div class="callout__title">&#9888; Before fetching, read this</div>
+        <div class="callout__title">⚠️ Before fetching, read this</div>
         <ol>
           <li>This only fetches a revision <strong>already saved to NexusMods</strong> (published or not) -- pick the one you want from the Revision dropdown below.</li>
           <li>If you've made changes in the Workshop since your last save/upload, this download will <strong>not</strong> include them.</li>
@@ -207,13 +207,13 @@
       </div>
 
       <div id="openFomodSection" class="callout callout--warning hidden">
-        <div class="callout__title">&#9888; Needs manual reinstall (Open FOMOD)</div>
+        <div class="callout__title">⚠️ Needs manual reinstall (Open FOMOD)</div>
         <p>These mods have a real FOMOD installer wizard but no choices recorded in <code>collection.json</code> &mdash; the collection deliberately leaves them to whoever installs it, and Vortex's wizard even pre-selects based on what else is currently installed. There's no default to replay automatically.</p>
         <ul id="openFomodList"></ul>
       </div>
 
       <div id="offSiteMissingSection" class="callout callout--warning hidden">
-        <div class="callout__title">&#9888; <span id="offSiteMissingTitle"></span></div>
+        <div class="callout__title">⚠️ <span id="offSiteMissingTitle"></span></div>
         <p id="offSiteMissingText"></p>
         <ul id="offSiteMissingList"></ul>
         <button id="downloadedStartRebuildBtn" class="btn btn--primary" style="margin-top: 10px;">Downloaded and Start Rebuild</button>
@@ -309,12 +309,12 @@
     <div id="summaryBadges" class="summary-badges"></div>
 
     <div id="criticalBanner" class="callout callout--critical hidden">
-      <div class="callout__title">&#10060; Critical: manual restore needed</div>
+      <div class="callout__title">🛑 Critical: manual restore needed</div>
       <div id="criticalDetail"></div>
     </div>
 
     <div id="summaryOpenFomodSection" class="callout callout--warning hidden">
-      <div class="callout__title">&#9888; Needs manual reinstall (Open FOMOD)</div>
+      <div class="callout__title">⚠️ Needs manual reinstall (Open FOMOD)</div>
       <ul id="summaryOpenFomodList"></ul>
     </div>
 
@@ -346,6 +346,15 @@
     A backups folder for Update Collection isn't configured yet -- <a href="/?area=settings">open Settings</a> to set one up before creating a backup.
   </div>
 
+  <div class="callout callout--warning">
+    <div class="callout__title">⚠️ Quick heads-up before you start!</div>
+    <ul>
+      <li><strong>Close Vortex first:</strong> Make sure Vortex is completely closed before you proceed so your updates save cleanly.</li>
+      <li><strong>Mark your mods first:</strong> Make sure any mod you want to keep is already marked as <strong>Ignored</strong> or <strong>Disabled</strong> in Vortex. This tool only saves what's currently set&mdash;it won't change statuses for you!</li>
+      <li><strong>Delete unwanted mods:</strong> If you marked a mod as <strong>Ignored</strong> to get rid of it, be sure to actually remove (delete) it in Vortex too. Setting a mod to <strong>Ignored</strong> just stops Vortex from reinstalling it later, but won't disable or remove an active mod.</li>
+    </ul>
+  </div>
+
   <div class="collection-picker">
     <div style="display: flex; flex-direction: column; gap: 4px;">
       <span class="field-label">Profile</span>
@@ -362,15 +371,6 @@
 
   <div class="view-actions">
     <button id="syncListModsBtn" class="btn btn--ghost" disabled>Show Ignored & Disabled</button>
-  </div>
-
-  <div class="callout callout--warning">
-    <div class="callout__title">&#9888; Quick heads-up before you start!</div>
-    <ul>
-      <li><strong>Close Vortex first:</strong> Make sure Vortex is completely closed before you proceed so your updates save cleanly.</li>
-      <li><strong>Mark your mods first:</strong> Make sure any mod you want to keep is already marked as <strong>Ignored</strong> or <strong>Disabled</strong> in Vortex. This tool only saves what's currently set&mdash;it won't change statuses for you!</li>
-      <li><strong>Delete unwanted mods:</strong> If you marked a mod as <strong>Ignored</strong> to get rid of it, be sure to actually remove (delete) it in Vortex too. Setting a mod to <strong>Ignored</strong> just stops Vortex from reinstalling it later, but won't disable or remove an active mod.</li>
-    </ul>
   </div>
 
   <div class="sync-phase">
@@ -394,7 +394,7 @@
          everything else on this page (the collection picker, the backup list) needs to be re-read
          fresh too, not just this one id patched in place. -->
     <div id="syncCollectionStaleError" class="callout callout--critical hidden">
-      <div class="callout__title">&#9888; Collection out of date</div>
+      <div class="callout__title">🛑 Collection out of date</div>
       <p>The version you're backing up isn't available anymore -- refresh this collection to continue.</p>
       <div class="view-actions">
         <button id="syncCollectionStaleRetryBtn" class="btn btn--ghost">Retry</button>
@@ -643,7 +643,7 @@
       </div>
     </div>
     <div class="callout callout--warning" style="margin-top: 14px;">
-      <div class="callout__title">&#9888; Important Security Warning</div>
+      <div class="callout__title">⚠️ Important Security Warning</div>
       Only change the host if you know what you're doing! Setting this to anything other than <code>127.0.0.1</code> or <code>localhost</code> exposes this tool—and gives full read and write access to your mod files and Vortex state—to everyone on your local network without password protection.
     </div>
     <div class="field-group">
@@ -671,6 +671,29 @@
         Don't warn me at startup if my installed Vortex version is untested
       </label>
     </div>
+
+    <!-- Moved here from Rebuild Collection 2026-07-27 -- this now also drives Missing Masters' own
+         single-mod rebuild auto-download, not just Rebuild Collection, so it belongs as a general,
+         tool-agnostic setting rather than living under one specific tool's own section. -->
+    <h3 class="settings-section-title">Download Missing Archives</h3>
+    <div class="field-group">
+      <label class="checkbox">
+        <input type="checkbox" id="settingsDownloadMissingInput">
+        Download missing archives automatically
+      </label>
+    </div>
+    <p class="muted">
+      When enabled, any mod archive that can't be found in your downloads folder gets downloaded
+      automatically from Nexus first, instead of being skipped.
+    </p>
+    <div class="callout callout--warning">
+      Automated downloads only work for Nexus <strong>Premium</strong> accounts -- Nexus's API refuses
+      this for free accounts by design, the same way Vortex's own client refuses to auto-download for
+      non-Premium users. This respects Nexus's ad-supported download model: free-tier users must
+      download the archive manually from the Nexus website (which shows ads) and let Vortex install
+      it. If your account isn't Premium, nothing else is attempted automatically -- you'll be told to
+      download and reinstall it yourself via Vortex instead.
+    </div>
   </div>
 
   <!-- Rebuild Collection -->
@@ -687,27 +710,6 @@
         <input id="settingsBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Mod Extraction\Vortex-Rebuild-Backups">
         <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsBackupRootInput">Browse&hellip;</button>
       </div>
-    </div>
-
-    <h3 class="settings-section-title">Download Missing Archives</h3>
-    <div class="field-group">
-      <label class="checkbox">
-        <input type="checkbox" id="settingsDownloadMissingInput">
-        Download missing archives automatically during rebuild
-      </label>
-    </div>
-    <p class="muted">
-      When enabled, Rebuild Collection will automatically download any mod archive it can't find in
-      your downloads folder directly from Nexus before extracting it, instead of skipping that mod.
-    </p>
-    <div class="callout callout--warning">
-      Automated downloads only work for Nexus <strong>Premium</strong> accounts -- Nexus's API refuses
-      this for free accounts by design, the same way Vortex's own client refuses to auto-download for
-      non-Premium users. This respects Nexus's ad-supported download model: free-tier users must
-      download the archive manually from the Nexus website (which shows ads) and let Vortex install
-      it. If your account is not Premium, this tool won't attempt anything else on your behalf -- it
-      will just skip the mod as it does today, with a note in the run log telling you to download and
-      reinstall it yourself via Vortex.
     </div>
 
     <div class="field-group">
@@ -819,6 +821,43 @@
     <span id="settingsCleanupStatus" class="muted"></span>
   </div>
 
+  <!-- Missing Masters (Utilities area) -->
+  <div class="settings-group">
+    <div class="settings-group__header">
+      <h2>Missing Masters</h2>
+      <p class="muted">READ-ONLY inputs -- this feature never writes to either of these two folders, only reads from them.</p>
+    </div>
+
+    <h3 class="settings-section-title">Skyrim Data folder</h3>
+    <div class="field-group">
+      <label class="field-label" for="settingsSkyrimDataDirInput">The Data directory is located directly inside Skyrim's root installation folder (for example, <code>C:\Program Files (x86)\Steam\steamapps\common\Skyrim Special Edition\Data</code>) <span class="field-required">(required)</span></label>
+      <div class="path-input-row">
+        <input id="settingsSkyrimDataDirInput" class="input input--wide" type="text" placeholder="e.g. E:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data">
+        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsSkyrimDataDirInput">Browse&hellip;</button>
+      </div>
+    </div>
+
+    <h3 class="settings-section-title">Plugins.txt location</h3>
+    <div class="field-group">
+      <label class="field-label" for="settingsPluginsListDirInput">The folder containing your Plugins.txt <span class="field-required">(required)</span></label>
+      <div class="path-input-row">
+        <input id="settingsPluginsListDirInput" class="input input--wide" type="text" placeholder="e.g. C:\Users\YourUsername\AppData\Local\Skyrim Special Edition">
+        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsPluginsListDirInput">Browse&hellip;</button>
+      </div>
+      <p class="muted">Located in your Windows AppData folder (not the game folder). If you're not sure where that is, it's usually <code>C:\Users\YourUsername\AppData\Local\Skyrim Special Edition</code>.</p>
+    </div>
+
+    <h3 class="settings-section-title">Dummy Masters output folder</h3>
+    <div class="field-group">
+      <label class="field-label" for="settingsDummyMastersOutputDirInput">Where a created dummy master gets written <span class="field-required">(required)</span></label>
+      <div class="path-input-row">
+        <input id="settingsDummyMastersOutputDirInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\Wyre Output">
+        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsDummyMastersOutputDirInput">Browse&hellip;</button>
+      </div>
+      <p class="muted">Never your live Data or SKSE folder -- a good choice is a dedicated folder inside your staging directory that you turn into its own mod in Vortex, the same way you'd manage a DynDOLOD Output or BodySlide Output folder.</p>
+    </div>
+  </div>
+
   <div class="view-actions">
     <button id="settingsSaveBtn" class="btn btn--primary">Save Settings</button>
     <span id="settingsSaveStatus" class="muted"></span>
@@ -895,7 +934,7 @@
   <div class="modal">
     <h2>Restore a Vortex database backup</h2>
     <div class="callout callout--warning">
-      <div class="callout__title">&#9888; Make sure Vortex is completely closed before continuing!</div>
+      <div class="callout__title">⚠️ Make sure Vortex is completely closed before continuing!</div>
       <p>This process will replace Vortex's database with the backup you choose below. Don't worry, though—we'll automatically create a fresh safety backup of your current setup first, so you can easily undo this anytime by restoring that new backup.</p>
     </div>
     <select id="settingsStateRestoreSelect" class="select"></select>
@@ -1006,20 +1045,24 @@
     <div class="summary-badges" id="rgReportSummaryBadges"></div>
     <p class="muted" id="rgReportResolvedNote"></p>
 
-    <h2 class="settings-section-title badge badge--success">Completed</h2>
-    <p class="muted">These mods already have their rules set up correctly.</p>
-    <ul id="rgReportCompletedList" class="sync-result-list"></ul>
+    <div id="rgReportCompletedSection">
+      <h2 class="settings-section-title badge badge--success">Completed</h2>
+      <p class="muted">These mods already have their rules set up correctly.</p>
+      <ul id="rgReportCompletedList" class="sync-result-list"></ul>
+    </div>
 
-    <h2 class="settings-section-title badge badge--warning">Exceptions</h2>
-    <p class="muted">These need a bit more attention before everything's fully resolved.</p>
+    <div id="rgReportExceptionsSection">
+      <h2 class="settings-section-title badge badge--warning">Exceptions</h2>
+      <p class="muted">These need a bit more attention before everything's fully resolved.</p>
 
-    <h3 class="settings-section-title">Needs a decision</h3>
-    <p class="muted">More than one mod in the original collection could be the real match for these &mdash; head to Rules Generator to pick the right one for each.</p>
-    <ul id="rgReportNeedsDecisionList" class="sync-result-list"></ul>
+      <h3 class="settings-section-title">Needs a decision</h3>
+      <p class="muted">More than one mod in the original collection could be the real match for these &mdash; head to Rules Generator to pick the right one for each.</p>
+      <ul id="rgReportNeedsDecisionList" class="sync-result-list"></ul>
 
-    <h3 class="settings-section-title">Old version still installed</h3>
-    <p class="muted">These mods were upgraded to a newer version in the new collection, but the older version is also still installed in Vortex. If you don't need it anymore, removing or disabling it there should clear up any leftover conflicts you see.</p>
-    <ul id="rgReportLeftoverList" class="sync-result-list"></ul>
+      <h3 class="settings-section-title">Old version still installed</h3>
+      <p class="muted">These mods were upgraded to a newer version in the new collection, but the older version is also still installed in Vortex. If you don't need it anymore, removing or disabling it there should clear up any leftover conflicts you see.</p>
+      <ul id="rgReportLeftoverList" class="sync-result-list"></ul>
+    </div>
   </div>
   </div>
 
@@ -1032,11 +1075,21 @@
     <h1>Utilities</h1>
   </div>
 
-  <h2 class="settings-section-title">Vortex Scrub</h2>
-  <p class="muted">Want to clean up your folders and reclaim disk space? If you're tired of guessing whether your archive or staging folders still contain unused Vortex mods, Vortex Scrub is here to help! Easily tidy up your setup and free up valuable storage in just a few clicks.</p>
+  <div class="view-actions">
+    <button id="utilities-sub-missingmasters" class="btn btn--primary btn--small">Missing Masters</button>
+    <button id="utilities-sub-scrub" class="btn btn--ghost btn--small">Vortex Scrub</button>
+  </div>
+
+  <div id="utilities-sub-area-scrub">
+  <!-- No "<h2>Vortex Scrub</h2>" here -- the sub-nav button right above already names the tool.
+       This intro banner pitches the value instead (see DESIGN.md's "Tool intro banner" section). -->
+  <div class="tool-hero">
+    <h2 class="tool-hero__title">🧽 Scrub Away Clutter in Seconds</h2>
+    <p class="tool-hero__body">Easily spot staging folders and archives that Vortex has quietly stopped tracking&mdash;no digging through anything by hand! Designed to take the guesswork out of cleanup, this tool shows you exactly what's safe to remove so you can reclaim disk space with confidence.</p>
+  </div>
 
   <div class="callout callout--warning">
-    <div class="callout__title">&#9888; Quick heads-up before you start!</div>
+    <div class="callout__title">⚠️ Quick heads-up before you start!</div>
     <p>Make sure Vortex isn't currently installing or downloading any mods before you start, so your results stay accurate and you don't run into any glitches.</p>
   </div>
 
@@ -1135,6 +1188,106 @@
       </div>
     </div>
   </div>
+  </div>
+  <!-- /utilities-sub-area-scrub -->
+
+  <!-- Modeled on the user's real Wrye Bash workflow (see TECHNICAL.md's "Missing Masters" section
+       for the full design writeup + the real Wrye Bash source findings this was grounded in). No
+       "close Vortex first" messaging anywhere on this sub-area -- this feature only ever reads
+       Plugins.txt/the Data folder directly (not Vortex's live state.v2), and its only write (a
+       created dummy master) goes to a separate, user-configured output folder Vortex isn't
+       actively managing. -->
+  <div id="utilities-sub-area-missingmasters" class="hidden">
+  <!-- No "<h2>Missing Masters</h2>" here -- the sub-nav button right above already names the tool.
+       This intro banner pitches the value instead (see DESIGN.md's "Tool intro banner" section). -->
+  <div class="tool-hero">
+    <h2 class="tool-hero__title">🧩 Triage Missing Masters in Seconds</h2>
+    <p class="tool-hero__body">Easily pinpoint missing master files and instantly see every mod relying on them&mdash;all in one clear view! Designed to streamline your troubleshooting, this tool takes the hassle out of tracking down broken dependencies so you can jump straight into Vortex and fix them with confidence.</p>
+  </div>
+
+  <div class="callout callout--info">
+    <div class="callout__title">💡 Tip</div>
+    <p>Fixing something here only updates your staging folder — open Vortex and click <strong>Deploy Mods</strong> afterward to finish moving it into your game.</p>
+  </div>
+
+  <!-- Same clickable-pill filter convention as Stats Report's "Current Issues" badges
+       (statsIssuesBadges) -- one pill per status with a live count, click to isolate, click again
+       (or Show all) to clear. Populated in mmRenderSummaryBadges. -->
+  <div class="summary-badges" id="mmSummaryBadges"></div>
+
+  <!-- One persistent header row (not nested inside #mmResults) -- mmResultsMeta doubles as both
+       the "N problem master(s)..." count line AND the "all clear" empty message, so the Refresh
+       button always has something to sit next to instead of occupying its own line. Hidden as a
+       whole only in the not-configured state, same as everything else on this page. mmLoading
+       lives on this SAME line too (not its own block below) -- confirmed 2026-07-27: a separate
+       loading-row block below inserted/removed a whole line every time it toggled, making the
+       page visibly bounce on every scan/poll. -->
+  <div class="mm-header-row" id="mmHeaderRow">
+    <p class="muted" id="mmResultsMeta"></p>
+    <div class="mm-header-row__right">
+      <span id="mmLoading" class="mm-inline-loading hidden"><span class="spinner"></span> Scanning&hellip;</span>
+      <button id="mmRefreshBtn" class="btn btn--primary btn--small">Refresh</button>
+    </div>
+  </div>
+
+  <div id="mmNotConfigured" class="empty-row hidden"></div>
+  <div id="mmCriticalError" class="callout callout--critical hidden"></div>
+
+  <div id="mmResults" class="hidden">
+    <div id="mmGroupsList"></div>
+  </div>
+
+  <div id="mmCreateDummyConfirmModal" class="modal-overlay hidden">
+    <div class="modal modal--wide">
+      <h2>🧩 Create a Dummy Master?</h2>
+      <div id="mmCreateDummyConfirmModalText"></div>
+      <!-- Static explainer -- most users clicking this button have no idea what a "dummy master" is,
+           and we're the ones offering the button, so this makes sure they understand what it does
+           (and doesn't do) before creating one. Same "own distinct visual piece" treatment as other
+           modals' precondition callouts -- never changes regardless of which master is being stubbed,
+           so it's static markup, not JS-set. Caveat is ⚠️ (not 🛑) -- creating one is never refused,
+           it just might not fully resolve everything on its own, matching the "tread lightly, not a
+           blocker" case in DESIGN.md's icon-severity test. -->
+      <div class="callout callout--info">
+        <div class="callout__title">🧩 Understanding Dummy Master Files</div>
+        <p>A dummy master is a lightweight placeholder file (.esm, .esp, or .esl) created solely to trick Skyrim into thinking a required dependency is installed. This prevents the game from immediately crashing on startup when a master file is missing.</p>
+        <p><strong>💡 When to use a dummy master</strong></p>
+        <ul>
+          <li><strong>Bypassing requirements:</strong> Useful if a patch or mod demands a master plugin you don't actually need or want in your setup.</li>
+          <li><strong>Merged mods:</strong> Helps older patches recognize merged plugins that replaced original .esp files.</li>
+        </ul>
+      </div>
+      <div class="callout callout--warning">
+        <div class="callout__title">⚠️ Important Caveat: Resolving Conflicts</div>
+        <p>Generating a dummy master prevents startup crashes, but it doesn't add actual mod data. If the dependent mod relies on scripts, textures, or specific game records from that missing master, you may still run into in-game glitches or missing content. After creating a dummy master, you might still need to manually resolve conflicts or adjust your load order in Vortex to ensure everything runs smoothly.</p>
+      </div>
+      <div class="modal-actions">
+        <button id="mmCreateDummyConfirmCancelBtn" class="btn btn--ghost">Cancel</button>
+        <button id="mmCreateDummyConfirmOkBtn" class="btn btn--primary">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="mmRebuildConfirmModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>🛠️ Rebuild Single Mod from Archive</h2>
+      <p id="mmRebuildConfirmModalText"></p>
+      <!-- The "Vortex must be closed" precondition is its OWN visually distinct stop-tier callout,
+           not just another sentence in the description above -- it's a hard blocking requirement
+           (this request is flatly refused if Vortex is open), matching DESIGN.md's own definition
+           of critical severity ("a step that cannot proceed"), not just a general caution. Static
+           (not JS-set) since this line never changes regardless of which mod is being rebuilt. -->
+      <div class="callout callout--critical">
+        <div class="callout__title">🛑 Make sure Vortex is completely closed before continuing!</div>
+      </div>
+      <div class="modal-actions">
+        <button id="mmRebuildConfirmCancelBtn" class="btn btn--ghost">Cancel</button>
+        <button id="mmRebuildConfirmOkBtn" class="btn btn--primary">Rebuild</button>
+      </div>
+    </div>
+  </div>
+  </div>
+  <!-- /utilities-sub-area-missingmasters -->
 </main>
 </section>
 
@@ -1178,23 +1331,29 @@
       <p id="rgApplyDoneText"></p>
     </div>
 
-    <div class="rg-section-header-row" id="rgReadySectionHeaderRow">
-      <h2 id="rgReadySectionTitle" class="settings-section-title badge badge--success">Ready to copy</h2>
-      <button id="rgExpandAllReadyBtn" type="button" class="badge badge--neutral badge--clickable">Expand all</button>
+    <div id="rgReadySection">
+      <div class="rg-section-header-row" id="rgReadySectionHeaderRow">
+        <h2 id="rgReadySectionTitle" class="settings-section-title badge badge--success">Ready to copy</h2>
+        <button id="rgExpandAllReadyBtn" type="button" class="badge badge--neutral badge--clickable">Expand all</button>
+      </div>
+      <p class="muted">We matched these mods with high confidence based on their names and existing rules. Feel free to click any mod to check or edit its rules&mdash;just like in Vortex's rule editor. Anything pointing to an older version of a mod has already been automatically updated to point to the new one!</p>
+      <div id="rgReadyList"></div>
     </div>
-    <p class="muted">We matched these mods with high confidence based on their names and existing rules. Feel free to click any mod to check or edit its rules&mdash;just like in Vortex's rule editor. Anything pointing to an older version of a mod has already been automatically updated to point to the new one!</p>
-    <div id="rgReadyList"></div>
 
-    <div class="rg-section-header-row" id="rgReviewSectionHeaderRow">
-      <h2 id="rgReviewSectionTitle" class="settings-section-title badge badge--warning">Needs your input</h2>
-      <button id="rgExpandAllReviewBtn" type="button" class="badge badge--neutral badge--clickable">Expand all</button>
+    <div id="rgReviewSection">
+      <div class="rg-section-header-row" id="rgReviewSectionHeaderRow">
+        <h2 id="rgReviewSectionTitle" class="settings-section-title badge badge--warning">Needs your input</h2>
+        <button id="rgExpandAllReviewBtn" type="button" class="badge badge--neutral badge--clickable">Expand all</button>
+      </div>
+      <p class="muted">More than one mod in the original collection could be the real match for these &mdash; pick the right one for each. Nothing here is guessed automatically.</p>
+      <div id="rgReviewList"></div>
     </div>
-    <p class="muted">More than one mod in the original collection could be the real match for these &mdash; pick the right one for each. Nothing here is guessed automatically.</p>
-    <div id="rgReviewList"></div>
 
-    <h2 id="rgNoLinkSectionTitle" class="settings-section-title badge badge--neutral">Nothing to do</h2>
-    <p class="muted">Added to the new collection with no relationship to anything in the original one &mdash; nothing needed here.</p>
-    <ul id="rgNoLinkList" class="sync-result-list"></ul>
+    <div id="rgNoLinkSection">
+      <h2 id="rgNoLinkSectionTitle" class="settings-section-title badge badge--neutral">Nothing to do</h2>
+      <p class="muted">Added to the new collection with no relationship to anything in the original one &mdash; nothing needed here.</p>
+      <ul id="rgNoLinkList" class="sync-result-list"></ul>
+    </div>
   </div>
 </main>
 
@@ -1265,5 +1424,6 @@
 <script src="rules-generator-app.js"></script>
 <script src="reports-rulesgen-app.js"></script>
 <script src="cleanup-app.js"></script>
+<script src="missing-masters-app.js"></script>
 </body>
 </html>

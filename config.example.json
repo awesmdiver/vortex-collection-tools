@@ -15,5 +15,8 @@
   "serverPort": 4321,
   "serverHost": "127.0.0.1",
   "autoOpenBrowser": true,
-  "cleanupExcludeListDir": null
+  "cleanupExcludeListDir": null,
+  "skyrimDataDir": null,
+  "pluginsListDir": null,
+  "dummyMastersOutputDir": null
 }

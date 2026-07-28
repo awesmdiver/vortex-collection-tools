@@ -123,6 +123,21 @@ function showToolArea(id) {
   // landing at the top of the new one. Confirmed live 2026-07-27: clicking the Settings nav icon
   // while scrolled partway down another page dropped you mid-Settings instead of at its top.
   window.scrollTo(0, 0);
+
+  // Keep the URL in sync with client-side navigation -- confirmed real gap 2026-07-27: this function
+  // never touched the URL before, so clicking between nav tabs left the address bar (and thus any
+  // browser refresh) pointing at whatever ?area= the page happened to first load with -- e.g. a
+  // refresh always landing back on Update Collection just because that was the last DEEP LINK ever
+  // visited, regardless of which tab was actually showing. history.replaceState (not pushState) --
+  // this should update the CURRENT entry, not pile up a new Back-button stop for every tab click.
+  // ?reports=/?utilities= are cleared here when navigating to a DIFFERENT area; showReportsSubTab/
+  // showUtilitiesSubTab set their own right back afterward, when id IS that area (both of those run
+  // via their own listener on the same nav-tab click, immediately after this one).
+  const url = new URL(location.href);
+  url.searchParams.set('area', id);
+  if (id !== 'reports') url.searchParams.delete('reports');
+  if (id !== 'utilities') url.searchParams.delete('utilities');
+  history.replaceState(null, '', url);
 }
 
 // Resolves 'save' or 'discard' -- shown only when navigating away from Settings with unsaved
@@ -179,7 +194,26 @@ if (reportsSubTab) {
     showReportsSubTab(REPORTS_SUB_TAB_URL_MAP[reportsSubTab] || 'stats');
   });
 } else if (jumpArea && TOOL_AREAS.includes(jumpArea)) {
-  document.addEventListener('DOMContentLoaded', () => showToolArea(jumpArea));
+  document.addEventListener('DOMContentLoaded', () => {
+    showToolArea(jumpArea);
+    // Update Collection's own profile data needs a live Vortex-state check (vortexRunningGate) --
+    // never fire it for any other area, and never unconditionally at load (see sync-app.js's boot()
+    // for the full reasoning: that used to run on every page load regardless of the active area,
+    // popping the shared Vortex-running modal on totally unrelated pages). window.loadSyncProfiles
+    // is defined by sync-app.js, which loads BEFORE this DOMContentLoaded callback ever fires (same
+    // "call a later-loaded script's function" technique already used for showReportsSubTab above).
+    // Skipped when a real profileId is already in the URL -- that's the Ignored/Disabled report's
+    // own Back link, and sync-app.js's boot() already awaits loadSyncProfiles() itself in that exact
+    // case, so calling it again here would just be a redundant, wasteful second fetch.
+    if (jumpArea === 'sync' && !params.get('profileId')) window.loadSyncProfiles?.();
+    // Restores the Utilities sub-tab (Missing Masters/Vortex Scrub) the same way the ?reports=
+    // branch above restores a Reports sub-tab -- showUtilitiesSubTab is defined in cleanup-app.js,
+    // which also loads before this callback ever fires, same deferred-to-DOMContentLoaded technique.
+    if (jumpArea === 'utilities') {
+      const utilitiesSubTab = params.get('utilities');
+      if (utilitiesSubTab) window.showUtilitiesSubTab?.(utilitiesSubTab);
+    }
+  });
 } else {
   // First-run check: land on Settings automatically when staging/downloads aren't configured yet,
   // with a banner explaining why -- this can only ever fire before the very first setup, since it

@@ -85,7 +85,7 @@ function renderCriticalMessage(text) {
 // treatment everywhere on this page (icon + title + structured message), not just plain red status
 // text, matching TECHNICAL.md's documented callout severity conventions.
 function showCriticalCallout(el, message) {
-  el.innerHTML = `<div class="callout__title">&#9888; Critical Error</div>${renderCriticalMessage(message)}`;
+  el.innerHTML = `<div class="callout__title">🛑 Critical Error</div>${renderCriticalMessage(message)}`;
   el.classList.remove('hidden');
 }
 function hideCriticalCallout(el) {
@@ -505,14 +505,14 @@ function renderBackupRatioWarning(ignoredCount, disabledCount, totalCount) {
   const el = $s('syncBackupRatioWarning');
   const message = buildBackupRatioWarning(ignoredCount, disabledCount, totalCount);
   if (!message) { el.classList.add('hidden'); el.innerHTML = ''; return; }
-  el.innerHTML = `<div class="callout__title">&#9888; Double-check this</div>${renderCriticalMessage(message)}`;
+  el.innerHTML = `<div class="callout__title">⚠️ Double-check this</div>${renderCriticalMessage(message)}`;
   el.classList.remove('hidden');
 }
 
 function renderBackupFreshnessWarning(message) {
   const el = $s('syncBackupFreshnessWarning');
   if (!message) { el.classList.add('hidden'); el.innerHTML = ''; return; }
-  el.innerHTML = `<div class="callout__title">&#9888; Double-check this</div>${renderCriticalMessage(message)}`;
+  el.innerHTML = `<div class="callout__title">⚠️ Double-check this</div>${renderCriticalMessage(message)}`;
   el.classList.remove('hidden');
 }
 
@@ -823,17 +823,54 @@ $s('syncCompareBtn').addEventListener('click', () => {
 // The Ignored/Disabled report is a real page (not an SPA route) -- its own Back button round-trips
 // ?collectionModId=&profileId= so navigating back here restores exactly what was selected before,
 // instead of resetting to "-- Select Collection --" (confirmed live this was lost otherwise).
+//
+// loadSyncProfiles() is deliberately NOT always awaited here -- confirmed real bug 2026-07-27: this
+// used to be an unconditional part of the Promise.all below, which ran on EVERY page load regardless
+// of which area the URL/nav actually landed on (every <script> tag executes no matter which tab
+// shows). Since /api/sync/profiles needs Vortex closed (vortexRunningGate), that meant the shared
+// "Vortex is running" modal could pop up while looking at a totally unrelated page (e.g. Utilities),
+// and -- because boot() only ever runs once per real page load -- clicking over to Update Collection
+// itself afterward triggered no new check, leaving the profile dropdown silently empty with no
+// explanation. loadSyncCollections()/loadSyncBackups() stay eager here since neither one ever
+// touches Vortex's live state (confirmed via web/sync-routes.js -- both are gate-free filesystem
+// reads), so they can never trigger that modal.
+//
+// Still awaited here ONLY when returning from the Ignored/Disabled report's Back link (the one case
+// where `?profileId=` is actually set) -- that link always also sets `?area=sync` (see
+// web/sync-routes.js's backHref), so shell.js's own jumpArea handling deliberately skips its own
+// loadSyncProfiles() call in that exact case to avoid a redundant double-fetch (see shell.js).
+// Every OTHER path to this data (clicking the Update Collection nav tab, a bare "?area=sync" link,
+// or clicking the profile dropdown itself while empty) is handled by the listeners further below.
 async function boot() {
-  await Promise.all([loadSyncCollections(), loadSyncProfiles(), loadSyncBackups()]);
   const params = new URLSearchParams(location.search);
   const restoreProfileId = params.get('profileId');
+  const restoreModId = params.get('collectionModId');
+  const tasks = [loadSyncCollections(), loadSyncBackups()];
+  if (restoreProfileId) tasks.push(loadSyncProfiles());
+  await Promise.all(tasks);
   if (restoreProfileId && $s('syncProfileSelect').querySelector(`option[value="${restoreProfileId}"]`)) {
     $s('syncProfileSelect').value = restoreProfileId;
   }
-  const restoreModId = params.get('collectionModId');
   if (restoreModId && $s('syncCollectionSelect').querySelector(`option[value="${restoreModId}"]`)) {
     $s('syncCollectionSelect').value = restoreModId;
     selectCollection(restoreModId);
   }
 }
+// Exposed for shell.js's own jumpArea handling (a direct "?area=sync" link/refresh) -- same
+// "deliberate seam, function defined by a later-loaded script" technique already used for
+// window.showUpdateCompareReport in this same file.
+window.loadSyncProfiles = loadSyncProfiles;
+
+// Re-checks Vortex-gated profile data specifically when the user actually visits Update Collection
+// -- clicking the nav tab (every time, whether switching in from elsewhere or already here) always
+// re-runs it, matching the same "re-check on every visit" behavior Missing Masters/Vortex Scrub
+// already use for their own Vortex-dependent scans.
+document.getElementById('nav-sync').addEventListener('click', () => loadSyncProfiles());
+
+// Explicit safety net the user asked for: if the profile dropdown is still showing its empty/
+// placeholder state (no real "data-profile" option -- see loadSyncProfiles' own render loop) when
+// clicked, re-run the check right then rather than leaving it silently empty with no explanation.
+$s('syncProfileSelect').addEventListener('click', () => {
+  if (!$s('syncProfileSelect').querySelector('option[data-profile]')) loadSyncProfiles();
+});
 boot();

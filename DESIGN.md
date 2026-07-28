@@ -70,12 +70,129 @@ modals, badges, and status-pills all share the exact same mapping (full rational
 |---|---|---|---|
 | Info | blue (`--accent`) | `&#9432;` circled-i | Plain status or instructions — nothing is wrong. |
 | Success | green (`--success`) | checkmark-style | Something completed, or worked correctly. |
-| Warning | amber (`--warning`) | `&#9888;` triangle-alert | Needs attention, but isn't blocking. |
-| Critical | red (`--danger`) | `&#9888;` triangle-alert | A real failure, or a step that cannot proceed. |
+| Warning | amber (`--warning`) | ⚠️ | Needs attention, but isn't blocking. |
+| Critical | red (`--danger`) | 🛑 | A real failure, or a step that cannot proceed. |
+
+**Icons updated 2026-07-27, twice the same day**: first, every `&#9888;`/bare `⚠` was swapped for
+the colorful emoji ⚠️ (U+26A0 + variation-selector-16) instead of the flat black-and-white HTML
+entity glyph — reads more eye-catching, matching this app's broader move toward emoji-led headings
+(see the Tool intro banner section above). Later the same day, Critical was split off to its own
+icon, 🛑 (stop sign) — Warning and Critical had been sharing the same triangle-alert glyph,
+distinguished only by color; the user wanted Critical to read as visually distinct, not just
+differently-colored, from Warning. **When adding a new critical-severity callout/modal, use 🛑, not
+⚠️** — check the container's actual CSS class (`callout--critical`/`modal--critical` vs.
+`callout--warning`/`modal--warning`) to pick the right one, since a title alone (e.g. "Double-check
+this") doesn't reliably tell you the severity.
+
+**The actual test, confirmed with the user 2026-07-27**: 🛑 = "you can't continue at all" (a hard
+blocker — the action will be flatly refused, or something has genuinely failed). ⚠️ = "tread
+lightly" (proceed with caution, nothing is blocking yet). This is why "Vortex must be closed before
+continuing" is 🛑, not ⚠️, on the Rebuild This Mod confirm modal — the request is refused outright
+if Vortex is open, not just risky to proceed with. Ask this question first when picking an icon for
+new copy, before defaulting to whichever one a nearby example happens to use.
+
+**Confirm-modal structure, same day**: a modal that has BOTH a plain description of what an action
+does AND a hard blocking precondition should split them into two visually distinct pieces, not one
+run-on paragraph — a plain `<p>` for the description, plus its own separate `.callout--critical`
+(🛑) directly inside the modal for the precondition. See `#mmRebuildConfirmModal` for the reference
+example. The modal's own `<h2>` gets a tool/action icon (🛠️ for "Rebuild Single Mod from Archive"),
+not a severity icon — severity belongs to the specific blocking-precondition callout inside, not
+the modal's title, which is just naming the action.
 
 Outside of that four-color system, plain grey (`--text-muted` / `.muted`) is for ordinary secondary
 text with **no severity implied at all** — most of this app's body copy. Never invent a one-off color
 for a status; pick one of the four above, or use plain muted grey if nothing is actually wrong.
+
+**Wrapped callout titles (2026-07-28)**: every `.callout__title` is one plain text string ("🛑 Make
+sure…", no separate icon markup), so a long title that wraps to a second line used to fall flush to
+the container's own left edge instead of lining up under the actual text. Fixed with a CSS hanging
+indent (`text-indent: -1.65em; padding-left: 1.65em;` on `.callout__title`) — verified via direct
+in-browser pixel measurement across four different icons (🛑 ⚠️ 🚀 🧩) at this class's real 15px
+font-size, each landing within 0.02px of the first line's own text. Applies automatically everywhere
+this class is used; no HTML/JS changes needed per callout.
+
+## Tool intro banner, not a redundant heading (2026-07-27)
+
+When a tool page sits behind its own sub-nav button (e.g. Utilities' "Missing Masters" / "Vortex
+Scrub" pair), don't ALSO put a plain `<h2>Tool Name</h2>` at the top of the page body -- the sub-nav
+button directly above already names it, so the heading is pure redundancy. Replace it with a
+`.tool-hero` intro banner that pitches the tool's value instead:
+
+```html
+<div class="tool-hero">
+  <h2 class="tool-hero__title">🧩 Triage Missing Masters in Seconds</h2>
+  <p class="tool-hero__body">Easily pinpoint missing master files and instantly see every mod
+  relying on them&mdash;all in one clear view! Designed to streamline your troubleshooting, this
+  tool takes the hassle out of tracking down broken dependencies so you can jump straight into
+  Vortex and fix them with confidence.</p>
+</div>
+```
+
+The copy itself follows the `plain-language-writer` skill's **"Special Feature & Utility Overviews
+(What & Why)"** section — load that skill before writing one of these banners, don't improvise the
+shape from scratch:
+- **Lead with flair**: a bold, catchy title prefixed with a contextual emoji (🧩, ⚡, 🔍, 🛠️, etc.)
+  to draw the eye immediately.
+- **Explain the what & why**: 2-3 punchy, encouraging sentences combining what the tool does and why
+  the user needs it — the core value (saving time, reducing frustration, replacing manual digging).
+- **Acknowledge the workflow**: name where the user actually finishes the job, if it's a different
+  tool than this page (e.g. "diagnose here, then fix it in Vortex").
+
+First shipped on Missing Masters, replacing its old `<h2 class="settings-section-title">Missing
+Masters</h2>` + plain description paragraph. **This is the standard going forward** — every existing
+tool page (Rebuild Collection, Update Collection, Rules Generator, each Reports sub-tab) should get
+the same treatment over time, not just new ones; do it opportunistically when touching a page for
+another reason, same as any other pattern in this document.
+
+Second example, Vortex Scrub (2026-07-27) — a case where the workflow is entirely self-contained
+(scan, review, and delete all happen on this same page, no handoff to another app like Missing
+Masters has), so the "acknowledge the workflow" beat leans on *how easy* the in-app path is instead
+of naming a destination elsewhere:
+
+```html
+<div class="tool-hero">
+  <h2 class="tool-hero__title">🧽 Scrub Away Clutter in Seconds</h2>
+  <p class="tool-hero__body">Easily spot staging folders and archives that Vortex has quietly
+  stopped tracking&mdash;no digging through anything by hand! Designed to take the guesswork out of
+  cleanup, this tool shows you exactly what's safe to remove so you can reclaim disk space with
+  confidence.</p>
+</div>
+```
+
+Icon choice: picked to evoke the tool's own name/action specifically (🧽 for "Scrub"), not just
+"cleaning" generically — same logic as 🧩 for "Missing Masters" evoking a puzzle piece that's
+missing. When choosing an icon for a future banner, look for one that maps to the tool's specific
+verb/name, not a generic "success"/"tool" icon.
+
+## Contextual error placement — put failure feedback where the user is already looking (2026-07-28)
+
+A page-level error box rendered once near the top of a long, scrolling list (e.g. Missing Masters'
+own `#mmCriticalError`) is easy to miss when the action that triggered it lives far down that list.
+Confirmed real, reported as "nothing happened, no error, no warning" THREE separate times before
+being traced to this: the message was rendering correctly every time, just off-screen above the
+user's current scroll position. Two fixes, in order of preference:
+1. **If the failure is tied to a specific row/item, render it INSIDE that row**, in a callout
+   already living there (or a new one placed right next to the existing one), not in a shared
+   top-of-page box. The user is already looking at that row — that's where the answer belongs.
+2. Only fall back to a page-level box (with `scrollIntoView` if you do) for failures that aren't
+   tied to any specific item (e.g. the whole page failed to load).
+
+When a row already has its own callout with useful info (e.g. "Missing Files in Staging Folder"
+naming the specific staging folder), don't overwrite its content with a NEW failure message — insert
+the new one alongside/above it instead. Overwriting loses real information (confirmed real: doing
+this once lost the folder-name reference the original message gave, which the failure message alone
+didn't repeat).
+
+## State a known outcome as fact, not a hedged conditional (2026-07-28)
+
+If the app already knows the current value of a relevant setting/condition at the moment a message
+is written, state the outcome as plain fact rather than hedging with "if `[setting]` is turned on…".
+Example: Missing Masters' Rebuild This Mod confirm dialog reads the actual current value of
+"Download missing archives automatically" and says either "This downloads **X**'s archive and
+reinstalls it…" or "This restores **X**'s files into your staging folder…" — never "if the setting
+is on, we'll try to download it," since the app already knows which case applies by the time the
+dialog needs to say anything. Reserve genuinely conditional phrasing for outcomes that really are
+uncertain at write-time (e.g. "you may still run into in-game glitches or missing content").
 
 ## Header nav ordering and Settings' icon treatment (2026-07-26)
 

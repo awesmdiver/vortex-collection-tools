@@ -117,7 +117,7 @@ function renderNeedsReview(kind, needsReview) {
   }
   const nounSingular = kind === 'archives' ? 'archive' : 'folder';
   const nounPlural = kind === 'archives' ? 'Archives' : 'Folders';
-  $g('cleanupNeedsReviewTitle').textContent = `⚠ Action Needed: Unrecognized ${nounPlural} Found`;
+  $g('cleanupNeedsReviewTitle').textContent = `⚠️ Action Needed: Unrecognized ${nounPlural} Found`;
   $g('cleanupNeedsReviewMeta').textContent =
     `We found the following ${nounSingular}s, but their names don't match the usual format. Please double-check them to let us know if they should be excluded or if they're safe to delete.`;
 
@@ -363,8 +363,32 @@ $g('cleanupCrossCheckDeleteAllBtn').addEventListener('click', () => {
   deleteCrossCheckMatches(cleanupCrossCheckMatches.map((m) => m.name));
 });
 
-// No load-once hook needed -- unlike Reports' sub-tabs, this is now a top-level area shown via the
-// generic showToolArea() (shell.js), and there's no scan-on-first-entry behavior to gate: both scans
-// are real, uncached reads of Vortex's state (and require it closed), so the user picks a side
-// rather than paying for a scan they may not want yet. The buttons above are wired unconditionally
-// at script-load time regardless.
+// Utilities area sub-tabs (Missing Masters / Vortex Scrub) -- mirrors stats-app.js's own
+// showReportsSubTab exactly (same array-of-ids toggle pattern). Missing Masters listed/defaulted
+// first -- confirmed 2026-07-27 it's used far more often than Vortex Scrub. "Missing Masters" itself
+// has no load-once gate here (unlike Reports' loadStatsPageOnce/loadWorkThroughPageOnce) -- it needs
+// to scan every time the tab is shown (and on focus/visibility change), not just once ever, so
+// missing-masters-app.js manages its own refresh timing; this just calls its exposed hook via the
+// same "deliberate seam" pattern reports-rulesgen-app.js already uses (a plain `typeof === function`
+// check, since missing-masters-app.js loads after this file and can't be referenced directly here).
+const UTILITIES_SUB_TABS = ['missingmasters', 'scrub'];
+function showUtilitiesSubTab(id) {
+  for (const tab of UTILITIES_SUB_TABS) {
+    $g(`utilities-sub-area-${tab}`).classList.toggle('hidden', tab !== id);
+    $g(`utilities-sub-${tab}`).classList.toggle('btn--primary', tab === id);
+    $g(`utilities-sub-${tab}`).classList.toggle('btn--ghost', tab !== id);
+  }
+  if (id === 'missingmasters' && typeof runMissingMastersScan === 'function') runMissingMastersScan();
+
+  // Keeps the URL in sync so a browser refresh returns to this exact sub-tab, not just the
+  // Utilities area generically -- same fix as showReportsSubTab (stats-app.js) / showToolArea
+  // (shell.js) for the same underlying gap: clicking a nav/sub-tab never used to touch the URL.
+  const url = new URL(location.href);
+  url.searchParams.set('area', 'utilities');
+  url.searchParams.set('utilities', id);
+  history.replaceState(null, '', url);
+}
+for (const tab of UTILITIES_SUB_TABS) {
+  $g(`utilities-sub-${tab}`).addEventListener('click', () => showUtilitiesSubTab(tab));
+}
+document.getElementById('nav-utilities').addEventListener('click', () => showUtilitiesSubTab('missingmasters'));

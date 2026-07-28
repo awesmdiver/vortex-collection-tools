@@ -222,6 +222,10 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 #cleanupCrossCheckList,
 #settingsCleanupIgnoredStagingList,
 #settingsCleanupIgnoredArchivesList { padding-left: 20px; }
+/* .mm-neededby-list deliberately does NOT get this same padding-left -- its own rows now use the
+   same 4-column grid as .mm-row__header with an empty leading column (see .mm-neededby-row above),
+   which already provides the visual indent AND keeps every column aligned with the header's own.
+   Adding this same 20px on top would double up and break that alignment again. */
 /* "+N more / Show less" toggle -- same collapsed-by-default convention as Rebuild Collection's own
    long file lists (.file-list-toggle), just its own class since that one is scoped under
    .detail-cell and this list isn't nested inside one. */
@@ -242,6 +246,14 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .view-header { margin-bottom: 22px; }
 .view-header h1 { font-size: 22px; margin: 6px 0 4px; }
 .view-header p { margin: 4px 0; }
+
+/* Tool intro banner -- replaces a redundant "<h2>Tool Name</h2>" (the sub-nav button right above it
+   already names the tool) with an eye-catching value pitch instead: an emoji-led headline plus a
+   friendly what/why sentence or two. See DESIGN.md's "Tool intro banner" section -- first shipped on
+   Missing Masters 2026-07-27, meant to be reused by every tool page's own intro over time. */
+.tool-hero { margin-bottom: 20px; }
+.tool-hero__title { font-size: 22px; margin: 0 0 8px; }
+.tool-hero__body { margin: 0; color: var(--text); font-size: 14px; line-height: 1.6; }
 
 /* Settings page header -- keeps the intro line and the server action buttons on one row, same
    space-between/flex-wrap idea as .progress-header-row, so a narrow window wraps the buttons
@@ -467,7 +479,15 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .callout--success { background: var(--success-bg); border-color: var(--success); }
 .callout--warning { background: var(--warning-bg); border-color: var(--warning); }
 .callout--critical { background: var(--danger-bg); border-color: var(--danger); }
-.callout__title { font-weight: 700; margin-bottom: 6px; }
+/* Hanging indent so a wrapped second (or third) line aligns with the TEXT, not the leading icon --
+   confirmed real 2026-07-28 via direct pixel measurement in-browser: every callout title is one
+   plain text string ("🛑 Make sure...", no separate icon markup anywhere), so a wrapped line
+   naturally fell flush to the container's own left edge instead of lining up under "Make". Measured
+   across four different icons (🛑 ⚠️ 🚀 🧩) at this class's real 15px font-size -- text-indent
+   pulls the FIRST line back left by the icon+space's own width, padding-left pushes the WHOLE block
+   right by the same amount, so wrapped lines land exactly under the first line's actual text start
+   (verified within 0.02px for all four). Applies everywhere .callout__title is used, not a one-off. */
+.callout__title { font-weight: 700; margin-bottom: 6px; text-indent: -1.65em; padding-left: 1.65em; }
 .callout ul, .callout ol { margin: 8px 0 0; padding-left: 20px; }
 .callout p { margin: 4px 0; font-size: 13.5px; }
 .callout ol li { font-size: 13.5px; margin: 4px 0; }
@@ -800,6 +820,78 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    .path-rows group, so they need their own gap -- otherwise they render flush against each other
    when both are visible at once. */
 #downloadNotice { margin-top: 10px; }
+
+/* Missing Masters (Utilities sub-tab) -- master-first row cards, UX-UI-DEPENDENCY-DESIGNER.md's
+   "Badge & Highlight Table" pattern (see reference_ux_dependency_designer_skill memory / TECHNICAL.md
+   for the full design writeup). Color-coded by status via a left accent border + a subtle tinted
+   background, not a plain grey card -- confirmed explicitly 2026-07-27 that an all-muted-grey list
+   reads as visually flat over a long scan. */
+/* Refresh button lives on the SAME line as the "N problem master(s)..." meta text (confirmed
+   2026-07-27: a separate .view-actions row above it was unnecessary vertical space) -- meta on the
+   left, button pinned right via space-between/margin-left:auto rather than a fixed width. */
+.mm-header-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 8px 0 20px; }
+.mm-header-row p { margin: 0; }
+/* Scanning... indicator sits on this SAME line, right before Refresh, instead of its own block
+   below -- confirmed 2026-07-27: a separate .loading-row inserted/removed a whole line every time
+   it toggled visible/hidden (every scan, every 5s silent poll check), making the page visibly
+   bounce. Grouped with the button in its own flex wrapper so a 3rd flex item doesn't get spread out
+   by .mm-header-row's own space-between -- it stays pinned right next to Refresh instead. */
+.mm-header-row__right { display: flex; align-items: center; gap: 12px; }
+.mm-inline-loading { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 13px; }
+.mm-row {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.mm-row--critical { border-left-color: var(--danger); background: var(--danger-bg); }
+.mm-row--warning { border-left-color: var(--warning); background: var(--warning-bg); }
+.mm-row--success { border-left-color: var(--success); background: var(--success-bg); }
+/* Grid, not flex -- gives the mod-name its own genuine column (confirmed 2026-07-27: a raw plugin
+   filename alone doesn't say which mod it's from) instead of just appending it as more inline text.
+   [badge] [filename] [mod name] [actions] -- the two middle columns are both `fr` so they expand to
+   fill all remaining width, which is what naturally pins the actions column flush right without
+   needing its own margin-left:auto.
+   Badge and actions columns are FIXED widths, not `auto` -- each .mm-row__header is its own
+   independent grid, so with `auto` the badge/actions columns were sized per-row from that row's own
+   content (a "Missing" row's badge text differs in length from "Disabled", and a Missing row has an
+   extra "Create Dummy Master" button the Disabled rows don't) -- that shifted where the fr columns
+   landed row to row, so the mod-name column visibly didn't line up between a Missing row and a
+   Disabled row (reported 2026-07-27). Fixed widths make every row's gutters identical so the two fr
+   columns always start/end at the same x regardless of that row's own badge label or action count. */
+.mm-row__header { display: grid; grid-template-columns: 118px minmax(160px, 1.2fr) minmax(140px, 1fr) 480px; align-items: center; gap: 10px; }
+/* The "Manual Action Needed" callout sits directly under the header with no gap otherwise -- .callout
+   only has its own margin-BELOW (for whatever comes after it), nothing above. */
+.mm-row__header + .callout { margin-top: 14px; }
+.mm-row__header > .badge { justify-self: start; }
+.mm-master-name { font-size: 15px; color: var(--text); overflow-wrap: anywhere; }
+.mm-row__actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.mm-row__neededby-label { margin-top: 10px; font-weight: 600; font-size: 13px; color: var(--text); }
+/* Same 4-column grid as .mm-row__header (badge/filename/mod-name/actions), not just a matching
+   2-column shape -- confirmed real 2026-07-27: two SEPARATE grids using the same fr ratios still
+   land their columns at DIFFERENT absolute pixel positions once their own total reserved-column
+   widths differ (header reserves 118px+480px for badge/actions; this row reserved nothing), so
+   filename/mod-name visibly zigzagged between the header line and its own "Needed by" rows instead
+   of lining up as one consistent table. Using the IDENTICAL template and leaving columns 1/4 empty
+   (see mmRenderNeededByRow's grid-column assignments) makes every column land at the exact same x
+   position down the whole card -- the empty first column reads as "this row has no badge of its
+   own," which is the correct visual (only the master row gets one), not a bug. */
+.mm-neededby-row { display: grid; grid-template-columns: 118px minmax(160px, 1.2fr) minmax(140px, 1fr) 480px; gap: 10px; align-items: baseline; }
+.mm-neededby-row > *:first-child { grid-column: 2; }
+.mm-neededby-row > *:last-child { grid-column: 3; }
+/* Master row's own mod name is bold (a <strong>, matches its filename right next to it) and full
+   text color -- it's the primary thing on this row. The needed-by list's mod names (a plain <span>)
+   are normal weight and a step quieter, since they're supplementary context for each dependent, not
+   the main point of that row -- but still not flat grey-on-grey; italic carries the "secondary"
+   signal instead of relying on color alone. */
+.mm-row__header .mm-modname { color: var(--text); overflow-wrap: anywhere; }
+.mm-neededby-row .mm-modname { font-style: italic; color: var(--text-muted); font-size: 13px; overflow-wrap: anywhere; }
+/* The count numbers in "N problem master(s) are affecting M plugin(s) total." -- accent-colored,
+   not the default muted-grey meta text, so the two numbers that actually matter stand out at a
+   glance instead of blending into the sentence around them. */
+.accent-count { color: var(--accent); font-weight: 700; }
 
 @media (max-width: 640px) {
   .app-main { padding: 20px 14px 60px; }

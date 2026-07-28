@@ -271,6 +271,16 @@ function showReportsSubTab(id) {
   if (id === 'stats') loadStatsPageOnce();
   else if (id === 'workthrough' && typeof loadWorkThroughPageOnce === 'function') loadWorkThroughPageOnce();
   else if (id === 'rulesgen' && typeof loadRulesGenReportPageOnce === 'function') loadRulesGenReportPageOnce();
+
+  // Keeps the URL in sync so a browser refresh returns to this exact sub-tab, not just the Reports
+  // area generically -- same "clicking a nav tab never touched the URL before" gap fixed for
+  // showToolArea in shell.js, applied one level deeper here. Reverses shell.js's own
+  // REPORTS_SUB_TAB_URL_MAP (only 'workthrough' needs translating back to the hyphenated
+  // "work-through" spelling; everything else already matches its internal id as-is).
+  const url = new URL(location.href);
+  url.searchParams.set('area', 'reports');
+  url.searchParams.set('reports', id === 'workthrough' ? 'work-through' : id);
+  history.replaceState(null, '', url);
 }
 for (const tab of REPORTS_SUB_TABS) {
   $g(`reports-sub-${tab}`).addEventListener('click', () => showReportsSubTab(tab));

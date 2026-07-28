@@ -591,6 +591,47 @@ node cli/sync-cli.js <command> [options]   # list-collections, backup, apply-ign
 `terminal-flow-archive/`, gitignored, kept only as a reference for a possible future non-web-based
 flow; this project is 100% web-UI-driven now.)
 
+**Standing pattern -- never call a Vortex-state-gated endpoint unconditionally at page/script load**
+(real bug fixed 2026-07-27): every `<script>` tag on this single-page app loads regardless of which
+area the URL/nav actually lands on, so any top-level, unconditional call runs on EVERY page load no
+matter what's showing. `web/public/sync-app.js`'s own `boot()` used to call `loadSyncProfiles()`
+(hits `GET /api/sync/profiles`, which has a real `vortexRunningGate` since it needs the live active
+profile) as part of its unconditional startup sequence -- meaning the shared "Vortex is running"
+modal could pop up while the user was looking at a completely unrelated page (Utilities, in the case
+that surfaced this), and since `boot()` only ever runs once per real page load, clicking over to
+Update Collection itself afterward triggered no NEW check, leaving the profile dropdown silently
+empty with no explanation at all -- the inverse bug, on the one page that actually needed the check.
+Fixed by moving the profiles fetch to fire only from real user actions: the `nav-sync` click
+listener (every visit re-checks), a `?area=sync` deep-link hook in `shell.js` (skipped when
+returning from the Ignored/Disabled report's own `?profileId=` link, where `boot()` already awaits
+it itself), and a fallback on the profile `<select>`'s own click if it's still empty. **This mirrors
+a pattern this project already had right**: Rebuild Collection's own Vortex-state check only ever
+runs when the user explicitly clicks **Load Vortex Data** (`refreshVortexData()` in `app.js`), never
+on that page's initial landing -- its own `loadCollections()` eager call is safe specifically
+because `/api/rebuild/collections` is gate-free (pure filesystem scan). Vortex Scrub
+(`cleanup-app.js`) and Missing Masters (`missing-masters-app.js`) both already follow this same
+correct shape too (zero eager calls at script-parse time, checks fire from tab-show/button-click
+only). **Any future area added to this app must follow the same rule**: a Vortex-state-gated route
+(anything with `vortexRunningGate` server-side) may only ever be called from an explicit action --
+a button click, a nav/sub-tab visit, a focus/visibility event scoped to that area being the one
+currently visible -- never unconditionally at load, regardless of which area happens to be showing.
+
+**Standing pattern -- client-side navigation must keep the URL in sync** (real bug fixed 2026-07-27,
+same session as the fix above): `showToolArea` (`shell.js`), `showReportsSubTab` (`stats-app.js`),
+and `showUtilitiesSubTab` (`cleanup-app.js`) never touched `location`/`history` before -- clicking
+between nav tabs and sub-tabs was purely a DOM class-toggle, so the address bar (and thus any
+browser refresh) kept showing whatever `?area=`/`?reports=`/`?utilities=` the page happened to first
+load with. The user's own real symptom: refreshing the browser always landed back on Update
+Collection specifically, no matter which tab they'd actually been viewing -- because that was the
+last real deep link (`?area=sync`) ever visited, and nothing since had updated the URL to reflect
+subsequent nav-tab clicks. Fixed by having all three functions call `history.replaceState` (never
+`pushState` -- this updates the CURRENT entry, it must not pile up a new Back-button stop per tab
+click) to write `?area=`/the relevant sub-tab param every time they run, and clearing the OTHER
+area's own sub-tab param (`?reports=`/`?utilities=`) when navigating away from it, since the
+`?reports=` branch in shell.js's own jump-link handling takes precedence over `?area=` if left
+stale. **Any future area/sub-tab must do the same**: whatever function actually switches the visible
+view is responsible for writing its own URL state back, not just toggling `hidden` classes.
+
 Three-phase, human-in-the-loop workflow (Vortex itself performs the actual mod installation — this
 tool only brackets that step):
 
@@ -1419,9 +1460,10 @@ same no-archive/no-collection signature as a genuine orphan, but deleting any of
 break LOD/bodies/patches with no Vortex-level warning (they're not collection members, so the user's
 stated "Vortex would flag it" safety net does not cover this case). The user's own fix, applied
 directly: Vortex's download-naming convention always ends a name in
-`-<modId>-<version parts>-<10-digit unix timestamp>` (`RECOGNIZED_DOWNLOAD_NAME_PATTERN`,
-`/-\d+(?:-\d+)*-\d{10}$/`) -- a hand-named tool-output folder never does. So every orphan candidate
-now splits into:
+`-<modId>-<version parts>-<10-digit unix timestamp>` (`RECOGNIZED_DOWNLOAD_NAME_PATTERN`, now defined
+in the shared `lib/download-naming.js` -- see Missing Masters' own section below for why it moved
+there and why its middle "version parts" match was later loosened) -- a hand-named tool-output folder
+never does. So every orphan candidate now splits into:
 - **`exceptions`** -- name matches the download-naming pattern -- confident, goes through the normal
   bulk Delete Selected/Delete All flow described below.
 - **`needsReview`** -- name does NOT match -- shown in its own "Action Needed: Unrecognized
@@ -1432,11 +1474,17 @@ now splits into:
 - **`vortex_collection_*`** folders are hard-excluded from BOTH buckets entirely (never shown as a
   candidate of any kind) -- reuses the exact `/^vortex_collection_/i` pattern already established
   elsewhere in this project (`vortex-sync/lib.js`, `state-query-worker.js`).
-- **Deliberately conservative, on purpose**: a real download whose version string contains letters
-  (e.g. `"1.0RC2"`) also won't match `RECOGNIZED_DOWNLOAD_NAME_PATTERN` and lands in `needsReview`
-  instead of `exceptions` -- a false negative here just means one more manual confirmation click, the
-  safe direction. The dangerous direction (wrongly treating a real tool-output folder as
-  confidently-safe-to-bulk-delete) is what this split exists to prevent.
+- **Deliberately conservative on ambiguity, still, even after the pattern was loosened**: originally
+  this bullet warned that a version string containing letters (e.g. `"1.0RC2"`) wouldn't match
+  `RECOGNIZED_DOWNLOAD_NAME_PATTERN` -- **no longer true** as of the 2026-07-27 fix documented in
+  Missing Masters' own section below (the pattern now accepts any non-hyphen content as the version
+  segment, confirmed necessary by real Vortex data with non-numeric versions like `"new"`,
+  `"3.4.0.3Beta"`). The REMAINING safe-direction guarantee is narrower but still real: a name that
+  doesn't end in the modId-...-10-digit-timestamp shape AT ALL (a hand-named tool-output folder with
+  no trailing digits, e.g. `DynDOLOD Output`) still correctly lands in `needsReview`, never a false
+  "exceptions" match -- verified directly against every real hand-named example this project has
+  encountered so far. The dangerous direction (wrongly treating a real tool-output folder as
+  confidently-safe-to-bulk-delete) remains what this split exists to prevent.
 
 **A second, distinct `needsReview` label -- "Possible manual download?"** (confirmed real
 2026-07-27): Vortex has a SECOND naming shape for archives that reach the downloads folder outside
@@ -1585,6 +1633,660 @@ the configured staging/downloads root and confirms the result still lives DIRECT
 (`path.dirname(full) === path.resolve(root)`) before ever calling `fs.rmSync` -- a malformed or
 crafted name (e.g. `../../something`) can never escape to an arbitrary filesystem path.
 
+## Missing Masters (Utilities area, added 2026-07-27)
+
+A second Utilities sub-tab (alongside Vortex Scrub) that finds active plugins whose declared
+masters aren't actually available to the game right now -- the classic Skyrim "missing master"
+crash. Modeled on the user's real Wrye Bash workflow (they run it purely for this one feature
+alongside Vortex): live, always-current visibility with no manual rescan, plus a "Create Dummy
+Master" action for a master a user deliberately chose not to install (e.g. a patch requiring an
+ignored mod).
+
+**Grounded in Wrye Bash's real source**, cloned+forked to `F:\Claude Workspace\vortex-tools\
+wrye-bash` (`origin`=`awesmdiver/wrye-bash`, `upstream`=`wrye-bash/wrye-bash`, same convention as
+the existing Vortex source clone) -- not assumed. Key findings from reading it directly:
+- **Missing-master status** (`Mopy/bash/bosh/__init__.py`, `_WithMastersInfo.info_status()`): its
+  core "Missing master(s)" check is purely `any(m not in modInfos for m in self.masterNames)` --
+  file presence in the Data folder, regardless of active status. A present-but-disabled master
+  falls into a separate "Delinquent Master" (load-order) concept instead -- **this project
+  deliberately goes further** (see Detection below), since Skyrim only loads active plugins, so a
+  present-but-disabled master crashes the game exactly like a truly-absent one.
+- **Live refresh is NOT a filesystem watcher** (confirmed: zero hits for watchdog/inotify/wx.Timer
+  anywhere in that codebase). It's `on_activate.subscribe(self.RefreshData)` -- Wrye Bash simply
+  rescans every time its own window regains focus, plus once at startup. The browser equivalent
+  used here is the Page Visibility API + window focus event, not `fs.watch`/`chokidar`.
+- **"Create Dummy Master"** (`Mopy/bash/basher/mod_links.py`, `Mod_CreateDummyMasters`): only
+  offered for masters genuinely absent from the Data folder. Writes a real, minimal, valid plugin
+  (zero masters of its own, ESM/ESL/ESP flag guessed from the missing file's own extension, author
+  field set to a recognizable marker `"BASHED DUMMY"`). Does NOT auto-activate it.
+
+### Data sources -- three new required Settings path fields, same treatment as `cleanupExcludeListDir`
+
+- `skyrimDataDir` -- the real Skyrim `Data` folder. **READ-ONLY** -- never written to.
+- `pluginsListDir` -- the folder containing `Plugins.txt`. **READ-ONLY**.
+- `dummyMastersOutputDir` -- the ONLY path this feature ever writes to. **Never the live Data or
+  SKSE folder** -- standing rule stated explicitly by the user 2026-07-27 while this was being
+  designed: any generated content (a dummy master, or anything similar in the future) always goes
+  to a separate, user-chosen output folder, never directly into the live game folder. Matches the
+  user's own real Wrye Bash workflow: dummy masters live in a dedicated folder inside their
+  staging directory (e.g. `Wyre Output`) that they separately turn into a real Vortex mod --
+  exactly the same pattern this project's own orphan-detection work already recognizes for
+  DynDOLOD Output/BodySlide Output folders.
+
+### Active-plugin-set derivation -- verified empirically against the user's real, live files, not assumed
+
+Confirmed by directly reading the user's real `Plugins.txt` (2026-07-27): it does NOT list base
+masters (`Skyrim.esm`, `Update.esm`, `Dawnguard.esm`, etc.) or a good chunk of Creation-Club `.esl`
+content at all -- those are implicitly always active whenever present. Only genuinely toggleable
+plugins get an explicit line (`*` prefix = active, no prefix = explicitly disabled). Rule used by
+`lib/missing-masters-scan.js`'s `computeActiveSet`:
+
+```
+for each plugin file found directly in the Data folder:
+    if it's a ".ghost"-suffixed file: never active (Vortex's own disabled-plugin marker)
+    else if it's explicitly listed in Plugins.txt WITHOUT a "*": not active
+    else (starred, OR not listed in Plugins.txt at all): active
+```
+
+`loadorder.txt` turned out to be **unnecessary** for this feature -- ghost-status is read directly
+off the Data folder's own file listing (a ghosted file is physically renamed to `<name>.ghost`
+there), which is more ground-truth-accurate than trusting a separate bookkeeping file that could in
+principle be stale, and this feature has no need for plugin ORDER, only presence/activation. All
+name comparisons are case-insensitive throughout (matches Windows filesystem + game behavior).
+
+### Binary plugin format -- `lib/esp-header.js` (reader) / `lib/esp-writer.js` (dummy-master writer)
+
+No existing code in this project reads raw plugin bytes -- Bethesda's format is small and stable
+enough (unchanged since Skyrim's original release) that a purpose-built ~70-line reader beats
+pulling in a full ESP-editing library (xEditLib from the separate `skyrimvr-claude-toolkit` project
+could technically do this, but was deliberately NOT used here -- see the "why not xEditLib"
+discussion below) for this one narrow need.
+
+Verified against the user's real files before being written, not assumed from memory:
+- `TES4` record header is a fixed 24 bytes: signature(4) + dataSize(4) + flags(4) + formId(4) +
+  versionControlInfo(4) + formVersion(2) + unknown(2). Subrecords within `dataSize` are
+  signature(4) + size(2, uint16 LE) + data(size bytes) -- confirmed by reading `Dawnguard.esm`'s
+  real TES4 body byte-for-byte: `HEDR`, `CNAM` (author), then a `MAST`/`DATA` pair per master
+  (`DATA` is an 8-byte legacy subrecord immediately following each `MAST`, safe to skip).
+- Real flags confirmed via `Update.esm`/`Dawnguard.esm` (`0x81` = Master `0x1` + Localized `0x80`)
+  and `ccbgssse002-exoticarrows.esl` (`0x281` = Master `0x1` + Localized `0x80` + Light Master
+  `0x200`) -- **an SSE light-master (`.esl`) plugin has BOTH the Master and Light Master bits set
+  together, not just `0x200` alone**, a real detail that would have been easy to get wrong from
+  memory alone. `versionControlInfo=0`/`formVersion=44`/`unknown=0` confirmed consistent across
+  esm/esl/esp real files -- used as-is for the dummy writer's own outer header.
+- Compressed `TES4` records (flag bit `0x00040000`) are detected but NOT decompressed -- reported
+  as "cannot parse header, skip" rather than implementing zlib-inflate support for what would be an
+  exceedingly rare case for a header this small in practice (same "safe direction on ambiguity"
+  convention as `RECOGNIZED_DOWNLOAD_NAME_PATTERN`'s deliberate conservatism elsewhere).
+
+**Why not xEditLib** (the `skyrimvr-claude-toolkit` project's own xEditLib.dll + Node FFI wrapper,
+which could technically read a plugin's master list): deliberately not used here as a runtime
+dependency of this project. It's tied to a specific machine setup (a Windows registry key,
+`XEditLib.dll` + its `.Hardcoded.dat` files) that this project's own "self-contained portable zip,
+zero setup" distribution model would otherwise inherit as a new fragility point for every user who
+downloads this tool. There is also no existing relationship between the two separate GitHub repos
+-- wiring a cross-project runtime dependency would mean this tool could silently break for someone
+who has one but not the other, or a mismatched version. Same "own your dependency, don't create a
+soft cross-project reliance" reasoning this project's own CLAUDE.md already applies to ESP records
+themselves (never `GetFormFromFile()` another mod's record -- copy it into your own plugin
+instead). xEditLib's proper role here is purely as an independent, one-off validation tool during
+*development* (cross-reading a generated dummy master to confirm it's structurally valid) -- never
+something this app depends on at runtime.
+
+### Detection (`lib/missing-masters-scan.js`)
+
+For every currently ACTIVE plugin (per the rule above): read its own master list via
+`lib/esp-header.js`. For each declared master, classify:
+- **`missing`** -- the file doesn't exist anywhere in the Data folder at all. "Create Dummy Master"
+  applies to this case only.
+- **`present-but-inactive`** -- the file exists in the Data folder, but isn't currently active
+  (explicitly un-starred, or ghosted). This is the real gap in Wrye Bash's own core status check
+  (see above) but IS what the game engine actually cares about -- exactly the user's own "I
+  ignored a mod, so its .esp isn't installed" scenario. Shown as its own distinct category since the
+  fix differs (re-enable it in Vortex, not create a duplicate).
+
+**Results are grouped by the PROBLEM MASTER, not the requiring plugin** (redesigned 2026-07-27,
+deviating deliberately from Wrye Bash's own left/right-by-plugin UI -- see
+`reference_ux_dependency_designer_skill` memory / `F:\Claude Workspace\docs\
+UX-UI-DEPENDENCY-DESIGNER.md` for the design framework this was built against). Real motivating
+example from the user's own live data: `GTS Patches - OWL.esp` alone is the missing master for 10
+separate requiring plugins -- a plugin-first list repeats that same master's name 10 times, hiding
+that fixing it ONCE resolves every one of those dependents. `scanMissingMasters` builds
+`problemMastersByKey` (`Map<lowercased master name, {name, status, neededBy: []}>`) instead of one
+entry per requiring plugin, sorted by `neededBy.length` descending (highest-impact fix first), then
+alphabetically for ties -- stable, scannable, independent of `fs.readdirSync`'s own
+platform-dependent ordering. Each `neededBy` array is itself alphabetized.
+
+UI (`web/public/missing-masters-app.js`) renders each problem master as its own color-tinted card
+(`.mm-row--critical`/`.mm-row--warning` in `styles.css` -- a left accent border + subtle background
+tint, not a plain grey card; confirmed explicitly that an all-muted-grey list read as visually flat
+over a long scan) with a real colored icon (\u{1F534}/\u{1F7E0}) + badge, the master's own name, a
+**Copy name** button (clipboard write -- genuinely useful for pasting into Vortex's own search/
+filter, and deliberately NOT a fake "Enable in Vortex" button, since this tool never writes to
+`Plugins.txt`), **Create Dummy Master** only on `missing` rows, and a "Needed by N plugins" list
+truncated to 3 with the existing `+N more`/`Show less` toggle convention once it exceeds that. The
+results-meta line ("N problem master(s) are affecting M plugin(s) total.") accent-colors its two
+counts (`.accent-count`) rather than rendering as flat muted text -- `M` is the count of DISTINCT
+plugins across every master's `neededBy` (deduped via a `Set`, since one plugin can need more than
+one problem master at once).
+
+**Verified end-to-end against the user's real, live install (2026-07-27)**: scanned 3568 active
+plugins in ~157ms, found 17 plugins with a problem master -- an EXACT match to Vortex's own
+Warning-flag filter count shown in the user's own screenshot ("showing 17/3909 items"). Multiple
+results correctly point at `GTS Patches - OWL.esp` as `present-but-inactive`, matching the specific
+real example the user showed (that mod's own Vortex status independently confirmed as "uninstalled"
+earlier this same session, in the Vortex Scrub work above).
+
+**No Vortex-running gate needed for this feature at all** -- a genuine simplification vs. the rest
+of this app. Detection only ever reads `Plugins.txt`/the Data folder directly (immutable existing
+files, not Vortex's live state.v2 LevelDB), and the only write (dummy master creation) goes to the
+separate `dummyMastersOutputDir` Vortex isn't actively managing.
+
+### Live refresh (`web/public/missing-masters-app.js`)
+
+**Current mechanism**: a silent background poll (`MM_POLL_INTERVAL_MS = 5000`, a plain
+`setInterval`) calls `pollMissingMastersScanSilently()` every 5s, gated on
+`!document.hidden && mmIsSubTabVisible()` (the browser tab isn't backgrounded/minimized, and the
+Missing Masters sub-tab is the one actually visible -- `mmIsSubTabVisible()` checks both the
+Utilities area and the sub-tab itself aren't hidden). That function fetches quietly (touches no
+loading-state UI at all), keeps a `JSON.stringify` snapshot of the last response actually rendered
+(`mmLastResponseJSON` -- a safe plain-string comparison since the backend's own ordering is fully
+deterministic, so unchanged data always serializes identically), and only calls `mmRender()` -- the
+one thing that redraws the DOM -- when the new response genuinely differs. A fetch failure in the
+silent path is console-only, never surfaced in the UI. Plus a manual Refresh button (the full,
+visible `runMissingMastersScan()` -- loading spinner, list teardown, real error surfacing) for
+on-demand use, and a full scan whenever the sub-tab is switched to via `showUtilitiesSubTab`. Still
+not a filesystem watcher -- a deliberate, simple timer, not `fs.watch`/`chokidar` -- chosen because
+the actual read (`Plugins.txt` + a Data-folder listing + per-plugin header parses) is cheap enough
+(~150ms against ~3500 active plugins, benchmarked live) that polling it outright is simpler than
+wiring up real file-change events for the marginal gain of near-zero latency over a 5s poll.
+
+**History, both same session (2026-07-27)**: originally modeled directly on Wrye Bash's own
+`on_activate` -> `RefreshData()` mechanism (confirmed via its real source: rescans whenever its
+window regains focus, not a filesystem watcher) -- retargeted here as
+`document.addEventListener('visibilitychange', ...)` + `window.addEventListener('focus', ...)`
+triggering the full, visible scan. The 5s silent poll was added alongside it (the user's real
+workflow: watching this page while working in a SEPARATE Vortex window, never switching focus back
+to the browser tab at all, so the focus listener alone never fired). The focus/visibilitychange
+listeners were then REMOVED entirely, not just made silent -- confirmed genuinely disruptive: they
+fired the full, visible `runMissingMastersScan()` (loading spinner + list teardown) on something as
+small as alt-tabbing away to copy some text and back, and had become fully redundant once the silent
+poll existed (Chrome's Page Visibility API tracks TAB visibility, not OS-level window focus --
+switching to a different application while this tab stays open on screen never sets
+`document.hidden`, so the poll keeps running the whole time regardless, with no freshness gained by
+also forcing a visible reload on refocus).
+
+**Layout, same day**: the Refresh button used to sit alone on its own `.view-actions` row above the
+"N problem master(s)..." line -- confirmed unnecessary vertical space. `#mmResultsMeta` and the
+button now share one persistent flex row (`.mm-header-row`, space-between) that also doubles as the
+"all clear" empty message (the separate `#mmEmpty` element was removed) -- hidden as a whole only in
+the not-configured state, same as everything else on this page. Missing Masters is also now listed
+and defaulted FIRST in the Utilities sub-nav (`UTILITIES_SUB_TABS = ['missingmasters', 'scrub']`,
+`nav-utilities`'s own click handler defaults to `'missingmasters'` instead of `'scrub'`) -- confirmed
+it's used far more often than Vortex Scrub.
+
+### Mod-name column (added 2026-07-27)
+
+Confirmed real-world need: a raw plugin filename alone (`GTS Patches - OWL.esp`) doesn't say which
+actual MOD it's part of, so a user can't always tell at a glance whether they recognize it.
+`lib/missing-masters-scan.js`'s `buildStagingModNameIndex(stagingDir)` reuses this project's own
+EXISTING, already-required `staging` config field (no new Settings field added) -- a pass over every
+staging subfolder's own top-level files, mapping each plugin filename found back to its owning
+folder, then stripping that folder's trailing modId-version-timestamp suffix via the shared
+`lib/download-naming.js`'s `stripDownloadNameSuffix` (see below for why this moved to its own shared
+module) to get a clean display name.
+Benchmarked live against the user's real ~4550-folder staging directory: ~150-290ms for a full pass
+-- cheap enough to rebuild on every scan (including the 5s silent poll). A folder whose name doesn't
+match the pattern (a hand-named tool-output folder, or a manually-downloaded archive matching
+`MANUAL_DOWNLOAD_NAME_PATTERN`'s shape instead) is used as-is, unstripped -- still more useful than
+nothing, confirmed against real examples ("ESLifier Output" shown correctly unstripped;
+"GTS - Specific Patches 97490 113 2026-07-17T15-17Z VMSnJrLRM" likewise). A plugin genuinely absent
+from every staging folder (never installed at all) gets `modName: null`.
+
+**Also checks one level into a `Data`/`data` subfolder** (case-insensitive), confirmed necessary by a
+real "true missing master" case the same day: mod author `1DustAdeptArmorSE-53257-new-1628092406`
+packaged BOTH `1DustAdeptArmor.esp` at its folder root AND `1DustAdeptArmor.esl` nested inside a
+`data\` subfolder (an on/off pick-one-format choice some mod authors ship) -- the collection that
+installed this mod picked the `.esp`, leaving the `.esl` genuinely sitting on the user's own disk,
+just never deployed to the live Data folder. A root-only scan completely missed it (found the `.esp`,
+moved on, never looked inside `data\`) -- exactly the case that would otherwise show `1DustAdeptArmor
+.esl` as having no known mod name, when the user could actually go find the real file themselves and
+manually resolve it instead of needing a dummy. Deliberately only ONE level deep (folder root, or
+folder-root's own `Data` subfolder) -- not a general recursive walk -- matching this one real nesting
+pattern, not a broader "search everywhere" for comparatively little further benefit.
+
+**No "—" placeholder specifically for a `missing` master's own mod name** (removed the same day):
+by definition a genuinely missing master usually has no staging folder to trace back to at all (that
+IS why it's missing) -- so nearly every `missing` row would show the dash, every single time, which
+reads as pure visual noise rather than information. A `present-but-inactive` master's file DOES exist
+on disk, so its mod name is almost always found there; "—" stays meaningful for THAT status, for the
+rare case it genuinely isn't found.
+
+Every `problemMasters[]` entry and every `neededBy[]` entry gained a `modName` field. UI
+(`web/public/missing-masters-app.js`) renders it as a genuine grid COLUMN, not inline text --
+`.mm-row__header` became a 4-column grid (badge / filename / mod name / actions) and each
+`.mm-neededby-row` a matching 2-column grid (filename / mod name), so every row's mod name lines up
+with its neighbors down the list. Per the user's explicit format spec: the MASTER row's own mod name
+is bold (`<strong class="mm-modname">`, full `--text` color -- it's the primary thing on that row),
+while every needed-by dependent's mod name is normal weight and italic (`<span class="mm-modname">`,
+`--text-muted` -- supplementary context, not the main point of that row). Italic carries the
+"secondary" signal there rather than relying on color/weight alone, consistent with this feature's
+own earlier "spacing/color both matter, don't just default everything to muted grey" lesson (see
+`reference_ux_dependency_designer_skill` memory).
+
+**Naming-convention pattern moved to a shared module, `lib/download-naming.js`** (same day, after two
+real follow-up findings): a `Data`/`data` subfolder inside a mod's own staging folder is now also
+checked (one level deep only, not a general recursive walk) -- confirmed necessary by a real "true
+missing master" case, mod `1DustAdeptArmorSE-53257-new-1628092406` packaging BOTH
+`1DustAdeptArmor.esp` at its root AND `1DustAdeptArmor.esl` nested in `data\` (an on/off pick-one-
+format choice some mod authors ship); a root-only scan completely missed the nested file. Separately,
+that SAME mod's own folder name exposed a real gap in `RECOGNIZED_DOWNLOAD_NAME_PATTERN` (previously
+only defined in `cleanup-scan.js`): its version segment is the literal word `"new"`, not numeric, so
+the original all-numeric-segments pattern (`(?:-\d+)*`) silently failed to recognize it as a Vortex
+download at all -- while Vortex's own UI correctly shows the clean name `"1DustAdeptArmorSE"`.
+Confirmed via a live screenshot of Vortex's own Version column that non-numeric version strings
+(`"3.4.0.3Beta"`, `"1.0.1.VampirePatch"`) are common in real data, not a one-off. Fixed by loosening
+the shared middle-segment match to `(?:-[^-]+)*` (any non-hyphen content, not just digits) --
+deliberately fixed ONCE in a new shared `lib/download-naming.js` (also housing
+`MANUAL_DOWNLOAD_NAME_PATTERN`/`isPossibleManualDownload`, plus a new `stripDownloadNameSuffix`
+helper `missing-masters-scan.js` uses for its own display-name cleanup) rather than as two separate
+copies, since both `cleanup-scan.js` (Vortex Scrub's exceptions/needsReview safety split) and
+`missing-masters-scan.js` (this cosmetic mod-name column) benefit from the same, more accurate rule.
+Checked the loosening against Vortex Scrub's own safety use FIRST, before sharing it: a hand-named
+tool-output folder (`DynDOLOD Output`, `BodySlide Output`, etc.) never ends in a
+`-<number>-...-<10-digit-timestamp>` shape at all, so this only recognizes more genuine downloads
+correctly -- it doesn't newly risk misreading a hand-named folder as a safe-to-bulk-delete
+"exceptions" match. Verified directly: `isRecognizedDownloadName` now correctly returns `true` for
+the `1DustAdeptArmorSE...` example (previously `false`) while every real hand-named tool-output
+folder still correctly returns `false`; also re-ran `scanStaging`/`scanArchives` against the user's
+real, live state.v2 afterward (Vortex closed) and confirmed identical exceptions/needsReview counts
+to before this change (0 exceptions / 19 needsReview staging, 0/0 archives) -- no regression.
+
+**"Active alternate" detection, same day** -- confirmed genuinely useful real-world signal: a
+`missing` master's own mod can be installed and ACTIVE right now, just deployed under a DIFFERENT
+plugin filename from the very same mod package (the `1DustAdeptArmorSE` example again: its own
+`.esp` variant is what's actually active/deployed, while the needed `.esl` variant sits unused in
+that same staging folder). `buildStagingModNameIndex` now also returns `siblingsByModName` (`Map<mod
+name, Set<every plugin filename that mod's own staging folder contains>>`), and
+`scanMissingMasters`'s new `findActiveAlternate(masterFileName)` helper -- only run for `missing`
+masters, since a `present-but-inactive` one's own file already exists on disk so the question doesn't
+apply -- looks up the master's own mod name, finds every sibling plugin filename from that SAME mod,
+and returns whichever one (if any) is both on disk in the Data folder AND currently active. Surfaced
+as a new `activeAlternate` field (nullable) on the affected `problemMasters[]` entry -- this is a
+strong hint the "missing" master isn't really a missing MOD at all, just a format/variant mismatch
+the user can likely fix with a manual file swap, rather than needing a dummy master.
+
+**UI styling, same day** -- rendered as a `.callout--warning` nested inside the master's own row
+(`web/public/missing-masters-app.js`), matching the exact "Manual Action Needed: ..." convention
+Vortex Scrub's own "Action Needed: Unrecognized Folders/Archives Found" callout already established
+-- explicit request to keep every informational warning like this consistent app-wide, not a one-off
+note style. Title: "Manual Action Needed: Uninstalled Mod Component Found". Body names the
+`activeAlternate` file specifically (bold): *"`<activeAlternate>`" is part of this mod, but isn't
+currently installed. To fix this, you'll need to manually remove the installed mod file and replace
+it with this listed one so Vortex can properly recognize it (and clear any missing master
+warnings).* -- "this listed one" refers to the row's own master name, already shown bold in the
+header just above.
+
+**Row-alignment bug, 2026-07-27 (reported via screenshot: a `missing` row's mod-name column didn't
+line up with `present-but-inactive` rows' mod-name column)** -- root cause: `.mm-row__header`'s grid
+(`grid-template-columns: auto minmax(160px, 1.2fr) minmax(140px, 1fr) auto`) had `auto` widths on the
+badge and actions columns, and each row is its OWN independent grid container -- CSS Grid does not
+share column tracks across separate `display: grid` elements. A `missing` row's badge text ("🔴
+Missing") differs in width from a `present-but-inactive` row's ("🟠 Disabled"), AND `missing` rows
+have an extra "Create Dummy Master" button in the actions column that other rows don't -- so each
+row's two `fr` columns split the remaining space differently, visibly shifting where the mod-name
+column landed row to row. Fixed by making the badge and actions columns FIXED widths (`118px` /
+`300px`) instead of `auto` -- every row now reserves identical gutters regardless of its own badge
+text or button count, so the two `fr` columns always start/end at the same x position across every
+row. Verified live (screenshot before/after): mod names for "Disabled" and "Missing" rows alike now
+line up in the same column.
+
+Follow-up, same day: the actions column's two buttons (Copy name, Create Dummy Master) were still
+wrapping onto two stacked lines at 250px, and with Copy name pushed first in the button array it sat
+on top while Create Dummy Master sat below -- reported as visually inconsistent (Copy name's own
+position moved between a 1-button row and a 2-button row). Fixed two ways together: widened the
+actions column to `300px` so both buttons fit on one line without wrapping, and reordered the button
+array so Create Dummy Master is added FIRST and Copy name LAST -- with `.mm-row__actions`' own
+`justify-content: flex-end`, Copy name is now always the rightmost element regardless of whether a
+row has one button or two, matching the request to keep every row's Copy name button aligned.
+
+**Raw "Failed to fetch" shown verbatim, same day** -- `mmHandleError` (`web/public/missing-masters-app.js`)
+used to do `box.textContent = e.message` unconditionally, so if the browser's `fetch()` couldn't even
+reach the local server at all (the `node web/server.js` process itself not listening -- as opposed to
+`mmApi`'s own `Error` for a real HTTP error response from a server that IS running), the raw
+`TypeError: Failed to fetch` browser exception string got shown directly to the user -- a
+developer-facing message with no actionable meaning to them, exactly the kind of thing the
+`plain-language-writer` skill exists to catch. Fixed by checking `e instanceof TypeError` specifically
+(the one thing a network-level fetch failure sets that a handled API error doesn't) and rendering a
+real `callout__title` + `<p>` pair instead, matching the existing "Manual Action Needed" convention:
+title "Can't Reach the App's Server", body explaining the local server itself may need restarting and
+that clicking Refresh alone won't help until it is. Verified without touching the user's own live
+server (it was actively serving a separate connection at the time) by calling `mmHandleError(new
+TypeError('Failed to fetch'))` directly via the browser console in a separate tab and confirming the
+rendered HTML/screenshot.
+
+**Naming-convention gap #2, same day (reported: `ElysiumEstate5.0.1-4119-5-0-1` still showing raw,
+while Vortex's own UI shows `ElysiumEstate5.0.1`)** -- investigated by (a) consulting the actual
+Vortex source (the local fork+clone at `F:\Claude Workspace\vortex-tools\Vortex` -- see
+`reference_vortex_source_clone` memory) and (b) listing the user's real, live staging directory
+(`E:/Vortex Mods/skyrimse`, 4560 folders) to check any candidate regex against real data before
+shipping it. Source finding: `deriveModInstallName`
+(`src/renderer/src/extensions/mod_management/modIdManager.ts`) is a pure pass-through of the
+archive's own downloaded filename (`maskFSInvalidChars` only swaps out `<>:"/\|?*` -- nothing else
+about the name is generated by this function) -- meaning the staging folder name is fundamentally
+whatever the DOWNLOAD was named, not something Vortex derives via one fixed formula. This explains
+why multiple genuinely different shapes coexist in one real install rather than there being a single
+"correct" pattern to reverse-engineer. `downloadNames.ts`'s `freeDownloadName` separately confirmed a
+different collision-avoidance suffix mechanism (`name.<Date.now() ms-epoch>.ext`), and
+`healStoragePathNames.ts` documents an actual historical Vortex naming regression (LAZ-807, CDN
+storage-path leakage into name attributes, needing its own "healing" migration) -- both reinforce that
+this naming pipeline has genuinely drifted across versions, not that this project's regex was simply
+wrong once.
+
+Counted three distinct real shapes across the live 4560-folder listing:
+- Dash + 10-digit unix epoch (`RECOGNIZED_DOWNLOAD_NAME_PATTERN`'s original target): 4038 matches.
+  Also fixed an empty-segment edge case here (`Project AHO - Spell Crafting for Mysticism-65891-1-0-1
+  --1648930764` -- a blank version segment between two dashes right before the real epoch) by loosening
+  `(?:-[^-]+)*` to `(?:-[^-]*)*` (zero-or-more instead of one-or-more per segment) so a blank
+  repetition doesn't fail the whole match.
+- Space-separated with an ISO timestamp + random token (e.g. `GTS - Specific Patches 97490 113
+  2026-07-17T15-17Z VMSnJrLRM` -> `GTS - Specific Patches`): 139 matches. Previously only
+  `MANUAL_DOWNLOAD_NAME_PATTERN` detected this shape's trailing date+token portion (for Vortex Scrub's
+  "possible manual download" flag) but nothing stripped the modId/version prefix before it for display.
+  New `SPACE_SEPARATED_DOWNLOAD_NAME_PATTERN` handles the full strip. Tight enough (mandatory numeric
+  modId + mandatory ISO-shaped timestamp + mandatory trailing alnum token, all space-delimited) that
+  zero false positives turned up across all 4560 real names -- added to `isRecognizedDownloadName`
+  too, since it's just as trustworthy as the dash+epoch shape.
+- Bare dash-modId-version with NO trailing timestamp at all (e.g. `ElysiumEstate5.0.1-4119-5-0-1` ->
+  `ElysiumEstate5.0.1`, matching Vortex's own displayed name exactly): 93 matches. New
+  `BARE_DASH_NO_TIMESTAMP_PATTERN`, used ONLY inside `stripDownloadNameSuffix`'s cosmetic fallback tier
+  -- deliberately NOT added to `isRecognizedDownloadName`. Reason: without a timestamp anchor this
+  shape is looser, and manual review of all 93 real matches found 3 ambiguous cases (`SQOSPatcher-v0-3`
+  -> `SQOSPatcher-v0`, where "-3" might be part of a real "v0.3" version string rather than stray
+  Vortex metadata; two `ggmods-<modId>-foundation-face...` folders where the trailing words might be
+  the actual mod name). That ambiguity is an acceptable trade for Missing Masters' purely cosmetic
+  display (worst case: an occasional name trimmed a bit more aggressively than ideal) but not for
+  Vortex Scrub's safety classification (`isRecognizedDownloadName` feeds the "confident, safe for bulk
+  delete" exceptions bucket) -- kept those two use cases on genuinely different confidence tiers rather
+  than reusing one check for both.
+
+`stripDownloadNameSuffix` now tries all three patterns in confidence order (dash+epoch, then
+space+ISO+token, then the loose bare-dash fallback) and strips using the first match; unchanged if
+none match. **Live-verified** (Vortex closed, same day): re-ran `scanStaging`/`scanArchives` against
+the user's real state.v2 with the `SPACE_SEPARATED_DOWNLOAD_NAME_PATTERN` addition to
+`isRecognizedDownloadName` live -- identical counts to the documented baseline (0 exceptions / 19
+needsReview staging, 0/0 archives). Also confirmed directly that zero of the current `exceptions`
+entries are newly recognized ONLY by the new pattern -- none of the 139 real space-separated-named
+folders in this install are currently orphaned (all are backed by a real mod/download record), so the
+new pattern wasn't even exercised by today's classification, let alone caused a regression.
+
+**Standing order, added 2026-07-27** (see `feedback_vortex_source_sync_naming_recheck` memory): after
+every future `merge-upstream` pull of new Vortex source, re-check
+`modIdManager.ts`/`downloadNames.ts` (and grep for new `shortid()`-adjacent naming code) for any
+additional naming convention Vortex may have introduced, and update `lib/download-naming.js`
+accordingly -- cross-checked against a live folder listing before shipping, not from source reading
+alone.
+
+**Naming-convention gap #3, 2026-07-28: this project's OWN auto-download (`lib/nexus-mod-download.js`)
+produced a file that broke every one of the naming-convention checks above.** Reported: Missing
+Masters' single-mod auto-download (`Rebuild This Mod`) saved `Snazzy Morthal AIO-147759-2-1-
+1751281253.7z`'s archive as plain `F:\Vortex Downloads\skyrimse\Snazzy Morthal AIO.7z` -- no
+modId/version/timestamp suffix at all -- while manually downloading the exact same mod from
+nexusmods.com produces the fully-suffixed name. Since every consumer of `lib/download-naming.js`
+(`stripDownloadNameSuffix`, `isRecognizedDownloadName`, Vortex Scrub's exceptions/needsReview split,
+Missing Masters' own staging-folder matching) depends on that suffix shape being present, any archive
+this app downloads itself was silently invisible/misclassified to all of them.
+
+Root-caused via Vortex's real source (not assumed): `modIdManager.ts`'s `deriveModInstallName` --
+already cited above -- confirms Vortex's own install-time code is a pure pass-through of whatever the
+DOWNLOADED FILE was already named; it never independently generates this suffix. So the suffix has to
+be baked in by whatever named the archive file at download time -- and since our own
+`downloadModArchive()` already calls the same real `download_link.json` endpoint Vortex itself uses
+(see the citation earlier in this same file) but gets back the mod author's own plain uploaded
+filename instead, the suffix must come specifically from Nexus's manual/website download flow, not
+the raw CDN link itself.
+
+**Solution found, then validated against 5 real mods before shipping** (per the user's own explicit
+ask -- "pick 3 to 5 random mods and downloading them all to see how the file names land"): Nexus's
+own `GET /v1/games/{gameDomain}/mods/{modId}/files/{fileId}.json` endpoint (single-file details, keyed
+by the exact fileId this project already has via `source.fileId` -- no version/timestamp guessing
+needed at all) returns a `file_name` field that IS ALREADY the fully-formed, naming-convention-correct
+string. A real example (queried live this session):
+```json
+{
+  "file_id": 753469,
+  "name": "SkyParkour V3 - Parkour Framework",
+  "version": "3.5.4",
+  "mod_version": "3.5.4",
+  "category_id": 1,
+  "category_name": "MAIN",
+  "is_primary": true,
+  "size": 4861,
+  "size_kb": 4861,
+  "size_in_bytes": 4977807,
+  "file_name": "SkyParkour V3 - Parkour Framework-132292-3-5-4-1779046772.7z",
+  "uploaded_timestamp": 1779046772,
+  "uploaded_time": "2026-05-17T19:39:32.000+00:00",
+  "external_virus_scan_url": "https://www.virustotal.com/gui/file/...",
+  "description": "...",
+  "changelog_html": "...",
+  "content_preview_link": "https://file-metadata.nexusmods.com/file/nexus-files-s3-meta/<gameId>/<modId>/<file_name>.json"
+}
+```
+`file_name` matched that mod's own real staging-folder name byte-for-byte. Validated against 5
+real, already-installed mods pulled from the user's live staging directory (ground truth: each
+folder's own already-suffixed name) before committing to this approach:
+
+| modId | Real folder name (ground truth) | API `file_name` |
+|---|---|---|
+| 37693 | `'Menagerie Creation Club Pet Overhaul' Patch-37693-2-10-1704998971` | matched (file's own name differs from the mod page title -- "Skills of the Wild", a bundled optional file -- but the modId/version/timestamp suffix shape matched) |
+| 146873 | `Core Impact Framework - Latest Version-146873-1-2-8-1771158591` | exact match |
+| 97050 | `Gourmet - Vigilant-97050-1-0-1690658632` | matched (file's own name "Gourmet - BS Bruma" differs, same bundled-file situation as above) |
+| 22878 | `Monster Lipsync SE - Vanilla-22878-2-8b-1555466953` | matched -- confirms a non-numeric version segment ("2.8b") round-trips correctly too |
+| 132292 | `SkyParkour V3 - Parkour Framework-132292-3-5-4-1779046772` | exact match, every field |
+
+Note on the two "matched but different display name" rows: a mod page can host multiple files (main
+file, optional files, patches), each with its OWN independently-uploaded `file_name` -- it does not
+necessarily echo the mod page's own title. This is expected and harmless for this project's purposes:
+`source.fileId` already pins down the exact file, so `file_name` is always the correct name for THAT
+specific file regardless of what the overall mod is called.
+
+**Implementation** (`lib/nexus-mod-download.js`): `downloadModArchive()` now calls a new
+`resolveFileDetails(apiKey, gameDomain, modId, fileId)` after the download completes and hash-verifies
+successfully, and uses `fileDetails.file_name` as the final on-disk filename whenever present.
+Best-effort only -- wrapped in its own try/catch, falling back to the previous Content-Disposition/
+logicalFilename-based name if this lookup fails for any reason (rate limit, mod taken down mid-flow,
+etc.). A successful download under a slightly plainer name beats failing the whole operation over a
+metadata lookup hiccup. This one shared function is called by BOTH Rebuild Collection's batch
+downloader (`downloadMissingArchivesForPlan`) and Missing Masters' single-mod path
+(`rebuild-single-mod.js`), so both benefit automatically -- no duplicated fix needed.
+
+**Follow-up idea raised, not yet built**: since a single-mod rebuild only ever runs against a
+completely empty staging folder (nothing to preserve, nothing Vortex-managed to conflict with), the
+user noted this opens a natural Vortex Scrub feature: detect fully-empty staging directories (the
+same signal Missing Masters' own `hollowInstalls` already computes) and offer to delete them outright,
+as its own dedicated flow. Not scoped or built yet -- flagged here for a future session.
+
+### Create Dummy Master (`lib/esp-writer.js`)
+
+Only offered in the UI for `missing` (genuinely absent) masters -- re-validated server-side too
+(`web/missing-masters-routes.js`'s `/create-dummy-master` re-scans the Data folder before writing,
+never trusting a possibly-stale client-side result, same "re-validate against real state" pattern
+as `cleanup-scan.js`'s `crossCheck`). Builds a minimal valid plugin from scratch: `TES4` + `HEDR` (12
+bytes: version 1.7 float + 0 records + `nextObjectID` 0x800, Creation Kit's own default for a fresh
+plugin) + `CNAM` (author `"Vortex Scrub Dummy Master"`, a recognizable marker mirroring Wrye Bash's
+own `"BASHED DUMMY"` convention). Zero `MAST` entries -- the dummy has no masters of its own. Flags
+guessed purely from the missing file's own extension (`.esm` -> `0x1`, `.esl` -> `0x201`, `.esp` ->
+`0x0`) -- the real file is by definition missing, so there's no actual value to read, only guess by
+convention (same limitation Wrye Bash itself accepts). Create-only, never overwrites an existing
+file. Does NOT auto-activate the dummy (no Plugins.txt write anywhere in this path) -- the UI's own
+confirmation text states plainly that it still needs to become an active mod in Vortex.
+
+Round-trip verified in a throwaway temp directory before being trusted (2026-07-27): created
+`.esp`/`.esm`/`.esl` dummies, re-read each with `lib/esp-header.js`, confirmed zero masters and the
+correct flag bits every time; also confirmed the overwrite-protection correctly throws on a second
+call for the same name.
+
+### Single-mod rebuild engine (`lib/build-mod-from-vortex-state.js`, `lib/rebuild-single-mod.js`)
+
+Missing Masters' first real cross-tool feature: reuses Rebuild Collection's own classify/extract/
+verify/swap engine (`lib/rebuild-mod.js`'s `classifyMod()`/`rebuildMod()`, completely unchanged) to
+repair ONE mod at a time, without that mod needing to belong to any active Vortex Collection. Full
+plan writeup + live-test addendum: `docs/plans/2026-07-27-single-mod-rebuild-engine.md` (this
+project's own plans folder -- project-specific plans live here now, not the centralized
+`F:\Claude Workspace\docs\plans\`, which is reserved for workspace-wide/meta plans not tied to one
+project).
+
+**Why this exists**: a real case surfaced by Missing Masters -- `Snazzy Morthal AIO-147759-2-1-
+1751281253`'s staging folder was found completely empty (0 files) while Vortex's own state.v2 still
+said `state: "installed"` and the mod's source archive was still intact in Downloads. Create Dummy
+Master fully resolves the crash (Skyrim loads fine) but leaves the mod's actual content invisible
+in-game with nothing pointing at why -- exactly the class of problem Rebuild Collection already
+solves, just previously only for a whole `collection.json`-driven run.
+
+**Key discovery, confirmed by reading `lib/choice-resolver.js` directly, not assumed**: Vortex's own
+per-mod state.v2 record (`persistent###mods###<gameId>###<modId>###attributes###installerChoices`)
+stores its recorded FOMOD choices in the EXACT SAME shape `resolveChoices()` expects from
+`collection.json`'s own `choices` block --
+`[{name, groups:[{name, choices:[{idx, name}]}]}]`, one entry per raw install step in document
+order. So replaying a FOMOD's recorded choices never actually required collection membership --
+only translating state.v2's own already-recorded fields into the shape this engine already
+consumes. **Gotcha found only once actually tested live**: this isn't stored as ONE combined key --
+state.v2 flattens it into two separate leaf keys, `attributes###installerChoices###type` and
+`attributes###installerChoices###options`, same convention as every other nested field in this
+database. A first live test correctly came back `SKIP_OPEN_FOMOD` (no choices found) instead of
+`REBUILD`, which is what caught this.
+
+**`lib/build-mod-from-vortex-state.js`**: `buildModFromVortexState({stateDir, gameId, vortexModId})`
+reads that one mod's `attributes` (via `syncLib.withStateDb`, the same safe-copy-then-read pattern
+every other state.v2 read in this project already uses) and returns a plain
+`{name, source, choices}` object shaped exactly like a `collection.json` mod entry.
+
+**`lib/rebuild-single-mod.js`**: `rebuildSingleMod({vortexModId, ...})` is the actual reusable
+engine entry point -- any tool can call it for one mod. `extract-mod.js` (the child process
+`rebuildMod()` spawns) always re-reads `collection.json` from disk by mod name
+(`collection-parser.js`'s `loadCollection`/`findMod`) -- it never accepts an in-memory mod object.
+Rather than touching that already-tested file, this writes a tiny SYNTHETIC single-mod
+`collection.json`-shaped temp file (`{mods: [mod]}`) and points `--collection` at it, cleaned up in
+a `finally` -- zero changes to `extract-mod.js`, `fomod-parser.js`, `choice-resolver.js`,
+`archive-locator.js`, or `collection-parser.js`. Everything downstream (`classifyMod`, `rebuildMod`,
+`locateArchive`, `downloadModArchive` for the optional Nexus auto-download fallback) is reused
+completely unchanged.
+
+**Threading**: confirmed with the user this is a single-person tool -- the odds of a whole-
+collection Rebuild Collection run and a Missing-Masters single-mod repair both touching the SAME
+mod at the SAME moment are negligible, so no new per-mod/per-folder lock was built. The only guard
+is a plain read-only check against `web/run-state.js`'s existing `isRunActive()` (already the
+single global "a Rebuild Collection run is happening" flag, built on `sse-session.js`) -- refuse to
+start a single-mod repair if a whole-collection run is active, rather than risk two independent
+processes touching the same staging folder at once. Verified directly: marking that session active
+and then calling `rebuildSingleMod()` throws the friendly `RUN_ACTIVE` error before doing any work.
+
+**Missing Masters' own new detection** (`lib/missing-masters-scan.js`): `buildStagingModNameIndex`
+now also records any staging folder found completely empty (0 files, root or the existing one-level
+`Data` subfolder check) as a `hollowInstalls` entry. For each `missing`-status master,
+`findPossibleHollowInstall` does a plain token-overlap match (significant words shared, case-
+insensitive, requiring at least 2 shared words covering at least half of the smaller name's own
+token set) between the master's own filename and each hollow install's cleaned name -- e.g.
+"Snazzy Interiors - Morthal AIO.esp" vs. "Snazzy Morthal AIO" (stripped from the real folder name)
+shares 3 significant tokens. Attached as `possibleHollowInstall: {folderName, vortexModId}`
+(`vortexModId` == the folder's own name -- confirmed real-world this doubles as the mods### key).
+Deliberately a lightweight, transparent GUESS shown to the user plainly (a new `.callout--warning`
+naming the candidate folder), not verified against Vortex's own records before suggesting it --
+per the user's own explicit call, the cost of guessing wrong here is cheap (it's just staging/
+archive data, trivially deleted and re-obtained from Nexus), so this favors a simple heuristic over
+an elaborate "prove it's the right mod first" search across every installed mod's archive.
+
+**Route**: `POST /api/missing-masters/rebuild-mod` (`web/missing-masters-routes.js`) -- the one
+route in this file that needs a Vortex-running gate (its other two routes deliberately don't, see
+the file's own header comment), since it reads state.v2. Matches `rebuild-routes.js`'s simple
+synchronous-response convention (no SSE session -- this is one fast mod, not a whole collection).
+
+**UI**: "Rebuild This Mod" button (next to Create Dummy Master -- both can show at once, they're
+not mutually exclusive) + a confirm modal mirroring Create Dummy Master's own shape. Reusing the
+existing `.mm-row__actions` fixed-width layout (see the row-alignment fix above) meant a THIRD
+button needed the actions column widened again, from `300px` to `480px`, to keep all three on one
+line without reintroducing the alignment issue that fix originally solved.
+
+**Live-verified end to end** (Vortex closed, real data): triggering this for the real
+`Snazzy Morthal AIO-147759-2-1-1751281253` mod returned `REBUILT`, `fileCount: 4`, and the staging
+folder -- empty before -- now has all 4 real files including `Snazzy Interiors - Morthal AIO.esp`.
+Missing Masters' own scan still correctly reports this master as `missing` immediately afterward --
+expected, not a bug: this only repairs the STAGING folder, exactly like every other Rebuild
+Collection run (see this doc's own "expect External Changes" note above) -- Vortex itself still
+needs to reopen and deploy before the file actually lands in the Data folder Missing Masters checks.
+
+### Dummy Masters output folder excluded from staging cross-reference (2026-07-28)
+
+Confirmed real: the configured Dummy Masters output folder (e.g. "Wyre Output," which can also
+double as a Wrye Bash-style shared dump for many unrelated dummy stub plugins over time) sitting
+directly inside the staging directory was being treated by `buildStagingModNameIndex` like any other
+mod's own package -- one folder = one mod's siblings. Since it actually holds many unrelated dummy
+files, an unrelated pair (`Bashed Patch, 0.esp` and a `TavernGames.esp` dummy, both genuine 61-byte
+stubs this app itself had created) got grouped as "siblings," and `findActiveAlternate` wrongly
+concluded one was an alternate format of the other just because both happened to be active/present.
+
+Fix (`buildStagingModNameIndex(stagingDir, excludeDirAbs)`, `scanMissingMasters`'s new
+`dummyMastersOutputDir` param): the configured folder is excluded from `siblingsByModName` and
+`hollowInstalls` (cross-referencing/rebuild-offer logic that assumes "one folder = one real mod's
+package") but its contents STILL populate `modNameByPlugin`/`folderPathByModName` (so a master whose
+only known copy is a dummy sitting there still shows its real mod name and an "Open Staging Folder"
+button -- still useful information, just not a basis for cross-referencing). `readyToDeploy` is
+ALSO gated off when a master's resolved modName matches the dummy-masters folder's own stripped
+name, since that folder isn't Vortex-deploy-managed (see espWriter.createDummyMaster's own "still
+needs to become an active mod in Vortex" framing) -- "Open Vortex and click Deploy Mods" would be
+actively wrong guidance for a dummy stub sitting there.
+
+### Single-mod rebuild's auto-download now goes through the SAME Premium gate as Rebuild Collection (2026-07-28)
+
+`rebuild-single-mod.js`'s auto-download path was calling `downloadModArchive()` directly, skipping
+the Premium check `downloadMissingArchivesForPlan` (Rebuild Collection's own batch downloader)
+already enforces -- a non-Premium account got a raw, confusing Nexus API error instead of the same
+clear explanation used everywhere else in this app. Fixed: `checkPremiumStatus()` is called first;
+not-Premium returns `{ ...action, downloadSkipped: 'not-premium', autoDownloadEnabled: true,
+canAutoDownload: true }` without attempting anything; a real download failure (network, hash
+mismatch, etc.) returns `{ ...action, downloadError: e.message, ... }` instead of throwing raw. Every
+non-REBUILD return also carries `autoDownloadEnabled`/`canAutoDownload` so the client can distinguish
+three genuinely different reasons nothing downloaded: setting is off, account isn't Premium, or the
+attempt itself failed (`web/public/missing-masters-app.js`'s `mmDescribeRebuildFailure`, checked in
+that priority order).
+
+Whether auto-download is attempted at all now follows the SAME global "Download missing archives
+automatically" Settings toggle (`downloadMissingArchives` in config.json) Rebuild Collection already
+uses -- `/rebuild-mod` reads it server-side via `appConfig.loadConfig()` rather than trusting a
+client-supplied flag, so both features stay in sync automatically. The `/scan` route also now
+returns `downloadMissingArchivesEnabled` (this same value) so the Rebuild This Mod confirm dialog can
+state plainly what WILL happen ("This downloads **X**'s archive and reinstalls it…" vs. "This
+restores **X**'s files…") instead of hedging with "if turned on in Settings" -- see DESIGN.md's
+"State a known outcome as fact" entry.
+
+**Live-verified with a real not-Premium test** (temporary, reverted): `checkPremiumStatus` was
+patched behind a `MM_TEST_FORCE_NOT_PREMIUM=1` env-var override (never touches the real account,
+removed before committing) to confirm the not-Premium message renders correctly end to end without
+needing to actually downgrade a real Nexus account. Confirmed via direct browser reproduction: the
+message renders correctly every time -- the "nothing happened" reports that led to this test were
+actually a SEPARATE visibility bug (see below), not a logic bug.
+
+**Rebuild failure display moved from a page-level box to the row itself** (see DESIGN.md's
+"Contextual error placement" entry for the full UX rationale): reported three separate times as
+"nothing happened, no error, no warning" -- the failure message was rendering correctly in
+`#mmCriticalError` every time, just at the top of the page while "Rebuild This Mod" can sit far down
+a long problem-master list. `mmShowRebuildFailureOnRow` now inserts the failure as a NEW callout
+directly in that row, positioned above the row's existing critical callout (e.g. "Missing Files in
+Staging Folder") rather than overwriting it -- overwriting once lost the folder-name reference the
+original message gave. Falls back to the old page-level box (with `scrollIntoView`) only if the
+row's own callout can't be found for some reason.
+
+### Missing Masters summary badges + tip banner (2026-07-28)
+
+Added the same clickable-pill status filter convention already used by Stats Report's "Current
+Issues" section (`badge--clickable`/`badge__count`/`badge--filter-active`, click to isolate a status,
+click again or "Show all" to clear) -- one pill per status (Missing/Disabled/Pending) with a live
+count, never auto-reset by the background poll or a manual Refresh so an active filter survives both
+(only clearing it explicitly resets it, matching every other clickable-pill filter in this app). Also
+added a 💡 Tip callout under the tool-hero banner reminding the user that fixing something here only
+updates staging -- Vortex's own **Deploy Mods** is still required to finish moving it into the game.
+
 ## Future work
 
 Tracked in the workspace `TODO.md` (not duplicated here — confirmed 2026-07-27, one place to check
@@ -1664,16 +2366,26 @@ Vortex-Collection-Tools/
 │   ├── pause-controller.js                                — Rebuild Collection pause/resume state machine
 │   ├── cleanup-scan.js, cleanup-exclude-store.js            — Vortex Scrub's scan/cross-check/delete logic
 │   │                                                          and its exclude-list data file reader/writer
+│   ├── download-naming.js                                   — shared Vortex download/staging-folder naming-
+│   │                                                          convention regexes, used by cleanup-scan.js AND
+│   │                                                          missing-masters-scan.js (see "Naming-convention
+│   │                                                          gap" entries above)
+│   ├── esp-header.js, esp-writer.js                          — Missing Masters' TES4 header reader / dummy-
+│   │                                                          master plugin writer (Create Dummy Master)
+│   ├── missing-masters-scan.js                              — Missing Masters' own detection/classification
+│   ├── build-mod-from-vortex-state.js, rebuild-single-mod.js — single-mod rebuild engine (Missing Masters'
+│   │                                                          "Rebuild This Mod", reuses rebuild-mod.js's
+│   │                                                          classify/extract engine unchanged)
 │   └── vortex-sync/                                          — Update Collection's engine
 │       ├── lib.js, report.js, win-dialog.js (incl. the async pickFolderAsync used by Settings' Browse buttons)
 │       ├── backups/ (gitignored), state-backups/ (gitignored)
 ├── web/
 │   ├── server.js, rebuild-routes.js, sync-routes.js, settings-routes.js, stats-routes.js,
-│   │   work-through-routes.js, rules-generator-routes.js, cleanup-routes.js, run-state.js,
-│   │   sync-run-state.js, sse-session.js
+│   │   work-through-routes.js, rules-generator-routes.js, cleanup-routes.js, missing-masters-routes.js,
+│   │   run-state.js, sync-run-state.js, sse-session.js
 │   └── public/ (index.html, app.js, sync-app.js, settings-app.js, stats-app.js,
 │       work-through-app.js, rules-generator-app.js, reports-rulesgen-app.js, cleanup-app.js,
-│       status-labels.js, shell.js, styles.css)
+│       missing-masters-app.js, status-labels.js, shell.js, styles.css)
 ├── diagnostics/            — permanent, reusable read-only diagnostics (wal-inclusion-check.js,
 │                              inspect-mod-by-name.js) -- see each file's own header for what it's for
 ├── logs/ (gitignored)      — Rebuild Collection run logs

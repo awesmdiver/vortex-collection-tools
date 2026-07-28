@@ -27,6 +27,7 @@ const { createStatsRouter } = require('./stats-routes');
 const { createWorkThroughRouter } = require('./work-through-routes');
 const { createRulesGeneratorRouter } = require('./rules-generator-routes');
 const { createCleanupRouter } = require('./cleanup-routes');
+const { createMissingMastersRouter } = require('./missing-masters-routes');
 const { loadSyncLib } = require('../lib/collection-runner');
 const appConfig = require('../lib/app-config');
 
@@ -83,6 +84,10 @@ function main() {
         state: cliArgs.state || fileConfig.state || syncLib.DEFAULT_STATE_DIR,
         // No CLI flag for this one (same as logsDir) -- config.json/Settings is the only path in.
         cleanupExcludeListDir: fileConfig.cleanupExcludeListDir || null,
+        // Missing Masters utility -- no CLI flags for these either, config.json/Settings only.
+        skyrimDataDir: fileConfig.skyrimDataDir || null,
+        pluginsListDir: fileConfig.pluginsListDir || null,
+        dummyMastersOutputDir: fileConfig.dummyMastersOutputDir || null,
         // maxBackupsToKeep is NOT included here deliberately -- unlike the paths above, it's read
         // fresh from config.json at the moment each rebuild run actually needs it (see
         // rebuild-routes.js), not baked in at startup, so changing it never needs a restart.
@@ -98,6 +103,7 @@ function main() {
     app.use('/api/work-through', createWorkThroughRouter());
     app.use('/api/rules-generator', createRulesGeneratorRouter(config));
     app.use('/api/cleanup', createCleanupRouter(config));
+    app.use('/api/missing-masters', createMissingMastersRouter(config));
 
     // Settings page's "Restart Now" button -- spawns a fresh, fully independent instance of this
     // same server (same args this one was launched with, forcing --no-open since a browser tab is
