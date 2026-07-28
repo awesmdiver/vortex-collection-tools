@@ -91,76 +91,110 @@
     <p class="tool-hero__body">Pick a tool to get started. Everything here works on collections you've already installed in Vortex&mdash;rebuild them faster, keep your cleanup after an update, sort out conflict rules, and see how it all went.</p>
   </div>
 
+  <div id="homePinnedRow"></div>
+
+  <div id="homeCategorySections">
   <div class="home-section-title">Main tools</div>
   <div class="home-grid">
-    <button class="home-card" data-area="rebuild">
-      <div class="home-card__icon">⚡</div>
-      <div class="home-card__name">Rebuild Collection</div>
-      <div class="home-card__desc">Re-extracts an installed collection straight into staging&mdash;same result, dramatically faster than Vortex's own install process.</div>
-      <div class="home-card__open">Open <span>→</span></div>
-    </button>
-    <button class="home-card" data-area="sync">
-      <div class="home-card__icon">🔄</div>
-      <div class="home-card__name">Update Collection</div>
-      <div class="home-card__desc">Keeps your Ignored and Disabled mods exactly as you set them, even after an update resets them in Vortex.</div>
-      <div class="home-card__open">Open <span>→</span></div>
-    </button>
-    <button class="home-card" data-area="rules-generator">
-      <div class="home-card__icon">🔗</div>
-      <div class="home-card__name">Rules Generator</div>
-      <div class="home-card__desc">Copies the conflict rules you already fixed over to an updated collection, so you're not resolving the same conflicts twice.</div>
-      <div class="home-card__open">Open <span>→</span></div>
-    </button>
+    <div class="home-card-wrap">
+      <button class="home-card" data-area="rebuild">
+        <div class="home-card__icon">⚡</div>
+        <div class="home-card__name">Rebuild Collection</div>
+        <div class="home-card__desc">Re-extract an installed collection straight into staging&mdash;same result, dramatically faster.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="rebuild" title="Pin to top">☆</button>
+    </div>
+    <div class="home-card-wrap">
+      <button class="home-card" data-area="sync">
+        <div class="home-card__icon">🔄</div>
+        <div class="home-card__name">Update Collection</div>
+        <div class="home-card__desc">Keep your Ignored and Disabled mods exactly as you set them after an update.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="sync" title="Pin to top">☆</button>
+    </div>
+    <div class="home-card-wrap">
+      <button class="home-card" data-area="rules-generator">
+        <div class="home-card__icon">🔗</div>
+        <div class="home-card__name">Rules Generator</div>
+        <div class="home-card__desc">Copy the conflict rules you already fixed from an old collection to its update.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="rules-generator" title="Pin to top">☆</button>
+    </div>
   </div>
 
   <div class="home-section-title">Reports</div>
   <div class="home-grid">
-    <button class="home-card" data-area="reports" data-sub="stats">
-      <div class="home-card__icon">📊</div>
-      <div class="home-card__name">Stats</div>
-      <div class="home-card__desc">See how every rebuild has gone over time, and spot what still needs attention right now.</div>
-      <div class="home-card__open">Open <span>→</span></div>
-    </button>
-    <button class="home-card" data-area="reports" data-sub="workthrough">
-      <div class="home-card__icon">✅</div>
-      <div class="home-card__name">Work Through</div>
-      <div class="home-card__desc">Every problem mod across every collection, gathered into one checklist you can work through.</div>
-      <div class="home-card__open">Open <span>→</span></div>
-    </button>
-    <button class="home-card" data-area="reports" data-sub="updatecompare">
-      <div class="home-card__icon">🔍</div>
-      <div class="home-card__name">Update Compare</div>
-      <div class="home-card__desc">A clear before-and-after of what an update added, kept, and removed.</div>
-      <div class="home-card__open">Open <span>→</span></div>
-    </button>
-    <button class="home-card" data-area="reports" data-sub="rulesgen">
-      <div class="home-card__icon">📋</div>
-      <div class="home-card__name">Rules Generator Report</div>
-      <div class="home-card__desc">Check which mods have their rules copied over, and which still need a decision.</div>
-      <div class="home-card__open">Open <span>→</span></div>
-    </button>
+    <div class="home-card-wrap">
+      <button class="home-card" data-area="reports" data-sub="stats">
+        <div class="home-card__icon">📊</div>
+        <div class="home-card__name">Stats</div>
+        <div class="home-card__desc">See how every rebuild performed, and what still needs attention.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="stats" title="Pin to top">☆</button>
+    </div>
+    <div class="home-card-wrap">
+      <button class="home-card" data-area="reports" data-sub="workthrough">
+        <div class="home-card__icon">✅</div>
+        <div class="home-card__name">Work Through</div>
+        <div class="home-card__desc">Gather every problem mod across every collection into one checklist.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="workthrough" title="Pin to top">☆</button>
+    </div>
+    <div class="home-card-wrap">
+      <button class="home-card" data-area="reports" data-sub="updatecompare">
+        <div class="home-card__icon">🔍</div>
+        <div class="home-card__name">Update Compare</div>
+        <div class="home-card__desc">See a clear before-and-after of what an update added, kept, and removed.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="updatecompare" title="Pin to top">☆</button>
+    </div>
+    <div class="home-card-wrap">
+      <button class="home-card" data-area="reports" data-sub="rulesgen">
+        <div class="home-card__icon">📋</div>
+        <div class="home-card__name">Rules Generator Report</div>
+        <div class="home-card__desc">Check which mods have their rules copied, and which still need a decision.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="rulesgen" title="Pin to top">☆</button>
+    </div>
   </div>
 
   <div class="home-section-title">Utilities</div>
   <div class="home-grid">
-    <button class="home-card" data-area="utilities" data-sub="missingmasters">
-      <div class="home-card__icon">🧩</div>
-      <div class="home-card__name">Missing Masters</div>
-      <div class="home-card__desc">Pinpoint missing master files and every mod that depends on them, before they crash your game.</div>
-      <div class="home-card__open">Open <span>→</span></div>
-    </button>
-    <button class="home-card" data-area="utilities" data-sub="scrub">
-      <div class="home-card__icon">🧽</div>
-      <div class="home-card__name">Vortex Scrub</div>
-      <div class="home-card__desc">Spot staging folders and archives Vortex has stopped tracking, and reclaim the space safely.</div>
-      <div class="home-card__open">Open <span>→</span></div>
-    </button>
-    <button class="home-card" data-area="utilities" data-sub="archivefinder">
-      <div class="home-card__icon">📦</div>
-      <div class="home-card__name">Archive Finder</div>
-      <div class="home-card__desc">Search inside every mod archive without extracting a thing, and pull out exactly the file you need.</div>
-      <div class="home-card__open">Open <span>→</span></div>
-    </button>
+    <div class="home-card-wrap">
+      <button class="home-card" data-area="utilities" data-sub="missingmasters">
+        <div class="home-card__icon">🧩</div>
+        <div class="home-card__name">Missing Masters</div>
+        <div class="home-card__desc">Pinpoint missing master files and every mod that depends on them.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="missingmasters" title="Pin to top">☆</button>
+    </div>
+    <div class="home-card-wrap">
+      <button class="home-card" data-area="utilities" data-sub="scrub">
+        <div class="home-card__icon">🧽</div>
+        <div class="home-card__name">Vortex Scrub</div>
+        <div class="home-card__desc">Spot staging folders and archives Vortex stopped tracking, and reclaim the space.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="scrub" title="Pin to top">☆</button>
+    </div>
+    <div class="home-card-wrap">
+      <button class="home-card" data-area="utilities" data-sub="archivefinder">
+        <div class="home-card__icon">📦</div>
+        <div class="home-card__name">Archive Finder</div>
+        <div class="home-card__desc">Search inside every mod archive without extracting a thing.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="archivefinder" title="Pin to top">☆</button>
+    </div>
+  </div>
   </div>
 
 </main>

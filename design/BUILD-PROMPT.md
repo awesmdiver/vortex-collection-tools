@@ -29,8 +29,8 @@ tokens and components, so it should feel seamless with every other page.
    Utilities), sub-tools expanded, exactly as in the mockup. Cards are keyboard-focusable
    `<button>`s. **Remove the five-tab `.app-nav` block from the header** — Home replaces it.
 2. **web/public/styles.css** — add `.home-grid`, `.home-card` (+ `__icon` / `__name` / `__desc` /
-   `__open`), `.home-section-title`, and give `.app-header__title` a pointer cursor + `--surface-2`
-   hover (it's now the Home control).
+   `__open`), `.home-card-wrap`, `.home-card__star`, `.home-section-title`, and give
+   `.app-header__title` a pointer cursor + `--surface-2` hover (it's now the Home control).
 3. **shell.js** — add `'home'` to `TOOL_AREAS`; make Home the **default landing** (replacing the
    current default into Rebuild), while preserving the existing deep-link / last-area routing for
    real navigations; wire the logo/title (`.app-header__title`) to return Home; route each card
@@ -39,6 +39,12 @@ tokens and components, so it should feel seamless with every other page.
    else depended on the removed `.app-nav` buttons (active-state toggling, etc.) and clean up any
    now-dead references.
 4. Light / dark / system keep working automatically through the CSS variables — just don't hardcode.
+5. **Pins** (see DESIGN.md's "Pinning" section) — wrap each card in `.home-card-wrap` with a sibling
+   `.home-card__star` button (NOT nested inside the card `<button>` — nested buttons are invalid
+   HTML). Render a **📌 Pinned** row above the category sections from the pinned tools; hide it when
+   nothing is pinned. Persist the pins. The star is `--accent` (not a severity color), the Pinned
+   row is additive (never reorders the grid), and toggling updates the star + Pinned row in place —
+   no full re-render, no flicker.
 
 **Then document + verify:**
 - The `DESIGN.md` section is already written. Add the engineer-facing wiring detail (the

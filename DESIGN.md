@@ -427,10 +427,110 @@ colors.
 condensed version of that tool's own `.tool-hero__body` "What & Why" — same promise, trimmed to one
 line. Load `plain-language-writer` before touching this copy.
 
+**Pinnable.** Each card carries a star (`.home-card__star`, top-right corner); pinned tools surface
+in a **📌 Pinned** row above the category sections. See the "Pinning" section below for the shared
+rules.
+
 The wiring detail (adding a `home` area to shell.js's `TOOL_AREAS`, making it the default landing,
 removing the `.app-nav` markup, routing each card through the same `showToolArea()` the old nav
 buttons used, and Reports/Utilities cards landing on their default sub-tab) is engineer-facing —
 document it in `TECHNICAL.md` when built, not here.
+
+## Settings — two-pane category layout (2026-07-28)
+
+Settings was one long vertical scroll of stacked `.settings-group` cards (a big "General" block
+plus one card per tool). Replaced with a **two-pane layout**: a sticky category rail on the left,
+and the selected category's cards on the right — one section visible at a time, so the page is
+short and scannable instead of a single long scroll. Reference mockup:
+`design/vortex-settings-mockup.html` (open in a browser); handoff prompt in
+`design/BUILD-PROMPT-settings.md`.
+
+**The page header is a `.tool-hero` intro banner**, not a plain heading — an emoji-led title (⚙️)
+plus a casual "What & Why" body, exactly like every tool page (see the "Tool intro banner" section
+above). It replaces the old `<h1>Settings</h1>` + one-line subtitle; the Restart Server / Stop
+Server actions sit to its right in the `.settings-header-row`.
+
+**One `<form>`, panes shown/hidden — not separate forms.** Every field stays in the DOM at all
+times; switching category only toggles which pane is visible. The single **Save Settings** button
+still writes the whole form at once, and edits made in one category are never lost by switching to
+another before saving. This is the load-bearing implementation rule — get it wrong and switching
+categories silently drops unsaved changes.
+
+**Category rail — `.settings-rail` / `.settings-rail__item`.** A vertical list of the settings
+categories, sticky under the header. Each item is the tool's emoji + label; the active one uses
+`--accent-bg` + `--accent` text (the same accent-selection language used everywhere else —
+deliberately NOT a severity color, which would imply meaning here). A real `<button>` per item,
+keyboard-focusable, built from existing tokens. On narrow widths (<820px) the rail wraps to a
+horizontal row above the content.
+
+**Categories and order — tool sections first, set-once config last:**
+1. ⚡ Rebuild Collection
+2. 🔄 Update Collection
+3. 🧩 Missing Masters
+4. 🧽 Vortex Scrub
+5. 📦 Archive Finder
+6. 📁 Paths & Backups — Vortex staging / downloads / database paths, database backups, logs
+7. ⚙️ General — theme, server (port/host + the security-warning callout), Nexus API key,
+   download-missing-archives, version warning
+
+**This order is static — hand-picked, never auto-reordered by usage.** A settings nav that
+reshuffles itself by frequency breaks the muscle memory of "it's the 4th item," which for
+navigation you return to repeatedly costs more than an "optimized" order gains. Put the important
+things up top once (done) and leave the order fixed. (Session memory is fine and different: the
+page may remember the *last-open* category across a save-reload — that doesn't move any item.)
+
+**The rail is pinnable** (`.settings-rail__pin` — a star that appears on row hover, stays visible
+once pinned). A **📌 Pinned** group sits above an **All settings** list; because pins never reorder
+the base list, this composes cleanly with the static order above. See the "Pinning" section below.
+
+The old single "General" block was split into **Paths & Backups** (where files live) and **General**
+(how the app behaves) — that block was the bulk of the old scroll, and separating locations from
+behavior makes both easier to scan. Rules Generator has no settings of its own (it shares the
+database backups under Paths & Backups), so it isn't a rail item.
+
+**Sticky Save bar — `.settings-save-bar`.** The Save Settings primary button pins to the bottom of
+the content pane, always in reach regardless of which category is open; a muted "All changes saved."
+hint sits to its left after a save. The Restart Server / Stop Server actions stay in the
+`.settings-header-row` at the top, unchanged.
+
+**Components unchanged; section copy refreshed.** Every field reuses the existing `.settings-group`
+card, `.settings-section-title` sub-labels, `.field-group` / `.field-label` / `.input` / `.select`
+/ `.checkbox`, and the `.callout--warning` security box; no field is removed or renamed. The
+per-section **blurbs and hints were rewritten to the friendly casual voice** (see the mockup) — each
+should say what its tool does in plain words, not a technical description (e.g. Missing Masters'
+"Read-only — this feature only ever reads…" became "Point Missing Masters at your Skyrim files here.
+It only reads these folders…"). The **security warning stays serious**. All copy follows
+`plain-language-writer`. Wiring detail (which `settings-app.js` render calls move into which pane,
+the show/hide toggle, last-open memory) is engineer-facing — put it in `TECHNICAL.md` when built.
+
+## Pinning — favorites on Home and the Settings rail (2026-07-28)
+
+One "pin" concept, used in two places, so it reads as a single feature: a star pins an item into a
+dedicated **📌 Pinned** zone for quick access. This is the mechanism that keeps the app navigable as
+it grows — at 20–30 tools you pin the handful you use and they're always one click away.
+
+- **Home** — each `.home-card` carries a star (`.home-card__star`, top-right). Pinned tools appear
+  in a **📌 Pinned** row above the category sections.
+- **Settings rail** — each rail row has a star that appears on hover (`.settings-rail__pin`, and
+  stays visible once pinned). Pinned categories appear in a **📌 Pinned** group above an
+  **All settings** list.
+
+Shared rules:
+- **The pinned zone is additive — it never reorders the base list/grid.** A pinned item shows in the
+  Pinned zone *and* keeps its normal spot below; the base order stays fixed (same muscle-memory
+  reasoning as the static rail order). Hide the Pinned zone entirely when nothing is pinned.
+- **The star uses `--accent`, not a severity color** — a filled `★` in accent when pinned, an
+  outline `☆` otherwise. (A red 📌 pushpin glyph would collide with the danger severity, so 📌 is
+  used only as the decorative zone label, never as the toggle.)
+- **Toggle in place — no full re-render.** Flipping a star updates that star and the Pinned zone
+  only; it must not rebuild the whole grid/rail, or the page flickers.
+- **Persist the pins** so they survive a reload. The mechanism (config vs. `localStorage`) is
+  engineer-facing — decide in `TECHNICAL.md`; a personal local tool can use either.
+
+**Future-proofing — define each tool once.** As tools are added, describe each in a single place —
+its emoji, its `.tool-hero` title, and its one-line pitch — and let its Home card, its page hero,
+and its Settings rail item all read from that source. Adding a tool then becomes one data entry plus
+its pane, not copy duplicated across three screens that can silently drift apart.
 
 ## How this document gets used
 
