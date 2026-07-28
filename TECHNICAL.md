@@ -2287,6 +2287,105 @@ count, never auto-reset by the background poll or a manual Refresh so an active 
 added a 💡 Tip callout under the tool-hero banner reminding the user that fixing something here only
 updates staging -- Vortex's own **Deploy Mods** is still required to finish moving it into the game.
 
+## Archive Finder (Utilities area, added 2026-07-28)
+
+A third Utilities sub-tab, folded in from a previously-standalone project
+(`skyrim-modding/archive-file-finder`, now retired -- see below). Indexes every archive in the
+`downloads` folder (the same folder Rebuild Collection already uses -- no separate "scan folder"
+setting) up front, so searching for a file name or browsing an archive's contents never requires
+unpacking anything. Two search modes: **Find individual files** (searches indexed file names
+directly) and **Display Archive** (searches archive names, then lets the user browse that one
+archive's full tree live). Selected files (individually, or by group/Select All) can be extracted
+directly to a chosen destination folder, flat (no per-archive subfolders) by default -- built for
+the exact "pull the one patch .esp out of a big archive" use case the user already had this tool
+for.
+
+**Reuse-first, not a straight port.** The user's own standing instruction going into this
+("basically, use reuse anything we have build in collection-vortex-tools if it's the same
+functionality") eliminated three of the original standalone tool's own modules outright, rather
+than porting them:
+- `lib/sevenzip.js` -- this project's own copy is already a strict superset of the standalone
+  tool's (bundled-7z-first lookup, the `-sccUTF-8` charset flag, correct `attrs.includes('D')`
+  directory detection vs. a buggy `startsWith('D')` in the original) -- same function signatures,
+  drop-in compatible, so Archive Finder's scanner (`lib/archive-finder-scanner.js`) just
+  `require('./sevenzip')`s it directly.
+- Its own `folder-picker.js` (a hand-rolled "always light-themed" native dialog) -- replaced
+  entirely by the existing generic `POST /api/settings/browse-folder` endpoint and
+  `win-dialog.js`'s `pickFolderAsync`, reused for both the new Settings Browse buttons and the
+  extraction-destination picker inside Archive Finder's own extract dialog.
+- Its own ad-hoc raw-http named-SSE-events implementation for scan progress -- replaced by
+  `web/sse-session.js`'s `createSseSession()`, the exact same `POST starts session (202) + GET
+  .../events subscribes` convention Rebuild Collection's own plan/run flow already uses. The
+  client dispatches on a single `frame.type` field via one `onmessage` handler, matching
+  `handlePlanEvent`'s own convention, not the original's named-event style.
+
+**What WAS ported** (with real, deliberate changes, not verbatim):
+- `lib/archive-finder-db.js` -- restructured from a module-level singleton opened at require-time
+  against a hardcoded `data/` folder into `createDb(dbDir)`, a factory taking a user-chosen
+  directory -- matches this project's own standing rule that every new data location is a
+  user-chosen path (`archiveFinderDbDir`, a new required Settings field, same treatment as
+  `cleanupExcludeListDir`/`skyrimDataDir`). The original's own `config` table (scanFolder/
+  outputFolder/extensions) is gone entirely -- extensions/outputFolder now live in the single
+  unified `config.json` (`archiveFinderExtensions`, `archiveFinderOutputDir`) instead of a second,
+  tool-local settings store.
+- `lib/archive-finder-scanner.js`, `-tree.js`, `-junk-paths.js` -- logic ported closely (grouping
+  algorithm, incremental-rescan fingerprinting by size+mtime+scanned-extensions-coverage, the
+  absolute-junk-entry filter), wired to the new `createDb`/`sevenzip.js` instead of the originals.
+
+**`node:sqlite`** (Node's own built-in SQLite module, requires Node >=22.5.0) is what the archive/
+file index runs on -- confirmed this machine's Node (v24.18.0) is well past the minimum;
+`package.json`'s `engines` field bumped from `>=18` to `>=22.5.0` accordingly.
+
+**Settings field gotcha worth flagging for any future Settings field**: `web/public/settings-app.js`
+has THREE separate places a new field must be wired -- `REQUIRED_FIELDS` (client-side validation),
+`loadSettings()` (value population on load), and the `body` object inside `saveSettings()` (the
+actual POST payload). Missing the third one produces a confusing failure mode: the input visibly
+holds the typed value, `REQUIRED_FIELDS` validation passes client-side, Save still fails with
+"Required setting(s) missing" because the field was silently never transmitted. Hit exactly this
+while wiring `archiveFinderDbDir`; fixed, but worth checking the same three spots any time a new
+Settings field is added.
+
+**Extension list (`archiveFinderExtensions`) and default extraction folder
+(`archiveFinderOutputDir`) don't require a restart** -- both are read fresh-per-request via
+`appConfig.loadConfig()`. `archiveFinderDbDir` DOES require a restart (the database is opened once,
+at router-creation time, in `web/archive-finder-routes.js`) -- uses the app's own existing
+"Restart Now" self-restart mechanism, same as any other restart-flagged path field.
+
+**Failed-archives voice fix (found during live testing, 2026-07-28):** the untrack/delete result
+messages originally read `"✓ Deleted from disk (archive #4527)"` -- a raw internal database id,
+exactly the kind of detail the plain-language voice guidelines say never helps a user. Fixed by
+having `archive-finder-app.js` track archive names alongside ids while the failed-archives modal is
+open (`afFailedNames`, a `Map`), so the result reads `"✓ Deleted from disk: <real archive name>"`
+instead.
+
+**Extract Selected button label fix:** `Extract Selected&hellip;` originally carried the
+Browse-style ellipsis, but the button opens this project's own in-app confirm modal
+(`afExtractModal`), not a native OS dialog directly -- per the established convention (ellipsis
+reserved for buttons that open a native dialog), corrected to plain `Extract Selected`. The
+`Browse&hellip;` button *inside* that modal correctly keeps its ellipsis, since that one does open
+a native folder picker.
+
+**Live-tested end-to-end against real production data** (2026-07-28, not synthetic): a genuine
+first scan of the user's real `downloads` folder (4,526 archives, 12,823 indexed `.esp` files, 0
+scan errors); file-search + archive-search + tree browsing all confirmed against real results;
+group expand/collapse and tri-state group-checkbox behavior confirmed; Select All/Clear Selection
+confirmed (211 checkboxes toggled correctly); a real extraction of 2 real files to a scratch
+destination confirmed on disk (correct names, correct byte sizes, flat mode honored,
+`archiveFinderOutputDir` correctly auto-remembered after use); pagination (page-size switching,
+prev/next) confirmed against the real 39-result "morthal" search; extension add/remove confirmed to
+persist server-side and survive a page reload. The failed-archives modal specifically (untrack +
+permanent delete-from-disk, including the path-validated-against-`downloads` guard) was verified by
+injecting two synthetic failed-archive rows directly via `lib/archive-finder-db.js` (the real scan
+had zero errors to test against organically) -- both the untrack and the delete-from-disk flow
+confirmed working live, including confirming the deleted test file was actually gone from disk
+afterward. All test rows/files were cleaned up and `archiveFinderOutputDir` reset to `null`
+afterward so no test artifacts leaked into the user's real config.
+
+**Retired**: the standalone `skyrim-modding/archive-file-finder` project (both its GitHub repo and
+local folder) is superseded by this fold-in and slated for removal once the user gives final
+go-ahead (destructive, so held for explicit confirmation rather than assumed from the original
+fold-in request).
+
 ## Future work
 
 Tracked in the workspace `TODO.md` (not duplicated here — confirmed 2026-07-27, one place to check
@@ -2376,16 +2475,19 @@ Vortex-Collection-Tools/
 │   ├── build-mod-from-vortex-state.js, rebuild-single-mod.js — single-mod rebuild engine (Missing Masters'
 │   │                                                          "Rebuild This Mod", reuses rebuild-mod.js's
 │   │                                                          classify/extract engine unchanged)
+│   ├── archive-finder-db.js, -scanner.js, -tree.js,          — Archive Finder's own archive/file index +
+│   │   -junk-paths.js                                          scanner (folded in 2026-07-28, see section
+│   │                                                            above); reuses lib/sevenzip.js as-is
 │   └── vortex-sync/                                          — Update Collection's engine
 │       ├── lib.js, report.js, win-dialog.js (incl. the async pickFolderAsync used by Settings' Browse buttons)
 │       ├── backups/ (gitignored), state-backups/ (gitignored)
 ├── web/
 │   ├── server.js, rebuild-routes.js, sync-routes.js, settings-routes.js, stats-routes.js,
 │   │   work-through-routes.js, rules-generator-routes.js, cleanup-routes.js, missing-masters-routes.js,
-│   │   run-state.js, sync-run-state.js, sse-session.js
+│   │   archive-finder-routes.js, run-state.js, sync-run-state.js, sse-session.js
 │   └── public/ (index.html, app.js, sync-app.js, settings-app.js, stats-app.js,
 │       work-through-app.js, rules-generator-app.js, reports-rulesgen-app.js, cleanup-app.js,
-│       missing-masters-app.js, status-labels.js, shell.js, styles.css)
+│       missing-masters-app.js, archive-finder-app.js, status-labels.js, shell.js, styles.css)
 ├── diagnostics/            — permanent, reusable read-only diagnostics (wal-inclusion-check.js,
 │                              inspect-mod-by-name.js) -- see each file's own header for what it's for
 ├── logs/ (gitignored)      — Rebuild Collection run logs

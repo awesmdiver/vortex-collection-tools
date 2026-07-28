@@ -94,9 +94,12 @@
 
   <!-- View: collection picker -->
   <section id="view-picker" class="view">
+    <div class="tool-hero">
+      <h2 class="tool-hero__title">⚡ Rebuild Collections in Minutes, Not Hours</h2>
+      <p class="tool-hero__body">Skip Vortex's slow archive-install process entirely! This tool re-extracts an already-installed collection's mods directly into your staging folder&mdash;same result, dramatically faster. Review exactly what would change before anything happens, then let it run while you do something else.</p>
+    </div>
     <div class="view-header">
       <h1>Choose a collection</h1>
-      <p class="muted">Rebuilds an already-installed collection's staging folder directly, instead of through Vortex's slower archive install process.</p>
     </div>
     <div id="collectionPickerLoading" class="loading-row"><span class="spinner"></span> Loading installed collections&hellip;</div>
 
@@ -337,9 +340,11 @@
 <section id="area-sync" class="tool-area hidden">
 
 <main class="app-main">
-  <div class="view-header">
-    <h1>Update Collection</h1>
-    <p class="muted">You can keep your <strong>Ignored</strong> and <strong>Disabled</strong> mods marked that way even after updating the collection -- less mod cleanup for you afterward.</p>
+  <!-- No "<h1>Update Collection</h1>" here -- the top nav tab already names the tool. This intro
+       banner pitches the value instead (see DESIGN.md's "Tool intro banner" section). -->
+  <div class="tool-hero">
+    <h2 class="tool-hero__title">🔄 Update Without Redoing Your Mod Cleanup</h2>
+    <p class="tool-hero__body">Updating a collection in Vortex often resets your carefully-set <strong>Ignored</strong> and <strong>Disabled</strong> mods back to their defaults. This tool remembers exactly how you had things set and restores it after the update, so that cleanup work never has to happen twice.</p>
   </div>
 
   <div id="syncBackupRootMissingBanner" class="callout callout--warning hidden">
@@ -858,6 +863,35 @@
     </div>
   </div>
 
+  <!-- Archive Finder (folded in from the standalone "Archive File Finder" project 2026-07-28 --
+       see TECHNICAL.md). Reuses the existing "Vortex downloads folder" above as its own scan
+       folder -- no separate "scan folder" setting here, deliberately. -->
+  <div class="settings-group">
+    <div class="settings-group__header">
+      <h2>Archive Finder</h2>
+      <p class="muted">Scans your Vortex downloads folder (set above, under Vortex paths) -- no separate folder to configure here.</p>
+    </div>
+
+    <h3 class="settings-section-title">Database folder</h3>
+    <div class="field-group">
+      <label class="field-label" for="settingsArchiveFinderDbDirInput">Where the archive search index is stored <span class="field-required">(required)</span></label>
+      <div class="path-input-row">
+        <input id="settingsArchiveFinderDbDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Downloads\archive-finder-index">
+        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsArchiveFinderDbDirInput">Browse&hellip;</button>
+      </div>
+      <p class="muted">A small local database, separate from your downloads folder itself -- safe to point anywhere, and safe to delete any time to force a clean rescan from scratch.</p>
+    </div>
+
+    <h3 class="settings-section-title">Default extraction folder</h3>
+    <div class="field-group">
+      <label class="field-label" for="settingsArchiveFinderOutputDirInput">Where extracted files go by default <span class="muted">(optional -- you can also pick a folder each time you extract)</span></label>
+      <div class="path-input-row">
+        <input id="settingsArchiveFinderOutputDirInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\My Patch Collection">
+        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsArchiveFinderOutputDirInput">Browse&hellip;</button>
+      </div>
+    </div>
+  </div>
+
   <div class="view-actions">
     <button id="settingsSaveBtn" class="btn btn--primary">Save Settings</button>
     <span id="settingsSaveStatus" class="muted"></span>
@@ -961,7 +995,12 @@
   </div>
 
   <div id="reports-sub-area-stats">
-  <p class="muted">Aggregate history across every collection this tool has rebuilt, plus current problem mods in one place.</p>
+  <!-- No redundant heading here -- the sub-nav button right above already names this report. This
+       intro banner pitches the value instead (see DESIGN.md's "Tool intro banner" section). -->
+  <div class="tool-hero">
+    <h2 class="tool-hero__title">📊 See Every Rebuild at a Glance</h2>
+    <p class="tool-hero__body">Track how every collection you've rebuilt has performed over time, and instantly spot which mods still need attention right now. No more digging through individual run logs one at a time to piece together the full picture.</p>
+  </div>
 
   <div class="view-actions" id="statsPeriodPicker">
     <button class="btn btn--ghost btn--small stats-period-btn" data-period="7d">Last 7 days</button>
@@ -1000,7 +1039,12 @@
   </div>
 
   <div id="reports-sub-area-workthrough" class="hidden">
-  <p class="muted">Work through every current problem mod, collection by collection. Resolvable mismatches and missing archives can be fixed right here; everything else gets a manual completed checkbox that persists across visits until a real rerun clears it.</p>
+  <!-- No redundant heading here -- the sub-nav button right above already names this report. This
+       intro banner pitches the value instead (see DESIGN.md's "Tool intro banner" section). -->
+  <div class="tool-hero">
+    <h2 class="tool-hero__title">✅ Work Through Every Problem Mod, One by One</h2>
+    <p class="tool-hero__body">Instead of hunting through separate run logs for what still needs fixing, this report gathers every problem mod across every collection into one checklist. Fix resolvable mismatches and missing archives right here; check off anything else as you handle it in Vortex yourself&mdash;your progress sticks around until a fresh rerun clears it.</p>
+  </div>
   <p class="muted" id="wtProgress"></p>
   <div class="summary-badges" id="wtBadges"></div>
   <div id="wtList"></div>
@@ -1009,6 +1053,12 @@
   <div id="reports-sub-area-updatecompare" class="hidden">
   <div class="view-actions">
     <button id="updateCompareBackBtn" class="btn btn--nav btn--back">&larr; Back to Update Collection</button>
+  </div>
+  <!-- No redundant heading here -- the sub-nav button right above already names this report. This
+       intro banner pitches the value instead (see DESIGN.md's "Tool intro banner" section). -->
+  <div class="tool-hero">
+    <h2 class="tool-hero__title">🔍 See Exactly What an Update Changed</h2>
+    <p class="tool-hero__body">After running Update Collection, get a clear before-and-after comparison of your mods&mdash;what stayed, what got added, and what got removed&mdash;so you're never left guessing what an update actually did.</p>
   </div>
   <!-- Informational, not warning -- these are plain next-steps to follow, nothing is wrong. Same
        .callout--info + numbered-steps pattern as Update Collection's own "Next steps in Vortex"
@@ -1025,7 +1075,12 @@
   </div>
 
   <div id="reports-sub-area-rulesgen" class="hidden">
-  <p class="muted">See what's already set up correctly between two collections, and what still needs a look.</p>
+  <!-- No redundant heading here -- the sub-nav button right above already names this report. This
+       intro banner pitches the value instead (see DESIGN.md's "Tool intro banner" section). -->
+  <div class="tool-hero">
+    <h2 class="tool-hero__title">📋 Check Your Rules Generator Progress</h2>
+    <p class="tool-hero__body">See at a glance which mods already have their conflict rules copied over correctly, and which ones still need a decision or a second look in Vortex&mdash;all without re-running the matching process itself.</p>
+  </div>
 
   <div class="collection-picker">
     <select id="rgReportOldSelect" class="select">
@@ -1078,6 +1133,7 @@
   <div class="view-actions">
     <button id="utilities-sub-missingmasters" class="btn btn--primary btn--small">Missing Masters</button>
     <button id="utilities-sub-scrub" class="btn btn--ghost btn--small">Vortex Scrub</button>
+    <button id="utilities-sub-archivefinder" class="btn btn--ghost btn--small">Archive Finder</button>
   </div>
 
   <div id="utilities-sub-area-scrub">
@@ -1191,6 +1247,146 @@
   </div>
   <!-- /utilities-sub-area-scrub -->
 
+  <!-- Archive Finder -- folded in 2026-07-28 from the standalone "Archive File Finder" project
+       (see TECHNICAL.md's "Archive Finder" section for the full writeup). No "close Vortex first"
+       messaging here -- this only ever reads your downloads folder and its own local index
+       database, and only writes when you explicitly extract files or delete a failed archive. -->
+  <div id="utilities-sub-area-archivefinder" class="hidden">
+  <div class="tool-hero">
+    <h2 class="tool-hero__title">📦 Find Any File Inside Any Archive</h2>
+    <p class="tool-hero__body">Stop extracting archives just to see what's inside! This tool indexes every zipped mod archive's contents up front&mdash;no unpacking needed&mdash;so you can instantly search across all of them by file or mod name, and pull out exactly the patch you need.</p>
+  </div>
+
+  <div class="callout callout--info">
+    <div class="callout__title">💡 Tip</div>
+    <p>The index only updates when you rescan. If you've added or removed archives in your downloads folder since the last scan, click <strong>Save &amp; Rescan</strong> again before searching.</p>
+  </div>
+
+  <div id="afNotConfigured" class="empty-row hidden"></div>
+  <div id="afCriticalError" class="callout callout--critical hidden"></div>
+
+  <div id="afMain" class="hidden">
+    <div class="mm-header-row" id="afHeaderRow">
+      <p class="muted" id="afStatsMeta"></p>
+      <div class="mm-header-row__right">
+        <span id="afScanLoading" class="mm-inline-loading hidden"><span class="spinner"></span> Scanning&hellip;</span>
+        <button id="afRescanBtn" class="btn btn--primary btn--small">Save &amp; Rescan</button>
+      </div>
+    </div>
+    <div id="afScanProgressWrap" class="hidden">
+      <div class="progress-bar-wrap"><div id="afScanProgressBar" class="progress-bar"></div></div>
+      <p class="muted" id="afScanProgressText"></p>
+    </div>
+    <p class="hidden" id="afFailedLinkWrap">
+      <a href="#" id="afFailedLinkAnchor" class="mismatch-note"></a>
+    </p>
+
+    <h3 class="settings-section-title">File extensions to index</h3>
+    <div class="summary-badges" id="afExtensionTags"></div>
+    <div class="path-input-row" style="margin-bottom: 20px;">
+      <input type="text" id="afNewExtensionInput" class="input input--small" placeholder=".esp">
+      <button id="afAddExtensionBtn" class="btn btn--ghost btn--small">Add</button>
+    </div>
+
+    <h3 class="settings-section-title">Search</h3>
+    <div class="field-group">
+      <label class="checkbox"><input type="radio" name="afSearchMode" value="files" checked> Find individual files <span class="muted">(searches indexed file names)</span></label>
+      <label class="checkbox"><input type="radio" name="afSearchMode" value="archives"> Display Archive <span class="muted">(searches archive names, browse full contents)</span></label>
+    </div>
+    <div class="path-input-row">
+      <input type="text" id="afSearchInput" class="input input--wide" placeholder="e.g. lanterns of skyrim" autocomplete="off">
+      <button id="afSearchBtn" class="btn btn--primary btn--small">Search</button>
+    </div>
+
+    <div class="view-actions" id="afSelectionActions">
+      <button id="afSelectAllBtn" class="btn btn--ghost btn--small">Select All</button>
+      <button id="afClearSelectionBtn" class="btn btn--ghost btn--small">Clear Selection</button>
+      <span id="afSelectionCount" class="muted"></span>
+      <button id="afExtractBtn" class="btn btn--primary btn--small">Extract Selected</button>
+    </div>
+
+    <div id="afPaginationBar" class="view-actions hidden">
+      <span class="muted">Show:</span>
+      <button class="btn btn--ghost btn--small af-page-size-btn" data-size="10">10</button>
+      <button class="btn btn--ghost btn--small af-page-size-btn" data-size="25">25</button>
+      <button class="btn btn--ghost btn--small af-page-size-btn" data-size="50">50</button>
+      <button class="btn btn--ghost btn--small af-page-size-btn" data-size="all">All</button>
+      <button id="afPrevPageBtn" class="btn btn--ghost btn--small">&larr; Prev</button>
+      <span id="afPageIndicator" class="muted"></span>
+      <button id="afNextPageBtn" class="btn btn--ghost btn--small">Next &rarr;</button>
+    </div>
+
+    <div class="plan-table-wrap">
+      <table class="plan-table hidden" id="afResultsTable">
+        <thead><tr><th></th><th>File</th><th>Ext</th><th>Found In (Archive)</th></tr></thead>
+        <tbody id="afResultsBody"></tbody>
+      </table>
+    </div>
+    <ul id="afArchiveResultsList" class="sync-result-list hidden"></ul>
+    <p class="muted hidden" id="afNoResults"></p>
+
+    <div id="afTreePanel" class="hidden">
+      <div class="view-actions">
+        <button id="afCloseTreeBtn" class="btn btn--nav btn--back">&larr; Back to results</button>
+        <strong id="afTreeArchiveName"></strong>
+      </div>
+      <div id="afTreeBody"></div>
+    </div>
+  </div>
+  </div>
+  <!-- /utilities-sub-area-archivefinder -->
+
+  <div id="afExtractModal" class="modal-overlay hidden">
+    <div class="modal modal--wide">
+      <h2>Extract Selected Files</h2>
+      <p><span id="afExtractCount">0</span> file(s) selected.</p>
+      <div class="field-group">
+        <label class="field-label" for="afExtractDestInput">Destination folder</label>
+        <div class="path-input-row">
+          <input id="afExtractDestInput" class="input input--wide" type="text">
+          <button id="afExtractBrowseBtn" class="btn btn--ghost btn--small">Browse&hellip;</button>
+        </div>
+      </div>
+      <label class="checkbox">
+        <input type="checkbox" id="afExtractFlatInput" checked>
+        Extract directly into this folder (no per-archive subfolders) &mdash; needed to build a single Vortex-installable patch mod
+      </label>
+      <div id="afExtractResults"></div>
+      <div class="modal-actions">
+        <button id="afExtractCancelBtn" class="btn btn--ghost">Cancel</button>
+        <button id="afExtractConfirmBtn" class="btn btn--primary">Extract</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="afFailedModal" class="modal-overlay hidden">
+    <div class="modal modal--wide">
+      <h2>🛑 Archives That Failed To Read</h2>
+      <p class="muted">These couldn't be opened by 7-Zip (usually a corrupt or incomplete download). Stop tracking them (keeps the file on disk) or delete the file from disk outright.</p>
+      <div class="field-group">
+        <label><input type="checkbox" id="afFailedSelectAllInput"> Select all</label>
+      </div>
+      <ul id="afFailedList" class="sync-result-list"></ul>
+      <div id="afFailedResults"></div>
+      <div class="modal-actions">
+        <button id="afFailedCloseBtn" class="btn btn--ghost">Close</button>
+        <button id="afFailedUntrackBtn" class="btn btn--primary">Remove From Index</button>
+        <button id="afFailedDeleteBtn" class="btn btn--primary">Delete From Disk&hellip;</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="afDeleteConfirmModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>Delete these permanently?</h2>
+      <p id="afDeleteConfirmModalText"></p>
+      <div class="modal-actions">
+        <button id="afDeleteConfirmCancelBtn" class="btn btn--ghost">Cancel</button>
+        <button id="afDeleteConfirmOkBtn" class="btn btn--primary">Delete</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modeled on the user's real Wrye Bash workflow (see TECHNICAL.md's "Missing Masters" section
        for the full design writeup + the real Wrye Bash source findings this was grounded in). No
        "close Vortex first" messaging anywhere on this sub-area -- this feature only ever reads
@@ -1293,9 +1489,11 @@
 
 <section id="area-rules-generator" class="tool-area hidden">
 <main class="app-main">
-  <div class="view-header">
-    <h1>Rules Generator</h1>
-    <p class="muted">Copies conflict rules from a mod in your original collection onto its higher-resolution counterpart in a new collection, so you don't have to resolve the same conflicts twice. Review what would change below, then apply it to Vortex whenever you're ready.</p>
+  <!-- No "<h1>Rules Generator</h1>" here -- the top nav tab already names the tool. This intro
+       banner pitches the value instead (see DESIGN.md's "Tool intro banner" section). -->
+  <div class="tool-hero">
+    <h2 class="tool-hero__title">🔗 Skip Re-Resolving Conflicts You Already Fixed</h2>
+    <p class="tool-hero__body">Updated to a new collection? Chances are you already spent time getting load-order rules just right in the old one. This tool matches mods between both collections and copies those rules straight across, so you're not stuck resolving the exact same conflicts twice. Review every match below before applying anything to Vortex.</p>
   </div>
 
   <div class="collection-picker">
@@ -1425,5 +1623,6 @@
 <script src="reports-rulesgen-app.js"></script>
 <script src="cleanup-app.js"></script>
 <script src="missing-masters-app.js"></script>
+<script src="archive-finder-app.js"></script>
 </body>
 </html>

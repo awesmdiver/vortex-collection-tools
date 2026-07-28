@@ -22,6 +22,7 @@ const REQUIRED_FIELDS = [
   { key: 'skyrimDataDir', inputId: 'settingsSkyrimDataDirInput', label: 'Skyrim Data folder (Missing Masters)' },
   { key: 'pluginsListDir', inputId: 'settingsPluginsListDirInput', label: 'Plugins.txt location (Missing Masters)' },
   { key: 'dummyMastersOutputDir', inputId: 'settingsDummyMastersOutputDirInput', label: 'Dummy Masters output folder (Missing Masters)' },
+  { key: 'archiveFinderDbDir', inputId: 'settingsArchiveFinderDbDirInput', label: 'Archive Finder database folder' },
 ];
 
 async function settingsApi(method, path, body) {
@@ -80,6 +81,8 @@ async function loadSettings() {
   $g('settingsSkyrimDataDirInput').value = cfg.skyrimDataDir || '';
   $g('settingsPluginsListDirInput').value = cfg.pluginsListDir || '';
   $g('settingsDummyMastersOutputDirInput').value = cfg.dummyMastersOutputDir || '';
+  $g('settingsArchiveFinderDbDirInput').value = cfg.archiveFinderDbDir || '';
+  $g('settingsArchiveFinderOutputDirInput').value = cfg.archiveFinderOutputDir || '';
   $g('settingsMaxBackupsInput').value = cfg.maxBackupsToKeep != null ? cfg.maxBackupsToKeep : '';
   $g('settingsMaxStateBackupsInput').value = cfg.maxStateBackupsToKeep != null ? cfg.maxStateBackupsToKeep : '';
   $g('settingsConcurrencyInput').value = cfg.concurrentExtractions || 1;
@@ -251,6 +254,8 @@ async function saveSettings() {
       skyrimDataDir: $g('settingsSkyrimDataDirInput').value,
       pluginsListDir: $g('settingsPluginsListDirInput').value,
       dummyMastersOutputDir: $g('settingsDummyMastersOutputDirInput').value,
+      archiveFinderDbDir: $g('settingsArchiveFinderDbDirInput').value,
+      archiveFinderOutputDir: $g('settingsArchiveFinderOutputDirInput').value,
       maxBackupsToKeep: $g('settingsMaxBackupsInput').value === '' ? null : Number($g('settingsMaxBackupsInput').value),
       maxStateBackupsToKeep: $g('settingsMaxStateBackupsInput').value === '' ? null : Number($g('settingsMaxStateBackupsInput').value),
       concurrentExtractions: Number($g('settingsConcurrencyInput').value) || 1,
