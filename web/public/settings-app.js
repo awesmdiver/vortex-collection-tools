@@ -111,28 +111,33 @@ function setRailStarVisual(star, on) {
 // group -- pinning/unpinning only ever lifts a row out or drops it back in, it never reorders
 // whichever rows stay put (same rule, same reasoning, as Home's HOME_CANONICAL_ORDER).
 function categoryOf(row) { return row.querySelector('.settings-rail__item').dataset.cat; }
-function insertRailRowInOrder(container, row) {
+function insertRailRowInOrder(container, row, beforeNode) {
   const myIndex = SETTINGS_CATEGORY_ORDER.indexOf(categoryOf(row));
   const rows = Array.from(container.querySelectorAll(':scope > .settings-rail__row'));
   const sibling = rows.find((sib) => sib !== row && SETTINGS_CATEGORY_ORDER.indexOf(categoryOf(sib)) > myIndex);
   if (sibling) container.insertBefore(row, sibling);
+  else if (beforeNode) container.insertBefore(row, beforeNode);
   else container.appendChild(row);
 }
 
-// Builds the "📌 Pinned" label + divider the first time anything is pinned; returns the container
-// pinned rows get inserted into (always right before the divider, via insertRailRowInOrder above).
+// Builds the "📌 Pinned" label + divider the first time anything is pinned; returns the divider so
+// callers can insert pinned rows before it -- label -> pinned rows -> divider -> the rest, matching
+// design/vortex-settings-mockup.html. Without this anchor, a plain appendChild would land new rows
+// AFTER the divider (the container's only children at that point are the label and the divider), so
+// the divider ends up sitting directly under the label instead of below the pinned rows.
 function ensurePinnedRailGroup() {
   const container = $g('settingsRailPinnedGroup');
-  if (!container.querySelector('.settings-rail__divider')) {
+  let divider = container.querySelector('.settings-rail__divider');
+  if (!divider) {
     const label = document.createElement('div');
     label.className = 'settings-rail__group';
     label.textContent = '📌 Pinned';
-    const divider = document.createElement('div');
+    divider = document.createElement('div');
     divider.className = 'settings-rail__divider';
     container.appendChild(label);
     container.appendChild(divider);
   }
-  return container;
+  return divider;
 }
 function clearPinnedRailGroupIfEmpty() {
   const container = $g('settingsRailPinnedGroup');
@@ -147,7 +152,12 @@ function applyCategoryPinState(cat, pinned) {
   if (!star) return;
   const row = star.closest('.settings-rail__row');
   setRailStarVisual(star, pinned);
-  insertRailRowInOrder(pinned ? ensurePinnedRailGroup() : $g('settingsRail'), row);
+  if (pinned) {
+    const divider = ensurePinnedRailGroup();
+    insertRailRowInOrder($g('settingsRailPinnedGroup'), row, divider);
+  } else {
+    insertRailRowInOrder($g('settingsRail'), row);
+  }
   clearPinnedRailGroupIfEmpty();
 }
 
