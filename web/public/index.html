@@ -1448,43 +1448,48 @@
   <div id="afCriticalError" class="callout callout--critical hidden"></div>
 
   <div id="afMain" class="hidden">
-    <div class="mm-header-row" id="afHeaderRow">
+    <div class="settings-group" id="afIndexCard">
+      <div class="mm-header-row">
+        <h2>Your archive index</h2>
+        <div class="mm-header-row__right">
+          <span id="afScanLoading" class="mm-inline-loading hidden"><span class="spinner"></span> Scanning&hellip;</span>
+          <button id="afRescanBtn" class="btn btn--primary btn--small">Save &amp; Rescan</button>
+        </div>
+      </div>
       <p class="muted" id="afStatsMeta"></p>
-      <div class="mm-header-row__right">
-        <span id="afScanLoading" class="mm-inline-loading hidden"><span class="spinner"></span> Scanning&hellip;</span>
-        <button id="afRescanBtn" class="btn btn--primary btn--small">Save &amp; Rescan</button>
+      <div id="afScanProgressWrap" class="hidden">
+        <div class="progress-bar-wrap"><div id="afScanProgressBar" class="progress-bar"></div></div>
+        <p class="muted" id="afScanProgressText"></p>
+      </div>
+      <p class="hidden" id="afFailedLinkWrap">
+        <a href="#" id="afFailedLinkAnchor" class="mismatch-note"></a>
+      </p>
+
+      <h3 class="settings-section-title">File extensions to index</h3>
+      <div class="summary-badges" id="afExtensionTags"></div>
+      <div class="path-input-row">
+        <input type="text" id="afNewExtensionInput" class="input input--small" placeholder=".esp">
+        <button id="afAddExtensionBtn" class="btn btn--ghost btn--small">Add</button>
       </div>
     </div>
-    <div id="afScanProgressWrap" class="hidden">
-      <div class="progress-bar-wrap"><div id="afScanProgressBar" class="progress-bar"></div></div>
-      <p class="muted" id="afScanProgressText"></p>
-    </div>
-    <p class="hidden" id="afFailedLinkWrap">
-      <a href="#" id="afFailedLinkAnchor" class="mismatch-note"></a>
-    </p>
 
-    <h3 class="settings-section-title">File extensions to index</h3>
-    <div class="summary-badges" id="afExtensionTags"></div>
-    <div class="path-input-row" style="margin-bottom: 20px;">
-      <input type="text" id="afNewExtensionInput" class="input input--small" placeholder=".esp">
-      <button id="afAddExtensionBtn" class="btn btn--ghost btn--small">Add</button>
-    </div>
+    <div class="settings-group" id="afSearchCard">
+      <h3 class="settings-section-title">Search</h3>
+      <div class="field-group">
+        <label class="checkbox"><input type="radio" name="afSearchMode" value="files" checked> Find individual files <span class="muted">(searches indexed file names)</span></label>
+        <label class="checkbox"><input type="radio" name="afSearchMode" value="archives"> Display Archive <span class="muted">(searches archive names, browse full contents)</span></label>
+      </div>
+      <div class="path-input-row">
+        <input type="text" id="afSearchInput" class="input input--wide" placeholder="e.g. lanterns of skyrim" autocomplete="off">
+        <button id="afSearchBtn" class="btn btn--primary btn--small">Search</button>
+      </div>
 
-    <h3 class="settings-section-title">Search</h3>
-    <div class="field-group">
-      <label class="checkbox"><input type="radio" name="afSearchMode" value="files" checked> Find individual files <span class="muted">(searches indexed file names)</span></label>
-      <label class="checkbox"><input type="radio" name="afSearchMode" value="archives"> Display Archive <span class="muted">(searches archive names, browse full contents)</span></label>
-    </div>
-    <div class="path-input-row">
-      <input type="text" id="afSearchInput" class="input input--wide" placeholder="e.g. lanterns of skyrim" autocomplete="off">
-      <button id="afSearchBtn" class="btn btn--primary btn--small">Search</button>
-    </div>
-
-    <div class="view-actions" id="afSelectionActions">
-      <button id="afSelectAllBtn" class="btn btn--ghost btn--small">Select All</button>
-      <button id="afClearSelectionBtn" class="btn btn--ghost btn--small">Clear Selection</button>
-      <span id="afSelectionCount" class="muted"></span>
-      <button id="afExtractBtn" class="btn btn--primary btn--small">Extract Selected</button>
+      <div class="view-actions" id="afSelectionActions">
+        <button id="afSelectAllBtn" class="btn btn--ghost btn--small">Select All</button>
+        <button id="afClearSelectionBtn" class="btn btn--ghost btn--small">Clear Selection</button>
+        <span id="afSelectionCount" class="muted"></span>
+        <button id="afExtractBtn" class="btn btn--primary btn--small">Extract Selected</button>
+      </div>
     </div>
 
     <div id="afPaginationBar" class="view-actions hidden">

@@ -2387,6 +2387,47 @@ from the original fold-in request): its one unpushed commit was pushed first, th
 archived (`gh repo archive`, now read-only), and the local folder was deleted. Full functionality
 now lives only here.
 
+**Page tightened into two cards, later same day** (see DESIGN.md's "Tool page layout" section;
+reference mockup `design/vortex-archive-finder-mockup.html`). The page had grown into a loose stack
+of controls with big gaps between them, running edge-to-edge on a wide monitor -- the worst offender
+DESIGN.md's own section was written from. Reorganized into two `.settings-group` cards, reusing
+components already established elsewhere rather than inventing new ones:
+- **`#afIndexCard`** ("Your archive index"): reuses Missing Masters' own `.mm-header-row` /
+  `.mm-header-row__right` pattern for the title + Save & Rescan button row (space-between, scanning
+  indicator pinned next to the button) -- a new `.settings-group .mm-header-row h2` rule sizes the
+  bare `<h2>` to match every other card title (17px), since `.mm-header-row` itself is also used
+  bare elsewhere (Missing Masters) and shouldn't get that sizing globally. Holds the stats line, scan
+  progress bar, failed-archives link, and the extensions manager.
+- **`#afSearchCard`** ("Search"): the mode radios, query input + Search, and the Select All/Clear
+  Selection/Extract Selected actions row -- moved from a bare `.view-actions` row into this same
+  card, per DESIGN.md's explicit grouping.
+- Pagination bar, the results table/list, and the tree panel deliberately stay OUTSIDE both cards,
+  as plain page content below them -- DESIGN.md's spec only calls out the two cards' own contents,
+  and results vary in shape (table vs. list vs. tree) too much to force into either "setup" card.
+- **Width cap, scoped to this one sub-tab**: `#utilities-sub-area-archivefinder { max-width:
+  min(1080px, 96vw) }` -- the shared Utilities `<main class="app-main">` is used by Missing
+  Masters/Vortex Scrub too, so (same reasoning as Settings' own `#settingsPanes` cap) this can't
+  live on `.app-main` itself. Confirmed live: Archive Finder measures exactly 1080px; switching to
+  Missing Masters in the same session confirms it's unaffected, still the shared wide width.
+- **Tightened inter-card spacing**: `#afIndexCard, #afSearchCard { margin: 0 0 16px }` overrides
+  `.settings-group`'s usual `margin: 20px 0` (sized for a long page of many separate sections) --
+  these two cards are one continuous "search setup" flow, not separate page sections, so DESIGN.md
+  asked for them to read closer together, matching the mockup's own 16px card margin.
+- **Copy**: the stats line dropped its `(s)` shorthand -- "4,526 archive(s) indexed, 12,823 matched
+  file(s) — last scan: ..." became "**4,526** archives indexed · **12,823** files matched · last
+  scan ..." (middle-dot separators, matching the mockup exactly, no trailing colon/period). Found
+  and fixed the same `(s)` pattern one line away in the same file while already there (the
+  failed-archives link text, "N archive(s) failed to read") using the real pluralization ternary
+  this same file already uses elsewhere (`afPageIndicator`'s own `${n === 1 ? '' : 's'}`), rather
+  than leaving one fixed and the other not.
+
+**Verified live** (2026-07-28): both cards render with the reused header/section-title components;
+width cap confirmed via geometry (1080px exactly) both for Archive Finder and by contrast for
+Missing Masters (unaffected, shared wide width); full functional regression pass after the
+restructure -- search still returns real grouped results (39 results for "morthal", matching the
+count from before this change), Select All/Clear Selection still work (204/0 selected); renders
+correctly in both dark and light themes.
+
 ## Home landing page (card-based launcher, added 2026-07-28)
 
 The app opens on a **Home** page instead of dropping straight into Rebuild Collection -- one

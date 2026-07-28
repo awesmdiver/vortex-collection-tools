@@ -991,6 +991,21 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    by .mm-header-row's own space-between -- it stays pinned right next to Refresh instead. */
 .mm-header-row__right { display: flex; align-items: center; gap: 12px; }
 .mm-inline-loading { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 13px; }
+/* .mm-header-row used as a .settings-group card's own header row (title + action button,
+   space-between) needs its bare <h2> sized to match every other card title in the app -- .mm-
+   header-row itself is also used bare (Missing Masters' own meta-text + Refresh row), so this is
+   scoped to the .settings-group context rather than changing .mm-header-row h2 everywhere
+   (2026-07-28, Archive Finder's two-card layout). */
+.settings-group .mm-header-row h2 { font-size: 17px; margin: 0; }
+/* Archive Finder's own content width, scoped to this one sub-tab only (its wrapper div already
+   exists as the scoping hook) -- same "cap the working measure, don't touch the shared wide
+   .app-main" reasoning as Settings' own #settingsPanes cap above; the shared Utilities <main> is
+   used by Missing Masters/Vortex Scrub too, so this can't live on .app-main itself (2026-07-28). */
+#utilities-sub-area-archivefinder { max-width: min(1080px, 96vw); margin: 0 auto; }
+/* Tighter than .settings-group's usual margin: 20px 0 (meant for a long page of many stacked
+   cards) -- these two cards are one continuous "search setup" flow, not separate page sections, so
+   the gap between them should read closer together, matching the mockup's own 16px card margin. */
+#afIndexCard, #afSearchCard { margin: 0 0 16px; }
 .mm-row {
   background: var(--surface-2);
   border: 1px solid var(--border);
