@@ -4,7 +4,7 @@
   "private": true,
   "description": "Unified toolkit for Vortex collection management: fast direct-extraction staging rebuilds (Rebuild Collection), and update-preserving ignore/disable state sync (Update Collection), with a shared local web UI.",
   "engines": {
-    "node": ">=18"
+    "node": ">=22.5.0"
   },
   "scripts": {
     "web": "node web/server.js"

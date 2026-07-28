@@ -18,5 +18,8 @@
   "cleanupExcludeListDir": null,
   "skyrimDataDir": null,
   "pluginsListDir": null,
-  "dummyMastersOutputDir": null
+  "dummyMastersOutputDir": null,
+  "archiveFinderDbDir": null,
+  "archiveFinderOutputDir": null,
+  "archiveFinderExtensions": [".esp"]
 }

@@ -139,10 +139,21 @@ shape from scratch:
   tool than this page (e.g. "diagnose here, then fix it in Vortex").
 
 First shipped on Missing Masters, replacing its old `<h2 class="settings-section-title">Missing
-Masters</h2>` + plain description paragraph. **This is the standard going forward** — every existing
-tool page (Rebuild Collection, Update Collection, Rules Generator, each Reports sub-tab) should get
-the same treatment over time, not just new ones; do it opportunistically when touching a page for
-another reason, same as any other pattern in this document.
+Masters</h2>` + plain description paragraph. **This is the standard going forward** — every tool
+page should get the same treatment, not just new ones.
+
+**Rolled out to every remaining tool page (2026-07-28)**: Rebuild Collection, Update Collection,
+Rules Generator, and all 4 Reports sub-tabs (Stats, Work Through, Update Compare, Rules Generator
+Report) all now have one — every top-level tool area and every Reports/Utilities sub-tab in the app
+follows this convention. Two placement variants, matching whether the page already had real,
+non-redundant view-specific text right below the old heading:
+- **Replace** the old `<h1>Tool Name</h1>` + description entirely (Update Collection, Rules
+  Generator, and all 4 Reports sub-tabs) — the removed text was purely restating the tool's own name
+  and a one-line summary, fully superseded by the banner.
+- **Add above** the existing heading, not replacing it (Rebuild Collection only) — its own
+  `<h1>Choose a collection</h1>` is genuine per-view instructional text (which collection-picker view
+  the user is on), not a redundant tool-name heading, so it stays; its OWN description paragraph
+  underneath (which had become redundant with the new banner) was trimmed instead.
 
 Second example, Vortex Scrub (2026-07-27) — a case where the workflow is entirely self-contained
 (scan, review, and delete all happen on this same page, no handoff to another app like Missing
@@ -268,6 +279,18 @@ Collection, before Reports) — Settings is the one and only exception that goes
   problems (confirmed the hard way, added/removed/re-added same day) — "All" is fastest for
   all-or-nothing, but "select all, then uncheck the few you want to keep" is the faster path once
   a list is long and you want to act on *most* of it.
+- **Grouped table rows with a tri-state group checkbox** (added 2026-07-28, Archive Finder's file
+  search): when consecutive result rows share a parent (e.g. several matched files inside the same
+  archive), collapse them into one toggle row (`▶`/`▼` + "N matching files") with its own checkbox
+  that reflects the children's combined state — unchecked, checked (all children checked), or
+  `indeterminate` (some but not all checked). Reuse this whenever a flat result list has a natural
+  one-to-many grouping, rather than either flattening it (losing the relationship) or forcing every
+  child into its own top-level row.
+- **Client-side pagination via a page-size button row**: `Show: 10 · 25 · 50 · All` as a row of
+  `.btn--ghost`/`.btn--primary` toggle buttons (the active size gets `.btn--primary`) plus `← Prev` /
+  `Next →`, same technique as Stats Report's `.stats-period-btn` — no new CSS class needed. Reuse
+  this for any future list large enough to need paging rather than a numbered-page-picker or infinite
+  scroll.
 
 ## External links open in a separate window, not a tab
 
@@ -353,6 +376,61 @@ snippet (see below), and reuses the same badge/table components as its two sibli
      repeating it reads as "a page inside a page." A page that's genuinely standalone (opened via a
      real navigation, like the Ignored/Disabled report) DOES get its own header/nav, matching
      `sync-routes.js`'s `renderIgnoredDisabledReport` exactly.
+
+## Home / landing page — card-based launcher (2026-07-28)
+
+The app opens on a **Home** page — a card-based launcher for every tool — instead of dropping the
+user straight into Rebuild Collection. One glanceable place to choose where to go. Reference mockup:
+`design/vortex-home-mockup.html` (open in a browser); full handoff prompt in `design/BUILD-PROMPT.md`.
+
+**The top nav row is removed.** With Home acting as the launcher, the old five-tab `.app-nav`
+(Rebuild Collection / Update Collection / Rules Generator / Reports / Utilities) is redundant and
+comes out. Navigation now happens two ways: pick a card on Home, or click the app-header logo/title
+(`.app-header__title`) to return Home from anywhere. Every tool page already has its own in-page
+"Back" affordance for stepping back within a flow. The trade-off (switching directly tool-to-tool
+now routes through Home instead of one click across the top) is deliberate and accepted for the
+launcher model. Settings stays exactly where it was — the gear at the header's far right.
+
+**The logo/title is the Home control.** `.app-header__title` gains a pointer cursor and a
+`var(--surface-2)` hover, and returns Home on click. The header meta/breadcrumb on the right still
+names the current area (reads "Home" on the landing page) so the user always knows where they are.
+
+**Layout.** A `.tool-hero` welcome banner (🧰 title + one casual orientation sentence — Home reuses
+the app's own intro-banner pattern, not a bespoke header), then grouped card sections:
+- **Main tools** — Rebuild Collection ⚡, Update Collection 🔄, Rules Generator 🔗
+- **Reports** — Stats 📊, Work Through ✅, Update Compare 🔍, Rules Generator Report 📋
+- **Utilities** — Missing Masters 🧩, Vortex Scrub 🧽, Archive Finder 📦
+
+Reports and Utilities show their **sub-tools expanded** as individual cards, so every destination in
+the app is one click from Home. Section labels reuse the `.settings-section-title` treatment (12px
+uppercase, letter-spaced, muted).
+
+**New pattern — `.home-card` / `.home-grid` / `.home-section-title`.** Nothing existing covered a
+clickable tool-launcher card, so this is added here as the shared convention. Built entirely from
+existing tokens and the `.settings-group` recipe — no new colors:
+- `.home-grid`: `repeat(auto-fill, minmax(280px, 1fr))`, `gap: 16px`.
+- `.home-card`: the `.settings-group` surface / border / `--radius` / padding, made clickable —
+  hover lifts it (`translateY(-2px)`) and switches the border to `--accent` with `--shadow` (the
+  same accent-on-hover language as `.btn--ghost` and the old `.nav-tab`). Use a real `<button>` (or
+  `<a>`) so it's keyboard-focusable, with a visible `:focus-visible` outline.
+- `.home-card__icon`: a 44px rounded chip, `background: var(--accent-bg)`, holding the tool's emoji
+  (the same one already used in that tool's own `.tool-hero__title`).
+- Name at 17px/600 (matching `.settings-group__header h2`); a one-line description in `--text-muted`;
+  an accent "Open →" affordance.
+
+**Icon chips stay accent-tinted, never severity-colored.** Deliberate: green/amber/red carry real
+meaning in this app (success / warning / critical). Color-coding launcher cards per tool would
+dilute that, so every chip uses the neutral `--accent-bg`. Don't "brighten it up" with per-tool
+colors.
+
+**Voice.** Casual register (a launcher page isn't consequential). Each card's one-line pitch is a
+condensed version of that tool's own `.tool-hero__body` "What & Why" — same promise, trimmed to one
+line. Load `plain-language-writer` before touching this copy.
+
+The wiring detail (adding a `home` area to shell.js's `TOOL_AREAS`, making it the default landing,
+removing the `.app-nav` markup, routing each card through the same `showToolArea()` the old nav
+buttons used, and Reports/Utilities cards landing on their default sub-tab) is engineer-facing —
+document it in `TECHNICAL.md` when built, not here.
 
 ## How this document gets used
 

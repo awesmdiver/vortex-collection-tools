@@ -893,6 +893,16 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    glance instead of blending into the sentence around them. */
 .accent-count { color: var(--accent); font-weight: 700; }
 
+/* Archive Finder -- per-item extract/failed-action result lines, and the extension tag pills'
+   own remove button (a plain "x" inside an existing .badge, not a whole new pill style). */
+.ok { color: var(--success); margin: 4px 0; font-size: 13.5px; }
+.fail { color: var(--danger); margin: 4px 0; font-size: 13.5px; }
+.af-tag-remove {
+  background: none; border: none; color: inherit; cursor: pointer; font-size: 14px;
+  line-height: 1; padding: 0 0 0 4px; opacity: 0.7;
+}
+.af-tag-remove:hover { opacity: 1; }
+
 @media (max-width: 640px) {
   .app-main { padding: 20px 14px 60px; }
   .plan-table th:nth-child(3), .plan-table td:nth-child(3) { display: none; }
