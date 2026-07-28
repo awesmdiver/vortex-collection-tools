@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body>
+<title>Vortex Collection Tools — Home mockup</title>
+<style>
+  :root{
+    --bg:#0d0f14; --surface:#161922; --surface-2:#1d212c; --border:#2a2f3d;
+    --text:#e6e9ef; --text-muted:#8b93a3;
+    --accent:#5b8def; --accent-hover:#75a1f5; --accent-bg:rgba(91,141,239,0.12);
+    --radius:10px; --shadow:0 4px 24px rgba(0,0,0,0.35);
+  }
+  :root[data-theme="light"]{
+    --bg:#f5f6f8; --surface:#ffffff; --surface-2:#eef0f4; --border:#d8dce3;
+    --text:#1a1d24; --text-muted:#5b6472;
+    --accent:#3568c9; --accent-hover:#4a7bd6; --accent-bg:rgba(53,104,201,0.12);
+    --shadow:0 4px 24px rgba(0,0,0,0.12);
+  }
+  @media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
+    --bg:#f5f6f8; --surface:#ffffff; --surface-2:#eef0f4; --border:#d8dce3;
+    --text:#1a1d24; --text-muted:#5b6472;
+    --accent:#3568c9; --accent-hover:#4a7bd6; --accent-bg:rgba(53,104,201,0.12);
+    --shadow:0 4px 24px rgba(0,0,0,0.12);
+  }}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;font-size:15px;line-height:1.5}
+
+  .app-header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:16px 28px;
+    border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:50}
+  .app-header__title{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:600;letter-spacing:.2px;
+    justify-self:start;cursor:pointer;border-radius:8px;padding:4px 8px;margin:-4px -8px;transition:background .15s}
+  .app-header__title:hover{background:var(--surface-2)}
+  .app-header__logo{font-size:20px;opacity:.85}
+  .app-header__right{display:flex;align-items:center;gap:14px;justify-self:end}
+  .app-header__meta{color:var(--text-muted);font-size:13px}
+  .app-nav{display:flex;gap:6px}
+  .nav-tab{font-family:inherit;font-size:13.5px;font-weight:500;padding:7px 16px;border-radius:8px;
+    border:1px solid transparent;background:transparent;color:var(--text-muted);cursor:pointer;transition:background .15s,color .15s}
+  .nav-tab:hover{background:var(--surface-2);color:var(--text)}
+  .settings-gear-btn{font-size:19px;padding:6px 9px;border-radius:8px;line-height:1;border:1px solid transparent;
+    background:transparent;color:var(--text-muted);cursor:pointer}
+  .settings-gear-btn:hover{background:var(--surface-2);color:var(--text)}
+
+  .app-main{max-width:min(1800px,96vw);margin:0 auto;padding:32px 24px 80px}
+  .tool-hero{margin-bottom:8px}
+  .tool-hero__title{font-size:22px;margin:0 0 8px}
+  .tool-hero__body{margin:0;color:var(--text);font-size:14px;line-height:1.6;max-width:820px}
+
+  .home-section-title{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);
+    font-weight:600;margin:30px 0 12px}
+  .home-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+  .home-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;
+    display:flex;flex-direction:column;gap:10px;cursor:pointer;text-align:left;font-family:inherit;color:inherit;
+    transition:border-color .15s ease,transform .1s ease,box-shadow .15s ease}
+  .home-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:var(--shadow)}
+  .home-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .home-card__icon{width:44px;height:44px;border-radius:10px;background:var(--accent-bg);display:grid;place-items:center;font-size:24px}
+  .home-card__name{font-size:17px;font-weight:600;margin:0}
+  .home-card__desc{font-size:14px;color:var(--text-muted);line-height:1.5;margin:0;flex:1}
+  .home-card__open{font-size:13px;font-weight:600;color:var(--accent);display:inline-flex;align-items:center;gap:5px}
+  .home-card:hover .home-card__open{gap:8px}
+
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(18px);opacity:0;pointer-events:none;
+    background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:11px 18px;border-radius:10px;
+    font-size:14px;box-shadow:var(--shadow);transition:.2s;z-index:80}
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  .preview-toggle{position:fixed;right:16px;bottom:16px;z-index:80;background:var(--surface);border:1px solid var(--border);
+    color:var(--text-muted);border-radius:20px;padding:7px 14px;font-size:12.5px;font-family:inherit;cursor:pointer;box-shadow:var(--shadow)}
+  .preview-toggle:hover{color:var(--text);border-color:var(--accent)}
+  @media (max-width:760px){.app-nav{display:none}}
+</style>
+
+<header class="app-header">
+  <div class="app-header__title" onclick="toast('Clicking the title brings you Home')" title="Back to Home">
+    <span class="app-header__logo">&#9881;</span><span>Vortex Collection Tools</span>
+  </div>
+  <div></div>
+  <div class="app-header__right">
+    <span class="app-header__meta">Home</span>
+    <button class="settings-gear-btn" title="Settings" onclick="open_('Settings')">&#9881;</button>
+  </div>
+</header>
+
+<main class="app-main">
+  <div class="tool-hero">
+    <h2 class="tool-hero__title">🧰 Your Whole Vortex Toolkit, in One Place</h2>
+    <p class="tool-hero__body">Pick a tool to get started. Everything here works on collections you've already
+    installed in Vortex — rebuild them faster, keep your cleanup after an update, sort out conflict rules, and
+    see how it all went.</p>
+  </div>
+  <div id="sections"></div>
+</main>
+
+<div id="toast"></div>
+<button class="preview-toggle" id="themeBtn">◐ Preview: toggle theme</button>
+
+<script>
+  const SECTIONS=[
+    {label:"Main tools",cards:[
+      {icon:"⚡",name:"Rebuild Collection",desc:"Re-extract an installed collection straight into staging — same result, dramatically faster."},
+      {icon:"🔄",name:"Update Collection",desc:"Keep your Ignored and Disabled mods exactly as you set them after an update."},
+      {icon:"🔗",name:"Rules Generator",desc:"Copy the conflict rules you already fixed from an old collection to its update."},
+    ]},
+    {label:"Reports",cards:[
+      {icon:"📊",name:"Stats",desc:"See how every rebuild has gone, and what still needs a look."},
+      {icon:"✅",name:"Work Through",desc:"Every problem mod across every collection, gathered into one checklist."},
+      {icon:"🔍",name:"Update Compare",desc:"A clear before-and-after of what an update added, kept, and removed."},
+      {icon:"📋",name:"Rules Generator Report",desc:"Check which mods have their rules copied, and which still need a decision."},
+    ]},
+    {label:"Utilities",cards:[
+      {icon:"🧩",name:"Missing Masters",desc:"Pinpoint missing master files and every mod that depends on them."},
+      {icon:"🧽",name:"Vortex Scrub",desc:"Spot staging folders and archives Vortex stopped tracking, and reclaim the space."},
+      {icon:"📦",name:"Archive Finder",desc:"Search inside every mod archive without extracting a thing."},
+    ]},
+  ];
+
+  const t=document.getElementById('toast');
+  function toast(m){t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),1900)}
+  window.open_=n=>toast('Opens '+n);
+
+  document.getElementById('sections').innerHTML=SECTIONS.map(s=>`
+    <div class="home-section-title">${s.label}</div>
+    <div class="home-grid">${s.cards.map(c=>`
+      <button class="home-card" onclick="open_('${c.name}')">
+        <div class="home-card__icon">${c.icon}</div>
+        <div class="home-card__name">${c.name}</div>
+        <div class="home-card__desc">${c.desc}</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>`).join('')}</div>`).join('');
+
+  const root=document.documentElement,tb=document.getElementById('themeBtn');
+  const isDark=()=>!(root.getAttribute('data-theme')==='light'||(!root.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme:light)').matches));
+  tb.onclick=()=>root.setAttribute('data-theme',isDark()?'light':'dark');
+</script>
+</body>
+</html>

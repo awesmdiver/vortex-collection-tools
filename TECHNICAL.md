@@ -2381,10 +2381,76 @@ confirmed working live, including confirming the deleted test file was actually 
 afterward. All test rows/files were cleaned up and `archiveFinderOutputDir` reset to `null`
 afterward so no test artifacts leaked into the user's real config.
 
-**Retired**: the standalone `skyrim-modding/archive-file-finder` project (both its GitHub repo and
-local folder) is superseded by this fold-in and slated for removal once the user gives final
-go-ahead (destructive, so held for explicit confirmation rather than assumed from the original
-fold-in request).
+**Retired (2026-07-28):** the standalone `skyrim-modding/archive-file-finder` project is superseded
+by this fold-in. Per explicit user confirmation (destructive, so held separately rather than assumed
+from the original fold-in request): its one unpushed commit was pushed first, the GitHub repo was
+archived (`gh repo archive`, now read-only), and the local folder was deleted. Full functionality
+now lives only here.
+
+## Home landing page (card-based launcher, added 2026-07-28)
+
+The app opens on a **Home** page instead of dropping straight into Rebuild Collection -- one
+glanceable card per tool, grouped into Main tools / Reports / Utilities (Reports/Utilities show
+their sub-tools expanded as individual cards, so every destination is one click from Home). Full
+visual/voice design rationale lives in DESIGN.md's "Home / landing page" section; this section is
+just the engineer-facing wiring.
+
+**The old five-tab `.app-nav` row is gone entirely** (Rebuild Collection / Update Collection / Rules
+Generator / Reports / Utilities text tabs) -- Home replaces it as the "go somewhere else" control.
+The header logo/title (`#appHeaderTitle`) is now clickable and returns Home from anywhere; the
+Settings gear (`#nav-settings`, the one remaining real `nav-*` element) is unchanged.
+
+**`shell.js` changes:**
+- `TOOL_AREAS` gained `'home'`; `AREA_LABELS.home = 'Home'`. `showToolArea()`'s per-area loop used to
+  unconditionally look up `nav-${a}` and toggle `.nav-tab--active` on it -- now guards with
+  `if (navBtn)` first, since only `nav-settings` still exists; every other area's lookup is expected
+  to come back `null`.
+- New `navigateToArea(id, subTab)` is the single entry point for every LIVE (already-loaded-page)
+  navigation -- home cards, the header title, and the Settings gear all call it, replacing the old
+  loop that wired a click listener onto each of the six `nav-${a}` elements. It reproduces the same
+  settings-unsaved-changes gate the old loop had (`currentArea === 'settings' && id !== 'settings' &&
+  window.settingsIsDirty()` -> `showUnsavedChangesModal()`), then calls `showToolArea(id)`, then
+  fires the same per-area "just arrived" side effects the deep-link (`?area=`) branch already did on
+  page load: `window.loadSyncProfiles()` when landing on `sync`, `window.showReportsSubTab(subTab)`/
+  `window.showUtilitiesSubTab(subTab)` when a card supplies one.
+- Default landing (the final `else` branch, when there's no `?area=`/`?reports=` deep link and
+  staging/downloads are already configured) changed from `showToolArea('rebuild')` to
+  `showToolArea('home')`. The first-run redirect to Settings (staging/downloads not yet configured)
+  is unchanged.
+
+**Home card markup** (`index.html`, new `<section id="area-home">`, inserted before
+`area-rebuild` -- which lost its old default-visible state, now starts `hidden` like every other
+area): each card is a real `<button class="home-card" data-area="..." data-sub="...">` --
+`data-sub` only set on the 7 Reports/Utilities sub-tool cards, using the exact internal sub-tab ids
+`stats-app.js`'s `REPORTS_SUB_TABS`/`cleanup-app.js`'s `UTILITIES_SUB_TABS` already use
+(`stats`/`workthrough`/`updatecompare`/`rulesgen`, `missingmasters`/`scrub`/`archivefinder`) --
+`navigateToArea` reads these two data attributes directly, no separate JS-side route table to keep
+in sync with the markup.
+
+**Dead code found and removed, exactly the "check nothing else depended on the removed nav buttons"
+risk the build prompt flagged:** three scripts had their own direct `document.getElementById('nav-
+sync'|'nav-reports'|'nav-utilities').addEventListener(...)` calls (`sync-app.js` re-loading profiles,
+`stats-app.js` defaulting to the Stats sub-tab, `cleanup-app.js` defaulting to Missing Masters) --
+all three would have thrown a `TypeError` on page load the moment those buttons left the DOM (`null`
+has no `.addEventListener`). Removed all three; their behavior is now covered by `navigateToArea`
+(sync/reports/utilities cards each already trigger the equivalent effect explicitly).
+
+**CSS** (`styles.css`): new `.home-section-title` (reuses the exact `.settings-group
+.settings-section-title` treatment -- 12px uppercase, letter-spaced, muted -- as its own top-level
+rule, since Home's sections aren't nested inside a `.settings-group` card), `.home-grid`
+(`repeat(auto-fill, minmax(280px, 1fr))`), `.home-card` (the `.settings-group` card recipe made
+clickable, hover lifts + accent border + shadow, `:focus-visible` outline). `.app-header__title`
+gained a pointer cursor and the same `--surface-2` hover treatment `.settings-gear-btn` already had.
+The now-orphaned `.app-nav { display: flex; gap: 6px; }` rule was deleted (the `<nav class="app-nav">`
+wrapper no longer exists); `.nav-tab`/`.nav-tab--active` themselves were kept, still used by the
+Settings gear button.
+
+**Verified live** (2026-07-28): opens on Home by default; all 10 cards + the header title navigate
+correctly (checked via URL params + `#headerMeta` text for each); Update Collection's profile
+dropdown populates after a card click (previously only wired via the removed `nav-sync` listener);
+the Settings unsaved-changes guard still blocks/resolves correctly when navigating away via a card or
+the title; light and dark theme both render with no visual seam versus the rest of the app; every
+`.home-card` is a real, natively tabbable `<button>`.
 
 ## Future work
 

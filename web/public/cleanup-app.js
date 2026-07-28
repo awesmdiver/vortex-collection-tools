@@ -394,4 +394,7 @@ function showUtilitiesSubTab(id) {
 for (const tab of UTILITIES_SUB_TABS) {
   $g(`utilities-sub-${tab}`).addEventListener('click', () => showUtilitiesSubTab(tab));
 }
-document.getElementById('nav-utilities').addEventListener('click', () => showUtilitiesSubTab('missingmasters'));
+// Home replaced the old nav-utilities tab this used to hang off of -- every Home card for a
+// Utilities sub-tool already passes its own explicit sub-tab id (see shell.js's navigateToArea),
+// so there's no longer a generic "Utilities" entry point that needs a default-to-missingmasters
+// fallback.
