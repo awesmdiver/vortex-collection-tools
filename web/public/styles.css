@@ -139,6 +139,10 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   top: 0;
   z-index: 50;
 }
+/* Home replaced the old five-tab .app-nav as the app's only "go somewhere else" control besides
+   Settings, so the logo/title itself is now clickable -- returns Home from anywhere (shell.js's
+   navigateToArea('home')). Same hover treatment as .settings-gear-btn (surface-2 + rounded), just
+   sized to fit the text instead of a square icon button. */
 .app-header__title {
   display: flex;
   align-items: center;
@@ -147,7 +151,13 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   font-weight: 600;
   letter-spacing: 0.2px;
   justify-self: start;
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 4px 8px;
+  margin: -4px -8px;
+  transition: background 0.15s ease;
 }
+.app-header__title:hover { background: var(--surface-2); }
 .app-header__logo { font-size: 20px; opacity: 0.85; }
 .app-header__right { display: flex; align-items: center; gap: 14px; justify-self: end; }
 .app-header__meta { color: var(--text-muted); font-size: 13px; text-align: right; }
@@ -164,8 +174,9 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 }
 .settings-gear-btn.nav-tab--active { background: var(--surface-2); color: var(--accent); font-weight: normal; }
 
-/* Top-level tool-area nav (shell.js) */
-.app-nav { display: flex; gap: 6px; }
+/* .nav-tab/.nav-tab--active are still used by the Settings gear button (the one nav-* element left
+   after Home replaced the old five-tab .app-nav row -- see DESIGN.md's "Home / landing page"
+   section) -- kept for that, not for a tab row anymore. */
 .nav-tab {
   font-family: inherit;
   font-size: 13.5px;
@@ -254,6 +265,44 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .tool-hero { margin-bottom: 20px; }
 .tool-hero__title { font-size: 22px; margin: 0 0 8px; }
 .tool-hero__body { margin: 0; color: var(--text); font-size: 14px; line-height: 1.6; }
+
+/* Home landing page -- card-based launcher for every tool (see DESIGN.md's "Home / landing page"
+   section). Built entirely from existing tokens/recipes, no new colors: .home-card is the
+   .settings-group card recipe made clickable; .home-section-title reuses the exact same
+   uppercase/letter-spacing/muted label treatment as .settings-group .settings-section-title above. */
+.home-section-title {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted);
+  font-weight: 600; margin: 30px 0 12px;
+}
+.home-section-title:first-of-type { margin-top: 0; }
+.home-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.home-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  transition: border-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+.home-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow); }
+.home-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.home-card__icon {
+  width: 44px; height: 44px; border-radius: 10px; background: var(--accent-bg);
+  display: grid; place-items: center; font-size: 24px;
+}
+.home-card__name { font-size: 17px; font-weight: 600; margin: 0; }
+.home-card__desc { font-size: 14px; color: var(--text-muted); line-height: 1.5; margin: 0; flex: 1; }
+.home-card__open {
+  font-size: 13px; font-weight: 600; color: var(--accent);
+  display: inline-flex; align-items: center; gap: 5px; transition: gap 0.15s ease;
+}
+.home-card:hover .home-card__open { gap: 8px; }
 
 /* Settings page header -- keeps the intro line and the server action buttons on one row, same
    space-between/flex-wrap idea as .progress-header-row, so a narrow window wraps the buttons

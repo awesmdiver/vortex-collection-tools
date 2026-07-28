@@ -285,7 +285,9 @@ function showReportsSubTab(id) {
 for (const tab of REPORTS_SUB_TABS) {
   $g(`reports-sub-${tab}`).addEventListener('click', () => showReportsSubTab(tab));
 }
-document.getElementById('nav-reports').addEventListener('click', () => showReportsSubTab('stats'));
+// Home replaced the old nav-reports tab this used to hang off of -- every Home card for a Reports
+// sub-tool already passes its own explicit sub-tab id (see shell.js's navigateToArea), so there's
+// no longer a generic "Reports" entry point that needs a default-to-stats fallback.
 
 // Called by sync-app.js's Generate Report button (sync-app.js loads BEFORE this file, so it can't
 // see inside this IIFE otherwise -- same "deliberate seam" as showReportsSubTab/window.setPageLabel

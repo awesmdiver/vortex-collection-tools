@@ -5,7 +5,7 @@
 // index.html; this only toggles which one is visible. app.js and sync-app.js each own their own
 // internal view-state exactly as before -- this file knows nothing about either.
 
-const TOOL_AREAS = ['rebuild', 'sync', 'settings', 'reports', 'rules-generator', 'utilities'];
+const TOOL_AREAS = ['home', 'rebuild', 'sync', 'settings', 'reports', 'rules-generator', 'utilities'];
 let currentArea = null;
 
 // "What page am I on" was genuinely hard to tell across several of this app's pages -- confirmed
@@ -109,13 +109,16 @@ fetch('/api/settings')
   })
   .catch(() => {});
 
-const AREA_LABELS = { rebuild: 'Rebuild Collection', sync: 'Update Collection', settings: 'Settings', reports: 'Reports', 'rules-generator': 'Rules Generator', utilities: 'Utilities' };
+const AREA_LABELS = { home: 'Home', rebuild: 'Rebuild Collection', sync: 'Update Collection', settings: 'Settings', reports: 'Reports', 'rules-generator': 'Rules Generator', utilities: 'Utilities' };
 
 function showToolArea(id) {
   currentArea = id;
   for (const a of TOOL_AREAS) {
     document.getElementById(`area-${a}`).classList.toggle('hidden', a !== id);
-    document.getElementById(`nav-${a}`).classList.toggle('nav-tab--active', a === id);
+    // Home replaced the old five-tab .app-nav -- only Settings still has a real nav-* element
+    // (the gear button), so every other area's lookup here is expected to come back null now.
+    const navBtn = document.getElementById(`nav-${a}`);
+    if (navBtn) navBtn.classList.toggle('nav-tab--active', a === id);
   }
   setPageLabel(AREA_LABELS[id] || '');
   // Every area shares the same page-level scroll (no per-area scroll container -- see styles.css),
@@ -154,18 +157,33 @@ function showUnsavedChangesModal() {
   });
 }
 
-for (const a of TOOL_AREAS) {
-  document.getElementById(`nav-${a}`).addEventListener('click', async () => {
-    if (currentArea === 'settings' && a !== 'settings' && window.settingsIsDirty && window.settingsIsDirty()) {
-      const choice = await showUnsavedChangesModal();
-      if (choice === 'save') {
-        const ok = await window.settingsSave();
-        if (!ok) return; // save failed -- stay on Settings so the error is visible and can be retried
-      }
+// The single entry point for every LIVE (already-loaded-page) navigation -- home cards, the
+// header logo/title, and the Settings gear button all funnel through this, replacing the old
+// per-nav-tab loop that used to wire all six areas (only Settings still has a real nav-* element
+// since Home replaced the rest). Reproduces the same per-area "just arrived" side effects the
+// deep-link (?area=) branch further below already does on page load: Update Collection needs its
+// profile dropdown loaded, Reports/Utilities cards land on a specific sub-tab rather than whatever
+// was last shown.
+async function navigateToArea(id, subTab) {
+  if (currentArea === 'settings' && id !== 'settings' && window.settingsIsDirty && window.settingsIsDirty()) {
+    const choice = await showUnsavedChangesModal();
+    if (choice === 'save') {
+      const ok = await window.settingsSave();
+      if (!ok) return; // save failed -- stay on Settings so the error is visible and can be retried
     }
-    showToolArea(a);
-  });
+  }
+  showToolArea(id);
+  if (id === 'sync' && window.loadSyncProfiles) window.loadSyncProfiles();
+  if (id === 'reports' && subTab && window.showReportsSubTab) window.showReportsSubTab(subTab);
+  if (id === 'utilities' && subTab && window.showUtilitiesSubTab) window.showUtilitiesSubTab(subTab);
 }
+window.navigateToArea = navigateToArea;
+
+document.getElementById('appHeaderTitle').addEventListener('click', () => navigateToArea('home'));
+document.getElementById('nav-settings').addEventListener('click', () => navigateToArea('settings'));
+document.querySelectorAll('.home-card').forEach((card) => {
+  card.addEventListener('click', () => navigateToArea(card.dataset.area, card.dataset.sub));
+});
 
 // Maps the URL's own ?reports= spelling to stats-app.js's internal sub-tab id (REPORTS_SUB_TABS) --
 // 'work-through' (hyphenated, readable in a URL) becomes 'workthrough' (no separator, matching this
@@ -217,8 +235,8 @@ if (reportsSubTab) {
 } else {
   // First-run check: land on Settings automatically when staging/downloads aren't configured yet,
   // with a banner explaining why -- this can only ever fire before the very first setup, since it
-  // never triggers again once those two paths are saved. Falls back to the normal default (Rebuild
-  // Collection) if this check itself fails for any reason, rather than getting stuck on a blank load.
+  // never triggers again once those two paths are saved. Falls back to the normal default (Home)
+  // if this check itself fails for any reason, rather than getting stuck on a blank load.
   fetch('/api/settings')
     .then((r) => r.json())
     .then((cfg) => {
@@ -227,8 +245,8 @@ if (reportsSubTab) {
         if (banner) banner.classList.remove('hidden');
         showToolArea('settings');
       } else {
-        showToolArea('rebuild');
+        showToolArea('home');
       }
     })
-    .catch(() => showToolArea('rebuild'));
+    .catch(() => showToolArea('home'));
 }

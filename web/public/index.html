@@ -18,17 +18,11 @@
 <body>
 
 <header class="app-header">
-  <div class="app-header__title">
+  <div class="app-header__title" id="appHeaderTitle" title="Back to Home">
     <span class="app-header__logo">&#9881;</span>
     <span>Vortex Collection Tools</span>
   </div>
-  <nav class="app-nav">
-    <button id="nav-rebuild" class="nav-tab">Rebuild Collection</button>
-    <button id="nav-sync" class="nav-tab">Update Collection</button>
-    <button id="nav-rules-generator" class="nav-tab">Rules Generator</button>
-    <button id="nav-reports" class="nav-tab">Reports</button>
-    <button id="nav-utilities" class="nav-tab">Utilities</button>
-  </nav>
+  <div></div>
   <div class="app-header__right">
     <div id="headerMeta" class="app-header__meta"></div>
     <button id="nav-settings" class="settings-gear-btn nav-tab" title="Settings">&#9881;</button>
@@ -88,7 +82,91 @@
   </div>
 </div>
 
-<section id="area-rebuild" class="tool-area">
+<section id="area-home" class="tool-area">
+
+<main class="app-main">
+
+  <div class="tool-hero">
+    <h2 class="tool-hero__title">🧰 Your Whole Vortex Toolkit, in One Place</h2>
+    <p class="tool-hero__body">Pick a tool to get started. Everything here works on collections you've already installed in Vortex&mdash;rebuild them faster, keep your cleanup after an update, sort out conflict rules, and see how it all went.</p>
+  </div>
+
+  <div class="home-section-title">Main tools</div>
+  <div class="home-grid">
+    <button class="home-card" data-area="rebuild">
+      <div class="home-card__icon">⚡</div>
+      <div class="home-card__name">Rebuild Collection</div>
+      <div class="home-card__desc">Re-extracts an installed collection straight into staging&mdash;same result, dramatically faster than Vortex's own install process.</div>
+      <div class="home-card__open">Open <span>→</span></div>
+    </button>
+    <button class="home-card" data-area="sync">
+      <div class="home-card__icon">🔄</div>
+      <div class="home-card__name">Update Collection</div>
+      <div class="home-card__desc">Keeps your Ignored and Disabled mods exactly as you set them, even after an update resets them in Vortex.</div>
+      <div class="home-card__open">Open <span>→</span></div>
+    </button>
+    <button class="home-card" data-area="rules-generator">
+      <div class="home-card__icon">🔗</div>
+      <div class="home-card__name">Rules Generator</div>
+      <div class="home-card__desc">Copies the conflict rules you already fixed over to an updated collection, so you're not resolving the same conflicts twice.</div>
+      <div class="home-card__open">Open <span>→</span></div>
+    </button>
+  </div>
+
+  <div class="home-section-title">Reports</div>
+  <div class="home-grid">
+    <button class="home-card" data-area="reports" data-sub="stats">
+      <div class="home-card__icon">📊</div>
+      <div class="home-card__name">Stats</div>
+      <div class="home-card__desc">See how every rebuild has gone over time, and spot what still needs attention right now.</div>
+      <div class="home-card__open">Open <span>→</span></div>
+    </button>
+    <button class="home-card" data-area="reports" data-sub="workthrough">
+      <div class="home-card__icon">✅</div>
+      <div class="home-card__name">Work Through</div>
+      <div class="home-card__desc">Every problem mod across every collection, gathered into one checklist you can work through.</div>
+      <div class="home-card__open">Open <span>→</span></div>
+    </button>
+    <button class="home-card" data-area="reports" data-sub="updatecompare">
+      <div class="home-card__icon">🔍</div>
+      <div class="home-card__name">Update Compare</div>
+      <div class="home-card__desc">A clear before-and-after of what an update added, kept, and removed.</div>
+      <div class="home-card__open">Open <span>→</span></div>
+    </button>
+    <button class="home-card" data-area="reports" data-sub="rulesgen">
+      <div class="home-card__icon">📋</div>
+      <div class="home-card__name">Rules Generator Report</div>
+      <div class="home-card__desc">Check which mods have their rules copied over, and which still need a decision.</div>
+      <div class="home-card__open">Open <span>→</span></div>
+    </button>
+  </div>
+
+  <div class="home-section-title">Utilities</div>
+  <div class="home-grid">
+    <button class="home-card" data-area="utilities" data-sub="missingmasters">
+      <div class="home-card__icon">🧩</div>
+      <div class="home-card__name">Missing Masters</div>
+      <div class="home-card__desc">Pinpoint missing master files and every mod that depends on them, before they crash your game.</div>
+      <div class="home-card__open">Open <span>→</span></div>
+    </button>
+    <button class="home-card" data-area="utilities" data-sub="scrub">
+      <div class="home-card__icon">🧽</div>
+      <div class="home-card__name">Vortex Scrub</div>
+      <div class="home-card__desc">Spot staging folders and archives Vortex has stopped tracking, and reclaim the space safely.</div>
+      <div class="home-card__open">Open <span>→</span></div>
+    </button>
+    <button class="home-card" data-area="utilities" data-sub="archivefinder">
+      <div class="home-card__icon">📦</div>
+      <div class="home-card__name">Archive Finder</div>
+      <div class="home-card__desc">Search inside every mod archive without extracting a thing, and pull out exactly the file you need.</div>
+      <div class="home-card__open">Open <span>→</span></div>
+    </button>
+  </div>
+
+</main>
+</section>
+
+<section id="area-rebuild" class="tool-area hidden">
 
 <main id="app" class="app-main">
 

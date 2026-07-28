@@ -862,10 +862,10 @@ async function boot() {
 window.loadSyncProfiles = loadSyncProfiles;
 
 // Re-checks Vortex-gated profile data specifically when the user actually visits Update Collection
-// -- clicking the nav tab (every time, whether switching in from elsewhere or already here) always
-// re-runs it, matching the same "re-check on every visit" behavior Missing Masters/Vortex Scrub
-// already use for their own Vortex-dependent scans.
-document.getElementById('nav-sync').addEventListener('click', () => loadSyncProfiles());
+// -- every time, whether arriving via a Home card or already here -- matching the same
+// "re-check on every visit" behavior Missing Masters/Vortex Scrub already use for their own
+// Vortex-dependent scans. Home replaced the old nav-sync tab this used to hang off of;
+// shell.js's navigateToArea('sync') now calls window.loadSyncProfiles directly instead.
 
 // Explicit safety net the user asked for: if the profile dropdown is still showing its empty/
 // placeholder state (no real "data-profile" option -- see loadSyncProfiles' own render loop) when
