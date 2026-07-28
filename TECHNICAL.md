@@ -2682,6 +2682,48 @@ wiring.
   Per-input `autocomplete`/`data-*` attributes are the standard, effective mitigation on their own
   and don't require a form wrapper at all, so that risk wasn't worth taking for this fix.
 
+## Tool page breadcrumb eyebrow (added 2026-07-28)
+
+Removing the old five-tab nav (see "Home landing page" above) took away the one thing that named
+which tool a user was actually looking at -- `.tool-hero__title` is a value pitch ("Skip
+Re-Resolving Conflicts You Already Fixed"), not the tool's name, and the header's own
+`#headerMeta` breadcrumb on the far right is too quiet to carry that alone. Every tool page except
+Home and Settings now gets a small `.tool-eyebrow` line immediately above its own
+`.tool-hero__title`: `Home › <area name>`, with **Home** a real clickable link back to the Home
+area. Reference mockup: `design/vortex-tool-eyebrow-mockup.html`; design rationale in DESIGN.md's
+"Tool page breadcrumb" section (it explicitly notes this reverses the earlier "tool intro banner,
+not a redundant heading" rule -- correct while the nav still named the tool, no longer correct once
+Home replaced the nav).
+
+**Markup**: `<div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span
+class="tool-eyebrow__sep">›</span><area name></div>`, placed directly above each of the 10
+`.tool-hero` blocks that need one -- Rebuild Collection, Update Collection, Rules Generator (one
+each), plus all 4 Reports sub-tabs (Stats/Work Through/Update Compare/Rules Generator Report, each
+reading just `Home › Reports`) and all 3 Utilities sub-tabs (Missing Masters/Vortex Scrub/Archive
+Finder, each reading just `Home › Utilities`) -- the existing sub-nav pills on those two areas
+already name the specific report/utility, so the eyebrow only needs to name the shared area.
+
+**Click wiring** (`shell.js`): one delegated `document`-level click listener
+(`e.target.closest('.tool-eyebrow__home')`) covers all 10 instances at once, rather than querying
+and wiring each on load -- calls the same `navigateToArea('home')` the header logo/title already
+uses. `e.preventDefault()` is required since these are real `<a href="#">` elements (matching the
+mockup's own markup, kept for the native link-hover/cursor semantics) that aren't meant to actually
+navigate anywhere themselves.
+
+**CSS**: `.tool-eyebrow` (12px, 600 weight, `letter-spacing: .09em`, uppercase, `--text-muted`,
+`margin: 0 0 8px`, flex row with an 8px gap) sits directly above `.tool-hero`'s own
+`margin-bottom: 20px`, so the two stack with no extra spacing rule needed. `.tool-eyebrow__home` is
+`var(--accent)` (matching the header logo/title's own "this returns you Home" affordance);
+`.tool-eyebrow__sep` (the `›` character) is `opacity: 0.5` to read as a quiet divider, not content.
+
+**Verified live** (2026-07-28): all 10 pages show the correct eyebrow text (checked
+programmatically, not just visually -- Rebuild Collection/Update Collection/Rules Generator each
+show their own tool name; all 4 Reports sub-tabs and all 3 Utilities sub-tabs correctly show just
+`Home › Reports`/`Home › Utilities`); clicking the Home link from a tool page navigates to Home and
+updates `#headerMeta` correctly; renders correctly in both dark and light themes.
+
+## Future work
+
 Tracked in the workspace `TODO.md` (not duplicated here — confirmed 2026-07-27, one place to check
 instead of two) under `vortex-tools/vortex-collection-tools`, split into "ready to work on" and
 "still just ideas" groups. The "New Utilities section" idea that used to live in this section is

@@ -15,8 +15,10 @@ components and severity sections), and **load the `plain-language-writer` skill*
 any copy. Open `design/vortex-settings-mockup.html` and match it.
 
 **Non-negotiable — no data loss:**
-- Keep Settings as **one `<form>`**. Panes are show/hide only; every field stays in the DOM at all
-  times. The single **Save Settings** button writes the whole form at once. Switching category must
+- Keep Settings as **one *logical* form — NOT a literal `<form>` element** (there is none, and
+  adding one would make the inner buttons default to `type="submit"`, so Enter in a field could
+  fire the wrong one). Panes are show/hide only; every field stays in the DOM, and the single
+  **Save Settings** button gathers them all via JS and writes at once. Switching category must
   never discard unsaved edits made in another category. Verify this explicitly.
 
 **Conventions (DESIGN.md):**
