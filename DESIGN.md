@@ -198,6 +198,25 @@ compact breadcrumb, not a full `<h2>` — serves the same intent (know where you
 contradicting it. The tool-hero title stays the value pitch; the eyebrow carries the name and the
 way back Home.
 
+## Tool page layout — group controls into cards, cap the width (2026-07-28)
+
+A tool page whose body is a stack of loose labels + inputs reads as unstructured (Archive Finder
+was the worst offender — a rescan bar, an extensions manager, and a search block all floating with
+big gaps, running edge-to-edge on a wide monitor). Two fixes, both reusing what's already here:
+
+- **Group distinct control chunks into `.settings-group` cards** — the same bordered, padded box
+  Settings and Update Collection already use. Archive Finder becomes two cards: *Your archive index*
+  (scan status + **Save & Rescan** + the file-extensions manager) and *Search* (mode radios + query
+  + the Select all / Clear selection / Extract selected actions). One card per "thing the user is
+  doing" — not one giant card, not loose controls.
+- **Cap the content width** to a comfortable working measure (~1080px, centered), same reasoning as
+  Settings' `#settingsPanes` cap. Scope it per tool area — don't touch the shared wide `.app-main`.
+- **Copy:** no `(s)` shorthand — "4,526 archive(s)… 12,823 matched file(s)" → "**4,526** archives
+  indexed · **12,823** files matched" (the `plain-language-writer` rule against `mod(s)`-style
+  syntax). Reference mockup: `design/vortex-archive-finder-mockup.html`.
+
+Apply the same grouping to any other tool page that has grown into a loose stack of controls.
+
 ## Contextual error placement — put failure feedback where the user is already looking (2026-07-28)
 
 A page-level error box rendered once near the top of a long, scrolling list (e.g. Missing Masters'

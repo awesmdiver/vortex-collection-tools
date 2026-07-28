@@ -101,12 +101,12 @@ async function afLoadStats() {
   afState.stats = stats;
   $g('afStatsMeta').innerHTML = '';
   $g('afStatsMeta').appendChild(el('span', { class: 'accent-count' }, stats.archiveCount.toLocaleString()));
-  $g('afStatsMeta').appendChild(document.createTextNode(' archive(s) indexed, '));
+  $g('afStatsMeta').appendChild(document.createTextNode(' archives indexed · '));
   $g('afStatsMeta').appendChild(el('span', { class: 'accent-count' }, stats.fileCount.toLocaleString()));
-  $g('afStatsMeta').appendChild(document.createTextNode(` matched file(s) — last scan: ${afFmtDate(stats.lastScanned)}.`));
+  $g('afStatsMeta').appendChild(document.createTextNode(` files matched · last scan ${afFmtDate(stats.lastScanned)}`));
   const wrap = $g('afFailedLinkWrap');
   if (stats.errorCount) {
-    $g('afFailedLinkAnchor').textContent = `${stats.errorCount} archive(s) failed to read`;
+    $g('afFailedLinkAnchor').textContent = `${stats.errorCount} archive${stats.errorCount === 1 ? '' : 's'} failed to read`;
     wrap.classList.remove('hidden');
   } else {
     wrap.classList.add('hidden');
