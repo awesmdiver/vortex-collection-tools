@@ -20,6 +20,10 @@
   --neutral-bg: rgba(124, 132, 148, 0.12);
   --radius: 10px;
   --shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  /* Standard vertical gap between stacked cards/sections app-wide -- see DESIGN.md's "Spacing --
+     give stacked things room, consistently" section (2026-07-28). Not themed (same in light/dark),
+     so this lives only in the base :root block, not repeated in the light-theme overrides below. */
+  --stack-gap: 24px;
 }
 
 /* Light theme -- the :root block above is the default/fallback (dark). Applied two ways: (1)
@@ -204,7 +208,7 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 18px 20px;
-  margin: 16px 0;
+  margin: var(--stack-gap) 0;
 }
 .sync-phase__header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .sync-phase__header h2 { font-size: 16px; margin: 0; }
@@ -254,7 +258,9 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   padding: 32px 24px 80px;
 }
 
-.view-header { margin-bottom: 22px; }
+/* Acts as the "banner before the first block" on views that have no .tool-hero of their own (Rebuild
+   Collection's logs/plan/progress/summary views) -- same standard gap as tool-hero's own. */
+.view-header { margin-bottom: var(--stack-gap); }
 .view-header h1 { font-size: 22px; margin: 6px 0 4px; }
 .view-header p { margin: 4px 0; }
 
@@ -262,7 +268,7 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    already names the tool) with an eye-catching value pitch instead: an emoji-led headline plus a
    friendly what/why sentence or two. See DESIGN.md's "Tool intro banner" section -- first shipped on
    Missing Masters 2026-07-27, meant to be reused by every tool page's own intro over time. */
-.tool-hero { margin-bottom: 20px; }
+.tool-hero { margin-bottom: var(--stack-gap); }
 /* Inside Settings' own header row the tool-hero sits beside the Restart/Stop Server buttons, not
    stacked above other page content -- the row's own gap already provides spacing, so the usual
    bottom margin would just double it up. */
@@ -420,7 +426,7 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   justify-content: space-between;
   gap: 12px;
   padding: 12px 16px;
-  margin-top: 20px;
+  margin-top: var(--stack-gap);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -538,15 +544,14 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    keeps it shrink-to-fit, and restores heading-scale text size over .badge's smaller default. */
 h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 /* Rules Generator section header + "Expand all" button on the same line, button right-justified.
-   The header row now owns the vertical rhythm (28px/10px, 20px top for the very first one) instead
+   The header row now owns the vertical rhythm (the standard --stack-gap above, 10px below) instead
    of the bare h2 -- wrapping the h2 in this row would otherwise confuse .settings-section-title's
    own :first-of-type rule (each wrapped h2 becomes the only h2 under ITS OWN parent, so every one
    would incorrectly match :first-of-type once wrapped). Explicit per-id margins here sidestep that
    instead of fighting the cascade. */
 .rg-section-header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .rg-section-header-row .settings-section-title { margin: 0; }
-#rgReadySectionHeaderRow { margin: 20px 0 10px; }
-#rgReviewSectionHeaderRow { margin: 28px 0 10px; }
+#rgReadySectionHeaderRow, #rgReviewSectionHeaderRow { margin: var(--stack-gap) 0 10px; }
 /* "Expand all" / "Collapse all" -- follows the "Nothing to do" badge's muted/neutral color on
    purpose (confirmed with the user 2026-07-26), regardless of which section it's attached to, so it
    never competes visually with that section's own success/warning-colored pill. It's a real
@@ -630,8 +635,10 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 /* Settings page section headers -- plain h2s, same rhythm as .view-header's h1 but smaller/lighter.
    Only used bare (no .settings-group ancestor) inside .settings-group__header now; everywhere else
    the more specific .settings-group .settings-section-title rule below wins instead. */
-.settings-section-title { font-size: 16px; margin: 28px 0 10px; }
-.settings-section-title:first-of-type { margin-top: 20px; }
+/* Page-level section dividers (Reports/Rules Generator, used bare -- not inside a .settings-group
+   card): a consistent standard gap above every one of these, first-of-type or not (no need for a
+   separate first-of-type override now that both cases converge on the same value). */
+.settings-section-title { font-size: 16px; margin: var(--stack-gap) 0 10px; }
 /* Settings page: groups fields by which tool they serve (General / Rebuild Collection / Update
    Collection) instead of one long flat list -- same bordered-card look as .sync-phase (Update
    Collection's own numbered steps use this already), just without a numbered circle since these
@@ -641,7 +648,7 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 18px 20px;
-  margin: 20px 0;
+  margin: var(--stack-gap) 0;
 }
 .settings-group__header { margin-bottom: 4px; }
 .settings-group__header h2 { font-size: 17px; margin: 0; }
@@ -658,7 +665,7 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 /* Settings two-pane layout (see DESIGN.md's "Settings -- two-pane category layout" section) -- a
    sticky category rail on the left, one category's .settings-group card(s) on the right, replacing
    the old single long scroll of every card stacked together. */
-.settings-layout { display: grid; grid-template-columns: 224px 1fr; gap: 24px; align-items: start; }
+.settings-layout { display: grid; grid-template-columns: 224px 1fr; gap: var(--stack-gap); align-items: start; }
 /* Caps the content column's own reading width (independent of the rail, which stays as-is) so
    callouts/hints wrap at a comfortable width instead of running edge-to-edge on a wide monitor --
    the two-pane layout's own right column can otherwise stretch past 1000px+ (2026-07-28). */
@@ -894,7 +901,7 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
   border: 1px solid var(--warning);
   border-radius: var(--radius);
   padding: 12px 16px;
-  margin-bottom: 18px;
+  margin-bottom: var(--stack-gap);
 }
 .checkbox { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .checkbox input { width: 16px; height: 16px; accent-color: var(--accent); }
@@ -1008,10 +1015,11 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    .app-main" reasoning as Settings' own #settingsPanes cap above; the shared Utilities <main> is
    used by Missing Masters/Vortex Scrub too, so this can't live on .app-main itself (2026-07-28). */
 #utilities-sub-area-archivefinder { max-width: min(1080px, 96vw); margin: 0 auto; }
-/* Tighter than .settings-group's usual margin: 20px 0 (meant for a long page of many stacked
-   cards) -- these two cards are one continuous "search setup" flow, not separate page sections, so
-   the gap between them should read closer together, matching the mockup's own 16px card margin. */
-#afIndexCard, #afSearchCard { margin: 0 0 16px; }
+/* Converged onto the standard --stack-gap (2026-07-28's app-wide spacing normalization) -- these
+   two cards previously used a deliberately tighter 16px on the theory that they're "one continuous
+   search setup flow, not separate page sections," but DESIGN.md's spacing rule calls for the SAME
+   consistent gap between every stacked card everywhere, no per-page exceptions. */
+#afIndexCard, #afSearchCard { margin: 0 0 var(--stack-gap); }
 /* Breathing room between the mode radios and the search input row below them -- they were touching
    directly with zero gap (.field-group has no margin-bottom of its own, and adding one there would
    ripple into the other 30+ .field-group uses across Settings/modals). Scoped to this one card. */

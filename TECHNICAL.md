@@ -2855,7 +2855,8 @@ navigate anywhere themselves.
 
 **CSS**: `.tool-eyebrow` (12px, 600 weight, `letter-spacing: .09em`, uppercase, `--text-muted`,
 `margin: 0 0 8px`, flex row with an 8px gap) sits directly above `.tool-hero`'s own
-`margin-bottom: 20px`, so the two stack with no extra spacing rule needed. `.tool-eyebrow__home` is
+`margin-bottom` (now `var(--stack-gap)`, see "App-wide spacing normalization" below), so the two
+stack with no extra spacing rule needed. `.tool-eyebrow__home` is
 `var(--accent)` (matching the header logo/title's own "this returns you Home" affordance);
 `.tool-eyebrow__sep` (the `›` character) is `opacity: 0.5` to read as a quiet divider, not content.
 
@@ -2864,6 +2865,80 @@ programmatically, not just visually -- Rebuild Collection/Update Collection/Rule
 show their own tool name; all 4 Reports sub-tabs and all 3 Utilities sub-tabs correctly show just
 `Home › Reports`/`Home › Utilities`); clicking the Home link from a tool page navigates to Home and
 updates `#headerMeta` correctly; renders correctly in both dark and light themes.
+
+## App-wide spacing normalization (added 2026-07-28)
+
+Per DESIGN.md's "Spacing -- give stacked things room, consistently" section: converges the vertical
+gap between stacked cards/sections app-wide onto one consistent value, replacing a scattered mix of
+12/16/18/20/22/28px margins that had accumulated across pages built at different times.
+
+**New token**: `--stack-gap: 24px` in `styles.css`'s base `:root` block (not themed -- same value in
+light and dark, so it isn't repeated in the light-theme override blocks). Every component below
+references `var(--stack-gap)` instead of a literal px value, so any future rebalancing is a one-line
+change.
+
+**Converged onto `var(--stack-gap)`** (previous value in parens):
+- `.tool-hero` `margin-bottom` (20px) -- the "banner → first block" gap on every tool page.
+- `.view-header` `margin-bottom` (22px) -- the equivalent banner-before-first-content gap on Rebuild
+  Collection's own sub-views (logs/plan/progress/summary) that have no `.tool-hero` of their own.
+- `.settings-group` `margin` (20px 0) -- used both in Settings' own panes and Archive Finder's two
+  top-level cards.
+- `.sync-phase` `margin` (16px 0) -- Update Collection's 4 numbered phase blocks.
+- `#afIndexCard, #afSearchCard` `margin` (0 0 16px) -- these two Archive Finder cards previously used
+  a deliberately tighter 16px on the theory that they're "one continuous flow, not separate
+  sections"; DESIGN.md's rule explicitly calls for the same gap everywhere with no per-page
+  exceptions, so this special case was removed.
+- `.vortex-data-box` `margin-top` (20px) -- the bordered "Vortex data cache" status box on Rebuild
+  Collection's picker view.
+- `.resume-box` `margin-bottom` (18px) -- the bordered "resume from previous run" prompt on the plan
+  view.
+- Bare (page-level, not `.settings-group`-scoped) `.settings-section-title` `margin` (was `28px 0
+  10px`, with a separate `:first-of-type { margin-top: 20px }` override) -- used by Reports' Stats
+  page (Overview/Concurrency/Current Issues/Browse by Collection) and the Rules Generator Report
+  page (Completed/Exceptions/Needs a decision/Old version still installed) as plain page-level
+  section dividers with no card border. Folding both values into one `var(--stack-gap)` made the
+  `:first-of-type` override exactly equal to the base rule, so it was deleted rather than kept
+  redundant.
+- `#rgReadySectionHeaderRow, #rgReviewSectionHeaderRow` `margin` (20px 0 10px / 28px 0 10px) -- same
+  bare-heading pattern as above, but wrapped in a flex row (title + "Expand all" button) instead of a
+  plain `<h2>`, so these needed their own explicit per-id rule already (see the existing comment
+  there on why `:first-of-type` can't be relied on once an h2 is wrapped).
+- `.settings-layout`'s own `gap: 24px` (Settings' two-pane rail/content split) was already correct --
+  just repointed at the token for one source of truth, no value change.
+
+**Deliberately NOT touched** (judgment calls, in scope for a future pass if it ever comes up, not
+silently decided as final):
+- `.callout`'s base `margin-bottom: 20px` -- callouts are reused in far more contexts than "a stacked
+  page section" (nested inside cards, inline warnings, modal content), several with their OWN
+  deliberately different overrides already (`.callout .callout { margin: 12px 0 8px }`,
+  `.mm-row__header + .callout { margin-top: 14px }`). Converging the base rule risked rippling into
+  those nested contexts in ways nobody asked for. Only the top-level "banner/card → next block" gaps
+  DESIGN.md names were changed.
+- Home's own `.home-grid` tile gap (16px) and `.home-section-title` margin (`30px 0 12px`) -- Home is
+  a wrapping tile-grid launcher, not a single column of full-width stacked cards/sections, and wasn't
+  named in DESIGN.md's spacing rule. Left as its own already-reviewed pattern from the Home build.
+- `.mm-row`'s 14px `margin-bottom` (Missing Masters' own per-mod row cards) and similar dense-list
+  spacing (`.plan-table-wrap`, `.summary-badges`, `.view-actions`, `.mm-header-row`, inline control
+  rows like `.collection-picker`) -- these are repeating list items or in-page control rows, not
+  distinct stacked "cards/sections," and DESIGN.md is explicit this rule is about big-block gaps, not
+  every internal margin on the page.
+
+**Margin-collapsing note** (why this Just Works without touching every adjacent sibling): adjacent
+block-level siblings' touching margins collapse to the LARGER of the two, not their sum, as long as
+nothing (padding/border/a flex or grid parent) sits between them breaking the collapse. So a
+`.tool-hero` with `margin-bottom: var(--stack-gap)` followed by, say, a `.callout` with its own
+smaller `margin-top: 0` still renders a clean 24px gap -- the callout's own margin doesn't need to
+also change. This is why the fix list above is short: fixing the handful of components that
+routinely open/close a "section" is enough to make the whole app's rhythm consistent, without a
+line-by-line audit of every sibling pair.
+
+**Verified live** (2026-07-28, `npm run web`): Home, Rebuild Collection (picker view), Update
+Collection (all 4 `.sync-phase` cards), Settings (two-pane layout), Rules Generator (empty state),
+Reports' Stats page (all 4 bare section headers -- confirmed both the first-after-tool-hero gap and
+the between-sections gaps read identically now, vs. previously 20px/28px), Missing Masters, Vortex
+Scrub, and Archive Finder (both cards) all checked for even, consistent breathing room with no flush
+stacking. Also spot-checked in light theme (Vortex Scrub) -- no regression, since `--stack-gap` isn't
+a themed value.
 
 ## Future work
 
