@@ -12,7 +12,9 @@ Vortex works fine for a small mod list, but at real scale (1,000+ mods) it freez
 settings, and burns hours on installs and updates. Vortex Collection Tools runs alongside Vortex to
 fix its biggest pain points: rebuilding a collection when files go missing or corrupted, updating a
 collection without losing track of every mod you'd marked Ignored or Disabled, and keeping your
-custom mod-order rules intact when a collection gets updated.
+custom mod-order rules intact when a collection gets updated. A set of smaller Utilities rounds it
+out — clearing away leftover mod clutter, catching missing master files before they crash your
+game, and finding any file inside any archive without unpacking it.
 
 ### 📋 At a Glance
 
@@ -55,6 +57,17 @@ custom mod-order rules intact when a collection gets updated.
 * **Shows you exactly what changed:** Every step previews what it's about to do before it touches
   anything real, and the Compare Report gives you a clear, color-coded summary of what was kept,
   disabled, added, or removed by the collection author.
+* **Cleans up mod-manager clutter safely:** Vortex Scrub finds staging folders and downloaded
+  archives Vortex no longer has any connection to — leftovers from a mod you uninstalled, or an old
+  duplicate download — and lets you review and remove them, with a permanent exclude list for
+  anything you want to keep around on purpose.
+* **Catches missing master files before they crash your game:** Missing Masters shows you every
+  active plugin whose master file isn't actually there — the classic Skyrim "missing master" crash
+  — the moment it happens, with no manual rescan needed. Use **Create Dummy Master** to patch it
+  instantly, or **Rebuild This Mod** to re-extract the real files if the install just came up empty.
+* **Finds any file inside any archive, instantly:** Archive Finder indexes every archive in your
+  downloads folder up front — no unpacking required — so you can search across all of them by file
+  or mod name and pull out exactly the file you need, whenever you need it.
 
 ---
 
