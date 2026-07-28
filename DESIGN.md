@@ -503,6 +503,15 @@ It only reads these folders…"). The **security warning stays serious**. All co
 `plain-language-writer`. Wiring detail (which `settings-app.js` render calls move into which pane,
 the show/hide toggle, last-open memory) is engineer-facing — put it in `TECHNICAL.md` when built.
 
+**Mockups are design references, not content specs.** The `design/` mockups pin down layout,
+structure, and voice — they deliberately simplify real content for brevity. When a mockup trims
+real content or functionality, **keep the real thing**: this is a reorganization, not a feature or
+disclosure trim. Confirmed 2026-07-28 (three good calls during the Settings build): kept the Nexus
+key's plaintext-storage security disclosure and its "get your key" link; kept Vortex Scrub's
+interactive exclude-list management (the mockup showed only a count); and kept the accurate
+"changes need a restart" note under Server. Rule of thumb: the mockup governs *how it looks and
+reads*; the existing app governs *what it does and must disclose*.
+
 ## Pinning — favorites on Home and the Settings rail (2026-07-28)
 
 One "pin" concept, used in two places, so it reads as a single feature: a star pins an item into a
