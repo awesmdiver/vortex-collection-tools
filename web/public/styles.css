@@ -854,6 +854,12 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    Children are emitted in pairs (path, button) and auto-flow two-per-row into these columns. */
 .ambiguous-candidates { display: grid; grid-template-columns: 1fr auto; align-items: start; gap: 10px 12px; }
 .plan-table tbody tr:hover { background: var(--surface-2); }
+/* A selected (checked) row -- see the "Selectable results tables" note above (styles.css keeps the
+   zebra/hover rules here, right next to the base .plan-table rules, rather than duplicating the
+   whole row-state group down in the Archive Finder section). Comes after :hover in source order
+   (equal specificity) so a selected row's accent tint always wins even while hovered. */
+.plan-table tbody tr.selected { background: var(--accent-bg); }
+.plan-table tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .status-pill {
   display: inline-block;
   padding: 3px 10px;
@@ -1006,6 +1012,56 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    cards) -- these two cards are one continuous "search setup" flow, not separate page sections, so
    the gap between them should read closer together, matching the mockup's own 16px card margin. */
 #afIndexCard, #afSearchCard { margin: 0 0 16px; }
+
+/* Selectable results tables -- the standard for any long, paginated, checkbox-selectable list (see
+   DESIGN.md's "Selectable results tables" section). First used by Archive Finder's search results
+   (2026-07-28); reuse this for any future selectable .plan-table rather than inventing a second
+   selection-bar/row-state pattern. */
+.af-selection-bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin: 8px 0 4px; }
+.af-selection-bar__left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+/* The "Select all M results?" offer -- Gmail/GitHub pattern: the header checkbox only ever selects
+   the current PAGE; when the full result set is bigger than one page, this banner offers to extend
+   that to everything. A plain inline button styled as a link (not a full .btn) since it's phrased
+   as part of the sentence, not a separate action button. */
+.af-inline-link-btn {
+  background: none; border: none; padding: 0; font: inherit; color: var(--accent);
+  text-decoration: underline; cursor: pointer;
+}
+.af-inline-link-btn:hover { color: var(--accent-hover); }
+.af-show-selected-only { margin: 10px 0 4px; font-size: 13.5px; }
+
+.col-check { width: 34px; }
+.col-ext { width: 70px; color: var(--text-muted); }
+/* Row states never go bright/white (DESIGN.md is explicit about this): hover is --surface-2
+   (already existed below), a selected row is a faint --accent-bg wash with a 3px inset accent edge
+   on the first cell only. A subtle zebra sits under both so a long list stays trackable row-to-row
+   -- source order matters here: zebra first, then the existing :hover rule, then .selected LAST, so
+   .selected always wins over both (equal specificity, later wins). */
+.plan-table tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.022); }
+
+/* Archive name cell: readable name + a hover-revealed copy-full-path button. The raw filename
+   (with the Nexus id/version/timestamp tail, when present) is only the title tooltip now, not the
+   visible text -- see afStripArchiveSuffix() in archive-finder-app.js. */
+.af-arch-cell { display: flex; align-items: center; gap: 8px; }
+.af-arch-name { color: var(--text); }
+.af-copy-btn {
+  opacity: 0; flex: none; background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-size: 13px; padding: 3px 5px; border-radius: 6px; line-height: 1;
+  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+.plan-table tbody tr:hover .af-copy-btn { opacity: 0.75; }
+.af-copy-btn:hover { opacity: 1; color: var(--accent); background: var(--bg); }
+.af-copy-btn.done { opacity: 1; color: var(--success); }
+/* "N matching files" group-row expander -- a quiet caret + accent text, level with the plain rows,
+   not a heavy button (DESIGN.md is explicit this should NOT look like this app's other buttons).
+   Its own class rather than reusing .sync-list-toggle (which stays underlined elsewhere -- Missing
+   Masters' own "+N more"/"Show less" -- changing that globally would be an uninvited visual change
+   there for a look this feature never asked for). */
+.af-expander {
+  background: none; border: none; padding: 0; font: inherit;
+  display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-weight: 500; cursor: pointer;
+}
+.af-expander:hover { color: var(--accent-hover); }
 .mm-row {
   background: var(--surface-2);
   border: 1px solid var(--border);

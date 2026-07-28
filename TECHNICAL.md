@@ -2428,6 +2428,108 @@ restructure -- search still returns real grouped results (39 results for "mortha
 count from before this change), Select All/Clear Selection still work (204/0 selected); renders
 correctly in both dark and light themes.
 
+**Search-results table overhaul (later same day, 2026-07-28)** -- per DESIGN.md's "Selectable
+results tables" section (reference mockup `design/vortex-results-table-mockup.html`). Turns the
+grouped file-search results into a real `.plan-table` with persistent, cross-page selection, a
+Gmail/GitHub-style "select all results" banner, shift-click range select, a "Show selected only"
+review toggle, and readable archive names with a hover-revealed copy-path button.
+
+- **Selection state is still the single `afState.selected` Map** (keyed by `archivePath|internalPath`
+  via `AF_ITEM_KEY`, unchanged) -- the whole feature is built as more ways to read and write that one
+  Map, not a second selection model. `afSetItemSelected(item, checked)` is the one place that
+  actually mutates it now.
+- **Two update paths, deliberately different.** A single checkbox (a file row, a group row, the
+  header checkbox acting on one page) goes through that row's own `change` handler, which updates
+  the Map, toggles that row's own `.selected` class, and re-derives the group/header tri-state
+  locally -- cheap, no re-render. A BULK action that touches many items at once (Select All, Invert,
+  Clear, the banner's "select all M" button, the header checkbox) mutates the Map directly for every
+  affected item, then calls one shared `afRefreshRowsFromState()` to resync every currently-rendered
+  row's checkbox/`.selected` class and the group/header tri-state -- avoids constructing and
+  dispatching N synthetic `change` events for a bulk operation.
+- **Shift-click range select (`afApplyShiftRange`)** reuses each row's own `change` handler instead
+  of duplicating the state-update logic: it walks the DOM between the last-clicked and
+  just-clicked file-row checkboxes (`afLastClickedFileCheckbox`, tracked on each checkbox's own
+  `click` listener, not `change`, since `change` doesn't carry `shiftKey`) and `dispatchEvent(new
+  Event('change'))` on each one that needs to flip. Only ever walks plain file-row checkboxes
+  (`.af-file-row`), never group-row checkboxes -- a shift-range spanning a collapsed group's hidden
+  children would otherwise silently skip them.
+- **`afAllFileItems()` is the "all results, not just this page" basis** for Select All/Invert/Clear
+  and for the banner's own denominator -- a flatMap over every group's `items` in
+  `afState.currentUnits`, gated to `afState.renderMode === 'files'` so it's a harmless `[]` in
+  Display Archive mode (see below). `afCurrentPageFlatItems()` is the page-scoped equivalent, driving
+  the header checkbox and the banner's "N on this page" numerator.
+- **The "select all M results?" banner (`afCheckSelectAllBanner`)** fires only when every item on the
+  current page is selected AND the full result set is bigger than one page AND the full set isn't
+  already 100% selected (no point offering to select what's already selected). Suppressed entirely
+  while "Show selected only" is on (trivially always page-selected there, so it would show a
+  meaningless banner every time).
+- **"Show selected only" reuses the existing single-item-group render path unchanged**
+  (`afSelectedOnlyUnits()` wraps each selected item as its own one-item "group", so it renders as a
+  plain, non-expandable row via the SAME branch `afRenderFileResultsPage` already had for
+  ungrouped/singleton matches) -- no second rendering code path for this view. A real edge case this
+  surfaced: toggling the view on with nothing selected must NOT hide the toggle itself (that would
+  trap the user with no way to turn it back off) -- `afRenderCurrentPage` gates the selection
+  bar/toggle's own visibility on whether a real (unfiltered) result set exists, separately from
+  whether the current *filtered* view happens to be empty.
+- **Selection-bar visibility is NOT gated to `files` mode.** The bar's Extract Selected/Clear
+  Selection buttons are also how a **Display Archive** tree-view selection gets extracted (see
+  `afRenderTreeNode`, which writes into the same `afState.selected` Map directly, pre-dating this
+  overhaul) -- hiding the bar whenever `renderMode !== 'files'` would have silently broken extraction
+  from an open archive tree. Select All/Invert/Clear/"Show selected only" stay files-mode-only
+  features that degrade to harmless no-ops in archives mode (`afAllFileItems()` returns `[]` there),
+  not hidden -- consistent with how the "select all results" banner already suppresses itself
+  outside files mode.
+- **Reset-on-new-search, not on paging**: `afRunSearch()` clears `afState.selected`,
+  `showSelectedOnly`, `afLastClickedFileCheckbox`, and hides the banner right after the "user is
+  running ANY new search" branch point but BEFORE the empty-result early returns, so every search
+  outcome (including "no matches") gets a consistent reset -- paging/page-size changes never call
+  `afRunSearch()`, only `afRenderCurrentPage()`, so selection survives those untouched.
+- **Archive name display (`afBuildArchiveCell`)**: shows `afStripArchiveSuffix(archiveName)` --
+  strips a confidently-parsed Nexus-style `-<modId>-<version>-<timestamp>.<ext>` tail
+  (`AF_ARCHIVE_SUFFIX_RE`) so the table reads as a mod name, not a download filename. Deliberately
+  narrow: this project's own `lib/download-naming.js` already documents a newer, space-separated
+  Vortex download-naming convention that this regex does NOT also try to parse -- falls back to the
+  full name rather than guessing wrong on an unfamiliar shape. Confirmed live against real scanned
+  data: a file ending `...1547248552.1.7z` (an extra `.1` ahead of the real `.7z` extension --
+  apparently a duplicate-download disambiguator, not part of the Nexus convention) correctly did NOT
+  match and fell back to the full name, exactly as designed. The full raw filename is always still
+  the cell's title tooltip. A hover-revealed `⧉` button (`.af-copy-btn`) copies
+  `afState.downloadsDir + '\' + archiveName` (Settings' own downloads folder, confirmed live to be
+  populated from `cfg.downloads` in `afLoadConfig`) and flips to `✓` for 1.2s on click
+  (`afCopyToClipboard`).
+- **The "N matching files" expander is its own `.af-expander` class**, not a reuse of
+  `.sync-list-toggle` -- confirmed live that `.sync-list-toggle` is also used by
+  `missing-masters-app.js` and `sync-app.js`, so restyling it globally to the new "quiet caret, no
+  button chrome" look would have been an uninvited visual change on both of those. Also fixed a real
+  pre-existing bug while investigating: `.sync-list-toggle` itself never had a button-chrome reset
+  (no `background`/`border`/`padding` override), so the old expander was rendering with native
+  browser button chrome underneath -- confirming the user's own complaint ("not a heavy blue button")
+  was accurate.
+- **Row states, source-order dependent**: zebra (`nth-child(even)`) → `:hover` → `.selected` is the
+  exact textual order in `styles.css`, required so `.selected` wins over both at equal specificity
+  (CSS's own same-specificity tiebreak is source order, not rule complexity) -- `.selected` sits
+  right after the pre-existing base `:hover` rule for exactly this reason. No bright/white row state
+  anywhere; selected is a faint `--accent-bg` wash with a 3px inset `--accent` edge on the first cell
+  only.
+- **Button-label casing, a judgment call**: DESIGN.md's prose and the mockup both use lowercase
+  ("Select all", "Extract selected (N)"), but every sibling button elsewhere in this app (Save &
+  Rescan, Clear Selection before this change, Download Missing Archives, etc.) uses Title Case --
+  went with Title Case ("Select All", "Invert Selection", "Clear Selection", "Extract Selected (N)")
+  for consistency with this app's own established convention over matching the mockup literally.
+- **Verified live** (2026-07-28, real data via `npm run web`): searched "a" against the real archive
+  index (2,420 grouped results / 11,748 individual files) -- shift-click range-selected 6 rows
+  (correct row states, no bright rows); paged forward and back with selection intact (still "6 of
+  11,748 selected" on return); header checkbox selected all 43 files on a page, banner correctly
+  offered and then correctly extended selection to all 11,748; Clear Selection zeroed it back out;
+  selecting 2 items then Invert Selection correctly flipped to 11,737; expanded a group, copied an
+  archive's full path (flip-to-✓ confirmed, and `afFullArchivePath()` confirmed via direct console
+  call to build the correct backslash-joined Windows path from the real configured downloads
+  folder); "Show selected only" correctly showed just the 11,737-item filtered set across 470 pages
+  and un-toggled cleanly; changing page size to 50 preserved the selection; running a brand-new
+  search ("b") correctly reset selection to 0 while keeping the page-size preference. All of this
+  against the user's real, live archive index -- no synthetic/seeded data needed since the existing
+  index already had 12,823+ real indexed files to search against.
+
 ## Home landing page (card-based launcher, added 2026-07-28)
 
 The app opens on a **Home** page instead of dropping straight into Rebuild Collection -- one
