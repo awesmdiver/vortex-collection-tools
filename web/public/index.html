@@ -1484,12 +1484,22 @@
         <button id="afSearchBtn" class="btn btn--primary btn--small">Search</button>
       </div>
 
-      <div class="view-actions" id="afSelectionActions">
-        <button id="afSelectAllBtn" class="btn btn--ghost btn--small">Select All</button>
-        <button id="afClearSelectionBtn" class="btn btn--ghost btn--small">Clear Selection</button>
-        <span id="afSelectionCount" class="muted"></span>
+      <div class="af-selection-bar hidden" id="afSelectionActions">
+        <div class="af-selection-bar__left">
+          <button id="afSelectAllBtn" class="btn btn--ghost btn--small">Select All</button>
+          <button id="afInvertSelectionBtn" class="btn btn--ghost btn--small">Invert Selection</button>
+          <button id="afClearSelectionBtn" class="btn btn--ghost btn--small">Clear Selection</button>
+          <span id="afSelectionCount" class="muted"></span>
+        </div>
         <button id="afExtractBtn" class="btn btn--primary btn--small">Extract Selected</button>
       </div>
+      <div id="afSelectAllBanner" class="callout callout--info hidden">
+        <p>All <strong id="afSelectAllBannerPageCount"></strong> on this page are selected. <button id="afSelectAllBannerBtn" class="af-inline-link-btn">Select all <span id="afSelectAllBannerTotalCount"></span> results?</button></p>
+      </div>
+      <label class="checkbox af-show-selected-only hidden" id="afShowSelectedOnlyLabel">
+        <input type="checkbox" id="afShowSelectedOnlyInput">
+        Show selected only
+      </label>
     </div>
 
     <div id="afPaginationBar" class="view-actions hidden">
@@ -1505,7 +1515,7 @@
 
     <div class="plan-table-wrap">
       <table class="plan-table hidden" id="afResultsTable">
-        <thead><tr><th></th><th>File</th><th>Ext</th><th>Found In (Archive)</th></tr></thead>
+        <thead><tr><th class="col-check"><input type="checkbox" id="afHeaderCheckbox" title="Select all on this page"></th><th>File</th><th class="col-ext">Ext</th><th>Found In (Archive)</th></tr></thead>
         <tbody id="afResultsBody"></tbody>
       </table>
     </div>

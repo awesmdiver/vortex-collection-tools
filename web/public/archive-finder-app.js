@@ -10,15 +10,19 @@ const afState = {
   selected: new Map(), // key `${archivePath}|${internalPath}` -> item
   renderMode: 'files', // mode of the currently-rendered result set (survives tree browsing)
   currentUnits: [], // top-level rows for the active mode: file groups, or archive rows
+  currentPageUnits: [], // just the file-groups actually rendered on the current page (files mode)
+  showSelectedOnly: false,
   pageSize: 25, // 10 | 25 | 50 | 'all'
   page: 1,
   stats: null,
   extensions: ['.esp'],
   outputFolder: '',
+  downloadsDir: '', // Settings' own Vortex downloads folder -- for the copy-full-path button
 };
 
 const AF_ITEM_KEY = (archivePath, internalPath) => `${archivePath}|${internalPath}`;
 const AF_PAGE_SIZE = 25;
+let afLastClickedFileCheckbox = null; // for shift-click range select -- see afApplyShiftRange
 
 async function afApi(method, path, body) {
   const res = await fetch(path, {
@@ -83,6 +87,7 @@ async function afLoadConfig() {
     afState.configured = cfg.configured;
     afState.extensions = cfg.extensions || ['.esp'];
     afState.outputFolder = cfg.outputFolder || '';
+    afState.downloadsDir = cfg.downloads || '';
     $g('afNotConfigured').classList.toggle('hidden', cfg.configured);
     if (!cfg.configured) {
       $g('afNotConfigured').textContent = 'Set up your Vortex downloads folder and Archive Finder database folder under Settings first.';
@@ -91,6 +96,7 @@ async function afLoadConfig() {
     }
     $g('afMain').classList.remove('hidden');
     afRenderExtensionTags();
+    afUpdateSelectionCount();
   } catch (e) {
     afHandleError(e);
   }
@@ -245,6 +251,10 @@ function afShowEmptyResults(message) {
   $g('afResultsTable').classList.add('hidden');
   $g('afArchiveResultsList').classList.add('hidden');
   $g('afPaginationBar').classList.add('hidden');
+  $g('afSelectionActions').classList.add('hidden');
+  $g('afShowSelectedOnlyLabel').classList.add('hidden');
+  afHideSelectAllBanner();
+  afUpdateSelectionCount();
   const empty = $g('afNoResults');
   empty.textContent = message;
   empty.classList.remove('hidden');
@@ -255,6 +265,15 @@ async function afRunSearch() {
   const q = $g('afSearchInput').value.trim();
   $g('afTreePanel').classList.add('hidden');
   $g('afNoResults').classList.add('hidden');
+
+  // Reset selection on every NEW search -- but paging/page-size within the SAME results (handled
+  // elsewhere, never here) must keep it. See DESIGN.md's "Selectable results tables" section.
+  afState.selected.clear();
+  afState.showSelectedOnly = false;
+  $g('afShowSelectedOnlyInput').checked = false;
+  afLastClickedFileCheckbox = null;
+  afHideSelectAllBanner();
+  afUpdateSelectionCount();
 
   if (afState.stats && afState.stats.archiveCount === 0) {
     afShowEmptyResults('No data available — nothing has been scanned yet. Click Save & Rescan above first.');
@@ -308,19 +327,60 @@ function afPaginate(units) {
   return { pageItems: units.slice(start, start + size), totalPages, total };
 }
 
+// Every individual file item across the WHOLE current result set (all pages), 'files' mode only --
+// the basis for Select All/Invert/Clear (which act on all results, not just the visible page, per
+// DESIGN.md's own mockup note) and for the "select all M results" banner's own M.
+function afAllFileItems() {
+  if (afState.renderMode !== 'files') return [];
+  return afState.currentUnits.flatMap((g) => g.items);
+}
+
+// "Show selected only" reuses the existing single-item-group render path unchanged: each selected
+// file becomes its own one-item "group" (so it renders as a plain, non-expandable row showing its
+// own archive name), no re-grouping by archive -- reviewing a hand-picked selection doesn't
+// benefit from collapsing it back down.
+function afSelectedOnlyUnits() {
+  return Array.from(afState.selected.values()).map((item) => ({
+    archivePath: item.archivePath, archiveName: item.archiveName, items: [item],
+  }));
+}
+
 function afRenderCurrentPage() {
   $g('afResultsTable').classList.add('hidden');
   $g('afArchiveResultsList').classList.add('hidden');
   $g('afTreePanel').classList.add('hidden');
 
-  const { pageItems, totalPages, total } = afPaginate(afState.currentUnits);
-  if (!total) {
+  const isFiles = afState.renderMode === 'files';
+  const hasResults = afState.currentUnits.length > 0;
+  // The selection bar's Extract/Clear buttons are also how a "Display Archive" tree-view selection
+  // gets extracted (see afRenderTreeNode) -- so this only needs to hide for a genuinely empty result
+  // set (handled in afShowEmptyResults), not for archives mode itself. Select All/Invert/Clear and
+  // "Show selected only" are files-mode-only features and stay harmless no-ops in archives mode
+  // (afAllFileItems() returns [] there).
+  $g('afSelectionActions').classList.toggle('hidden', !hasResults);
+  $g('afShowSelectedOnlyLabel').classList.toggle('hidden', !isFiles || !hasResults);
+  if (!hasResults) {
     $g('afPaginationBar').classList.add('hidden');
+    afHideSelectAllBanner();
     return;
   }
-  if (afState.renderMode === 'files') afRenderFileResultsPage(pageItems);
+
+  const sourceUnits = (isFiles && afState.showSelectedOnly) ? afSelectedOnlyUnits() : afState.currentUnits;
+  const { pageItems, totalPages, total } = afPaginate(sourceUnits);
+  if (!total) {
+    // Only reachable via "Show selected only" with nothing selected -- clear the stale table instead
+    // of leaving the previous page's rows on screen with no indication why nothing changed.
+    $g('afResultsTable').classList.add('hidden');
+    $g('afResultsBody').innerHTML = '';
+    $g('afPaginationBar').classList.add('hidden');
+    afHideSelectAllBanner();
+    afUpdateSelectionCount();
+    return;
+  }
+  if (isFiles) afRenderFileResultsPage(pageItems);
   else afRenderArchiveResultsPage(pageItems);
   afUpdatePaginationBar(totalPages, total);
+  if (isFiles) afUpdateSelectionCount();
 }
 
 function afUpdatePaginationBar(totalPages, total) {
@@ -352,6 +412,7 @@ $g('afNextPageBtn').addEventListener('click', () => {
 });
 
 function afRenderFileResultsPage(groups) {
+  afState.currentPageUnits = groups;
   $g('afResultsTable').classList.remove('hidden');
   const body = $g('afResultsBody');
   body.innerHTML = '';
@@ -367,25 +428,111 @@ function afRenderFileResultsPage(groups) {
       body.appendChild(tr);
     }
   }
+  afUpdateHeaderCheckboxState();
+  afCheckSelectAllBanner();
+}
+
+// Nexus-style download filenames typically end "-<modId>-<version>-<timestamp>.<ext>" (version can
+// itself be dash-joined, e.g. "4-1-6" for v4.1.6) -- strip that tail when it parses confidently so
+// the table shows a readable mod name instead of the raw download filename. Falls back to the full
+// name for anything that doesn't match this exact shape -- this project's own naming-convention
+// code (lib/download-naming.js) already notes a newer, space-separated Vortex download format that
+// this deliberately does NOT also try to parse; better to show the full name than guess wrong on an
+// unfamiliar pattern.
+const AF_ARCHIVE_SUFFIX_RE = /^(.+?)-(\d{2,8})-(\d+(?:-\d+){0,3})-(\d{9,11})(\.[a-z0-9]+)$/i;
+function afStripArchiveSuffix(fullName) {
+  const m = fullName.match(AF_ARCHIVE_SUFFIX_RE);
+  return m ? m[1] : fullName;
+}
+
+function afFullArchivePath(archiveName) {
+  const dir = (afState.downloadsDir || '').replace(/\//g, '\\').replace(/\\+$/, '');
+  return dir ? `${dir}\\${archiveName}` : archiveName;
+}
+
+function afCopyToClipboard(text, btn) {
+  const finish = () => {
+    const old = btn.textContent;
+    btn.textContent = '✓';
+    btn.classList.add('done');
+    setTimeout(() => { btn.textContent = old; btn.classList.remove('done'); }, 1200);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(finish).catch(finish);
+  } else {
+    finish();
+  }
+}
+
+// Shared "readable name + hover-revealed copy-full-path button" cell, used by both a plain file
+// row's own archive column and a group row's archive column.
+function afBuildArchiveCell(archiveName) {
+  const displayName = afStripArchiveSuffix(archiveName);
+  const nameSpan = el('span', { class: 'af-arch-name', title: archiveName }, displayName);
+  const copyBtn = el('button', { type: 'button', class: 'af-copy-btn', title: 'Copy full path' }, '⧉');
+  copyBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    afCopyToClipboard(afFullArchivePath(archiveName), copyBtn);
+  });
+  return el('div', { class: 'af-arch-cell' }, [nameSpan, copyBtn]);
+}
+
+function afSetItemSelected(item, checked) {
+  const key = AF_ITEM_KEY(item.archivePath, item.internalPath);
+  if (checked) afState.selected.set(key, item);
+  else afState.selected.delete(key);
+}
+
+// Shift-click range select (DESIGN.md's "Selectable results tables" section) -- toggles every FILE
+// row checkbox (never group-row checkboxes) between the last individually-clicked one and the one
+// just clicked, to match `checked`. Reuses each row's own 'change' handler (via a dispatched event)
+// for the actual state update, rather than duplicating that logic here -- toCb is skipped since its
+// own 'change' handler already runs normally for the checkbox the user actually clicked.
+function afApplyShiftRange(fromCb, toCb, checked) {
+  const all = Array.from(document.querySelectorAll('#afResultsBody tr.af-file-row input[type=checkbox]'));
+  const i1 = all.indexOf(fromCb);
+  const i2 = all.indexOf(toCb);
+  if (i1 === -1 || i2 === -1) return;
+  const [lo, hi] = i1 < i2 ? [i1, i2] : [i2, i1];
+  for (let i = lo; i <= hi; i++) {
+    const cb = all[i];
+    if (cb === toCb) continue;
+    if (cb.checked !== checked) {
+      cb.checked = checked;
+      cb.dispatchEvent(new Event('change'));
+    }
+  }
 }
 
 function afBuildFileRow(row, indented) {
   const key = AF_ITEM_KEY(row.archivePath, row.internalPath);
+  const item = { archivePath: row.archivePath, internalPath: row.internalPath, fileName: row.fileName, archiveName: row.archiveName };
   const checkbox = el('input', { type: 'checkbox' });
   if (afState.selected.has(key)) checkbox.checked = true;
-  const item = { archivePath: row.archivePath, internalPath: row.internalPath, fileName: row.fileName, archiveName: row.archiveName };
-  checkbox.addEventListener('change', (e) => {
-    if (e.target.checked) afState.selected.set(key, item);
-    else afState.selected.delete(key);
-    afUpdateSelectionCount();
-    if (indented) afSyncGroupCheckbox(tr);
-  });
-  const tr = el('tr', indented ? { class: 'group-child' } : {}, [
+
+  const tr = el('tr', { class: indented ? 'af-file-row group-child' : 'af-file-row' }, [
     el('td', { class: 'col-check' }, [checkbox]),
     el('td', {}, row.fileName),
-    el('td', {}, row.extension),
-    el('td', {}, indented ? '' : row.archiveName),
+    el('td', { class: 'col-ext' }, row.extension),
+    el('td', {}, indented ? '' : [afBuildArchiveCell(row.archiveName)]),
   ]);
+  tr.dataset.key = key;
+  tr.classList.toggle('selected', checkbox.checked);
+
+  checkbox.addEventListener('click', (e) => {
+    if (e.shiftKey && afLastClickedFileCheckbox && afLastClickedFileCheckbox !== checkbox) {
+      afApplyShiftRange(afLastClickedFileCheckbox, checkbox, checkbox.checked);
+    }
+    afLastClickedFileCheckbox = checkbox;
+  });
+  checkbox.addEventListener('change', (e) => {
+    afSetItemSelected(item, e.target.checked);
+    tr.classList.toggle('selected', e.target.checked);
+    if (indented) afSyncGroupCheckbox(tr);
+    afUpdateSelectionCount();
+    afUpdateHeaderCheckboxState();
+    afCheckSelectAllBanner();
+  });
   return tr;
 }
 
@@ -397,29 +544,30 @@ function afBuildGroupRow(group) {
   groupCheckbox.checked = selectedCount === items.length;
   groupCheckbox.indeterminate = selectedCount > 0 && selectedCount < items.length;
 
-  const toggleBtn = el('button', { type: 'button', class: 'sync-list-toggle' }, `▶ ${items.length} matching files`);
+  const toggleBtn = el('button', { type: 'button', class: 'af-expander' }, `▸ ${items.length} matching files`);
 
   const tr = el('tr', { class: 'group-row' }, [
     el('td', { class: 'col-check' }, [groupCheckbox]),
     el('td', {}, [toggleBtn]),
-    el('td', {}, '—'),
-    el('td', {}, group.archiveName),
+    el('td', { class: 'col-ext' }, [el('span', { class: 'muted' }, '—')]),
+    el('td', {}, [afBuildArchiveCell(group.archiveName)]),
   ]);
+  tr.classList.toggle('selected', groupCheckbox.checked);
 
   groupCheckbox.addEventListener('change', () => {
     const checked = groupCheckbox.checked;
     groupCheckbox.indeterminate = false;
-    for (const it of items) {
-      const key = AF_ITEM_KEY(it.archivePath, it.internalPath);
-      if (checked) afState.selected.set(key, it);
-      else afState.selected.delete(key);
-    }
-    afUpdateSelectionCount();
+    for (const it of items) afSetItemSelected(it, checked);
+    tr.classList.toggle('selected', checked);
     let sib = tr.nextElementSibling;
     while (sib && sib.classList.contains('group-child')) {
       sib.querySelector('input[type=checkbox]').checked = checked;
+      sib.classList.toggle('selected', checked);
       sib = sib.nextElementSibling;
     }
+    afUpdateSelectionCount();
+    afUpdateHeaderCheckboxState();
+    afCheckSelectAllBanner();
   });
 
   toggleBtn.addEventListener('click', () => {
@@ -429,7 +577,7 @@ function afBuildGroupRow(group) {
       sib.classList.toggle('hidden');
       sib = sib.nextElementSibling;
     }
-    toggleBtn.textContent = `${wasCollapsed ? '▼' : '▶'} ${items.length} matching files`;
+    toggleBtn.textContent = `${wasCollapsed ? '▾' : '▸'} ${items.length} matching files`;
   });
 
   return tr;
@@ -450,8 +598,64 @@ function afSyncGroupCheckbox(childRow) {
     if (sib.querySelector('input[type=checkbox]').checked) checkedCount++;
     sib = sib.nextElementSibling;
   }
-  groupCheckbox.checked = total > 0 && checkedCount === total;
+  const allChecked = total > 0 && checkedCount === total;
+  groupCheckbox.checked = allChecked;
   groupCheckbox.indeterminate = checkedCount > 0 && checkedCount < total;
+  groupRow.classList.toggle('selected', allChecked);
+}
+
+// Recomputes every rendered row's checkbox/selected-class from afState.selected -- used after a
+// BULK change that doesn't go through any one row's own 'change' handler (the header checkbox,
+// Select All/Invert/Clear, and the "select all M results" banner button all touch afState.selected
+// directly for many items at once, then call this instead of dispatching N synthetic events).
+function afRefreshRowsFromState() {
+  document.querySelectorAll('#afResultsBody tr.af-file-row').forEach((tr) => {
+    const cb = tr.querySelector('input[type=checkbox]');
+    const checked = afState.selected.has(tr.dataset.key);
+    cb.checked = checked;
+    tr.classList.toggle('selected', checked);
+  });
+  document.querySelectorAll('#afResultsBody tr.group-row').forEach((tr) => {
+    afSyncGroupCheckbox(tr.nextElementSibling && tr.nextElementSibling.classList.contains('group-child') ? tr.nextElementSibling : tr);
+  });
+  afUpdateHeaderCheckboxState();
+}
+
+function afCurrentPageFlatItems() {
+  return (afState.currentPageUnits || []).flatMap((g) => g.items);
+}
+
+function afUpdateHeaderCheckboxState() {
+  const headerCb = $g('afHeaderCheckbox');
+  if (!headerCb) return;
+  const pageItems = afCurrentPageFlatItems();
+  const selectedCount = pageItems.filter((it) => afState.selected.has(AF_ITEM_KEY(it.archivePath, it.internalPath))).length;
+  headerCb.checked = pageItems.length > 0 && selectedCount === pageItems.length;
+  headerCb.indeterminate = selectedCount > 0 && selectedCount < pageItems.length;
+}
+
+// The Gmail/GitHub "Select all M results?" pattern -- the header checkbox only ever selects the
+// current PAGE; when the whole result set is bigger than that, offer to extend the selection to
+// everything. Suppressed while reviewing "Show selected only" (trivially always page-selected
+// there) and once every result is already selected (nothing left to offer).
+function afCheckSelectAllBanner() {
+  if (afState.renderMode !== 'files' || afState.showSelectedOnly) { afHideSelectAllBanner(); return; }
+  const allItems = afAllFileItems();
+  const total = allItems.length;
+  const pageItems = afCurrentPageFlatItems();
+  const pageSelectedCount = pageItems.filter((it) => afState.selected.has(AF_ITEM_KEY(it.archivePath, it.internalPath))).length;
+  const allPageSelected = pageItems.length > 0 && pageSelectedCount === pageItems.length;
+  const allAlreadySelected = total > 0 && allItems.every((it) => afState.selected.has(AF_ITEM_KEY(it.archivePath, it.internalPath)));
+  if (allPageSelected && total > pageItems.length && !allAlreadySelected) {
+    $g('afSelectAllBannerPageCount').textContent = pageItems.length;
+    $g('afSelectAllBannerTotalCount').textContent = total;
+    $g('afSelectAllBanner').classList.remove('hidden');
+  } else {
+    afHideSelectAllBanner();
+  }
+}
+function afHideSelectAllBanner() {
+  $g('afSelectAllBanner').classList.add('hidden');
 }
 
 function afRenderArchiveResultsPage(rows) {
@@ -533,19 +737,53 @@ function afCloseTree() {
 }
 
 function afUpdateSelectionCount() {
-  $g('afSelectionCount').textContent = `${afState.selected.size} selected`;
+  const n = afState.selected.size;
+  const total = afAllFileItems().length;
+  $g('afSelectionCount').textContent = total ? `${n} of ${total} selected` : (n ? `${n} selected` : '');
+  const extractBtn = $g('afExtractBtn');
+  extractBtn.textContent = `Extract Selected (${n})`;
+  extractBtn.disabled = n === 0;
 }
 
 $g('afSelectAllBtn').addEventListener('click', () => {
-  document.querySelectorAll('#afResultsBody input[type=checkbox]').forEach((cb) => {
-    cb.checked = true;
-    cb.dispatchEvent(new Event('change'));
-  });
+  for (const it of afAllFileItems()) afSetItemSelected(it, true);
+  afRefreshRowsFromState();
+  afUpdateSelectionCount();
+  afCheckSelectAllBanner();
+});
+$g('afInvertSelectionBtn').addEventListener('click', () => {
+  for (const it of afAllFileItems()) {
+    const key = AF_ITEM_KEY(it.archivePath, it.internalPath);
+    afSetItemSelected(it, !afState.selected.has(key));
+  }
+  afRefreshRowsFromState();
+  afUpdateSelectionCount();
+  afCheckSelectAllBanner();
 });
 $g('afClearSelectionBtn').addEventListener('click', () => {
   afState.selected.clear();
-  document.querySelectorAll('#afResultsBody input[type=checkbox], #afTreeBody input[type=checkbox]').forEach((cb) => { cb.checked = false; cb.indeterminate = false; });
+  document.querySelectorAll('#afTreeBody input[type=checkbox]').forEach((cb) => { cb.checked = false; cb.indeterminate = false; });
+  afRefreshRowsFromState();
   afUpdateSelectionCount();
+  afHideSelectAllBanner();
+});
+$g('afSelectAllBannerBtn').addEventListener('click', () => {
+  for (const it of afAllFileItems()) afSetItemSelected(it, true);
+  afRefreshRowsFromState();
+  afUpdateSelectionCount();
+  afHideSelectAllBanner();
+});
+$g('afHeaderCheckbox').addEventListener('change', (e) => {
+  const checked = e.target.checked;
+  for (const it of afCurrentPageFlatItems()) afSetItemSelected(it, checked);
+  afRefreshRowsFromState();
+  afUpdateSelectionCount();
+  afCheckSelectAllBanner();
+});
+$g('afShowSelectedOnlyInput').addEventListener('change', (e) => {
+  afState.showSelectedOnly = e.target.checked;
+  afState.page = 1;
+  afRenderCurrentPage();
 });
 
 // ---------- Extraction ----------

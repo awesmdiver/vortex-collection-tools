@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body>
+<title>Archive Finder results — table cleanup v3</title>
+<style>
+  :root{
+    --bg:#0d0f14; --surface:#161922; --surface-2:#1d212c; --border:#2a2f3d;
+    --text:#e6e9ef; --text-muted:#8b93a3; --accent:#5b8def; --accent-hover:#75a1f5; --accent-bg:rgba(91,141,239,0.12);
+    --success:#3ecf8e; --radius:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;font-size:15px;line-height:1.5}
+  .wrap{max-width:min(1200px,96vw);margin:0 auto;padding:24px}
+
+  .btn{font-family:inherit;font-size:13.5px;font-weight:500;padding:8px 14px;border-radius:8px;border:1px solid var(--border);
+    background:var(--surface-2);color:var(--text);cursor:pointer;white-space:nowrap}
+  .btn:hover{border-color:var(--accent)}
+  .btn--primary{background:var(--accent);border-color:var(--accent);color:#0b1220;font-weight:600}
+
+  .selbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .selbtns{display:flex;gap:8px}
+  .selcount{font-size:13px;color:var(--text-muted);min-width:96px}
+  .selcount b{color:var(--accent)}
+  .spacer{flex:1}
+
+  .pager{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;font-size:13px;color:var(--text-muted)}
+  .pager .seg{display:flex;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:3px}
+  .pager .seg button{font-family:inherit;font-size:13px;padding:4px 10px;border-radius:6px;border:none;background:transparent;color:var(--text-muted);cursor:pointer}
+  .pager .seg button.on{background:var(--accent);color:#0b1220;font-weight:600}
+  .pager .nav{font-family:inherit;font-size:13px;padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer}
+
+  .plan-table-wrap{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .plan-table{width:100%;border-collapse:collapse;font-size:13.5px}
+  .plan-table thead th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;
+    color:var(--text-muted);padding:11px 14px;background:var(--surface-2);border-bottom:1px solid var(--border);position:sticky;top:0}
+  .plan-table td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+  .plan-table tbody tr:last-child td{border-bottom:none}
+  .plan-table tbody tr:nth-child(even){background:rgba(255,255,255,.022)}
+  .plan-table tbody tr:hover{background:var(--surface-2)}
+  .plan-table tbody tr.sel{background:var(--accent-bg)}
+  .plan-table tbody tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+  .col-chk{width:34px} .col-ext{width:70px;color:var(--text-muted)}
+  input[type=checkbox]{width:15px;height:15px;accent-color:var(--accent)}
+
+  .fname{color:var(--text)}
+  .arch-cell{display:flex;align-items:center;gap:8px}
+  .mod{color:var(--text)}
+  .expander{display:inline-flex;align-items:center;gap:7px;color:var(--accent);cursor:pointer;font-weight:500}
+  .muted-dash{color:var(--text-muted)}
+  .copy{opacity:0;flex:none;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:13px;
+    padding:3px 5px;border-radius:6px;line-height:1;transition:opacity .12s,color .12s,background .12s}
+  .plan-table tbody tr:hover .copy{opacity:.75}
+  .copy:hover{opacity:1;color:var(--accent);background:var(--bg)}
+  .copy.done{opacity:1;color:var(--success)}
+  .note{margin:16px 2px 0;font-size:12.5px;color:var(--text-muted);line-height:1.7}
+  code{background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:12px}
+</style>
+
+<div class="wrap">
+  <div class="selbar">
+    <div class="selbtns">
+      <button class="btn" onclick="selAll()">Select all</button>
+      <button class="btn" onclick="invert()">Invert selection</button>
+      <button class="btn" onclick="clearSel()">Clear selection</button>
+    </div>
+    <span class="selcount" id="selcount"></span>
+    <div class="spacer"></div>
+    <button class="btn btn--primary">Extract selected</button>
+  </div>
+
+  <div class="pager">
+    <span>Show:</span>
+    <span class="seg"><button>10</button><button class="on">25</button><button>50</button><button>All</button></span>
+    <button class="nav">← Prev</button>
+    <span>Page 1 of 3 &middot; 61 results</span>
+    <button class="nav">Next →</button>
+  </div>
+
+  <div class="plan-table-wrap">
+    <table class="plan-table">
+      <thead><tr><th class="col-chk"></th><th>File</th><th class="col-ext">Ext</th><th>Found in archive</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <p class="note">
+    <strong>Select all · Invert selection · Clear selection</strong> act on <em>all</em> results (all 3 pages / 61), not just this page — so "pick 12, invert, extract the other 49" works. The <strong id="cnt-echo"></strong> count updates live so you can confirm.<br>
+    Zebra + hover + selected states layered; archive names show the mod name (hover for the full filename, hover the row → <code>⧉</code> copies the full path).
+  </p>
+</div>
+
+<script>
+  const DL = "F:\\Vortex Downloads\\skyrimse\\";
+  const TOTAL = 61;                 // real result set spans pages; mock shows 8 rows
+  const ROWS=[
+    [false,{exp:"4 matching files"},"—","COTN Falkreath Patch Collection","COTN Falkreath Patch Collection-56734-1-29-1768260027.rar"],
+    [false,{exp:"3 matching files"},"—","COTN Morthal Patch Collection","COTN Morthal Patch Collection-34228-3-7-1771708887.rar"],
+    [false,{exp:"6 matching files"},"—","Creation Club Open Helmets","Creation Club Open Helmets-70992-1-4-1705370311.7z"],
+    [false,"Dragon Races of Skyrim - LotD Patch.esp",".esp","Dragon Races of Skyrim","Dragon Races of Skyrim 159377 3.5 2026-07-02T23-58Z tSBlcEZm7.7z"],
+    [false,"DragonWarLotD.esp",".esp","Dragon War - A Dragon Overhaul","Dragon War - A Dragon Overhaul-51310-4-1-6-1749894630.7z"],
+    [true,"Taberu Animation - LotD Patch.esp",".esp","Eating Animations - Patch Collection","Eating Animations - Patch Collection-63741-2-10-1683906496.7z"],
+    [false,"LOTD-GIY_Patch.esp",".esp","Goldenglow_Is_Yours_2.2.1_oPpNfUTrn.7z","Goldenglow_Is_Yours_2.2.1_oPpNfUTrn.7z"],
+    [false,"GreenThumbSolitude - LOTD Patch.esp",".esp","Green Thumb - Lush Cities of Skyrim","Green Thumb - Lush Cities of Skyrim-149515-1-3-1771622855.7z"],
+  ];
+  document.getElementById('rows').innerHTML = ROWS.map(([chk,file,ext,mod,full])=>{
+    const fileCell = (typeof file==='object')
+      ? `<span class="expander"><span class="caret">▸</span>${file.exp}</span>` : `<span class="fname">${file}</span>`;
+    const extCell = ext==="—" ? `<span class="muted-dash">—</span>` : ext;
+    return `<tr class="${chk?'sel':''}">
+      <td><input type="checkbox" ${chk?'checked':''} onchange="onBox(this)"></td>
+      <td>${fileCell}</td>
+      <td class="col-ext">${extCell}</td>
+      <td><div class="arch-cell"><span class="mod" title="${full}">${mod}</span>
+        <button class="copy" data-path="${DL}${full}" title="Copy full path">⧉</button></div></td>
+    </tr>`;
+  }).join('');
+
+  const boxes=()=>[...document.querySelectorAll('#rows input[type=checkbox]')];
+  function paint(cb){cb.closest('tr').classList.toggle('sel',cb.checked);}
+  function refresh(){
+    const n=boxes().filter(b=>b.checked).length;
+    document.getElementById('selcount').innerHTML=`<b>${n}</b> of ${TOTAL} selected`;
+    document.getElementById('cnt-echo').textContent=`${n} of ${TOTAL} selected`;
+  }
+  window.onBox=cb=>{paint(cb);refresh();};
+  window.selAll=()=>{boxes().forEach(b=>{b.checked=true;paint(b);});refresh();};
+  window.clearSel=()=>{boxes().forEach(b=>{b.checked=false;paint(b);});refresh();};
+  window.invert=()=>{boxes().forEach(b=>{b.checked=!b.checked;paint(b);});refresh();};
+
+  document.querySelectorAll('.copy').forEach(b=>b.addEventListener('click',e=>{
+    e.stopPropagation();
+    try{ navigator.clipboard && navigator.clipboard.writeText(b.dataset.path); }catch(_){}
+    const old=b.textContent; b.textContent='✓'; b.classList.add('done');
+    setTimeout(()=>{b.textContent=old;b.classList.remove('done');},1200);
+  }));
+  refresh();
+</script>
+</body>
+</html>

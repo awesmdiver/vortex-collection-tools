@@ -217,6 +217,48 @@ big gaps, running edge-to-edge on a wide monitor). Two fixes, both reusing what'
 
 Apply the same grouping to any other tool page that has grown into a loose stack of controls.
 
+## Selectable lists — the standard select-and-act pattern (2026-07-28)
+
+**One selection pattern for every list the user checks items in and then acts on** — Archive
+Finder's results, Vortex Scrub / Clean Up (needs-review, main, cross-check), the Settings exclude
+lists, and any future one. Build it as **one reusable helper/component** so every list stays in
+sync, not copy-pasted per page. Two tiers: the **core** affordances apply to *every* such list; the
+**paginated-table extras** apply only when the list is long enough to page. Reference mockup:
+`design/vortex-results-table-mockup.html`. This supersedes and extends the older "Checkbox list +
+Select all + bulk action(s)" note under Core components.
+
+### Core — every select-and-act list
+
+- **Controls:** `Select all · Invert selection · Clear selection` on the left; the bulk/primary
+  action (`Delete all (N)` / `Extract selected (N)` / `Remove all (N)` …) **right-aligned**, set
+  apart from the selection controls. **Invert** covers "pick a few, act on the rest."
+- **Live count** — a `N of M selected` readout by the controls, and **the count on the action
+  button** so the scope of a bulk/destructive step is always visible.
+- **Shift-click range select** on the checkboxes — click one, shift-click another, toggle everything
+  between. The biggest time-saver in a long list.
+- **Row states never go bright/white** — hover `--surface-2`; a checked row a faint `--accent-bg`
+  (plus a 3px inset `--accent` edge if it's a table row). Consistent checkbox styling
+  (`accent-color: var(--accent)`).
+
+### Paginated-table extras — long lists (e.g. Archive Finder results)
+
+- Render as a standard `.plan-table` in `.plan-table-wrap` (uppercase-muted sticky header, hairline
+  dividers, rounded wrapper), with a subtle **zebra** (`nth-child(even)` ~2% white) under the
+  hover/selected states.
+- **Selection persists across pages and page-size changes** — track selected ids independent of what
+  is rendered. Losing selection on paging breaks the whole flow.
+- **Page-vs-all scope** — the header checkbox selects the *visible page*; when more results exist,
+  show a thin banner "All N on this page are selected. Select all M results?" (the Gmail/GitHub
+  pattern).
+- **Reset selection on a NEW search / new result set** — but keep it across paging within the same
+  results.
+- **"Show selected only" toggle** to review the selected set before acting.
+- **Readable names, not raw strings** — strip the Nexus-style `-<id>-<ver>-<timestamp>` tail when it
+  parses confidently (fall back to the full name); full filename in the `title` tooltip; a
+  hover-revealed **copy button (⧉)** copies the full path (Settings downloads folder + filename),
+  flipping to ✓ on copy. "N matching files" expanders are a quiet caret + accent text, not a heavy
+  button.
+
 ## Contextual error placement — put failure feedback where the user is already looking (2026-07-28)
 
 A page-level error box rendered once near the top of a long, scrolling list (e.g. Missing Masters'
