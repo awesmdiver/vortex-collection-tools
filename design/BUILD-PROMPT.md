@@ -41,10 +41,11 @@ tokens and components, so it should feel seamless with every other page.
 4. Light / dark / system keep working automatically through the CSS variables — just don't hardcode.
 5. **Pins** (see DESIGN.md's "Pinning" section) — wrap each card in `.home-card-wrap` with a sibling
    `.home-card__star` button (NOT nested inside the card `<button>` — nested buttons are invalid
-   HTML). Render a **📌 Pinned** row above the category sections from the pinned tools; hide it when
-   nothing is pinned. Persist the pins. The star is `--accent` (not a severity color), the Pinned
-   row is additive (never reorders the grid), and toggling updates the star + Pinned row in place —
-   no full re-render, no flicker.
+   HTML). **Pinning MOVES a card** into a **📌 Pinned** row above the category sections — the card
+   leaves its category section (not duplicated); hide a section that ends up empty, and hide the
+   Pinned row when nothing is pinned. Persist the pins. The star is `--accent` (not a severity
+   color). Toggling re-renders just the Pinned row + affected section — no full-page rebuild, no
+   flicker.
 
 **Then document + verify:**
 - The `DESIGN.md` section is already written. Add the engineer-facing wiring detail (the

@@ -480,8 +480,8 @@ things up top once (done) and leave the order fixed. (Session memory is fine and
 page may remember the *last-open* category across a save-reload — that doesn't move any item.)
 
 **The rail is pinnable** (`.settings-rail__pin` — a star that appears on row hover, stays visible
-once pinned). A **📌 Pinned** group sits above an **All settings** list; because pins never reorder
-the base list, this composes cleanly with the static order above. See the "Pinning" section below.
+once pinned). Pinned categories move into a **📌 Pinned** group at the top and leave the main list;
+the remaining categories keep their static order. See the "Pinning" section below.
 
 The old single "General" block was split into **Paths & Backups** (where files live) and **General**
 (how the app behaves) — that block was the bulk of the old scroll, and separating locations from
@@ -512,18 +512,23 @@ it grows — at 20–30 tools you pin the handful you use and they're always one
 - **Home** — each `.home-card` carries a star (`.home-card__star`, top-right). Pinned tools appear
   in a **📌 Pinned** row above the category sections.
 - **Settings rail** — each rail row has a star that appears on hover (`.settings-rail__pin`, and
-  stays visible once pinned). Pinned categories appear in a **📌 Pinned** group above an
-  **All settings** list.
+  stays visible once pinned). Pinned categories appear in a **📌 Pinned** group above the rest of
+  the list.
 
 Shared rules:
-- **The pinned zone is additive — it never reorders the base list/grid.** A pinned item shows in the
-  Pinned zone *and* keeps its normal spot below; the base order stays fixed (same muscle-memory
-  reasoning as the static rail order). Hide the Pinned zone entirely when nothing is pinned.
+- **Pinning MOVES an item into the Pinned zone — it does not duplicate it.** A pinned tool/category
+  leaves its category section (Home) or the main rail list (Settings) and shows *only* in the
+  **📌 Pinned** zone, so each item appears exactly once (decided 2026-07-28 — the earlier
+  additive/duplicate version read as clutter). The *remaining* items keep their static relative
+  order — pinning lifts items out, it never reorders or usage-ranks the rest. On Home, hide a
+  category section that becomes empty because all its cards are pinned. Hide the Pinned zone
+  entirely when nothing is pinned.
 - **The star uses `--accent`, not a severity color** — a filled `★` in accent when pinned, an
   outline `☆` otherwise. (A red 📌 pushpin glyph would collide with the danger severity, so 📌 is
   used only as the decorative zone label, never as the toggle.)
-- **Toggle in place — no full re-render.** Flipping a star updates that star and the Pinned zone
-  only; it must not rebuild the whole grid/rail, or the page flickers.
+- **No flicker.** Toggling a pin moves one item between the Pinned zone and its section/list, so
+  re-render just those two regions — never the whole page (the header/hero stay put), and never in a
+  way that flashes. (Confirmed clean on Home 2026-07-28.)
 - **Persist the pins** so they survive a reload. The mechanism (config vs. `localStorage`) is
   engineer-facing — decide in `TECHNICAL.md`; a personal local tool can use either.
 

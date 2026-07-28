@@ -274,7 +274,10 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted);
   font-weight: 600; margin: 30px 0 12px;
 }
-.home-section-title:first-of-type { margin-top: 0; }
+/* No :first-of-type zero-margin override -- which section/the Pinned row visually ends up first
+   changes at runtime now (pinning can hide a whole section, see the Pinning note below), so a
+   static "first" rule can't track it. Matches design/vortex-home-mockup.html, which accepts the
+   uniform top margin even on whichever one is first. */
 .home-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
 .home-card {
   background: var(--surface);
