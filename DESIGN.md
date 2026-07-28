@@ -175,6 +175,29 @@ Icon choice: picked to evoke the tool's own name/action specifically (🧽 for "
 missing. When choosing an icon for a future banner, look for one that maps to the tool's specific
 verb/name, not a generic "success"/"tool" icon.
 
+## Tool page breadcrumb — name where you are (2026-07-28)
+
+Removing the top nav (see the Home / landing page section) took away the one thing that told a user
+*which tool they're in* — the `.tool-hero__title` is a value pitch ("🔗 Skip Re-Resolving Conflicts
+You Already Fixed"), not the tool's name, and the header breadcrumb on the far right is too quiet to
+carry it alone. So every tool page now gets a small **breadcrumb eyebrow** immediately above its
+`.tool-hero__title`. Reference mockup: `design/vortex-tool-eyebrow-mockup.html`.
+
+- `.tool-eyebrow`: `font-size: 12px; font-weight: 600; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--text-muted)`, `margin: 0 0 8px`, sitting directly above
+  the tool-hero title. It reads **Home** `›` `<area>`: **Home** is `var(--accent)` and returns to
+  the Home area on click (same destination as the logo); the `›` separator and area name are muted.
+- Per page: `Home › Rebuild Collection`, `Home › Update Collection`, `Home › Rules Generator`; and
+  `Home › Reports` / `Home › Utilities` on those two areas — their sub-nav already names the specific
+  report/utility, so the eyebrow names only the area.
+
+**This intentionally reverses the older "Tool intro banner, not a redundant heading" rule above.**
+That rule was correct *while the nav existed* — the nav named the tool, so a tool-name heading was
+pure redundancy. Removing the nav removed that source of the name, so re-introducing it — as a
+compact breadcrumb, not a full `<h2>` — serves the same intent (know where you are) rather than
+contradicting it. The tool-hero title stays the value pitch; the eyebrow carries the name and the
+way back Home.
+
 ## Contextual error placement — put failure feedback where the user is already looking (2026-07-28)
 
 A page-level error box rendered once near the top of a long, scrolling list (e.g. Missing Masters'
@@ -291,6 +314,26 @@ Collection, before Reports) — Settings is the one and only exception that goes
   `Next →`, same technique as Stats Report's `.stats-period-btn` — no new CSS class needed. Reuse
   this for any future list large enough to need paging rather than a numbered-page-picker or infinite
   scroll.
+
+## Informational name lists — collapsed neutral chips (2026-07-28)
+
+A read-only list of item names where **no action is needed** (Rules Generator's "Nothing to do"
+bucket — mods added to the new collection with no relationship to anything in the original) is the
+lowest-priority content on the page. Instead of a full-width, one-name-per-row list, tuck it behind
+a **collapsed disclosure** that expands to a wrapping row of **neutral chips**.
+
+- Keep the section's **"Nothing to do" neutral badge** header visible. Under it, a `<details>`
+  styled as a quiet row — summary like `▸ <count> mods added with nothing needed — show them`, the
+  caret rotating on open. Reuses the app's existing disclosure / "+N more / show less" convention;
+  collapsed by default.
+- Expanded body: a `flex; flex-wrap: wrap; gap: 8px` of chips. Each chip: `background:
+  var(--neutral-bg); border: 1px solid var(--border); color: var(--text-muted); border-radius: 8px;
+  padding: 6px 12px; font-size: 13px` — reuses the neutral severity color the section's own badge
+  already uses, so it reads as one set. The chips are non-interactive labels.
+- The point: demote the least-important section to match its importance (it's noise), while keeping
+  it tidy and pleasant when opened ("pretty noise"). Reuse this treatment for any future "here's the
+  set, nothing to do about it" list. Reference mockup: `design/vortex-nothing-todo-mockup.html`
+  (the "Chips, collapsed" treatment).
 
 ## External links open in a separate window, not a tab
 
@@ -458,11 +501,16 @@ Server actions sit in a right-aligned row just below the banner (above the two p
 2026-07-28 because they're used infrequently and were cluttering the space above the rail's colorful
 icons.
 
-**One `<form>`, panes shown/hidden — not separate forms.** Every field stays in the DOM at all
-times; switching category only toggles which pane is visible. The single **Save Settings** button
-still writes the whole form at once, and edits made in one category are never lost by switching to
-another before saving. This is the load-bearing implementation rule — get it wrong and switching
-categories silently drops unsaved changes.
+**One *logical* form (not a literal `<form>` element), panes shown/hidden — not separate forms.**
+Every field stays in the DOM at all times; switching category only toggles which pane is visible.
+The single **Save Settings** button gathers every field via JS and writes them all at once, so
+edits made in one category are never lost by switching to another before saving. This is the
+load-bearing rule — get it wrong and switching categories silently drops unsaved changes.
+**Do not wrap the fields in an actual `<form>` element** (there isn't one, deliberately): inside a
+form, every button (Save, Browse, Delete, Restore, Add…) defaults to `type="submit"`, so pressing
+Enter in a text field could fire the wrong button. The existing JS Save handler already does the
+all-at-once write — keep it. Anti-autofill is handled with per-input `autocomplete="off"` (+
+`data-lpignore`/`data-1p-ignore`/`data-form-type="other"` on the API-key field), not a form.
 
 **Category rail — `.settings-rail` / `.settings-rail__item`.** A vertical list of the settings
 categories, sticky under the header. Each item is the tool's emoji + label; the active one uses

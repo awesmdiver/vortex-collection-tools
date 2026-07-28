@@ -182,6 +182,19 @@ window.navigateToArea = navigateToArea;
 document.getElementById('appHeaderTitle').addEventListener('click', () => navigateToArea('home'));
 document.getElementById('nav-settings').addEventListener('click', () => navigateToArea('settings'));
 
+// Tool page breadcrumb eyebrow's "Home" link (DESIGN.md's "Tool page breadcrumb" section) -- one
+// delegated listener covers every .tool-eyebrow__home across every tool page's own tool-hero,
+// same destination as the header logo/title. preventDefault since these are real <a href="#">
+// elements (matching design/vortex-tool-eyebrow-mockup.html) purely for their link-like appearance,
+// not real navigation.
+document.addEventListener('click', (e) => {
+  const home = e.target.closest('.tool-eyebrow__home');
+  if (home) {
+    e.preventDefault();
+    navigateToArea('home');
+  }
+});
+
 // Pinning (DESIGN.md's "Pinning" section) -- a star per Home card. Pinning MOVES a card's own real
 // DOM node into a dedicated Pinned row above the category sections -- it does NOT duplicate it
 // (confirmed 2026-07-28: the earlier additive/clone version read as clutter). A section that loses
