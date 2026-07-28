@@ -137,21 +137,19 @@
       </button>
       <button class="home-card__star ${on?'on':''}" data-fav="${c.name}" title="${on?'Unpin':'Pin to top'}" onclick="toggleFav('${c.name}')">${on?'★':'☆'}</button>
     </div>`;};
-  function renderPinned(){
-    const p=ALL.filter(c=>FAV.has(c.name));
-    document.getElementById('pinned').innerHTML=p.length
-      ? `<div class="home-section-title">📌 Pinned</div><div class="home-grid">${p.map(cardHTML).join('')}</div>` : '';
+  const pinnedEl=document.getElementById('pinned'),sectionsEl=document.getElementById('sections');
+  function render(){
+    const favs=ALL.filter(c=>FAV.has(c.name));
+    pinnedEl.innerHTML=favs.length
+      ? `<div class="home-section-title">📌 Pinned</div><div class="home-grid">${favs.map(cardHTML).join('')}</div>` : '';
+    sectionsEl.innerHTML=SECTIONS.map(s=>{
+      const cards=s.cards.filter(c=>!FAV.has(c.name));       // pinned tools move up, not duplicated
+      if(!cards.length) return '';                            // hide a section that's fully pinned
+      return `<div class="home-section-title">${s.label}</div><div class="home-grid">${cards.map(cardHTML).join('')}</div>`;
+    }).join('');
   }
-  window.toggleFav=n=>{
-    FAV.has(n)?FAV.delete(n):FAV.add(n);const on=FAV.has(n);
-    document.querySelectorAll(`.home-card__star[data-fav="${CSS.escape(n)}"]`).forEach(b=>{
-      b.classList.toggle('on',on);b.textContent=on?'★':'☆';b.title=on?'Unpin':'Pin to top';});
-    renderPinned();toast(on?'Pinned '+n:'Unpinned '+n);
-  };
-  document.getElementById('sections').innerHTML=SECTIONS.map(s=>`
-    <div class="home-section-title">${s.label}</div>
-    <div class="home-grid">${s.cards.map(cardHTML).join('')}</div>`).join('');
-  renderPinned();
+  window.toggleFav=n=>{FAV.has(n)?FAV.delete(n):FAV.add(n);render();toast(FAV.has(n)?'Pinned '+n:'Unpinned '+n);};
+  render();
 
   const root=document.documentElement,tb=document.getElementById('themeBtn');
   const isDark=()=>!(root.getAttribute('data-theme')==='light'||(!root.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme:light)').matches));

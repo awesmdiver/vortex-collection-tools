@@ -182,10 +182,11 @@ window.navigateToArea = navigateToArea;
 document.getElementById('appHeaderTitle').addEventListener('click', () => navigateToArea('home'));
 document.getElementById('nav-settings').addEventListener('click', () => navigateToArea('settings'));
 
-// Pinning (DESIGN.md's "Pinning" section) -- a star per Home card, additive: pinned tools ALSO
-// surface in a dedicated Pinned row above the category sections, but never move or disappear from
-// their normal spot below. Persisted to localStorage (same mechanism as the theme preference above)
-// -- purely a personal display preference, no server round-trip needed.
+// Pinning (DESIGN.md's "Pinning" section) -- a star per Home card. Pinning MOVES a card's own real
+// DOM node into a dedicated Pinned row above the category sections -- it does NOT duplicate it
+// (confirmed 2026-07-28: the earlier additive/clone version read as clutter). A section that loses
+// every one of its cards to pinning hides entirely. Persisted to localStorage (same mechanism as
+// the theme preference above) -- purely a personal display preference, no server round-trip needed.
 const PINNED_TOOLS_STORAGE_KEY = 'pinnedTools';
 function loadPinnedTools() {
   try {
@@ -206,9 +207,94 @@ function setStarVisual(star, on) {
   star.title = on ? 'Unpin' : 'Pin to top';
 }
 
-// Wires ONE card-wrap's card-click and star-click behavior -- called once per real card at load,
-// and again for each clone rendered into the Pinned row (cloneNode never carries listeners along).
-function wireHomeCardWrap(wrap) {
+// The one fixed order every grid (a section's own, or the Pinned row's) is kept in -- pinning/
+// unpinning only ever LIFTS a card out or drops it back in; it never reorders whichever cards stay
+// put. Reused for both directions (into Pinned, back into a section) since a section's own order is
+// already just a sub-sequence of this same list.
+const HOME_CANONICAL_ORDER = [
+  'rebuild', 'sync', 'rules-generator',
+  'stats', 'workthrough', 'updatecompare', 'rulesgen',
+  'missingmasters', 'scrub', 'archivefinder',
+];
+function pinKeyOf(wrap) {
+  return wrap.querySelector('.home-card__star').dataset.pinKey;
+}
+function insertInCanonicalOrder(grid, wrap) {
+  const myIndex = HOME_CANONICAL_ORDER.indexOf(pinKeyOf(wrap));
+  const nextSibling = Array.from(grid.children).find(
+    (sib) => HOME_CANONICAL_ORDER.indexOf(pinKeyOf(sib)) > myIndex
+  );
+  // appendChild/insertBefore on a node already in the document MOVES it -- this is what actually
+  // makes pinning "move, not duplicate": no cloneNode, no re-wiring, the exact same node (and its
+  // listeners) just changes parent.
+  if (nextSibling) grid.insertBefore(wrap, nextSibling);
+  else grid.appendChild(wrap);
+}
+
+function pinnedRowGrid() {
+  return document.querySelector('#homePinnedRow .home-grid');
+}
+// Creates the "📌 Pinned" title + grid the first time something gets pinned; returns the (possibly
+// just-created) grid to insert into.
+function ensurePinnedRowGrid() {
+  let grid = pinnedRowGrid();
+  if (grid) return grid;
+  const row = document.getElementById('homePinnedRow');
+  const title = document.createElement('div');
+  title.className = 'home-section-title';
+  title.textContent = '📌 Pinned';
+  grid = document.createElement('div');
+  grid.className = 'home-grid';
+  row.appendChild(title);
+  row.appendChild(grid);
+  return grid;
+}
+// Tears the Pinned row back down to nothing once the last pinned card leaves it -- keeps "hide the
+// Pinned zone entirely when nothing is pinned" true without a leftover empty title+grid in the DOM.
+function clearPinnedRowIfEmpty() {
+  const grid = pinnedRowGrid();
+  if (grid && grid.children.length === 0) document.getElementById('homePinnedRow').innerHTML = '';
+}
+
+function homeSectionElFor(wrap) {
+  return document.getElementById(wrap.dataset.section);
+}
+// A section hides entirely once every one of its cards has been pinned away, and un-hides the
+// moment any card returns to it -- checked fresh off the grid's own child count each time, not a
+// separately-tracked counter that could drift.
+function refreshSectionVisibility(sectionEl) {
+  const grid = sectionEl.querySelector('.home-grid');
+  sectionEl.classList.toggle('hidden', grid.children.length === 0);
+}
+
+// Moves ONE card to reflect `pinned` -- used both for a live star click and for applying persisted
+// pins at load. Touches only the Pinned row and the one section this card belongs to, never any
+// other section and never the whole page (DESIGN.md's explicit no-flicker rule).
+function applyPinState(key, pinned) {
+  const star = document.querySelector(`.home-card__star[data-pin-key="${CSS.escape(key)}"]`);
+  if (!star) return;
+  const wrap = star.closest('.home-card-wrap');
+  const sectionEl = homeSectionElFor(wrap);
+  setStarVisual(star, pinned);
+  if (pinned) {
+    insertInCanonicalOrder(ensurePinnedRowGrid(), wrap);
+  } else {
+    insertInCanonicalOrder(sectionEl.querySelector('.home-grid'), wrap);
+  }
+  refreshSectionVisibility(sectionEl);
+  clearPinnedRowIfEmpty();
+}
+
+function toggleFavTool(key) {
+  const pinning = !pinnedTools.has(key);
+  if (pinning) pinnedTools.add(key); else pinnedTools.delete(key);
+  savePinnedTools();
+  applyPinState(key, pinning);
+}
+
+// Each real card only ever needs wiring ONCE, here at load -- pinning now MOVES this same node
+// around rather than cloning it, so there's never a second copy that would need its own listeners.
+document.querySelectorAll('#homeCategorySections .home-card-wrap').forEach((wrap) => {
   const card = wrap.querySelector('.home-card');
   const star = wrap.querySelector('.home-card__star');
   card.addEventListener('click', () => navigateToArea(card.dataset.area, card.dataset.sub));
@@ -216,51 +302,10 @@ function wireHomeCardWrap(wrap) {
     e.stopPropagation(); // don't also trigger the card's own navigate-away click underneath it
     toggleFavTool(star.dataset.pinKey);
   });
-}
-
-// Toggle in place, no full re-render (DESIGN.md's explicit "must not flicker" rule): updates every
-// star sharing this key (the original card's star AND its Pinned-row clone's star, when pinned) plus
-// re-renders just the Pinned row -- never rebuilds the category grids themselves.
-function toggleFavTool(key) {
-  if (pinnedTools.has(key)) pinnedTools.delete(key); else pinnedTools.add(key);
-  savePinnedTools();
-  const on = pinnedTools.has(key);
-  document.querySelectorAll(`.home-card__star[data-pin-key="${CSS.escape(key)}"]`).forEach((star) => setStarVisual(star, on));
-  renderPinnedRow();
-}
-
-// The Pinned row is built by CLONING each pinned tool's real wrap node from the category sections
-// below (not a second copy of card data to keep in sync) -- hidden entirely when nothing is pinned.
-function renderPinnedRow() {
-  const row = document.getElementById('homePinnedRow');
-  if (!row) return;
-  const pinnedWraps = Array.from(document.querySelectorAll('#homeCategorySections .home-card-wrap'))
-    .filter((wrap) => pinnedTools.has(wrap.querySelector('.home-card__star').dataset.pinKey));
-  if (!pinnedWraps.length) {
-    row.innerHTML = '';
-    return;
-  }
-  const title = document.createElement('div');
-  title.className = 'home-section-title';
-  title.textContent = '📌 Pinned';
-  const grid = document.createElement('div');
-  grid.className = 'home-grid';
-  for (const wrap of pinnedWraps) {
-    const clone = wrap.cloneNode(true);
-    wireHomeCardWrap(clone);
-    grid.appendChild(clone);
-  }
-  row.innerHTML = '';
-  row.appendChild(title);
-  row.appendChild(grid);
-}
-
-document.querySelectorAll('#homeCategorySections .home-card-wrap').forEach((wrap) => {
-  wireHomeCardWrap(wrap);
-  const star = wrap.querySelector('.home-card__star');
-  setStarVisual(star, pinnedTools.has(star.dataset.pinKey));
 });
-renderPinnedRow();
+// Apply any pins already persisted from a previous visit -- moves each one into the Pinned row and
+// hides its section if that empties it out, all before the very first paint.
+for (const key of pinnedTools) applyPinState(key, true);
 
 // Maps the URL's own ?reports= spelling to stats-app.js's internal sub-tab id (REPORTS_SUB_TABS) --
 // 'work-through' (hyphenated, readable in a URL) becomes 'workthrough' (no separator, matching this
