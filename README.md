@@ -93,8 +93,14 @@ just clicking that window's **X** button — all three shut it down the same cle
 ## ⚠️ Important Notes
 
 > [!WARNING]
-> Vortex must be fully closed before running either tool — both flows check for this and refuse
-> to continue otherwise.
+> Vortex needs to be fully closed for anything that reads or writes its live database: starting an
+> actual rebuild or update, Rules Generator's **Apply to Vortex** step, Vortex Scrub's scan, and
+> Missing Masters' **Rebuild This Mod**. If Vortex is still open when you try one of these, the app
+> tells you right there and won't let you continue until you close it — you don't need to remember
+> this list yourself.
+>
+> Everything else works fine with Vortex open: browsing Reports, Missing Masters' scan, editing
+> Vortex Scrub's exclude list, and all of Archive Finder.
 
 > [!NOTE]
 > After you rebuild a collection, Vortex will likely show an **"External Changes"** prompt the next
