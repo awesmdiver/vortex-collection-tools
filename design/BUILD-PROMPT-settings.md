@@ -43,7 +43,8 @@ any copy. Open `design/vortex-settings-mockup.html` and match it.
    config last**: Rebuild Collection, Update Collection, Missing Masters, Vortex Scrub, Archive
    Finder, Paths & Backups, General. This order is **static** (hand-picked, never auto-reordered by
    usage). Move the Save Settings button into a sticky `.settings-save-bar` at the bottom of the
-   content pane; leave Restart / Stop Server in the header row.
+   content pane; put Restart / Stop Server in a right-aligned row between the tool-hero banner and
+   the panes (infrequent actions, kept clear of the rail's icons).
 3. **web/public/styles.css** — add `.settings-layout`, `.settings-rail`, `.settings-rail__item`
    (+ active + `__icon`), `.settings-rail__row`, `.settings-rail__pin`, `.settings-rail__group`,
    `.settings-rail__divider`, `.settings-pane`, `.settings-save-bar`, matching the mockup.

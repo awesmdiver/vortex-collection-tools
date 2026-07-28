@@ -408,7 +408,13 @@ uppercase, letter-spaced, muted).
 **New pattern — `.home-card` / `.home-grid` / `.home-section-title`.** Nothing existing covered a
 clickable tool-launcher card, so this is added here as the shared convention. Built entirely from
 existing tokens and the `.settings-group` recipe — no new colors:
-- `.home-grid`: `repeat(auto-fill, minmax(280px, 1fr))`, `gap: 16px`.
+- `.home-grid`: `repeat(auto-fill, minmax(280px, 1fr))`, `gap: 16px`. Cap the Home content to
+  ~1280px, centered — the shared `.app-main` is deliberately wide (1800px, for data tables), which
+  leaves the cards clustered left on a big monitor; scope the cap to Home only, don't touch
+  `.app-main` (2026-07-28).
+- **Equal-height cards.** `.home-card-wrap` and `.home-card` are `height: 100%`, so cards in a row
+  match height and — with `.home-card__desc { flex: 1 }` — the "Open →" link pins to the bottom
+  (2026-07-28).
 - `.home-card`: the `.settings-group` surface / border / `--radius` / padding, made clickable —
   hover lifts it (`translateY(-2px)`) and switches the border to `--accent` with `--shadow` (the
   same accent-on-hover language as `.btn--ghost` and the old `.nav-tab`). Use a real `<button>` (or
@@ -447,8 +453,10 @@ short and scannable instead of a single long scroll. Reference mockup:
 
 **The page header is a `.tool-hero` intro banner**, not a plain heading — an emoji-led title (⚙️)
 plus a casual "What & Why" body, exactly like every tool page (see the "Tool intro banner" section
-above). It replaces the old `<h1>Settings</h1>` + one-line subtitle; the Restart Server / Stop
-Server actions sit to its right in the `.settings-header-row`.
+above). It replaces the old `<h1>Settings</h1>` + one-line subtitle. The Restart Server / Stop
+Server actions sit in a right-aligned row just below the banner (above the two panes) — moved there
+2026-07-28 because they're used infrequently and were cluttering the space above the rail's colorful
+icons.
 
 **One `<form>`, panes shown/hidden — not separate forms.** Every field stays in the DOM at all
 times; switching category only toggles which pane is visible. The single **Save Settings** button
@@ -461,7 +469,9 @@ categories, sticky under the header. Each item is the tool's emoji + label; the 
 `--accent-bg` + `--accent` text (the same accent-selection language used everywhere else —
 deliberately NOT a severity color, which would imply meaning here). A real `<button>` per item,
 keyboard-focusable, built from existing tokens. On narrow widths (<820px) the rail wraps to a
-horizontal row above the content.
+horizontal row above the content. The content column (`#settingsPanes`) is capped to ~960px so
+callouts and hints wrap at a comfortable reading width instead of running edge-to-edge on a wide
+monitor (2026-07-28).
 
 **Categories and order — tool sections first, set-once config last:**
 1. ⚡ Rebuild Collection
@@ -490,8 +500,8 @@ database backups under Paths & Backups), so it isn't a rail item.
 
 **Sticky Save bar — `.settings-save-bar`.** The Save Settings primary button pins to the bottom of
 the content pane, always in reach regardless of which category is open; a muted "All changes saved."
-hint sits to its left after a save. The Restart Server / Stop Server actions stay in the
-`.settings-header-row` at the top, unchanged.
+hint sits to its left after a save. The Restart Server / Stop Server actions sit in a right-aligned
+row between the banner and the panes (see the header note above).
 
 **Components unchanged; section copy refreshed.** Every field reuses the existing `.settings-group`
 card, `.settings-section-title` sub-labels, `.field-group` / `.field-label` / `.input` / `.select`

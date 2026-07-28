@@ -274,6 +274,11 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    section). Built entirely from existing tokens/recipes, no new colors: .home-card is the
    .settings-group card recipe made clickable; .home-section-title reuses the exact same
    uppercase/letter-spacing/muted label treatment as .settings-group .settings-section-title above. */
+/* Scoped to Home only -- the shared .app-main is deliberately wide (1800px, for data tables
+   elsewhere in the app), which leaves Home's cards clustered on the left on a big monitor. The ID
+   selector here overrides that shared rule without touching it, so every other tool area keeps its
+   full width (2026-07-28). */
+#area-home .app-main { max-width: min(1280px, 96vw); }
 .home-section-title {
   font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted);
   font-weight: 600; margin: 30px 0 12px;
@@ -311,13 +316,18 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 }
 .home-card:hover .home-card__open { gap: 8px; }
 /* Cards must fill their wrapper now that the grid item is .home-card-wrap, not .home-card itself
-   (see below) -- without this a card would only be as wide as its own content. */
-.home-card { width: 100%; }
+   (see below) -- without this a card would only be as wide as its own content. height: 100% makes
+   cards in the same grid row match height (a CSS grid row already stretches to its tallest item by
+   default; this is what makes the shorter cards actually fill that height instead of leaving
+   whitespace below) -- combined with the flex column above + .home-card__desc's flex: 1, "Open →"
+   pins to the bottom of every card regardless of description length (2026-07-28). */
+.home-card { width: 100%; height: 100%; }
 
 /* Pinning (see DESIGN.md's "Pinning" section) -- a star SIBLING to the card button, not nested
    inside it (nested buttons are invalid HTML and unclickable in practice). .home-card-wrap is the
-   actual grid item now; position: relative lets the star corner-pin over the card beneath it. */
-.home-card-wrap { position: relative; }
+   actual grid item now; position: relative lets the star corner-pin over the card beneath it;
+   height: 100% lets .home-card's own height: 100% above actually reach the full grid-row height. */
+.home-card-wrap { position: relative; height: 100%; }
 .home-card__star {
   position: absolute; top: 11px; right: 11px; z-index: 2;
   width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
@@ -637,6 +647,10 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    sticky category rail on the left, one category's .settings-group card(s) on the right, replacing
    the old single long scroll of every card stacked together. */
 .settings-layout { display: grid; grid-template-columns: 224px 1fr; gap: 24px; align-items: start; }
+/* Caps the content column's own reading width (independent of the rail, which stays as-is) so
+   callouts/hints wrap at a comfortable width instead of running edge-to-edge on a wide monitor --
+   the two-pane layout's own right column can otherwise stretch past 1000px+ (2026-07-28). */
+#settingsPanes { max-width: 960px; }
 .settings-rail { position: sticky; top: 92px; display: flex; flex-direction: column; gap: 3px; }
 .settings-rail__row { position: relative; }
 .settings-rail__item {

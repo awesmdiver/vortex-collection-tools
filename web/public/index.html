@@ -727,7 +727,7 @@
       <div class="field-group">
         <label class="field-label" for="settingsBackupRootInput">Backup root folder <span class="muted">(optional, only needed if backups are turned on below)</span></label>
         <div class="path-input-row">
-          <input id="settingsBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Mod Extraction\Vortex-Rebuild-Backups">
+          <input id="settingsBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Mod Extraction\Vortex-Rebuild-Backups" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsBackupRootInput">Browse&hellip;</button>
         </div>
       </div>
@@ -776,7 +776,7 @@
       <div class="field-group">
         <label class="field-label" for="settingsSyncBackupRootInput">Backups folder <span class="field-required">(required)</span></label>
         <div class="path-input-row">
-          <input id="settingsSyncBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\collection-sync">
+          <input id="settingsSyncBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\collection-sync" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsSyncBackupRootInput">Browse&hellip;</button>
         </div>
       </div>
@@ -801,7 +801,7 @@
       <div class="field-group">
         <label class="field-label" for="settingsSkyrimDataDirInput">The Data directory is located directly inside Skyrim's root installation folder (for example, <code>C:\Program Files (x86)\Steam\steamapps\common\Skyrim Special Edition\Data</code>) <span class="field-required">(required)</span></label>
         <div class="path-input-row">
-          <input id="settingsSkyrimDataDirInput" class="input input--wide" type="text" placeholder="e.g. E:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data">
+          <input id="settingsSkyrimDataDirInput" class="input input--wide" type="text" placeholder="e.g. E:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsSkyrimDataDirInput">Browse&hellip;</button>
         </div>
       </div>
@@ -810,7 +810,7 @@
       <div class="field-group">
         <label class="field-label" for="settingsPluginsListDirInput">The folder containing your Plugins.txt <span class="field-required">(required)</span></label>
         <div class="path-input-row">
-          <input id="settingsPluginsListDirInput" class="input input--wide" type="text" placeholder="e.g. C:\Users\YourUsername\AppData\Local\Skyrim Special Edition">
+          <input id="settingsPluginsListDirInput" class="input input--wide" type="text" placeholder="e.g. C:\Users\YourUsername\AppData\Local\Skyrim Special Edition" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsPluginsListDirInput">Browse&hellip;</button>
         </div>
         <p class="muted">Located in your Windows AppData folder (not the game folder). If you're not sure where that is, it's usually <code>C:\Users\YourUsername\AppData\Local\Skyrim Special Edition</code>.</p>
@@ -820,7 +820,7 @@
       <div class="field-group">
         <label class="field-label" for="settingsDummyMastersOutputDirInput">Where a created dummy master gets written <span class="field-required">(required)</span></label>
         <div class="path-input-row">
-          <input id="settingsDummyMastersOutputDirInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\Wyre Output">
+          <input id="settingsDummyMastersOutputDirInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\Wyre Output" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsDummyMastersOutputDirInput">Browse&hellip;</button>
         </div>
         <p class="muted">Pick a dedicated folder for this -- not your live Data or SKSE folder. Somewhere inside your staging folder works great, the same way you'd set up a DynDOLOD or BodySlide output.</p>
@@ -840,7 +840,7 @@
       <div class="field-group">
         <label class="field-label" for="settingsCleanupExcludeListDirInput">Folder to store the exclude list in <span class="field-required">(required)</span></label>
         <div class="path-input-row">
-          <input id="settingsCleanupExcludeListDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\clean-up-exclude-list">
+          <input id="settingsCleanupExcludeListDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\clean-up-exclude-list" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsCleanupExcludeListDirInput">Browse&hellip;</button>
         </div>
       </div>
@@ -860,7 +860,7 @@
         </div>
       </details>
       <div class="path-input-row" style="margin-top: 12px;">
-        <input id="settingsCleanupAddStagingInput" class="input input--wide" type="text" placeholder="Exact staging folder name">
+        <input id="settingsCleanupAddStagingInput" class="input input--wide" type="text" placeholder="Exact staging folder name" autocomplete="off">
         <button id="settingsCleanupAddStagingBtn" class="btn btn--ghost btn--small">Add</button>
       </div>
 
@@ -878,7 +878,7 @@
         </div>
       </details>
       <div class="path-input-row" style="margin-top: 12px;">
-        <input id="settingsCleanupAddArchiveInput" class="input input--wide" type="text" placeholder="Exact archive file name (extension optional -- matched either way)">
+        <input id="settingsCleanupAddArchiveInput" class="input input--wide" type="text" placeholder="Exact archive file name (extension optional -- matched either way)" autocomplete="off">
         <button id="settingsCleanupAddArchiveBtn" class="btn btn--ghost btn--small">Add</button>
       </div>
       <span id="settingsCleanupStatus" class="muted"></span>
@@ -899,7 +899,7 @@
       <div class="field-group">
         <label class="field-label" for="settingsArchiveFinderDbDirInput">Where the archive search index is stored <span class="field-required">(required)</span></label>
         <div class="path-input-row">
-          <input id="settingsArchiveFinderDbDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Downloads\archive-finder-index">
+          <input id="settingsArchiveFinderDbDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Downloads\archive-finder-index" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsArchiveFinderDbDirInput">Browse&hellip;</button>
         </div>
         <p class="muted">A small index file, kept separate from your downloads -- safe to put anywhere, and safe to delete anytime to force a fresh scan.</p>
@@ -909,7 +909,7 @@
       <div class="field-group">
         <label class="field-label" for="settingsArchiveFinderOutputDirInput">Where extracted files go by default <span class="muted">(optional -- you can also pick a folder each time you extract)</span></label>
         <div class="path-input-row">
-          <input id="settingsArchiveFinderOutputDirInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\My Patch Collection">
+          <input id="settingsArchiveFinderOutputDirInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\My Patch Collection" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsArchiveFinderOutputDirInput">Browse&hellip;</button>
         </div>
       </div>
@@ -929,21 +929,21 @@
       <div class="field-group">
         <label class="field-label" for="settingsStagingInput">Vortex staging folder <span class="field-required">(required)</span></label>
         <div class="path-input-row">
-          <input id="settingsStagingInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse">
+          <input id="settingsStagingInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsStagingInput">Browse&hellip;</button>
         </div>
       </div>
       <div class="field-group">
         <label class="field-label" for="settingsDownloadsInput">Vortex downloads folder <span class="field-required">(required)</span></label>
         <div class="path-input-row">
-          <input id="settingsDownloadsInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Downloads\skyrimse">
+          <input id="settingsDownloadsInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Downloads\skyrimse" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsDownloadsInput">Browse&hellip;</button>
         </div>
       </div>
       <div class="field-group">
         <label class="field-label" for="settingsStateInput">Vortex database path (leave blank to auto-detect)</label>
         <div class="path-input-row">
-          <input id="settingsStateInput" class="input input--wide" type="text" placeholder="auto-detected under %APPDATA%\Vortex\state.v2">
+          <input id="settingsStateInput" class="input input--wide" type="text" placeholder="auto-detected under %APPDATA%\Vortex\state.v2" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsStateInput">Browse&hellip;</button>
         </div>
       </div>
@@ -971,7 +971,7 @@
       <div class="field-group">
         <label class="field-label" for="settingsLogsDirInput">Log file location</label>
         <div class="path-input-row">
-          <input id="settingsLogsDirInput" class="input input--wide" type="text" placeholder="Default: this app's own logs folder">
+          <input id="settingsLogsDirInput" class="input input--wide" type="text" placeholder="Default: this app's own logs folder" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsLogsDirInput">Browse&hellip;</button>
         </div>
       </div>
@@ -1010,7 +1010,7 @@
         </div>
         <div class="field-group">
           <label class="field-label" for="settingsServerHostInput">Host / IP address to bind to</label>
-          <input id="settingsServerHostInput" class="input input--small" type="text" placeholder="127.0.0.1">
+          <input id="settingsServerHostInput" class="input input--small" type="text" placeholder="127.0.0.1" autocomplete="off">
         </div>
       </div>
       <div class="callout callout--warning" style="margin-top: 14px;">
@@ -1028,7 +1028,7 @@
       <p class="muted">Grab your personal API key from <a href="https://www.nexusmods.com/settings/api-keys" target="_blank" rel="noopener">nexusmods.com/settings/api-keys</a> -- scroll to the bottom of the page, under "Personal API Key".</p>
       <div class="field-group">
         <label class="field-label" for="settingsNexusKeyInput">API key</label>
-        <input id="settingsNexusKeyInput" class="input input--wide" type="password" placeholder="paste your personal API key" autocomplete="off">
+        <input id="settingsNexusKeyInput" class="input input--wide" type="password" placeholder="paste your personal API key" autocomplete="new-password" data-lpignore="true" data-1p-ignore data-bwignore="true" data-form-type="other">
         <span id="settingsNexusKeyStatus" class="muted"></span>
       </div>
       <p class="muted">Stored as plain text in <code>config.json</code>, not encrypted -- anyone with access to this computer could read it directly from that file.</p>

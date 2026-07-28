@@ -57,6 +57,7 @@
 
   /* Two-pane settings */
   .settings-layout{display:grid;grid-template-columns:224px 1fr;gap:24px;align-items:start}
+  #panes{max-width:960px}
   .settings-rail{position:sticky;top:92px;display:flex;flex-direction:column;gap:3px}
   .settings-rail__row{position:relative}
   .settings-rail__item{display:flex;align-items:center;gap:11px;padding:9px 34px 9px 12px;border-radius:8px;border:1px solid transparent;
@@ -123,15 +124,13 @@
 </header>
 
 <main class="app-main">
-  <div class="settings-header-row" style="align-items:flex-start">
-    <div class="tool-hero">
-      <h2 class="tool-hero__title">⚙️ Set It Up Once, Use It Everywhere</h2>
-      <p class="tool-hero__body">Set your Vortex paths and preferences here just once, and every tool picks them up automatically! Designed to keep all your setup in one place, this saves you from entering the same folders and options over and over&mdash;so you can spend your time on the actual work, not the configuration.</p>
-    </div>
-    <div class="settings-header-actions">
-      <button class="btn btn--ghost">Restart Server</button>
-      <button class="btn btn--ghost">Stop Server</button>
-    </div>
+  <div class="tool-hero">
+    <h2 class="tool-hero__title">⚙️ Set It Up Once, Use It Everywhere</h2>
+    <p class="tool-hero__body">Set your Vortex paths and preferences here just once, and every tool picks them up automatically! Designed to keep all your setup in one place, this saves you from entering the same folders and options over and over&mdash;so you can spend your time on the actual work, not the configuration.</p>
+  </div>
+  <div class="settings-header-actions" style="justify-content:flex-end;margin:0 0 14px">
+    <button class="btn btn--ghost">Restart Server</button>
+    <button class="btn btn--ghost">Stop Server</button>
   </div>
 
   <div class="settings-layout">
