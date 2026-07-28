@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body>
+<title>Vortex Collection Tools — Settings mockup</title>
+<style>
+  :root{
+    --bg:#0d0f14; --surface:#161922; --surface-2:#1d212c; --border:#2a2f3d;
+    --text:#e6e9ef; --text-muted:#8b93a3;
+    --accent:#5b8def; --accent-hover:#75a1f5; --accent-bg:rgba(91,141,239,0.12);
+    --warning:#f5b942; --warning-bg:rgba(245,185,66,0.10); --danger:#f0546b;
+    --radius:10px; --shadow:0 4px 24px rgba(0,0,0,0.35);
+  }
+  :root[data-theme="light"]{
+    --bg:#f5f6f8; --surface:#ffffff; --surface-2:#eef0f4; --border:#d8dce3;
+    --text:#1a1d24; --text-muted:#5b6472; --accent:#3568c9; --accent-hover:#4a7bd6;
+    --accent-bg:rgba(53,104,201,0.12); --warning:#b8790a; --warning-bg:rgba(184,121,10,0.12);
+    --danger:#c23652; --shadow:0 4px 24px rgba(0,0,0,0.12);
+  }
+  @media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
+    --bg:#f5f6f8; --surface:#ffffff; --surface-2:#eef0f4; --border:#d8dce3;
+    --text:#1a1d24; --text-muted:#5b6472; --accent:#3568c9; --accent-hover:#4a7bd6;
+    --accent-bg:rgba(53,104,201,0.12); --warning:#b8790a; --warning-bg:rgba(184,121,10,0.12);
+    --danger:#c23652; --shadow:0 4px 24px rgba(0,0,0,0.12);
+  }}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;font-size:15px;line-height:1.5}
+
+  .app-header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:16px 28px;
+    border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:50}
+  .app-header__title{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:600;justify-self:start;
+    cursor:pointer;border-radius:8px;padding:4px 8px;margin:-4px -8px}
+  .app-header__title:hover{background:var(--surface-2)}
+  .app-header__logo{font-size:20px;opacity:.85}
+  .app-header__right{display:flex;align-items:center;gap:14px;justify-self:end}
+  .app-header__meta{color:var(--text-muted);font-size:13px}
+  .settings-gear-btn{font-size:19px;padding:6px 9px;border-radius:8px;line-height:1;border:1px solid transparent;
+    background:var(--surface-2);color:var(--accent)}
+
+  .app-main{max-width:min(1400px,96vw);margin:0 auto;padding:28px 24px 40px}
+  .settings-header-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:22px}
+  .settings-header-row h1{font-size:22px;margin:0 0 4px}
+  .settings-header-row p{margin:0;color:var(--text-muted);font-size:14px}
+  .settings-header-actions{display:flex;gap:8px;flex-shrink:0}
+  .tool-hero{margin-bottom:0}
+  .tool-hero__title{font-size:22px;margin:0 0 8px}
+  .tool-hero__body{margin:0;color:var(--text);font-size:14px;line-height:1.6;max-width:820px}
+
+  .btn{font-family:inherit;font-size:14px;font-weight:500;padding:9px 18px;border-radius:8px;border:1px solid transparent;
+    cursor:pointer;transition:background .15s,border-color .15s}
+  .btn--primary{background:var(--accent);color:#0b1220;font-weight:600}
+  .btn--primary:hover{background:var(--accent-hover)}
+  .btn--ghost{background:transparent;color:var(--text);border-color:var(--border)}
+  .btn--ghost:hover{background:var(--surface-2);border-color:var(--accent)}
+  .btn--small{padding:5px 12px;font-size:13px}
+
+  /* Two-pane settings */
+  .settings-layout{display:grid;grid-template-columns:224px 1fr;gap:24px;align-items:start}
+  .settings-rail{position:sticky;top:92px;display:flex;flex-direction:column;gap:3px}
+  .settings-rail__row{position:relative}
+  .settings-rail__item{display:flex;align-items:center;gap:11px;padding:9px 34px 9px 12px;border-radius:8px;border:1px solid transparent;
+    background:transparent;color:var(--text-muted);cursor:pointer;font-family:inherit;font-size:14px;text-align:left;width:100%;
+    transition:background .15s,color .15s}
+  .settings-rail__item:hover{background:var(--surface-2);color:var(--text)}
+  .settings-rail__item.active{background:var(--accent-bg);color:var(--accent);font-weight:600}
+  .settings-rail__icon{font-size:16px;width:20px;text-align:center;flex:none}
+  .settings-rail__pin{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:26px;height:26px;border-radius:6px;
+    border:1px solid transparent;background:transparent;color:var(--text-muted);cursor:pointer;font-size:15px;line-height:1;
+    display:grid;place-items:center;opacity:0;transition:opacity .12s,color .12s,background .12s}
+  .settings-rail__row:hover .settings-rail__pin{opacity:.75}
+  .settings-rail__pin:hover{opacity:1;color:var(--accent);background:var(--surface-2)}
+  .settings-rail__pin.on{opacity:1;color:var(--accent)}
+  .settings-rail__group{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:600;padding:0 12px;margin:4px 0 2px}
+  .settings-rail__divider{height:1px;background:var(--border);margin:8px 6px 4px}
+
+  .settings-pane{display:none}
+  .settings-pane.active{display:block}
+  .settings-group{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;margin:0 0 18px}
+  .settings-group__header h2{font-size:17px;margin:0 0 2px}
+  .settings-group__header p{margin:0 0 6px;color:var(--text-muted);font-size:13.5px}
+  .settings-section-title{font-size:12px;margin:20px 0 10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);font-weight:600}
+  .settings-section-title:first-of-type{margin-top:6px}
+
+  .field-group{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+  .field-label{font-size:12px;color:var(--text-muted)}
+  .req{color:var(--danger);font-weight:600}
+  .input{font-family:inherit;font-size:13.5px;padding:8px 12px;background:var(--surface-2);color:var(--text);
+    border:1px solid var(--border);border-radius:8px;width:100%}
+  .input:focus{outline:none;border-color:var(--accent)}
+  .select{font-family:inherit;font-size:14px;padding:9px 13px;background:var(--surface-2);color:var(--text);
+    border:1px solid var(--border);border-radius:8px;cursor:pointer;width:280px;max-width:100%}
+  .path-row{display:flex;gap:8px;align-items:center}
+  .path-row .input{flex:1}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .checkbox{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;margin:6px 0}
+  .checkbox input{width:16px;height:16px;accent-color:var(--accent)}
+  .hint{color:var(--text-muted);font-size:13px;margin:2px 0 12px}
+  .row-actions{display:flex;gap:8px;margin-top:4px}
+  .callout{border-radius:var(--radius);padding:14px 18px;margin:6px 0 12px;border:1px solid}
+  .callout--warning{background:var(--warning-bg);border-color:var(--warning)}
+  .callout__title{font-weight:700;margin-bottom:6px}
+  .callout p{margin:4px 0;font-size:13.5px}
+
+  .settings-save-bar{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--border);
+    padding:14px 0 6px;display:flex;align-items:center;gap:12px;justify-content:flex-end;margin-top:6px}
+  .save-hint{color:var(--text-muted);font-size:13px;margin-right:auto}
+
+  #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(16px);opacity:0;pointer-events:none;
+    background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:11px 18px;border-radius:10px;
+    font-size:14px;box-shadow:var(--shadow);transition:.2s;z-index:80}
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  .preview-toggle{position:fixed;right:16px;bottom:16px;z-index:80;background:var(--surface);border:1px solid var(--border);
+    color:var(--text-muted);border-radius:20px;padding:7px 14px;font-size:12.5px;font-family:inherit;cursor:pointer;box-shadow:var(--shadow)}
+  @media (max-width:820px){.settings-layout{grid-template-columns:1fr}.settings-rail{position:static;flex-direction:row;flex-wrap:wrap}}
+</style>
+
+<header class="app-header">
+  <div class="app-header__title"><span class="app-header__logo">&#9881;</span><span>Vortex Collection Tools</span></div>
+  <div></div>
+  <div class="app-header__right"><span class="app-header__meta">Settings</span>
+    <button class="settings-gear-btn" title="Settings">&#9881;</button></div>
+</header>
+
+<main class="app-main">
+  <div class="settings-header-row" style="align-items:flex-start">
+    <div class="tool-hero">
+      <h2 class="tool-hero__title">⚙️ Set It Up Once, Use It Everywhere</h2>
+      <p class="tool-hero__body">Set your Vortex paths and preferences here just once, and every tool picks them up automatically! Designed to keep all your setup in one place, this saves you from entering the same folders and options over and over&mdash;so you can spend your time on the actual work, not the configuration.</p>
+    </div>
+    <div class="settings-header-actions">
+      <button class="btn btn--ghost">Restart Server</button>
+      <button class="btn btn--ghost">Stop Server</button>
+    </div>
+  </div>
+
+  <div class="settings-layout">
+    <nav class="settings-rail" id="rail"></nav>
+
+    <div id="panes">
+      <!-- GENERAL -->
+      <section class="settings-pane" id="pane-general">
+        <div class="settings-group">
+          <div class="settings-group__header"><h2>General</h2><p>How the app looks and behaves.</p></div>
+          <div class="settings-section-title">Appearance</div>
+          <div class="field-group"><div class="field-label">Theme</div>
+            <select class="select"><option>System default</option><option>Dark</option><option>Light</option></select></div>
+          <div class="settings-section-title">Server</div>
+          <div class="two-col">
+            <div class="field-group"><div class="field-label">Port</div><input class="input" value="4321"></div>
+            <div class="field-group"><div class="field-label">Host / IP address to bind to</div><input class="input" value="127.0.0.1"></div>
+          </div>
+          <div class="callout callout--warning">
+            <div class="callout__title">⚠️ Important security warning</div>
+            <p>Only change the host if you know what you're doing. Setting this to anything other than <strong>127.0.0.1</strong> or <strong>localhost</strong> gives everyone on your local network full read and write access to your mod files and Vortex state, with no password.</p>
+          </div>
+          <label class="checkbox"><input type="checkbox" checked> Automatically open a browser tab when the server starts</label>
+          <div class="settings-section-title">Nexus Mods</div>
+          <div class="field-group"><div class="field-label">API key</div><input class="input" placeholder="Paste your personal API key"></div>
+          <p class="hint">A key is already stored — leave blank to keep it, or type a new one to replace it.</p>
+          <div class="row-actions"><button class="btn btn--ghost btn--small">Clear stored key</button></div>
+          <label class="checkbox"><input type="checkbox"> Don't warn me at startup if my installed Vortex version is untested</label>
+          <div class="settings-section-title">Download missing archives</div>
+          <label class="checkbox"><input type="checkbox" checked> Download missing archives automatically</label>
+          <p class="hint">If a mod's archive isn't in your downloads folder, we'll grab it from Nexus automatically instead of skipping it. (Nexus Premium accounts only.)</p>
+        </div>
+      </section>
+
+      <!-- PATHS & BACKUPS -->
+      <section class="settings-pane" id="pane-paths">
+        <div class="settings-group">
+          <div class="settings-group__header"><h2>Paths &amp; Backups</h2><p>Where your Vortex files, database backups, and logs live.</p></div>
+          <div class="settings-section-title">Vortex paths</div>
+          <p class="hint">Path changes need a server restart — you'll be offered one automatically when you save.</p>
+          <div class="field-group"><div class="field-label">Vortex staging folder <span class="req">(required)</span></div>
+            <div class="path-row"><input class="input" value="E:\Vortex Mods\skyrimse"><button class="btn btn--ghost">Browse…</button></div></div>
+          <div class="field-group"><div class="field-label">Vortex downloads folder <span class="req">(required)</span></div>
+            <div class="path-row"><input class="input" value="F:\Vortex Downloads\skyrimse"><button class="btn btn--ghost">Browse…</button></div></div>
+          <div class="field-group"><div class="field-label">Vortex database path (leave blank to auto-detect)</div>
+            <div class="path-row"><input class="input" placeholder="Auto-detected under %APPDATA%\Vortex\state.v2"><button class="btn btn--ghost">Browse…</button></div></div>
+          <div class="settings-section-title">Vortex database backups</div>
+          <p class="hint">Shared by both Update Collection and Rules Generator. Restore lets you go back to an earlier backup if something goes wrong.</p>
+          <div class="field-group"><div class="field-label">Number of backups to keep (blank = unlimited)</div><input class="input" style="width:120px" value="5"></div>
+          <div class="row-actions"><button class="btn btn--ghost btn--small">Delete all backups</button><button class="btn btn--ghost btn--small">Restore</button></div>
+          <div class="settings-section-title">Logs</div>
+          <div class="field-group"><div class="field-label">Log file location</div>
+            <div class="path-row"><input class="input" value="F:\Claude Temp Files\Logs"><button class="btn btn--ghost">Browse…</button></div></div>
+          <div class="row-actions"><button class="btn btn--ghost btn--small">Open Logs Folder</button><button class="btn btn--ghost btn--small">Delete all logs</button></div>
+        </div>
+      </section>
+
+      <!-- REBUILD -->
+      <section class="settings-pane" id="pane-rebuild">
+        <div class="settings-group">
+          <div class="settings-group__header"><h2>Rebuild Collection</h2><p>Rebuild a collection fast by extracting its mods straight into your staging folder.</p></div>
+          <div class="settings-section-title">Backup path</div>
+          <div class="field-group"><div class="field-label">Backup root folder (optional, only needed if backups are turned on below)</div>
+            <div class="path-row"><input class="input" placeholder="e.g. F:\Mod Extraction\Vortex-Rebuild-Backups"><button class="btn btn--ghost">Browse…</button></div></div>
+          <label class="checkbox"><input type="checkbox" checked> Automatically force-extract off-site mods when a downloaded file doesn't exactly match</label>
+          <div class="settings-section-title">Performance</div>
+          <div class="field-group"><div class="field-label">Concurrent extractions (1–8)</div><input class="input" style="width:120px" value="8"></div>
+          <p class="hint">Runs several extractions in parallel — faster for large collections, at the cost of more disk and CPU use.</p>
+          <div class="settings-section-title">Backups</div>
+          <div class="field-group"><div class="field-label">Number of backups to keep per collection (0 = off)</div><input class="input" style="width:120px" value="0"></div>
+          <div class="row-actions"><button class="btn btn--ghost btn--small">Delete all backups</button></div>
+        </div>
+      </section>
+
+      <!-- UPDATE -->
+      <section class="settings-pane" id="pane-update">
+        <div class="settings-group">
+          <div class="settings-group__header"><h2>Update Collection</h2><p>Keeps your Ignored and Disabled mods set the way you had them after an update.</p></div>
+          <div class="settings-section-title">Paths</div>
+          <div class="field-group"><div class="field-label">Backup folder <span class="req">(required)</span></div>
+            <div class="path-row"><input class="input" value="F:\Claude Workspace\vortex-tools\vortex-collection-tool\collection-backups"><button class="btn btn--ghost">Browse…</button></div></div>
+          <div class="settings-section-title">Collection snapshot backups</div>
+          <p class="hint">Collection backups created from the "Create Backup" option.</p>
+          <div class="row-actions"><button class="btn btn--ghost btn--small">Delete all backups</button></div>
+        </div>
+      </section>
+
+      <!-- SCRUB -->
+      <section class="settings-pane" id="pane-scrub">
+        <div class="settings-group">
+          <div class="settings-group__header"><h2>Vortex Scrub</h2><p>Mark folders and archives as safe to keep, and they'll stop showing up as "Action Needed" in Vortex Scrub.</p></div>
+          <div class="settings-section-title">Exclude list location</div>
+          <div class="field-group"><div class="field-label">Folder to store the exclude list in <span class="req">(required)</span></div>
+            <div class="path-row"><input class="input" value="F:\Claude Workspace\vortex-tools\vortex-collection-tool\clean-up-exclude-list"><button class="btn btn--ghost">Browse…</button></div></div>
+          <p class="hint">Adding or removing items below takes effect right away — no need to Save Settings for those.</p>
+          <div class="settings-section-title">Excluded items</div>
+          <div class="field-group"><div class="field-label">Excluded staging folders (19)</div>
+            <div class="path-row"><input class="input" placeholder="Exact staging folder name"><button class="btn btn--ghost">Add</button></div></div>
+          <div class="field-group"><div class="field-label">Excluded archives (0)</div>
+            <div class="path-row"><input class="input" placeholder="Exact archive file name"><button class="btn btn--ghost">Add</button></div></div>
+        </div>
+      </section>
+
+      <!-- MISSING MASTERS -->
+      <section class="settings-pane" id="pane-missing">
+        <div class="settings-group">
+          <div class="settings-group__header"><h2>Missing Masters</h2><p>Point Missing Masters at your Skyrim files here. It only reads these folders to track down missing masters — it never changes anything in them.</p></div>
+          <div class="field-group"><div class="field-label">Skyrim Data folder <span class="req">(required)</span></div>
+            <div class="path-row"><input class="input" value="E:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data"><button class="btn btn--ghost">Browse…</button></div></div>
+          <div class="field-group"><div class="field-label">plugins.txt location <span class="req">(required)</span></div>
+            <div class="path-row"><input class="input" value="C:\Users\awesm\AppData\Local\Skyrim Special Edition"><button class="btn btn--ghost">Browse…</button></div></div>
+          <div class="field-group"><div class="field-label">Dummy Masters output folder <span class="req">(required)</span></div>
+            <div class="path-row"><input class="input" value="E:\Vortex Mods\skyrimse\Wyre Output"><button class="btn btn--ghost">Browse…</button></div></div>
+          <p class="hint">Pick a dedicated folder for this — not your live Data or SKSE folder. Somewhere inside your staging folder works great, the same way you'd set up a DynDOLOD or BodySlide output.</p>
+        </div>
+      </section>
+
+      <!-- ARCHIVE FINDER -->
+      <section class="settings-pane" id="pane-archive">
+        <div class="settings-group">
+          <div class="settings-group__header"><h2>Archive Finder</h2><p>Searches inside the mod archives in your Vortex downloads folder (set under Paths &amp; Backups) — nothing extra to point it at here.</p></div>
+          <div class="field-group"><div class="field-label">Archive search index folder <span class="req">(required)</span></div>
+            <div class="path-row"><input class="input" value="F:\Vortex Downloads\archive-finder-index"><button class="btn btn--ghost">Browse…</button></div></div>
+          <p class="hint">A small index file, kept separate from your downloads — safe to put anywhere, and safe to delete anytime to force a fresh scan.</p>
+          <div class="field-group"><div class="field-label">Default extraction folder (optional)</div>
+            <div class="path-row"><input class="input" placeholder="Pick a folder each time you extract, or set a default here"><button class="btn btn--ghost">Browse…</button></div></div>
+        </div>
+      </section>
+
+      <div class="settings-save-bar">
+        <span class="save-hint" id="saveHint"></span>
+        <button class="btn btn--primary" id="saveBtn">Save Settings</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="toast"></div>
+<button class="preview-toggle" id="themeBtn">◐ Preview: toggle theme</button>
+
+<script>
+  const CATS=[
+    {id:"rebuild",icon:"⚡",label:"Rebuild Collection"},
+    {id:"update",icon:"🔄",label:"Update Collection"},
+    {id:"missing",icon:"🧩",label:"Missing Masters"},
+    {id:"scrub",icon:"🧽",label:"Vortex Scrub"},
+    {id:"archive",icon:"📦",label:"Archive Finder"},
+    {id:"paths",icon:"📁",label:"Paths & Backups"},
+    {id:"general",icon:"⚙️",label:"General"},
+  ];
+  const rail=document.getElementById('rail');
+  const PINNED=new Set(['rebuild','update']); // demo: two pinned
+  let current=CATS[0].id;
+  const railRow=c=>{const on=PINNED.has(c.id);return `<div class="settings-rail__row">
+    <button class="settings-rail__item${c.id===current?' active':''}" data-t="${c.id}">
+      <span class="settings-rail__icon">${c.icon}</span>${c.label}</button>
+    <button class="settings-rail__pin${on?' on':''}" data-pin="${c.id}" title="${on?'Unpin':'Pin to top'}">${on?'★':'☆'}</button>
+  </div>`;};
+  function renderRail(){
+    const pinned=CATS.filter(c=>PINNED.has(c.id));
+    const rest=CATS.filter(c=>!PINNED.has(c.id));     // pinned move up, not duplicated
+    let h='';
+    if(pinned.length){
+      h+='<div class="settings-rail__group">📌 Pinned</div>'+pinned.map(railRow).join('');
+      h+='<div class="settings-rail__divider"></div>';
+    }
+    h+=rest.map(railRow).join('');
+    rail.innerHTML=h;
+  }
+  function show(id){
+    current=id;
+    document.querySelectorAll('.settings-pane').forEach(p=>p.classList.toggle('active',p.id==='pane-'+id));
+    document.querySelectorAll('.settings-rail__item').forEach(b=>b.classList.toggle('active',b.dataset.t===id));
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+  function togglePin(id){
+    PINNED.has(id)?PINNED.delete(id):PINNED.add(id);
+    renderRail();
+    const c=CATS.find(x=>x.id===id);
+    toast(PINNED.has(id)?'Pinned '+c.label:'Unpinned '+c.label);
+  }
+  rail.addEventListener('click',e=>{
+    const pin=e.target.closest('.settings-rail__pin');
+    if(pin){togglePin(pin.dataset.pin);return;}
+    const item=e.target.closest('.settings-rail__item');
+    if(item)show(item.dataset.t);
+  });
+  renderRail();
+  show(current);
+
+  const t=document.getElementById('toast');
+  function toast(m){t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),1800)}
+  document.getElementById('saveBtn').onclick=()=>{document.getElementById('saveHint').textContent='All changes saved.';toast('Settings saved')};
+
+  const root=document.documentElement,tb=document.getElementById('themeBtn');
+  const isDark=()=>!(root.getAttribute('data-theme')==='light'||(!root.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme:light)').matches));
+  tb.onclick=()=>root.setAttribute('data-theme',isDark()?'light':'dark');
+</script>
+</body>
+</html>

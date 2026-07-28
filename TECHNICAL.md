@@ -2531,6 +2531,96 @@ Collection's own line dropped its trailing "...faster than Vortex's own install 
 Missing Masters dropped "...before they crash your game") -- wording only, no card gained or lost a
 tool.
 
+## Settings two-pane category layout (added 2026-07-28)
+
+Settings moved from one long vertical scroll of stacked `.settings-group` cards to a **two-pane
+layout**: a sticky category rail on the left, the selected category's card(s) on the right. Full
+visual/voice rationale lives in DESIGN.md's "Settings -- two-pane category layout" and "Pinning"
+sections; reference mockup `design/vortex-settings-mockup.html`, handoff prompt
+`design/BUILD-PROMPT-settings.md`. This section is the engineer-facing wiring.
+
+**Non-negotiable rule, satisfied structurally, not by extra code**: every field stays in the DOM at
+all times -- `.settings-pane`/`.settings-pane.active` is a pure CSS `display: none`/`block` toggle,
+never an innerHTML rebuild. Nothing in `loadSettings()`/`saveSettings()` (both unchanged) needed to
+change for this -- they already read/write every field by id regardless of which pane is visible,
+so "switching category never drops an edit in another category" falls out of the markup choice
+itself rather than needing its own guard.
+
+**Split**: the old single "General" `.settings-group` became two rail categories -- **General**
+(theme, server + the security warning + auto-open, Nexus API key, download-missing-archives,
+version warning) and **Paths & Backups** (Vortex staging/downloads/database paths, database
+backups, logs). Rebuild Collection / Update Collection / Missing Masters / Vortex Scrub / Archive
+Finder each already had their own `.settings-group` -- those just moved into their own
+`<section class="settings-pane" id="pane-<cat>">` unchanged. Rail order is the DESIGN.md-specified
+static list (`SETTINGS_CATEGORY_ORDER` in `settings-app.js`): `rebuild, update, missing, scrub,
+archive, paths, general` -- tool sections first, set-once config last, never auto-reordered.
+
+**Header**: the old `<h1>Settings</h1>` + one-line subtitle became a `.tool-hero` banner (⚙️ "Set It
+Up Once, Use It Everywhere") inside `.settings-header-row`, which also holds the Restart/Stop
+Server buttons -- `align-items` changed from `center` to `flex-start` since the two-line tool-hero
+no longer vertically centers well against the button row the way the old single-line subtitle did.
+
+**Rail markup + pane switching** (`index.html`/`settings-app.js`): `#settingsRail` holds 7 static
+`.settings-rail__row` elements (icon + label `<button class="settings-rail__item" data-cat="...">`,
+plus a sibling `.settings-rail__pin` star -- same sibling-not-nested reasoning as Home's
+`.home-card`/`.home-card__star`). A single delegated click listener on `#settingsRail` dispatches to
+either `toggleCategoryPin()` (star) or `showSettingsCategory()` (item) via `e.target.closest(...)`.
+`showSettingsCategory(cat)` toggles `.active` on the matching pane/rail-item and persists `cat` to
+`localStorage` under `settingsLastCategory` -- read back on load (`SETTINGS_CATEGORY_ORDER.includes
+(saved) ? saved : SETTINGS_CATEGORY_ORDER[0]`) so a save-triggered reload (or just reopening the
+app later) returns to the same category, not always the first one.
+
+**Rail pinning is the exact same MOVE-not-duplicate mechanism as Home's cards** (see Home's own
+Pinning subsection above for the full reasoning -- this reuses it, not a separate design):
+`data-pin-key` on the star matches `data-cat` on the item; `insertRailRowInOrder()` re-parents the
+real `.settings-rail__row` node (never clones it) into either `#settingsRailPinnedGroup` or back
+into `#settingsRail`, always at the position dictated by the fixed `SETTINGS_CATEGORY_ORDER` among
+whatever's currently in that container -- so the Pinned group shows pinned categories in a stable
+order (not click order) and the remaining rail keeps its static order regardless of pin/unpin
+sequence. `ensurePinnedRailGroup()`/`clearPinnedRailGroupIfEmpty()` build/tear down the "📌 Pinned"
+label + divider exactly once each way, mirroring `ensurePinnedRowGrid()`/`clearPinnedRowIfEmpty()`
+from Home. Persisted to `localStorage` under `settingsPinnedCategories` (separate key from Home's
+own `pinnedTools` -- different concepts, own namespace).
+
+**Save bar**: `.settings-save-bar` (sticky to the bottom of `#settingsPanes`) now holds
+`#settingsSaveStatus` (class changed from `muted` to the new `.save-hint` -- same id, same element,
+JS untouched) and `#settingsSaveBtn`. Restart/Stop Server stayed in the header row, unaffected.
+
+**Copy refresh**: applied the mockup's own already-approved rewrites verbatim where they existed
+(Rebuild Collection/Update Collection/Vortex Scrub/Missing Masters/Archive Finder blurbs -- see the
+plain-language-writer skill's "Settings-section blurbs" confirmed examples) and a light
+plain-language tightening pass on the rest. **Three deliberate departures from the mockup's own
+(demo-simplified) copy, judgment calls made in favor of keeping real information over matching the
+mockup verbatim**:
+1. Kept the Nexus API key's plaintext-storage disclosure ("Stored as plain text in `config.json`,
+   not encrypted...") and the "grab your key from nexusmods.com/settings/api-keys" sourcing link --
+   the mockup omits both for brevity, but the first is a real security disclosure and the second is
+   genuinely useful for first-time setup; neither seemed safe to silently drop during what's meant
+   to be a reorg, not a content cut.
+2. Kept the Vortex Scrub exclude-list's real interactive management UI (the `<details>` disclosure
+   with a checkbox list + Select all + Remove Selected/Remove All per staging-folder/archive
+   exclusion) -- the mockup shows only a static "(19)"/"(0)" count with an Add row and no visible
+   list at all, which would be an actual feature removal (no more viewing/removing existing
+   exclusions from Settings) if copied literally, not just a copy change.
+3. Kept a short restart-required note under General -> Server ("Changes here need a server
+   restart...") even though the mockup omits it -- `serverPort`/`serverHost` are genuinely in
+   `SERVER_FIELDS` (settings-routes.js), so this is accurate, not just cargo-culted from the old
+   copy.
+
+**Verified live** (2026-07-28): all 7 categories switch correctly; typing in one category's field,
+switching to a different category, then back, confirms the edit survived (no data loss) and
+`settingsIsDirty()` still reports true; Save Settings writes correctly (confirmed real config
+values unchanged/correct via a direct `/api/settings` fetch after save); the Settings
+unsaved-changes navigation guard still fires when leaving via a Home card or the header title;
+rail pinning verified with the same rigor as Home's (scrambled pin order still yields canonical
+Pinned-group order, a DOM-node-identity marker on an unrelated pane's field survived several
+pin/unpin cycles, clicking a moved/pinned row's item still switches panes correctly); last-open
+category persists across a real reload; the security warning still renders under General -> Server
+in both themes; the `@media (max-width: 820px)` rail-wrap rule confirmed present and correctly
+parsed, and visually confirmed (rail wraps to a horizontal multi-row flow, content pane stacks
+below) by temporarily forcing the narrow-width styles, since this session's `resize_window` call
+didn't actually shrink the tab's own rendering viewport in this environment.
+
 ## Future work
 
 Tracked in the workspace `TODO.md` (not duplicated here — confirmed 2026-07-27, one place to check

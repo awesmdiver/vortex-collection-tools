@@ -660,17 +660,17 @@
 
 <section id="area-settings" class="tool-area hidden">
 <main class="app-main">
-  <div class="view-header">
-    <h1>Settings</h1>
-    <div class="settings-header-row">
-      <p class="muted">Set up your paths and preferences here once — every tool on this site uses them.</p>
-      <div class="settings-header-actions">
-        <button id="settingsRestartServerBtn" class="btn btn--ghost btn--small">Restart Server</button>
-        <button id="settingsStopServerBtn" class="btn btn--ghost btn--small">Stop Server</button>
-      </div>
+  <div class="settings-header-row">
+    <div class="tool-hero">
+      <h2 class="tool-hero__title">⚙️ Set It Up Once, Use It Everywhere</h2>
+      <p class="tool-hero__body">Set your Vortex paths and preferences here just once, and every tool picks them up automatically! Designed to keep all your setup in one place, this saves you from entering the same folders and options over and over&mdash;so you can spend your time on the actual work, not the configuration.</p>
     </div>
-    <p id="settingsServerActionStatus" class="muted hidden"></p>
+    <div class="settings-header-actions">
+      <button id="settingsRestartServerBtn" class="btn btn--ghost btn--small">Restart Server</button>
+      <button id="settingsStopServerBtn" class="btn btn--ghost btn--small">Stop Server</button>
+    </div>
   </div>
+  <p id="settingsServerActionStatus" class="muted hidden"></p>
 
   <div id="settingsFirstRunBanner" class="callout callout--warning hidden">
     Welcome! Staging/downloads aren't configured yet, so you've landed here first -- fill in the paths below (Browse buttons pick them for you), Save, and you're set. This only happens once.
@@ -680,339 +680,395 @@
     A path change is saved but not yet active -- restart the server (Settings &rarr; Save Settings again, or close and re-run <code>node web/server.js</code>) to apply it.
   </div>
 
-  <!-- General -- applies regardless of which tool you're using. -->
-  <div class="settings-group">
-    <div class="settings-group__header">
-      <h2>General</h2>
-    </div>
-
-    <h3 class="settings-section-title">Appearance</h3>
-    <div class="field-group">
-      <label class="field-label" for="settingsThemeSelect">Theme</label>
-      <select id="settingsThemeSelect" class="select select--small">
-        <option value="system">System default</option>
-        <option value="dark">Dark</option>
-        <option value="light">Light</option>
-      </select>
-    </div>
-
-    <h3 class="settings-section-title">Vortex paths</h3>
-    <p class="muted">Path changes require a server restart -- you'll be offered one automatically when you save.</p>
-    <div class="field-group">
-      <label class="field-label" for="settingsStagingInput">Vortex staging folder <span class="field-required">(required)</span></label>
-      <div class="path-input-row">
-        <input id="settingsStagingInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse">
-        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsStagingInput">Browse&hellip;</button>
+  <div class="settings-layout">
+    <nav class="settings-rail" id="settingsRail">
+      <div id="settingsRailPinnedGroup"></div>
+      <div class="settings-rail__row">
+        <button class="settings-rail__item" data-cat="rebuild"><span class="settings-rail__icon">⚡</span>Rebuild Collection</button>
+        <button class="settings-rail__pin" data-pin-key="rebuild" title="Pin to top">☆</button>
       </div>
-    </div>
-    <div class="field-group">
-      <label class="field-label" for="settingsDownloadsInput">Vortex downloads folder <span class="field-required">(required)</span></label>
-      <div class="path-input-row">
-        <input id="settingsDownloadsInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Downloads\skyrimse">
-        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsDownloadsInput">Browse&hellip;</button>
+      <div class="settings-rail__row">
+        <button class="settings-rail__item" data-cat="update"><span class="settings-rail__icon">🔄</span>Update Collection</button>
+        <button class="settings-rail__pin" data-pin-key="update" title="Pin to top">☆</button>
       </div>
-    </div>
-    <div class="field-group">
-      <label class="field-label" for="settingsStateInput">Vortex database path (leave blank to auto-detect)</label>
-      <div class="path-input-row">
-        <input id="settingsStateInput" class="input input--wide" type="text" placeholder="auto-detected under %APPDATA%\Vortex\state.v2">
-        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsStateInput">Browse&hellip;</button>
+      <div class="settings-rail__row">
+        <button class="settings-rail__item" data-cat="missing"><span class="settings-rail__icon">🧩</span>Missing Masters</button>
+        <button class="settings-rail__pin" data-pin-key="missing" title="Pin to top">☆</button>
       </div>
-    </div>
-
-    <h3 class="settings-section-title">Vortex database backups</h3>
-    <p class="muted">Shared by both Update Collection and Rules Generator, since both write to Vortex's database. <strong>Delete all backups</strong> removes them permanently. <strong>Restore</strong> lets you bring your database back to an earlier backup if something goes wrong.</p>
-    <div class="field-group">
-      <label class="field-label" for="settingsMaxStateBackupsInput">Number of backups to keep (blank = unlimited, requires manual deletion)</label>
-      <input id="settingsMaxStateBackupsInput" class="input input--small" type="number" min="1" step="1" placeholder="unlimited">
-    </div>
-    <div class="view-actions">
-      <button id="settingsStateDeleteBackupsBtn" class="btn btn--ghost btn--small">Delete all backups</button>
-      <button id="settingsStateRestoreBtn" class="btn btn--ghost btn--small">Restore</button>
-      <span id="settingsStateDeleteBackupsStatus" class="muted"></span>
-    </div>
-    <div id="settingsStateRestoreResultActions" class="view-actions hidden">
-      <span class="muted">Restored backup</span>
-      <button id="settingsStateRevealRestoredBtn" class="btn btn--ghost btn--small">Reveal</button>
-      <span class="muted" title="A safety backup taken automatically right before this restore, in case you need to undo it">Safety backup</span>
-      <button id="settingsStateRevealPreRestoreBtn" class="btn btn--ghost btn--small">Reveal</button>
-    </div>
-
-    <h3 class="settings-section-title">Logs</h3>
-    <p class="muted">Where this app's run logs are stored. Each tool that keeps logs gets its own subfolder here. Leave blank to use the built-in default. Path changes require a server restart.</p>
-    <div class="field-group">
-      <label class="field-label" for="settingsLogsDirInput">Log file location</label>
-      <div class="path-input-row">
-        <input id="settingsLogsDirInput" class="input input--wide" type="text" placeholder="Default: this app's own logs folder">
-        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsLogsDirInput">Browse&hellip;</button>
+      <div class="settings-rail__row">
+        <button class="settings-rail__item" data-cat="scrub"><span class="settings-rail__icon">🧽</span>Vortex Scrub</button>
+        <button class="settings-rail__pin" data-pin-key="scrub" title="Pin to top">☆</button>
       </div>
-    </div>
-    <div class="view-actions">
-      <button id="settingsOpenLogsBtn" class="btn btn--ghost btn--small">Open Logs Folder</button>
-      <button id="settingsDeleteLogsBtn" class="btn btn--ghost btn--small">Delete all logs</button>
-      <span id="settingsDeleteLogsStatus" class="muted"></span>
-    </div>
+      <div class="settings-rail__row">
+        <button class="settings-rail__item" data-cat="archive"><span class="settings-rail__icon">📦</span>Archive Finder</button>
+        <button class="settings-rail__pin" data-pin-key="archive" title="Pin to top">☆</button>
+      </div>
+      <div class="settings-rail__row">
+        <button class="settings-rail__item" data-cat="paths"><span class="settings-rail__icon">📁</span>Paths &amp; Backups</button>
+        <button class="settings-rail__pin" data-pin-key="paths" title="Pin to top">☆</button>
+      </div>
+      <div class="settings-rail__row">
+        <button class="settings-rail__item" data-cat="general"><span class="settings-rail__icon">⚙️</span>General</button>
+        <button class="settings-rail__pin" data-pin-key="general" title="Pin to top">☆</button>
+      </div>
+    </nav>
 
-    <h3 class="settings-section-title">Server</h3>
-    <p class="muted">Changes here require the server restart. This server has no login/authentication of its own, so leave the host as <code>127.0.0.1</code> unless you specifically want another device on your network to reach it.</p>
-    <div class="settings-row-2">
+    <div id="settingsPanes">
+
+    <!-- Rebuild Collection -->
+    <section class="settings-pane" id="pane-rebuild">
+    <div class="settings-group">
+      <div class="settings-group__header">
+        <h2>Rebuild Collection</h2>
+        <p class="muted">Rebuild a collection fast by extracting its mods straight into your staging folder.</p>
+      </div>
+
+      <h3 class="settings-section-title">Backup path</h3>
       <div class="field-group">
-        <label class="field-label" for="settingsServerPortInput">Port</label>
-        <input id="settingsServerPortInput" class="input input--small" type="number" min="1" max="65535" step="1">
+        <label class="field-label" for="settingsBackupRootInput">Backup root folder <span class="muted">(optional, only needed if backups are turned on below)</span></label>
+        <div class="path-input-row">
+          <input id="settingsBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Mod Extraction\Vortex-Rebuild-Backups">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsBackupRootInput">Browse&hellip;</button>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="checkbox">
+          <input type="checkbox" id="settingsForceExtractMismatchInput">
+          Automatically force-extract off-site mods when a downloaded file doesn't exactly match
+        </label>
+      </div>
+      <p class="muted">
+        When enabled, Force Extract automatically extracts any off-site mod archive you've
+        downloaded, instead of skipping that mod. Vortex might show this as a new mod and ask you
+        to import it -- make sure you do.
+      </p>
+
+      <h3 class="settings-section-title">Performance</h3>
+      <p class="muted">Runs several extractions in parallel -- faster for large collections, at the cost of more disk and CPU use.</p>
+      <div class="field-group">
+        <label class="field-label" for="settingsConcurrencyInput">Concurrent extractions (1-8)</label>
+        <input id="settingsConcurrencyInput" class="input input--small" type="number" min="1" max="8" step="1">
+      </div>
+
+      <h3 class="settings-section-title">Backups</h3>
+      <p class="muted">A backup is a full copy of every mod's current staging folder, made just before rebuilding it. For larger collections this could use a lot of disk space.</p>
+      <div class="field-group">
+        <label class="field-label" for="settingsMaxBackupsInput">Number of backups to keep per collection (0 = off (suggested); 1-3 = keep only the N most recent; blank = unlimited, requires manual deletion)</label>
+        <input id="settingsMaxBackupsInput" class="input input--small" type="number" min="0" max="3" step="1" placeholder="unlimited">
+      </div>
+      <div class="view-actions">
+        <button id="settingsDeleteBackupsBtn" class="btn btn--ghost btn--small">Delete all backups</button>
+        <span id="settingsDeleteBackupsStatus" class="muted"></span>
+      </div>
+    </div>
+    </section>
+
+    <!-- Update Collection -->
+    <section class="settings-pane" id="pane-update">
+    <div class="settings-group">
+      <div class="settings-group__header">
+        <h2>Update Collection</h2>
+        <p class="muted">Keeps your Ignored and Disabled mods set the way you had them after an update.</p>
+      </div>
+
+      <h3 class="settings-section-title">Paths</h3>
+      <div class="field-group">
+        <label class="field-label" for="settingsSyncBackupRootInput">Backups folder <span class="field-required">(required)</span></label>
+        <div class="path-input-row">
+          <input id="settingsSyncBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\collection-sync">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsSyncBackupRootInput">Browse&hellip;</button>
+        </div>
+      </div>
+      <h3 class="settings-section-title">Collection snapshot backups</h3>
+      <p class="muted">Collection backups created from the "Create Backup" option.</p>
+      <div class="view-actions">
+        <button id="settingsSyncDeleteBackupsBtn" class="btn btn--ghost btn--small">Delete all backups</button>
+        <span id="settingsSyncDeleteBackupsStatus" class="muted"></span>
+      </div>
+    </div>
+    </section>
+
+    <!-- Missing Masters (Utilities area) -->
+    <section class="settings-pane" id="pane-missing">
+    <div class="settings-group">
+      <div class="settings-group__header">
+        <h2>Missing Masters</h2>
+        <p class="muted">Point Missing Masters at your Skyrim files here. It only reads these folders to track down missing masters -- it never changes anything in them.</p>
+      </div>
+
+      <h3 class="settings-section-title">Skyrim Data folder</h3>
+      <div class="field-group">
+        <label class="field-label" for="settingsSkyrimDataDirInput">The Data directory is located directly inside Skyrim's root installation folder (for example, <code>C:\Program Files (x86)\Steam\steamapps\common\Skyrim Special Edition\Data</code>) <span class="field-required">(required)</span></label>
+        <div class="path-input-row">
+          <input id="settingsSkyrimDataDirInput" class="input input--wide" type="text" placeholder="e.g. E:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsSkyrimDataDirInput">Browse&hellip;</button>
+        </div>
+      </div>
+
+      <h3 class="settings-section-title">Plugins.txt location</h3>
+      <div class="field-group">
+        <label class="field-label" for="settingsPluginsListDirInput">The folder containing your Plugins.txt <span class="field-required">(required)</span></label>
+        <div class="path-input-row">
+          <input id="settingsPluginsListDirInput" class="input input--wide" type="text" placeholder="e.g. C:\Users\YourUsername\AppData\Local\Skyrim Special Edition">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsPluginsListDirInput">Browse&hellip;</button>
+        </div>
+        <p class="muted">Located in your Windows AppData folder (not the game folder). If you're not sure where that is, it's usually <code>C:\Users\YourUsername\AppData\Local\Skyrim Special Edition</code>.</p>
+      </div>
+
+      <h3 class="settings-section-title">Dummy Masters output folder</h3>
+      <div class="field-group">
+        <label class="field-label" for="settingsDummyMastersOutputDirInput">Where a created dummy master gets written <span class="field-required">(required)</span></label>
+        <div class="path-input-row">
+          <input id="settingsDummyMastersOutputDirInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\Wyre Output">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsDummyMastersOutputDirInput">Browse&hellip;</button>
+        </div>
+        <p class="muted">Pick a dedicated folder for this -- not your live Data or SKSE folder. Somewhere inside your staging folder works great, the same way you'd set up a DynDOLOD or BodySlide output.</p>
+      </div>
+    </div>
+    </section>
+
+    <!-- Vortex Scrub (Utilities area) -->
+    <section class="settings-pane" id="pane-scrub">
+    <div class="settings-group">
+      <div class="settings-group__header">
+        <h2>Vortex Scrub</h2>
+        <p class="muted">Mark folders and archives as safe to keep, and they'll stop showing up as "Action Needed" in Vortex Scrub.</p>
+      </div>
+
+      <h3 class="settings-section-title">Exclude list location</h3>
+      <div class="field-group">
+        <label class="field-label" for="settingsCleanupExcludeListDirInput">Folder to store the exclude list in <span class="field-required">(required)</span></label>
+        <div class="path-input-row">
+          <input id="settingsCleanupExcludeListDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\clean-up-exclude-list">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsCleanupExcludeListDirInput">Browse&hellip;</button>
+        </div>
+      </div>
+      <p class="muted">Adding or removing items below takes effect right away -- no need to Save Settings for those, only for this path itself (requires a restart).</p>
+
+      <h3 class="settings-section-title">Excluded staging folders</h3>
+      <details id="settingsCleanupIgnoredStagingDetails">
+        <summary>Show excluded folders (<span id="settingsCleanupIgnoredStagingCount">0</span>)</summary>
+        <div class="field-group" style="margin: 8px 0;">
+          <label><input type="checkbox" id="settingsCleanupIgnoredStagingSelectAllInput"> Select all</label>
+        </div>
+        <ul id="settingsCleanupIgnoredStagingList" class="sync-result-list"></ul>
+        <p id="settingsCleanupIgnoredStagingEmpty" class="muted hidden">None excluded yet.</p>
+        <div class="view-actions">
+          <button id="settingsCleanupIgnoredStagingRemoveSelectedBtn" class="btn btn--ghost btn--small" disabled>Remove Selected</button>
+          <button id="settingsCleanupIgnoredStagingRemoveAllBtn" class="btn btn--ghost btn--small">Remove All</button>
+        </div>
+      </details>
+      <div class="path-input-row" style="margin-top: 12px;">
+        <input id="settingsCleanupAddStagingInput" class="input input--wide" type="text" placeholder="Exact staging folder name">
+        <button id="settingsCleanupAddStagingBtn" class="btn btn--ghost btn--small">Add</button>
+      </div>
+
+      <h3 class="settings-section-title">Excluded archives</h3>
+      <details id="settingsCleanupIgnoredArchivesDetails">
+        <summary>Show excluded archives (<span id="settingsCleanupIgnoredArchivesCount">0</span>)</summary>
+        <div class="field-group" style="margin: 8px 0;">
+          <label><input type="checkbox" id="settingsCleanupIgnoredArchivesSelectAllInput"> Select all</label>
+        </div>
+        <ul id="settingsCleanupIgnoredArchivesList" class="sync-result-list"></ul>
+        <p id="settingsCleanupIgnoredArchivesEmpty" class="muted hidden">None excluded yet.</p>
+        <div class="view-actions">
+          <button id="settingsCleanupIgnoredArchivesRemoveSelectedBtn" class="btn btn--ghost btn--small" disabled>Remove Selected</button>
+          <button id="settingsCleanupIgnoredArchivesRemoveAllBtn" class="btn btn--ghost btn--small">Remove All</button>
+        </div>
+      </details>
+      <div class="path-input-row" style="margin-top: 12px;">
+        <input id="settingsCleanupAddArchiveInput" class="input input--wide" type="text" placeholder="Exact archive file name (extension optional -- matched either way)">
+        <button id="settingsCleanupAddArchiveBtn" class="btn btn--ghost btn--small">Add</button>
+      </div>
+      <span id="settingsCleanupStatus" class="muted"></span>
+    </div>
+    </section>
+
+    <!-- Archive Finder (folded in from the standalone "Archive File Finder" project 2026-07-28 --
+         see TECHNICAL.md). Reuses the "Vortex downloads folder" (Paths & Backups) as its own scan
+         folder -- no separate "scan folder" setting here, deliberately. -->
+    <section class="settings-pane" id="pane-archive">
+    <div class="settings-group">
+      <div class="settings-group__header">
+        <h2>Archive Finder</h2>
+        <p class="muted">Searches inside the mod archives in your Vortex downloads folder (set under Paths &amp; Backups) -- nothing extra to point it at here.</p>
+      </div>
+
+      <h3 class="settings-section-title">Database folder</h3>
+      <div class="field-group">
+        <label class="field-label" for="settingsArchiveFinderDbDirInput">Where the archive search index is stored <span class="field-required">(required)</span></label>
+        <div class="path-input-row">
+          <input id="settingsArchiveFinderDbDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Downloads\archive-finder-index">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsArchiveFinderDbDirInput">Browse&hellip;</button>
+        </div>
+        <p class="muted">A small index file, kept separate from your downloads -- safe to put anywhere, and safe to delete anytime to force a fresh scan.</p>
+      </div>
+
+      <h3 class="settings-section-title">Default extraction folder</h3>
+      <div class="field-group">
+        <label class="field-label" for="settingsArchiveFinderOutputDirInput">Where extracted files go by default <span class="muted">(optional -- you can also pick a folder each time you extract)</span></label>
+        <div class="path-input-row">
+          <input id="settingsArchiveFinderOutputDirInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\My Patch Collection">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsArchiveFinderOutputDirInput">Browse&hellip;</button>
+        </div>
+      </div>
+    </div>
+    </section>
+
+    <!-- Paths & Backups -- where files live (split from the old single General block 2026-07-28). -->
+    <section class="settings-pane" id="pane-paths">
+    <div class="settings-group">
+      <div class="settings-group__header">
+        <h2>Paths &amp; Backups</h2>
+        <p class="muted">Where your Vortex files, database backups, and logs live.</p>
+      </div>
+
+      <h3 class="settings-section-title">Vortex paths</h3>
+      <p class="muted">Path changes require a server restart -- you'll be offered one automatically when you save.</p>
+      <div class="field-group">
+        <label class="field-label" for="settingsStagingInput">Vortex staging folder <span class="field-required">(required)</span></label>
+        <div class="path-input-row">
+          <input id="settingsStagingInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsStagingInput">Browse&hellip;</button>
+        </div>
       </div>
       <div class="field-group">
-        <label class="field-label" for="settingsServerHostInput">Host / IP address to bind to</label>
-        <input id="settingsServerHostInput" class="input input--small" type="text" placeholder="127.0.0.1">
+        <label class="field-label" for="settingsDownloadsInput">Vortex downloads folder <span class="field-required">(required)</span></label>
+        <div class="path-input-row">
+          <input id="settingsDownloadsInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Downloads\skyrimse">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsDownloadsInput">Browse&hellip;</button>
+        </div>
       </div>
-    </div>
-    <div class="callout callout--warning" style="margin-top: 14px;">
-      <div class="callout__title">⚠️ Important Security Warning</div>
-      Only change the host if you know what you're doing! Setting this to anything other than <code>127.0.0.1</code> or <code>localhost</code> exposes this tool—and gives full read and write access to your mod files and Vortex state—to everyone on your local network without password protection.
-    </div>
-    <div class="field-group">
-      <label class="checkbox">
-        <input type="checkbox" id="settingsAutoOpenInput">
-        Automatically open a browser tab when the server starts
-      </label>
-    </div>
-
-    <h3 class="settings-section-title">NexusMods</h3>
-    <p class="muted">To obtain your Nexus API key, go to <a href="https://www.nexusmods.com/settings/api-keys" target="_blank" rel="noopener">nexusmods.com/settings/api-keys</a> and scroll to the bottom of the page, under "Personal API Key".</p>
-    <div class="field-group">
-      <label class="field-label" for="settingsNexusKeyInput">API key</label>
-      <input id="settingsNexusKeyInput" class="input input--wide" type="password" placeholder="paste your personal API key" autocomplete="off">
-      <span id="settingsNexusKeyStatus" class="muted"></span>
-    </div>
-    <p class="muted">Stored as plain text in the <code>config.json</code> file. Not encrypted, anyone with access to this machine/user account could read it directly from the file.</p>
-    <div class="view-actions">
-      <button id="settingsClearNexusKeyBtn" class="btn btn--ghost btn--small">Clear stored key</button>
-    </div>
-
-    <div class="field-group" style="margin-top: 14px;">
-      <label class="checkbox">
-        <input type="checkbox" id="settingsHideVortexVersionWarningInput">
-        Don't warn me at startup if my installed Vortex version is untested
-      </label>
-    </div>
-
-    <!-- Moved here from Rebuild Collection 2026-07-27 -- this now also drives Missing Masters' own
-         single-mod rebuild auto-download, not just Rebuild Collection, so it belongs as a general,
-         tool-agnostic setting rather than living under one specific tool's own section. -->
-    <h3 class="settings-section-title">Download Missing Archives</h3>
-    <div class="field-group">
-      <label class="checkbox">
-        <input type="checkbox" id="settingsDownloadMissingInput">
-        Download missing archives automatically
-      </label>
-    </div>
-    <p class="muted">
-      When enabled, any mod archive that can't be found in your downloads folder gets downloaded
-      automatically from Nexus first, instead of being skipped.
-    </p>
-    <div class="callout callout--warning">
-      Automated downloads only work for Nexus <strong>Premium</strong> accounts -- Nexus's API refuses
-      this for free accounts by design, the same way Vortex's own client refuses to auto-download for
-      non-Premium users. This respects Nexus's ad-supported download model: free-tier users must
-      download the archive manually from the Nexus website (which shows ads) and let Vortex install
-      it. If your account isn't Premium, nothing else is attempted automatically -- you'll be told to
-      download and reinstall it yourself via Vortex instead.
-    </div>
-  </div>
-
-  <!-- Rebuild Collection -->
-  <div class="settings-group">
-    <div class="settings-group__header">
-      <h2>Rebuild Collection</h2>
-      <p class="muted">Fast direct-extraction staging rebuilds.</p>
-    </div>
-
-    <h3 class="settings-section-title">Backup path</h3>
-    <div class="field-group">
-      <label class="field-label" for="settingsBackupRootInput">Backup root folder <span class="muted">(optional, only needed if backups are turned on below)</span></label>
-      <div class="path-input-row">
-        <input id="settingsBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Mod Extraction\Vortex-Rebuild-Backups">
-        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsBackupRootInput">Browse&hellip;</button>
+      <div class="field-group">
+        <label class="field-label" for="settingsStateInput">Vortex database path (leave blank to auto-detect)</label>
+        <div class="path-input-row">
+          <input id="settingsStateInput" class="input input--wide" type="text" placeholder="auto-detected under %APPDATA%\Vortex\state.v2">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsStateInput">Browse&hellip;</button>
+        </div>
       </div>
-    </div>
 
-    <div class="field-group">
-      <label class="checkbox">
-        <input type="checkbox" id="settingsForceExtractMismatchInput">
-        Automatically force-extract off-site mods when a downloaded file doesn't exactly match
-      </label>
-    </div>
-    <p class="muted">
-      When enabled, Force Extract will automatically extract any off-site mod archive that you have
-      downloaded, instead of skipping that mod. Note: Vortex might show this as a new mod and ask you
-      to import it -- make sure you do.
-    </p>
-
-    <h3 class="settings-section-title">Performance</h3>
-    <p class="muted">Rebuild Collection extracts mods one at a time by default. Raising this runs several extractions in parallel (each is its own independent process) -- faster for large collections, at the cost of more simultaneous disk/CPU use.</p>
-    <div class="field-group">
-      <label class="field-label" for="settingsConcurrencyInput">Concurrent extractions (1-8)</label>
-      <input id="settingsConcurrencyInput" class="input input--small" type="number" min="1" max="8" step="1">
-    </div>
-
-    <h3 class="settings-section-title">Backups</h3>
-    <p class="muted">A backup is a full copy of every mod's current staging folder, made just before rebuilding it. For larger collections this option could consume a large amount of disk space.</p>
-    <div class="field-group">
-      <label class="field-label" for="settingsMaxBackupsInput">Number of backups to keep per collection (0 = off (suggested); 1-3 = keep only the N most recent; blank = unlimited, requires manual deletion)</label>
-      <input id="settingsMaxBackupsInput" class="input input--small" type="number" min="0" max="3" step="1" placeholder="unlimited">
-    </div>
-    <div class="view-actions">
-      <button id="settingsDeleteBackupsBtn" class="btn btn--ghost btn--small">Delete all backups</button>
-      <span id="settingsDeleteBackupsStatus" class="muted"></span>
-    </div>
-  </div>
-
-  <!-- Update Collection -->
-  <div class="settings-group">
-    <div class="settings-group__header">
-      <h2>Update Collection</h2>
-      <p class="muted">Tool used to preserve the ignore/disable status while updating a collection.</p>
-    </div>
-
-    <h3 class="settings-section-title">Paths</h3>
-    <div class="field-group">
-      <label class="field-label" for="settingsSyncBackupRootInput">Backups folder <span class="field-required">(required)</span></label>
-      <div class="path-input-row">
-        <input id="settingsSyncBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\collection-sync">
-        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsSyncBackupRootInput">Browse&hellip;</button>
+      <h3 class="settings-section-title">Vortex database backups</h3>
+      <p class="muted">Shared by both Update Collection and Rules Generator, since both write to Vortex's database. <strong>Restore</strong> lets you go back to an earlier backup if something goes wrong.</p>
+      <div class="field-group">
+        <label class="field-label" for="settingsMaxStateBackupsInput">Number of backups to keep (blank = unlimited, requires manual deletion)</label>
+        <input id="settingsMaxStateBackupsInput" class="input input--small" type="number" min="1" step="1" placeholder="unlimited">
       </div>
-    </div>
-    <h3 class="settings-section-title">Collection snapshot backups</h3>
-    <p class="muted">Collection backups created from the 'Create Backup' option.</p>
-    <div class="view-actions">
-      <button id="settingsSyncDeleteBackupsBtn" class="btn btn--ghost btn--small">Delete all backups</button>
-      <span id="settingsSyncDeleteBackupsStatus" class="muted"></span>
-    </div>
-  </div>
-
-  <!-- Vortex Scrub (Utilities area) -->
-  <div class="settings-group">
-    <div class="settings-group__header">
-      <h2>Vortex Scrub</h2>
-      <p class="muted">Folders and archives you've confirmed are safe to keep -- they won't show up as "Action Needed" in Vortex Scrub anymore.</p>
-    </div>
-
-    <h3 class="settings-section-title">Exclude list location</h3>
-    <div class="field-group">
-      <label class="field-label" for="settingsCleanupExcludeListDirInput">Folder to store the exclude list in <span class="field-required">(required)</span></label>
-      <div class="path-input-row">
-        <input id="settingsCleanupExcludeListDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\clean-up-exclude-list">
-        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsCleanupExcludeListDirInput">Browse&hellip;</button>
-      </div>
-    </div>
-    <p class="muted">Excluding/adding/removing items below takes effect immediately once this is set -- no need to hit Save Settings for those, only for this path itself (requires a restart).</p>
-
-    <h3 class="settings-section-title">Excluded staging folders</h3>
-    <details id="settingsCleanupIgnoredStagingDetails">
-      <summary>Show excluded folders (<span id="settingsCleanupIgnoredStagingCount">0</span>)</summary>
-      <div class="field-group" style="margin: 8px 0;">
-        <label><input type="checkbox" id="settingsCleanupIgnoredStagingSelectAllInput"> Select all</label>
-      </div>
-      <ul id="settingsCleanupIgnoredStagingList" class="sync-result-list"></ul>
-      <p id="settingsCleanupIgnoredStagingEmpty" class="muted hidden">None excluded yet.</p>
       <div class="view-actions">
-        <button id="settingsCleanupIgnoredStagingRemoveSelectedBtn" class="btn btn--ghost btn--small" disabled>Remove Selected</button>
-        <button id="settingsCleanupIgnoredStagingRemoveAllBtn" class="btn btn--ghost btn--small">Remove All</button>
+        <button id="settingsStateDeleteBackupsBtn" class="btn btn--ghost btn--small">Delete all backups</button>
+        <button id="settingsStateRestoreBtn" class="btn btn--ghost btn--small">Restore</button>
+        <span id="settingsStateDeleteBackupsStatus" class="muted"></span>
       </div>
-    </details>
-    <div class="path-input-row" style="margin-top: 12px;">
-      <input id="settingsCleanupAddStagingInput" class="input input--wide" type="text" placeholder="Exact staging folder name">
-      <button id="settingsCleanupAddStagingBtn" class="btn btn--ghost btn--small">Add</button>
-    </div>
+      <div id="settingsStateRestoreResultActions" class="view-actions hidden">
+        <span class="muted">Restored backup</span>
+        <button id="settingsStateRevealRestoredBtn" class="btn btn--ghost btn--small">Reveal</button>
+        <span class="muted" title="A safety backup taken automatically right before this restore, in case you need to undo it">Safety backup</span>
+        <button id="settingsStateRevealPreRestoreBtn" class="btn btn--ghost btn--small">Reveal</button>
+      </div>
 
-    <h3 class="settings-section-title">Excluded archives</h3>
-    <details id="settingsCleanupIgnoredArchivesDetails">
-      <summary>Show excluded archives (<span id="settingsCleanupIgnoredArchivesCount">0</span>)</summary>
-      <div class="field-group" style="margin: 8px 0;">
-        <label><input type="checkbox" id="settingsCleanupIgnoredArchivesSelectAllInput"> Select all</label>
+      <h3 class="settings-section-title">Logs</h3>
+      <p class="muted">Where this app's run logs are stored. Each tool that keeps logs gets its own subfolder here. Leave blank to use the built-in default. Changes here need a server restart.</p>
+      <div class="field-group">
+        <label class="field-label" for="settingsLogsDirInput">Log file location</label>
+        <div class="path-input-row">
+          <input id="settingsLogsDirInput" class="input input--wide" type="text" placeholder="Default: this app's own logs folder">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsLogsDirInput">Browse&hellip;</button>
+        </div>
       </div>
-      <ul id="settingsCleanupIgnoredArchivesList" class="sync-result-list"></ul>
-      <p id="settingsCleanupIgnoredArchivesEmpty" class="muted hidden">None excluded yet.</p>
       <div class="view-actions">
-        <button id="settingsCleanupIgnoredArchivesRemoveSelectedBtn" class="btn btn--ghost btn--small" disabled>Remove Selected</button>
-        <button id="settingsCleanupIgnoredArchivesRemoveAllBtn" class="btn btn--ghost btn--small">Remove All</button>
-      </div>
-    </details>
-    <div class="path-input-row" style="margin-top: 12px;">
-      <input id="settingsCleanupAddArchiveInput" class="input input--wide" type="text" placeholder="Exact archive file name (extension optional -- matched either way)">
-      <button id="settingsCleanupAddArchiveBtn" class="btn btn--ghost btn--small">Add</button>
-    </div>
-    <span id="settingsCleanupStatus" class="muted"></span>
-  </div>
-
-  <!-- Missing Masters (Utilities area) -->
-  <div class="settings-group">
-    <div class="settings-group__header">
-      <h2>Missing Masters</h2>
-      <p class="muted">READ-ONLY inputs -- this feature never writes to either of these two folders, only reads from them.</p>
-    </div>
-
-    <h3 class="settings-section-title">Skyrim Data folder</h3>
-    <div class="field-group">
-      <label class="field-label" for="settingsSkyrimDataDirInput">The Data directory is located directly inside Skyrim's root installation folder (for example, <code>C:\Program Files (x86)\Steam\steamapps\common\Skyrim Special Edition\Data</code>) <span class="field-required">(required)</span></label>
-      <div class="path-input-row">
-        <input id="settingsSkyrimDataDirInput" class="input input--wide" type="text" placeholder="e.g. E:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data">
-        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsSkyrimDataDirInput">Browse&hellip;</button>
+        <button id="settingsOpenLogsBtn" class="btn btn--ghost btn--small">Open Logs Folder</button>
+        <button id="settingsDeleteLogsBtn" class="btn btn--ghost btn--small">Delete all logs</button>
+        <span id="settingsDeleteLogsStatus" class="muted"></span>
       </div>
     </div>
+    </section>
 
-    <h3 class="settings-section-title">Plugins.txt location</h3>
-    <div class="field-group">
-      <label class="field-label" for="settingsPluginsListDirInput">The folder containing your Plugins.txt <span class="field-required">(required)</span></label>
-      <div class="path-input-row">
-        <input id="settingsPluginsListDirInput" class="input input--wide" type="text" placeholder="e.g. C:\Users\YourUsername\AppData\Local\Skyrim Special Edition">
-        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsPluginsListDirInput">Browse&hellip;</button>
+    <!-- General -- applies regardless of which tool you're using. -->
+    <section class="settings-pane" id="pane-general">
+    <div class="settings-group">
+      <div class="settings-group__header">
+        <h2>General</h2>
+        <p class="muted">How the app looks and behaves.</p>
       </div>
-      <p class="muted">Located in your Windows AppData folder (not the game folder). If you're not sure where that is, it's usually <code>C:\Users\YourUsername\AppData\Local\Skyrim Special Edition</code>.</p>
-    </div>
 
-    <h3 class="settings-section-title">Dummy Masters output folder</h3>
-    <div class="field-group">
-      <label class="field-label" for="settingsDummyMastersOutputDirInput">Where a created dummy master gets written <span class="field-required">(required)</span></label>
-      <div class="path-input-row">
-        <input id="settingsDummyMastersOutputDirInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\Wyre Output">
-        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsDummyMastersOutputDirInput">Browse&hellip;</button>
+      <h3 class="settings-section-title">Appearance</h3>
+      <div class="field-group">
+        <label class="field-label" for="settingsThemeSelect">Theme</label>
+        <select id="settingsThemeSelect" class="select select--small">
+          <option value="system">System default</option>
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
       </div>
-      <p class="muted">Never your live Data or SKSE folder -- a good choice is a dedicated folder inside your staging directory that you turn into its own mod in Vortex, the same way you'd manage a DynDOLOD Output or BodySlide Output folder.</p>
-    </div>
-  </div>
 
-  <!-- Archive Finder (folded in from the standalone "Archive File Finder" project 2026-07-28 --
-       see TECHNICAL.md). Reuses the existing "Vortex downloads folder" above as its own scan
-       folder -- no separate "scan folder" setting here, deliberately. -->
-  <div class="settings-group">
-    <div class="settings-group__header">
-      <h2>Archive Finder</h2>
-      <p class="muted">Scans your Vortex downloads folder (set above, under Vortex paths) -- no separate folder to configure here.</p>
-    </div>
-
-    <h3 class="settings-section-title">Database folder</h3>
-    <div class="field-group">
-      <label class="field-label" for="settingsArchiveFinderDbDirInput">Where the archive search index is stored <span class="field-required">(required)</span></label>
-      <div class="path-input-row">
-        <input id="settingsArchiveFinderDbDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Downloads\archive-finder-index">
-        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsArchiveFinderDbDirInput">Browse&hellip;</button>
+      <h3 class="settings-section-title">Server</h3>
+      <p class="muted">Changes here need a server restart. This server has no login of its own, so leave the host as <code>127.0.0.1</code> unless you specifically want another device on your network to reach it.</p>
+      <div class="settings-row-2">
+        <div class="field-group">
+          <label class="field-label" for="settingsServerPortInput">Port</label>
+          <input id="settingsServerPortInput" class="input input--small" type="number" min="1" max="65535" step="1">
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="settingsServerHostInput">Host / IP address to bind to</label>
+          <input id="settingsServerHostInput" class="input input--small" type="text" placeholder="127.0.0.1">
+        </div>
       </div>
-      <p class="muted">A small local database, separate from your downloads folder itself -- safe to point anywhere, and safe to delete any time to force a clean rescan from scratch.</p>
-    </div>
+      <div class="callout callout--warning" style="margin-top: 14px;">
+        <div class="callout__title">⚠️ Important Security Warning</div>
+        Only change the host if you know what you're doing! Setting this to anything other than <code>127.0.0.1</code> or <code>localhost</code> exposes this tool—and gives full read and write access to your mod files and Vortex state—to everyone on your local network without password protection.
+      </div>
+      <div class="field-group">
+        <label class="checkbox">
+          <input type="checkbox" id="settingsAutoOpenInput">
+          Automatically open a browser tab when the server starts
+        </label>
+      </div>
 
-    <h3 class="settings-section-title">Default extraction folder</h3>
-    <div class="field-group">
-      <label class="field-label" for="settingsArchiveFinderOutputDirInput">Where extracted files go by default <span class="muted">(optional -- you can also pick a folder each time you extract)</span></label>
-      <div class="path-input-row">
-        <input id="settingsArchiveFinderOutputDirInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\My Patch Collection">
-        <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsArchiveFinderOutputDirInput">Browse&hellip;</button>
+      <h3 class="settings-section-title">Nexus Mods</h3>
+      <p class="muted">Grab your personal API key from <a href="https://www.nexusmods.com/settings/api-keys" target="_blank" rel="noopener">nexusmods.com/settings/api-keys</a> -- scroll to the bottom of the page, under "Personal API Key".</p>
+      <div class="field-group">
+        <label class="field-label" for="settingsNexusKeyInput">API key</label>
+        <input id="settingsNexusKeyInput" class="input input--wide" type="password" placeholder="paste your personal API key" autocomplete="off">
+        <span id="settingsNexusKeyStatus" class="muted"></span>
+      </div>
+      <p class="muted">Stored as plain text in <code>config.json</code>, not encrypted -- anyone with access to this computer could read it directly from that file.</p>
+      <div class="view-actions">
+        <button id="settingsClearNexusKeyBtn" class="btn btn--ghost btn--small">Clear stored key</button>
+      </div>
+
+      <div class="field-group" style="margin-top: 14px;">
+        <label class="checkbox">
+          <input type="checkbox" id="settingsHideVortexVersionWarningInput">
+          Don't warn me at startup if my installed Vortex version is untested
+        </label>
+      </div>
+
+      <!-- Moved here from Rebuild Collection 2026-07-27 -- this now also drives Missing Masters' own
+           single-mod rebuild auto-download, not just Rebuild Collection, so it belongs as a general,
+           tool-agnostic setting rather than living under one specific tool's own section. -->
+      <h3 class="settings-section-title">Download Missing Archives</h3>
+      <div class="field-group">
+        <label class="checkbox">
+          <input type="checkbox" id="settingsDownloadMissingInput">
+          Download missing archives automatically
+        </label>
+      </div>
+      <p class="muted">If a mod's archive isn't in your downloads folder, we'll grab it from Nexus automatically instead of skipping it.</p>
+      <div class="callout callout--warning">
+        This only works for Nexus <strong>Premium</strong> accounts -- Nexus's API blocks automatic
+        downloads for free accounts by design, the same way Vortex's own client does. If your
+        account isn't Premium, download the archive yourself from either within Vortex or on
+        Nexus's website to reinstall it.
       </div>
     </div>
-  </div>
+    </section>
 
-  <div class="view-actions">
-    <button id="settingsSaveBtn" class="btn btn--primary">Save Settings</button>
-    <span id="settingsSaveStatus" class="muted"></span>
+    <div class="settings-save-bar">
+      <span id="settingsSaveStatus" class="save-hint"></span>
+      <button id="settingsSaveBtn" class="btn btn--primary">Save Settings</button>
+    </div>
+
+    </div>
   </div>
 </main>
 

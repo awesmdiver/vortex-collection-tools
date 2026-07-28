@@ -68,6 +68,109 @@ themeSelect.addEventListener('change', () => {
   applyTheme(theme);
 });
 
+// ---------- Two-pane category layout + rail pinning ----------
+// See DESIGN.md's "Settings -- two-pane category layout" and "Pinning" sections. Every field stays
+// in the DOM at all times -- switching category (or pinning a rail row) only ever toggles which
+// .settings-pane is visible / moves a .settings-rail__row between the rail and its Pinned group.
+// Nothing here touches loadSettings()/saveSettings() below; those already read/write every field
+// regardless of which pane happens to be showing.
+const SETTINGS_CATEGORY_ORDER = ['rebuild', 'update', 'missing', 'scrub', 'archive', 'paths', 'general'];
+const SETTINGS_LAST_CATEGORY_KEY = 'settingsLastCategory';
+const SETTINGS_PINNED_KEY = 'settingsPinnedCategories';
+
+function loadPinnedCategories() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SETTINGS_PINNED_KEY) || '[]');
+    return new Set(Array.isArray(raw) ? raw : []);
+  } catch {
+    return new Set();
+  }
+}
+const pinnedCategories = loadPinnedCategories();
+function savePinnedCategories() {
+  localStorage.setItem(SETTINGS_PINNED_KEY, JSON.stringify(Array.from(pinnedCategories)));
+}
+
+function showSettingsCategory(cat) {
+  localStorage.setItem(SETTINGS_LAST_CATEGORY_KEY, cat);
+  document.querySelectorAll('.settings-pane').forEach((p) => p.classList.toggle('active', p.id === `pane-${cat}`));
+  document.querySelectorAll('.settings-rail__item').forEach((b) => b.classList.toggle('active', b.dataset.cat === cat));
+  // Same "land at the top of the new view" fix shell.js's own showToolArea already applies when
+  // switching tool areas -- without it, switching category leaves you wherever the PREVIOUS
+  // category's pane happened to be scrolled to.
+  window.scrollTo(0, 0);
+}
+
+function setRailStarVisual(star, on) {
+  star.classList.toggle('on', on);
+  star.textContent = on ? '★' : '☆';
+  star.title = on ? 'Unpin' : 'Pin to top';
+}
+
+// One fixed order every rail row lives in, whether it's currently in the main list or the Pinned
+// group -- pinning/unpinning only ever lifts a row out or drops it back in, it never reorders
+// whichever rows stay put (same rule, same reasoning, as Home's HOME_CANONICAL_ORDER).
+function categoryOf(row) { return row.querySelector('.settings-rail__item').dataset.cat; }
+function insertRailRowInOrder(container, row) {
+  const myIndex = SETTINGS_CATEGORY_ORDER.indexOf(categoryOf(row));
+  const rows = Array.from(container.querySelectorAll(':scope > .settings-rail__row'));
+  const sibling = rows.find((sib) => sib !== row && SETTINGS_CATEGORY_ORDER.indexOf(categoryOf(sib)) > myIndex);
+  if (sibling) container.insertBefore(row, sibling);
+  else container.appendChild(row);
+}
+
+// Builds the "📌 Pinned" label + divider the first time anything is pinned; returns the container
+// pinned rows get inserted into (always right before the divider, via insertRailRowInOrder above).
+function ensurePinnedRailGroup() {
+  const container = $g('settingsRailPinnedGroup');
+  if (!container.querySelector('.settings-rail__divider')) {
+    const label = document.createElement('div');
+    label.className = 'settings-rail__group';
+    label.textContent = '📌 Pinned';
+    const divider = document.createElement('div');
+    divider.className = 'settings-rail__divider';
+    container.appendChild(label);
+    container.appendChild(divider);
+  }
+  return container;
+}
+function clearPinnedRailGroupIfEmpty() {
+  const container = $g('settingsRailPinnedGroup');
+  if (!container.querySelector('.settings-rail__row')) container.innerHTML = '';
+}
+
+// Moves ONE rail row to reflect `pinned` -- used both for a live star click and for applying
+// persisted pins at load. The row itself (and its listeners) is the same real node either way --
+// re-parenting it moves it, it never gets cloned.
+function applyCategoryPinState(cat, pinned) {
+  const star = document.querySelector(`.settings-rail__pin[data-pin-key="${CSS.escape(cat)}"]`);
+  if (!star) return;
+  const row = star.closest('.settings-rail__row');
+  setRailStarVisual(star, pinned);
+  insertRailRowInOrder(pinned ? ensurePinnedRailGroup() : $g('settingsRail'), row);
+  clearPinnedRailGroupIfEmpty();
+}
+
+function toggleCategoryPin(cat) {
+  const pinning = !pinnedCategories.has(cat);
+  if (pinning) pinnedCategories.add(cat); else pinnedCategories.delete(cat);
+  savePinnedCategories();
+  applyCategoryPinState(cat, pinning);
+}
+
+$g('settingsRail').addEventListener('click', (e) => {
+  const pin = e.target.closest('.settings-rail__pin');
+  if (pin) { toggleCategoryPin(pin.dataset.pinKey); return; }
+  const item = e.target.closest('.settings-rail__item');
+  if (item) showSettingsCategory(item.dataset.cat);
+});
+
+// Apply any pins already persisted from a previous visit, then land on the last-open category (or
+// the first one, on a genuinely first visit) -- all before the very first paint.
+for (const cat of pinnedCategories) applyCategoryPinState(cat, true);
+const savedCategory = localStorage.getItem(SETTINGS_LAST_CATEGORY_KEY);
+showSettingsCategory(SETTINGS_CATEGORY_ORDER.includes(savedCategory) ? savedCategory : SETTINGS_CATEGORY_ORDER[0]);
+
 // ---------- Load current settings ----------
 async function loadSettings() {
   const cfg = await settingsApi('GET', '/api/settings');
