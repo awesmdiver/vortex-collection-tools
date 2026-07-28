@@ -198,6 +198,20 @@ compact breadcrumb, not a full `<h2>` — serves the same intent (know where you
 contradicting it. The tool-hero title stays the value pitch; the eyebrow carries the name and the
 way back Home.
 
+**The breadcrumb goes on EVERY view within a tool — not just the tool-hero landing (2026-07-28).**
+A tool's deeper views don't have a `.tool-hero`, so the first pass missed them: Rebuild Collection's
+plan/confirmation and progress screens, Update Collection's steps, log/report sub-views — they showed
+only their own heading + an in-flow "← Back to X" button, with no "Home › <area>". Add the same
+`.tool-eyebrow` at the top of **every** view, above its heading.
+
+**The breadcrumb replaces the old in-flow back buttons (2026-07-28 decision).** Retire the
+`.btn--nav.btn--back` "← Back to <tool>" controls — the breadcrumb's **area segment is now the way
+back**: on a sub-view it links to that tool's landing/first view (for Rebuild, the collection picker
+— where "Back to Collections" went); on the tool's own landing view it's just the current location
+(not a link). **Home** always links to the Home area. One consistent navigation on every view.
+(Exception: a genuine *step-back within a multi-step flow* that goes somewhere other than the tool
+landing — keep that specific control and flag it.)
+
 ## Tool page layout — group controls into cards, cap the width (2026-07-28)
 
 A tool page whose body is a stack of loose labels + inputs reads as unstructured (Archive Finder
@@ -259,6 +273,45 @@ Select all + bulk action(s)" note under Core components.
   flipping to ✓ on copy. "N matching files" expanders are a quiet caret + accent text, not a heavy
   button.
 
+**Confirmed during the build (2026-07-28) — two calls the mockups didn't capture, both kept:**
+- **Button labels are Title Case in this app** — "Select All", "Invert Selection", "Clear
+  Selection", "Extract Selected" (matching the established convention: "Delete All", "Save &
+  Rescan", "View Collection", "Load Vortex Data"). This overrides the mockups' sentence case and the
+  plain-language sentence-case default — internal consistency wins (the `plain-language-writer`
+  skill's own "consistency can outrank the rule"). **Use Title Case for button labels app-wide;** the
+  design mockups often show sentence case, but the app's Title Case is the source of truth.
+- **The selection bar is shared across both Archive Finder modes** — "Find individual files" and
+  "Display Archive" (tree browse) use the same bar for their Extract flow, so it stays visible in
+  both. Scoping selection UI to files-mode would silently break the tree mode's pre-existing Extract
+  — the "mockup governs look, the app governs what it does" rule again.
+
+## Spacing — give stacked things room, consistently (2026-07-28)
+
+Elements should never sit flush on top of each other, and the gap between them should be
+*consistent* so a page reads with an even rhythm instead of a random mix of 12/16/20px. Default to
+breathing room — when in doubt, add air, not remove it.
+
+- **Between stacked cards / sections** (`.settings-group`, `.sync-phase`, the tool-page cards, the
+  two-pane content blocks): a consistent **24px (1.5rem)** vertical gap. Never flush. Existing
+  components on 16–20px margins should converge on this.
+- **Tool-hero → first card / section:** the same ~24px of air below the banner before the first
+  block.
+- **Prefer a container `gap` over per-element margins** where practical — `display: flex;
+  flex-direction: column; gap: 24px` (or grid `gap`) on the wrapping stack keeps spacing uniform by
+  construction and avoids collapsed/doubled margins. Fall back to a single consistent bottom margin
+  only where a shared container isn't practical.
+- This rule governs the **gaps between big blocks**, not padding *inside* a card (keep the existing
+  internal rhythm of section sub-labels and field groups).
+- **Does NOT apply to** (confirmed 2026-07-28, correctly left untouched during the rollout):
+  `.callout` margins (shared across nested/inline contexts — a global change ripples everywhere);
+  Home's launcher grid (`.home-grid` gap, `.home-section-title`), a separate already-reviewed
+  pattern; and dense repeating rows (`.mm-row`, `.plan-table` rows, tight control rows) — those are
+  list items, not stacked cards, and keep their own tighter rhythm.
+
+Confirmed 2026-07-28 from the Archive Finder "Search" card sitting flush under the "Your archive
+index" card — the user wanted air between them. Reflects a standing preference for generous
+whitespace over cramped, stacked layouts.
+
 ## Contextual error placement — put failure feedback where the user is already looking (2026-07-28)
 
 A page-level error box rendered once near the top of a long, scrolling list (e.g. Missing Masters'
@@ -304,9 +357,9 @@ Collection, before Reports) — Settings is the one and only exception that goes
 ## Core components — reuse these, don't reinvent them
 
 - **Buttons**: `.btn--primary` (the one action to take on this screen), `.btn--ghost` (secondary /
-  cancel), `.btn--nav.btn--back` (every "Back to X" navigation control, always this exact pair of
-  classes — never ghost or primary for a back button), `.btn--small` as a size modifier on any of
-  the above.
+  cancel), `.btn--small` as a size modifier on any of the above. **`.btn--nav.btn--back` ("← Back to
+  X") is retired (2026-07-28)** — the tool-page breadcrumb replaces in-flow back navigation (see
+  "Tool page breadcrumb — name where you are"). Don't add new back buttons; use the breadcrumb.
 - **Cards**: `.settings-group` / `.sync-phase` — a bordered, padded box for a distinct chunk of a
   page (Settings' three tool-area cards, Update Collection's four numbered steps).
 - **Badges & status-pills**: `.badge` (a small pill, usually with a count) and `.status-pill` (a
