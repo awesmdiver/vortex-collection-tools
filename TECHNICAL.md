@@ -2584,7 +2584,8 @@ own `pinnedTools` -- different concepts, own namespace).
 
 **Save bar**: `.settings-save-bar` (sticky to the bottom of `#settingsPanes`) now holds
 `#settingsSaveStatus` (class changed from `muted` to the new `.save-hint` -- same id, same element,
-JS untouched) and `#settingsSaveBtn`. Restart/Stop Server stayed in the header row, unaffected.
+JS untouched) and `#settingsSaveBtn`. Restart/Stop Server moved to a right-aligned row between the
+tool-hero banner and the panes (2026-07-28, per the user -- infrequent, kept clear of the rail).
 
 **Copy refresh**: applied the mockup's own already-approved rewrites verbatim where they existed
 (Rebuild Collection/Update Collection/Vortex Scrub/Missing Masters/Archive Finder blurbs -- see the
@@ -2621,7 +2622,65 @@ parsed, and visually confirmed (rail wraps to a horizontal multi-row flow, conte
 below) by temporarily forcing the narrow-width styles, since this session's `resize_window` call
 didn't actually shrink the tab's own rendering viewport in this environment.
 
-## Future work
+**Header row polish, same day, two follow-up passes**: the Restart Server/Stop Server buttons
+gained `.settings-header-actions { margin-left: auto }` so they stay pinned to the header row's
+right edge (confirmed via geometry: `actionsRight === rowRight` exactly) even when they wrap onto
+their own line under a narrow window, instead of falling back to the left edge. A `margin-bottom`
+was added to `.settings-header-row` in the same pass to add breathing room before the rail/Pinned
+group below, then removed again once live feedback showed the right-aligned buttons had already
+solved the crowding the margin was compensating for -- the extra gap was just wasted space at that
+point.
+
+## Home/Settings layout polish pass (2026-07-28)
+
+Three small layout fixes plus one anti-autofill fix, done together after Home/Settings were both
+already built. Reference: `design/vortex-home-mockup.html` and `design/vortex-settings-mockup.html`
+were both updated with the finalized values first; DESIGN.md's "Home / landing page" and
+"Settings -- two-pane category layout" sections already document the *why* -- this is just the
+wiring.
+
+- **Home content width, scoped to Home only**: `#area-home .app-main { max-width: min(1280px,
+  96vw) }`. The shared `.app-main` rule itself (`min(1800px, 96vw)`, sized for wide data tables
+  elsewhere in the app) was deliberately left untouched -- an ID-scoped override beats editing the
+  shared rule since every other tool area still needs the full width. Confirmed live: Home measures
+  exactly 1280px and centers with even margins; Rebuild Collection (and by the same mechanism,
+  every other area) still measures the full 1800px.
+- **Equal-height Home cards**: `.home-card` and `.home-card-wrap` both gained `height: 100%` (on
+  top of the `width: 100%` already there). A CSS grid row already stretches to its tallest item by
+  default -- the missing piece was the card/wrap actually filling that stretched height instead of
+  just sitting at their own content height inside it. Combined with the flex-column layout +
+  `.home-card__desc { flex: 1 }` already in place, this pins "Open →" to the bottom of every card
+  regardless of description length. Confirmed live: three cards with 1-3 lines of description each
+  measured identical heights (214.33px) in the same grid row.
+- **Settings content-column width cap**: `#settingsPanes { max-width: 960px }`, added right next to
+  the existing `.settings-layout` rule. Scoped to the content column only -- the rail
+  (`.settings-rail`, 224px) is unaffected, matches the mockup exactly. Confirmed live: `#settingsPanes`
+  measures exactly 960px, and callout/hint text now wraps at a readable width instead of running
+  edge-to-edge on a wide monitor.
+- **Autofill/password-manager suppression**: the browser's password manager was reading Settings'
+  loose collection of text/password inputs as a login form and popping its own "No items to show /
+  + New login" overlay. Added `autocomplete="off"` to every plain text/path input in Settings (15
+  fields -- Rebuild Collection's backup root, Update Collection's backup folder, Missing Masters'
+  three folders, Vortex Scrub's exclude-list folder + the two ad-hoc add-name inputs, Archive
+  Finder's two folders, the three Vortex-paths fields, the logs folder, and the server host field;
+  deliberately NOT the `type="number"` fields, which aren't a password-manager target). The Nexus
+  API key field -- the one field a password manager plausibly mistakes for an actual credential --
+  changed from `autocomplete="off"` (which Chrome and other browsers are documented to deliberately
+  *ignore* on password-type fields specifically, to stop sites disabling the password manager on
+  real login forms) to `autocomplete="new-password"` (the browser-sanctioned way to say "this is
+  not an existing saved login"), plus `data-lpignore="true"` (LastPass), `data-1p-ignore`
+  (1Password), `data-bwignore="true"` (Bitwarden -- added as a same-risk, same-goal bonus beyond
+  what was asked, since it's the same category of harmless opt-out attribute and directly relevant
+  if Bitwarden turns out to be the specific extension involved), and `data-form-type="other"`.
+  **Deliberately did NOT introduce a literal `<form>` element** around Settings' fields (the
+  original ask's literal wording implied one exists) -- there is no `<form>` in this app today, and
+  every button inside Settings (Save Settings, every Browse, every Delete/Restore/Add/Remove) would
+  silently default to `type="submit"` the moment a `<form>` wrapper appeared, meaning pressing Enter
+  in any text field would risk synthetically clicking the wrong button (browsers submit via the
+  first submit control, or invoke it directly, when Enter is pressed in a form field) -- a real
+  regression that would need `type="button"` added to every single button to fully neutralize.
+  Per-input `autocomplete`/`data-*` attributes are the standard, effective mitigation on their own
+  and don't require a form wrapper at all, so that risk wasn't worth taking for this fix.
 
 Tracked in the workspace `TODO.md` (not duplicated here — confirmed 2026-07-27, one place to check
 instead of two) under `vortex-tools/vortex-collection-tools`, split into "ready to work on" and
