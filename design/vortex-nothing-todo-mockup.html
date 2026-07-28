@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body>
+<title>Rules Generator — "Nothing to do" cleanup</title>
+<style>
+  :root{
+    --bg:#0d0f14; --surface:#161922; --surface-2:#1d212c; --border:#2a2f3d;
+    --text:#e6e9ef; --text-muted:#8b93a3; --accent:#5b8def;
+    --neutral:#7c8494; --neutral-bg:rgba(124,132,148,0.12); --radius:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;font-size:15px;line-height:1.5}
+  .wrap{max-width:1100px;margin:0 auto;padding:26px 24px 60px}
+
+  .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:26px;flex-wrap:wrap}
+  .toolbar .lbl{font-size:12.5px;color:var(--text-muted);margin-right:2px}
+  .toolbar button{font-family:inherit;font-size:13px;padding:7px 14px;border-radius:20px;border:1px solid var(--border);
+    background:var(--surface);color:var(--text-muted);cursor:pointer}
+  .toolbar button.on{color:var(--accent);border-color:var(--accent);background:rgba(91,141,239,0.12)}
+
+  .badge{display:inline-block;font-size:13px;font-weight:600;padding:6px 14px;border-radius:16px;
+    background:var(--neutral-bg);color:var(--neutral)}
+  .desc{color:var(--text-muted);font-size:14px;margin:12px 0 16px}
+
+  /* current: flat list */
+  .nd-list{list-style:none;margin:0;padding:0}
+  .nd-list li{padding:9px 2px;border-bottom:1px solid var(--border);font-size:14px}
+  .nd-list li:last-child{border-bottom:none}
+
+  /* chips */
+  .nd-chips{display:flex;flex-wrap:wrap;gap:8px}
+  .nd-chip{font-size:13px;color:var(--text-muted);background:var(--neutral-bg);border:1px solid var(--border);
+    border-radius:8px;padding:6px 12px}
+
+  /* columns */
+  .nd-cols{columns:3;column-gap:28px}
+  .nd-cols div{font-size:14px;color:var(--text);padding:6px 0;border-bottom:1px solid var(--border);break-inside:avoid}
+
+  /* collapsed */
+  details.nd{border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);padding:0}
+  details.nd summary{list-style:none;cursor:pointer;padding:12px 16px;display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text-muted)}
+  details.nd summary::-webkit-details-marker{display:none}
+  details.nd summary .caret{transition:transform .15s;display:inline-block}
+  details.nd[open] summary .caret{transform:rotate(90deg)}
+  details.nd .body{padding:0 16px 16px}
+  .count{color:var(--neutral);font-weight:600}
+  @media (max-width:640px){.nd-cols{columns:1}}
+</style>
+
+<div class="wrap">
+  <div class="toolbar">
+    <span class="lbl">Treatment:</span>
+    <button id="t-chips" class="on" onclick="setT('chips')">Chips</button>
+    <button id="t-collapsed" onclick="setT('collapsed')">Chips, collapsed</button>
+    <button id="t-cols" onclick="setT('cols')">3 columns</button>
+    <button id="t-current" onclick="setT('current')">Current (list)</button>
+  </div>
+
+  <div id="stage"></div>
+</div>
+
+<script>
+  const MODS=["4k_2k Parallax","Blended Roads Redone 4K","Faultier's PBR Skyrim AIO 4k",
+    "Praedy's Fort Dawnguard - SE V3 4K","Miggyluv's Eyes - PBR Addon","Vergis Ancient Vessels PBR 4K","Ignoble Beds - PBR"];
+  const desc = `Added to the new collection with no relationship to anything in the original one — nothing needed here.`;
+  const chips = MODS.map(m=>`<span class="nd-chip">${m}</span>`).join('');
+  const listHTML = `<ul class="nd-list">${MODS.map(m=>`<li>${m}</li>`).join('')}</ul>`;
+  const colsHTML = `<div class="nd-cols">${MODS.map(m=>`<div>${m}</div>`).join('')}</div>`;
+
+  const head = `<span class="badge">Nothing to do</span><p class="desc">${desc}</p>`;
+
+  function setT(t){
+    document.querySelectorAll('.toolbar button').forEach(b=>b.classList.remove('on'));
+    document.getElementById('t-'+t).classList.add('on');
+    const s=document.getElementById('stage');
+    if(t==='chips'){
+      s.innerHTML = head + `<div class="nd-chips">${chips}</div>`;
+    } else if(t==='collapsed'){
+      s.innerHTML = `<span class="badge">Nothing to do</span>
+        <details class="nd" style="margin-top:12px">
+          <summary><span class="caret">▸</span> <span class="count">${MODS.length}</span> mods added with nothing needed — show them</summary>
+          <div class="body"><p class="desc" style="margin-top:2px">${desc}</p><div class="nd-chips">${chips}</div></div>
+        </details>`;
+    } else if(t==='cols'){
+      s.innerHTML = head + colsHTML;
+    } else {
+      s.innerHTML = head + listHTML;
+    }
+  }
+  setT('chips');
+</script>
+</body>
+</html>
