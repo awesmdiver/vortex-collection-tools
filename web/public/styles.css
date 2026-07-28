@@ -303,6 +303,23 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   display: inline-flex; align-items: center; gap: 5px; transition: gap 0.15s ease;
 }
 .home-card:hover .home-card__open { gap: 8px; }
+/* Cards must fill their wrapper now that the grid item is .home-card-wrap, not .home-card itself
+   (see below) -- without this a card would only be as wide as its own content. */
+.home-card { width: 100%; }
+
+/* Pinning (see DESIGN.md's "Pinning" section) -- a star SIBLING to the card button, not nested
+   inside it (nested buttons are invalid HTML and unclickable in practice). .home-card-wrap is the
+   actual grid item now; position: relative lets the star corner-pin over the card beneath it. */
+.home-card-wrap { position: relative; }
+.home-card__star {
+  position: absolute; top: 11px; right: 11px; z-index: 2;
+  width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text-muted);
+  display: grid; place-items: center; font-size: 17px; line-height: 1;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.home-card__star:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+.home-card__star.on { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 
 /* Settings page header -- keeps the intro line and the server action buttons on one row, same
    space-between/flex-wrap idea as .progress-header-row, so a narrow window wraps the buttons

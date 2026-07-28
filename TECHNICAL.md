@@ -2445,12 +2445,63 @@ The now-orphaned `.app-nav { display: flex; gap: 6px; }` rule was deleted (the `
 wrapper no longer exists); `.nav-tab`/`.nav-tab--active` themselves were kept, still used by the
 Settings gear button.
 
+**Pinning, added 2026-07-28** (see DESIGN.md's "Pinning" section for the visual/UX rationale --
+this is the wiring). Each card is now `<div class="home-card-wrap"><button class="home-card">...
+</button><button class="home-card__star" data-pin-key="...">☆</button></div>` -- the star is a
+SIBLING of the card button, not nested inside it (a `<button>` inside a `<button>` is invalid HTML
+and unreliable to click); `.home-card-wrap` is the actual CSS grid item now, `position: relative` so
+the star can corner-pin over the card beneath it, and `.home-card` gained `width: 100%` since it's no
+longer the grid item itself.
+
+- **Pin key**: `data-pin-key` is the same string as the card's own `data-sub` (for the 7 expanded
+  Reports/Utilities cards) or `data-area` (for the 3 Main tools cards) -- already unique across all
+  10 cards, so no separate id scheme was invented.
+- **Persistence**: `localStorage` under `pinnedTools` (a JSON array of pin keys) -- same mechanism
+  already used for the theme preference just above it in `shell.js`. A personal display preference
+  with no server-side meaning, so a `config.json` round-trip would be pure overhead; picked over it
+  for that reason, per DESIGN.md's "engineer's choice" note.
+- **The Pinned row is built by cloning**, not a second data model: `renderPinnedRow()` queries
+  `#homeCategorySections .home-card-wrap` for every wrap whose star's `data-pin-key` is in the
+  pinned set, `cloneNode(true)`s each one into `#homePinnedRow`, and re-wires the clone (`cloneNode`
+  never carries listeners along) via the same `wireHomeCardWrap()` every original card uses at load.
+  This means a card's copy/icon/link only ever needs to change in ONE place (its real markup below);
+  the Pinned row can never drift out of sync with it. `#homePinnedRow` is left as empty string
+  (`row.innerHTML = ''`) when nothing is pinned, per the "hide entirely" rule.
+- **Toggle in place, no full re-render**: `toggleFavTool(key)` flips the key in the `Set`, saves it,
+  updates every star sharing that key via `document.querySelectorAll('.home-card__star[data-pin-key=
+  "..."]')` (this matches BOTH the original card's star and its Pinned-row clone's star, when one
+  exists), then calls `renderPinnedRow()` -- which only ever touches `#homePinnedRow`'s own contents,
+  never the category grids. Verified live via a DOM-node-identity marker on an unrelated card,
+  confirmed untouched (same node reference) after several pin/unpin cycles -- not just "looked fine
+  visually," the actual node survives.
+- **Star click doesn't also trigger the card underneath it**: the star sits on TOP of the card via
+  `z-index: 2` + absolute positioning, and its own click handler calls `e.stopPropagation()` before
+  toggling -- without this, clicking the star would also fire the card's `navigateToArea()` click
+  listener (they're siblings, not nested, so this isn't automatic; `stopPropagation` is required).
+
 **Verified live** (2026-07-28): opens on Home by default; all 10 cards + the header title navigate
 correctly (checked via URL params + `#headerMeta` text for each); Update Collection's profile
 dropdown populates after a card click (previously only wired via the removed `nav-sync` listener);
 the Settings unsaved-changes guard still blocks/resolves correctly when navigating away via a card or
 the title; light and dark theme both render with no visual seam versus the rest of the app; every
 `.home-card` is a real, natively tabbable `<button>`.
+
+**Pinning verified live** (2026-07-28, same day, after the taglines below were also tightened to
+match the finalized mockup): pinning a card fills its star and adds a Pinned row above the category
+sections with a matching clone; unpinning (from either the original card's star OR the Pinned-row
+clone's own star -- both tested) clears the star and removes the Pinned row entirely once empty;
+navigating via a Pinned-row clone's card works identically to the original; pins survive a real page
+reload (`localStorage` confirmed intact, Pinned row rebuilt correctly from it on load); toggling
+never touched an unrelated card's own DOM node (checked via a planted marker attribute surviving
+several pin/unpin cycles -- confirms the "no full re-render" rule actually holds, not just that
+nothing looked different); light and dark theme both render the star/Pinned-row correctly.
+
+**Card taglines re-aligned to the finalized mockup, same change**: the original build (written before
+the mockup's own copy was tightened) had slightly longer descriptions on several cards. Replaced all
+10 with the shorter, more imperative phrasing now in `design/vortex-home-mockup.html` (e.g. Rebuild
+Collection's own line dropped its trailing "...faster than Vortex's own install process" clause;
+Missing Masters dropped "...before they crash your game") -- wording only, no card gained or lost a
+tool.
 
 ## Future work
 

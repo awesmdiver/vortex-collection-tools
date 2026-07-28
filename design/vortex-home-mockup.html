@@ -60,6 +60,12 @@
   .home-card__desc{font-size:14px;color:var(--text-muted);line-height:1.5;margin:0;flex:1}
   .home-card__open{font-size:13px;font-weight:600;color:var(--accent);display:inline-flex;align-items:center;gap:5px}
   .home-card:hover .home-card__open{gap:8px}
+  .home-card{width:100%}
+  .home-card-wrap{position:relative}
+  .home-card__star{position:absolute;top:11px;right:11px;z-index:2;width:32px;height:32px;border-radius:8px;cursor:pointer;
+    border:1px solid var(--border);background:var(--surface-2);color:var(--text-muted);display:grid;place-items:center;font-size:17px;line-height:1;transition:.15s}
+  .home-card__star:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
+  .home-card__star.on{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
 
   #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(18px);opacity:0;pointer-events:none;
     background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:11px 18px;border-radius:10px;
@@ -89,6 +95,7 @@
     installed in Vortex — rebuild them faster, keep your cleanup after an update, sort out conflict rules, and
     see how it all went.</p>
   </div>
+  <div id="pinned"></div>
   <div id="sections"></div>
 </main>
 
@@ -103,9 +110,9 @@
       {icon:"🔗",name:"Rules Generator",desc:"Copy the conflict rules you already fixed from an old collection to its update."},
     ]},
     {label:"Reports",cards:[
-      {icon:"📊",name:"Stats",desc:"See how every rebuild has gone, and what still needs a look."},
-      {icon:"✅",name:"Work Through",desc:"Every problem mod across every collection, gathered into one checklist."},
-      {icon:"🔍",name:"Update Compare",desc:"A clear before-and-after of what an update added, kept, and removed."},
+      {icon:"📊",name:"Stats",desc:"See how every rebuild performed, and what still needs attention."},
+      {icon:"✅",name:"Work Through",desc:"Gather every problem mod across every collection into one checklist."},
+      {icon:"🔍",name:"Update Compare",desc:"See a clear before-and-after of what an update added, kept, and removed."},
       {icon:"📋",name:"Rules Generator Report",desc:"Check which mods have their rules copied, and which still need a decision."},
     ]},
     {label:"Utilities",cards:[
@@ -119,15 +126,32 @@
   function toast(m){t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),1900)}
   window.open_=n=>toast('Opens '+n);
 
-  document.getElementById('sections').innerHTML=SECTIONS.map(s=>`
-    <div class="home-section-title">${s.label}</div>
-    <div class="home-grid">${s.cards.map(c=>`
+  const ALL=SECTIONS.flatMap(s=>s.cards);
+  const FAV=new Set(['Rebuild Collection','Update Compare']); // demo: pre-pinned
+  const cardHTML=c=>{const on=FAV.has(c.name);return `<div class="home-card-wrap">
       <button class="home-card" onclick="open_('${c.name}')">
         <div class="home-card__icon">${c.icon}</div>
         <div class="home-card__name">${c.name}</div>
         <div class="home-card__desc">${c.desc}</div>
         <div class="home-card__open">Open <span>→</span></div>
-      </button>`).join('')}</div>`).join('');
+      </button>
+      <button class="home-card__star ${on?'on':''}" data-fav="${c.name}" title="${on?'Unpin':'Pin to top'}" onclick="toggleFav('${c.name}')">${on?'★':'☆'}</button>
+    </div>`;};
+  function renderPinned(){
+    const p=ALL.filter(c=>FAV.has(c.name));
+    document.getElementById('pinned').innerHTML=p.length
+      ? `<div class="home-section-title">📌 Pinned</div><div class="home-grid">${p.map(cardHTML).join('')}</div>` : '';
+  }
+  window.toggleFav=n=>{
+    FAV.has(n)?FAV.delete(n):FAV.add(n);const on=FAV.has(n);
+    document.querySelectorAll(`.home-card__star[data-fav="${CSS.escape(n)}"]`).forEach(b=>{
+      b.classList.toggle('on',on);b.textContent=on?'★':'☆';b.title=on?'Unpin':'Pin to top';});
+    renderPinned();toast(on?'Pinned '+n:'Unpinned '+n);
+  };
+  document.getElementById('sections').innerHTML=SECTIONS.map(s=>`
+    <div class="home-section-title">${s.label}</div>
+    <div class="home-grid">${s.cards.map(cardHTML).join('')}</div>`).join('');
+  renderPinned();
 
   const root=document.documentElement,tb=document.getElementById('themeBtn');
   const isDark=()=>!(root.getAttribute('data-theme')==='light'||(!root.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme:light)').matches));

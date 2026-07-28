@@ -181,9 +181,86 @@ window.navigateToArea = navigateToArea;
 
 document.getElementById('appHeaderTitle').addEventListener('click', () => navigateToArea('home'));
 document.getElementById('nav-settings').addEventListener('click', () => navigateToArea('settings'));
-document.querySelectorAll('.home-card').forEach((card) => {
+
+// Pinning (DESIGN.md's "Pinning" section) -- a star per Home card, additive: pinned tools ALSO
+// surface in a dedicated Pinned row above the category sections, but never move or disappear from
+// their normal spot below. Persisted to localStorage (same mechanism as the theme preference above)
+// -- purely a personal display preference, no server round-trip needed.
+const PINNED_TOOLS_STORAGE_KEY = 'pinnedTools';
+function loadPinnedTools() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PINNED_TOOLS_STORAGE_KEY) || '[]');
+    return new Set(Array.isArray(raw) ? raw : []);
+  } catch {
+    return new Set();
+  }
+}
+const pinnedTools = loadPinnedTools();
+function savePinnedTools() {
+  localStorage.setItem(PINNED_TOOLS_STORAGE_KEY, JSON.stringify(Array.from(pinnedTools)));
+}
+
+function setStarVisual(star, on) {
+  star.classList.toggle('on', on);
+  star.textContent = on ? '★' : '☆';
+  star.title = on ? 'Unpin' : 'Pin to top';
+}
+
+// Wires ONE card-wrap's card-click and star-click behavior -- called once per real card at load,
+// and again for each clone rendered into the Pinned row (cloneNode never carries listeners along).
+function wireHomeCardWrap(wrap) {
+  const card = wrap.querySelector('.home-card');
+  const star = wrap.querySelector('.home-card__star');
   card.addEventListener('click', () => navigateToArea(card.dataset.area, card.dataset.sub));
+  star.addEventListener('click', (e) => {
+    e.stopPropagation(); // don't also trigger the card's own navigate-away click underneath it
+    toggleFavTool(star.dataset.pinKey);
+  });
+}
+
+// Toggle in place, no full re-render (DESIGN.md's explicit "must not flicker" rule): updates every
+// star sharing this key (the original card's star AND its Pinned-row clone's star, when pinned) plus
+// re-renders just the Pinned row -- never rebuilds the category grids themselves.
+function toggleFavTool(key) {
+  if (pinnedTools.has(key)) pinnedTools.delete(key); else pinnedTools.add(key);
+  savePinnedTools();
+  const on = pinnedTools.has(key);
+  document.querySelectorAll(`.home-card__star[data-pin-key="${CSS.escape(key)}"]`).forEach((star) => setStarVisual(star, on));
+  renderPinnedRow();
+}
+
+// The Pinned row is built by CLONING each pinned tool's real wrap node from the category sections
+// below (not a second copy of card data to keep in sync) -- hidden entirely when nothing is pinned.
+function renderPinnedRow() {
+  const row = document.getElementById('homePinnedRow');
+  if (!row) return;
+  const pinnedWraps = Array.from(document.querySelectorAll('#homeCategorySections .home-card-wrap'))
+    .filter((wrap) => pinnedTools.has(wrap.querySelector('.home-card__star').dataset.pinKey));
+  if (!pinnedWraps.length) {
+    row.innerHTML = '';
+    return;
+  }
+  const title = document.createElement('div');
+  title.className = 'home-section-title';
+  title.textContent = '📌 Pinned';
+  const grid = document.createElement('div');
+  grid.className = 'home-grid';
+  for (const wrap of pinnedWraps) {
+    const clone = wrap.cloneNode(true);
+    wireHomeCardWrap(clone);
+    grid.appendChild(clone);
+  }
+  row.innerHTML = '';
+  row.appendChild(title);
+  row.appendChild(grid);
+}
+
+document.querySelectorAll('#homeCategorySections .home-card-wrap').forEach((wrap) => {
+  wireHomeCardWrap(wrap);
+  const star = wrap.querySelector('.home-card__star');
+  setStarVisual(star, pinnedTools.has(star.dataset.pinKey));
 });
+renderPinnedRow();
 
 // Maps the URL's own ?reports= spelling to stats-app.js's internal sub-tab id (REPORTS_SUB_TABS) --
 // 'work-through' (hyphenated, readable in a URL) becomes 'workthrough' (no separator, matching this
