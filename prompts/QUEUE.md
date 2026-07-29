@@ -72,7 +72,7 @@ in TECHNICAL.md; write your wrap-up to prompts/handoff-latest.md.
 ## ✅ Done
 - **Disabled-count bug** — phantom "1 disabled" fixed (`f4976ab`)
 - **Step 2/3 polish** — chip-grid previews, bold action hints, pluralization (`16ebbc7`)
-- **Header tighten** — "Show Ignored & Disabled" onto the stepper row — *done, but NOT yet committed*
+- **Header tighten** — "Show Ignored & Disabled" onto the stepper row (`4f600d1`)
 
 ---
 
@@ -85,6 +85,8 @@ in TECHNICAL.md; write your wrap-up to prompts/handoff-latest.md.
 *(Harmonization folds into the theming/dashboard era. Theming + the warm/fun voice apply to BOTH
 audiences — Developer mode only adds tools.)*
 
-**Revisit (held):** the Next-gating standard (#1) is a shared stepper pattern, so The Forge is a
-candidate — but The Forge is a one-sitting flow with no "go to Vortex" step between steps, so it may
-not need it. **Hold until you've played with The Forge hands-on**, then decide (per user 2026-07-29).
+**Revisit (review-only, fire anytime):** does the Next-gating standard (#1) apply to The Forge's
+stepper? The Forge is a one-sitting flow with no leave-and-return step, and its main action (Merge)
+*is* the advance — so the two-primary "did I act?" ambiguity likely doesn't occur. Rather than wait on
+manual testing, **terminal reviews The Forge's stepper logic and reports whether/where the standard
+applies** (no code changes); we decide from that. Doesn't block the two pending builds above.
