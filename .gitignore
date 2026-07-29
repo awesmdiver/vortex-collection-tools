@@ -51,3 +51,8 @@ prompts/.board-state.json
 # OS
 Thumbs.db
 .DS_Store
+
+# Downloaded portable binary for scripts/compress-image.js (lossless PNG re-optimization) -- same
+# "bundled copy, checked first, never committed" convention lib/sevenzip.js already uses for
+# tools/7-Zip/7z.exe. compress-image.js auto-downloads this on first use if missing.
+tools/oxipng/
