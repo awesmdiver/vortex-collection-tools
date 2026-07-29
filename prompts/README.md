@@ -186,7 +186,8 @@ npm run web that every page has even breathing room and nothing sits flush.
 
 ---
 
-### 11. Breadcrumb on ALL views — audit ⭕
+### 11. Breadcrumb on ALL views — audit ✅
+*Audit: only Rebuild Collection had routed sub-views (fixed). Kept 2 back controls: Update Compare's cross-tool jump + Archive Finder's in-place "Back to results."*
 *First pass only hit the tool-hero landing views; deeper flow views (Rebuild plan/progress, etc.) were missed.*
 ```
 Inventory every page/view/sub-view in the app and make sure each shows the breadcrumb eyebrow
