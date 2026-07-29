@@ -25,6 +25,34 @@ empty in v1.0).
 | `reports` | Reports | **The Chronicle** | 📜 | The Chronicle of every rebuild, update, and change. |
 | `settings` | Settings | **The Standing Stones** *(new — proposal)* | 🗿 | Choose your paths and preferences once; every tool draws on them. |
 
+## Why these names (Skyrim lore → tool function)
+
+The naming principle — and the rule for naming any *future* tool consistently: **pick a Skyrim term
+whose in-world meaning maps to what the tool actually does.** That's why they land as right rather than
+decorative.
+
+- **The Arcaneum** — the College of Winterhold's great library, where every tome is collected. Home is
+  the library where all your tools live. *(a launcher = a library)*
+- **Restoration** — the school of *healing/mending* magic. Rebuild mends a broken collection back to
+  full health, re-extracting missing/corrupted files. *(heal the broken)*
+- **The Ward** — a Restoration spell that *shields/protects*. Update protects the Ignored/Disabled
+  choices you set (your "wards") so they survive the update. *(protect what you set)*
+- **The Scribe** — one who *copies/transcribes*. Rules Generator copies your conflict rules from the
+  old collection to the new one. *(transcribe the rules across)*
+- **The Forge** — where raw materials are *fused into one* item (smithing). Merge forges many plugins
+  into a single file. *(many into one)*
+- **The Augur** — the Augur of Dunlain *foresees/divines*. Missing Masters foresees a missing-master
+  crash before it happens. *(see the problem coming)*
+- **The Cleansing** — purging corruption/clutter from a place. Vortex Scrub clears the staging clutter
+  and dead leftovers Vortex left behind. *(purge the clutter)*
+- **Clairvoyance** — the Illusion spell that *reveals what's hidden* / lights the path. Archive Finder
+  reveals what's inside any archive without opening it. *(see the hidden)*
+- **The Chronicle** — a *record of events over time*. Reports are the history of every rebuild, update,
+  and change. *(record the history)*
+- **The Standing Stones** *(settings proposal)* — you pick a passive blessing *once* and it shapes your
+  whole playthrough. Settings: set your paths and preferences once; every tool draws on them.
+  *(set once, affects everything)*
+
 ## Notes / open bits
 - **The keepers** (from the original draft, the ones you liked): The Arcaneum, Restoration, The Ward,
   The Scribe, The Forge, The Augur, The Cleansing, Clairvoyance, The Chronicle.
