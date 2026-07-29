@@ -1183,6 +1183,11 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .merge-step.active b { background: var(--accent); color: #0b1220; }
 .merge-step.done { color: var(--success); }
 .merge-step.done b { background: var(--success); color: #0b1220; }
+/* A step with genuinely nothing to do this run (e.g. Apply Disables when the backup captured zero
+   disabled mods) -- greyed out further than an ordinary not-yet-visited pill, same opacity dial
+   already used for a muted/disabled control elsewhere (.select:disabled). Still fully clickable --
+   this is a visual hint, not a lockout, per DESIGN.md/the task's own "still clickable" requirement. */
+.merge-step.muted { opacity: 0.55; }
 
 /* Update Collection's own stepper is fully navigable (jump to any step, unlike The Forge's mostly-
    linear one -- see DESIGN.md's "Navigable vs. linear") -- scoped to this modifier rather than the
@@ -1196,7 +1201,11 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    the right edge via margin-left: auto. On a narrow window the row wraps as a whole -- the button
    drops to its own line below the pills (still right-aligned there, via the same auto margin)
    rather than crowding or overlapping them. */
-.sync-stepper-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin: 0 0 var(--stack-gap); }
+/* margin-top added 2026-07-29 -- the header-tighten pass (moving "Show Ignored & Disabled" onto
+   this row) removed the row that used to separate the Profile/Collection pickers from the stepper,
+   leaving them cramped together with no breathing room; .collection-picker has no bottom margin of
+   its own, so this row's own top margin is the only thing establishing that gap now. */
+.sync-stepper-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin: var(--stack-gap) 0; }
 .sync-stepper-row .merge-stepper { margin: 0; }
 .sync-stepper-row #syncListModsBtn { margin-left: auto; }
 

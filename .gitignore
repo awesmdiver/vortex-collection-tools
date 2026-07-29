@@ -21,9 +21,13 @@ terminal-flow-archive/
 # personal, local-progress data (see lib/work-through-state.js).
 # offsite-import-map.json tracks manually-imported off-site archive associations (see
 # lib/offsite-import-map.js) — also personal, local filenames.
+# backup-ratio-dismiss-state.json tracks which collections have been dismissed from Update
+# Collection's backup ratio warning (see lib/backup-ratio-dismiss-state.js) — also personal,
+# local-preference data.
 config.json
 work-through-state.json
 offsite-import-map.json
+backup-ratio-dismiss-state.json
 lib/vortex-sync/backups/
 lib/vortex-sync/state-backups/
 

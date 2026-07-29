@@ -32,13 +32,42 @@ function escHtml(s) {
 // every control keeps whatever state a previous visit left it in for free.
 const SYNC_STEPS = ['Backup', 'Apply Ignores', 'Apply Disables', 'Compare'];
 let syncStep = 0;
+// True once the CURRENT backup is known to have captured zero disabled mods -- Apply Disables
+// (step 3, index 2) has nothing to do this run. Known as soon as a backup exists (Create Backup or
+// Restore Backup), not gated behind Apply Ignores actually running -- the fact itself doesn't
+// depend on that. Drives three things kept in sync via updateSyncNoDisablesState(): the Apply
+// Disables pill renders muted, Apply Ignores' own Next button skips straight to Compare, and the
+// end-of-Apply-Ignores guidance shows the green "you're done here" callout instead of the normal
+// "continue to Apply Disables" steps -- see DESIGN.md/TECHNICAL.md's "adaptive completion" note.
+let syncNoDisablesInBackup = false;
 
 function syncRenderStepper() {
   $s('syncStepper').innerHTML = SYNC_STEPS.map((label, i) => {
-    const cls = i === syncStep ? 'active' : i < syncStep ? 'done' : '';
-    const num = i < syncStep ? '✓' : String(i + 1);
+    let cls;
+    if (i === syncStep) cls = 'active';
+    else if (i === 2 && syncNoDisablesInBackup) cls = 'muted';
+    else if (i < syncStep) cls = 'done';
+    else cls = '';
+    const num = i < syncStep && cls !== 'muted' ? '✓' : String(i + 1);
     return `<div class="merge-step ${cls}" data-step="${i}"><b>${num}</b>${label}</div>`;
   }).join('');
+}
+
+// Apply Ignores' own Next button reads "Next: Apply Disables" and jumps to step 2 normally, or
+// "Next: Compare" and jumps straight to step 3 when this backup has nothing to disable -- kept in
+// one place since the label and the jump target must never disagree.
+function updateSyncStep1NextTarget() {
+  $s('syncStep1NextBtn').textContent = syncNoDisablesInBackup ? 'Next: Compare →' : 'Next: Apply Disables →';
+}
+
+// Recomputes syncNoDisablesInBackup from whatever currentBackup now is and refreshes every place
+// that depends on it (the stepper pill, Apply Ignores' Next label/target). Called anywhere
+// currentBackup changes -- Create Backup success, Restore Backup confirm, and the collection reset
+// (where currentBackup goes back to null, so this correctly reverts to the default state).
+function updateSyncNoDisablesState() {
+  syncNoDisablesInBackup = (currentBackup?.disabled?.length ?? 0) === 0;
+  syncRenderStepper();
+  updateSyncStep1NextTarget();
 }
 
 function syncGoToStep(n) {
@@ -56,7 +85,7 @@ $s('syncStepper').addEventListener('click', (e) => {
 
 $s('syncStep0NextBtn').addEventListener('click', () => syncGoToStep(1));
 $s('syncStep1BackBtn').addEventListener('click', () => syncGoToStep(0));
-$s('syncStep1NextBtn').addEventListener('click', () => syncGoToStep(2));
+$s('syncStep1NextBtn').addEventListener('click', () => syncGoToStep(syncNoDisablesInBackup ? 3 : 2));
 $s('syncStep2BackBtn').addEventListener('click', () => syncGoToStep(1));
 $s('syncStep2NextBtn').addEventListener('click', () => syncGoToStep(3));
 $s('syncStep3BackBtn').addEventListener('click', () => syncGoToStep(2));
@@ -257,6 +286,7 @@ function showBackupNextSteps(ignoredCount, disabledCount) {
 function resetSyncStepsForNewCollection() {
   currentBackup = null;
   $s('syncStep0NextBtn').disabled = true;
+  updateSyncNoDisablesState();
   setSyncStatus($s('syncBackupStatus'), '');
   $s('syncBackupNextSteps').classList.add('hidden');
   $s('syncBackupNothingToDoInfo').classList.add('hidden');
@@ -566,28 +596,60 @@ $s('syncListModsBtn').addEventListener('click', () => {
 // points from the user's own collections (40 ignored out of ~1900 is normal/expected; 685 of 884
 // disabled clearly wasn't).
 const BACKUP_RATIO_WARNING_THRESHOLD = 0.03;
+// Absolute floor alongside the ratio -- confirmed real 2026-07-29: a tiny collection (e.g. 40 mods
+// total) can clear 3% with a count as small as 2, which is never actually worth a nudge (a couple of
+// mods being Ignored/Disabled is completely ordinary, at any collection size). Both conditions must
+// hold -- over 3% AND at least this many -- so a count of 2-5 never warns regardless of how small
+// the collection is. Tunable if 15 turns out wrong in practice; no other significance to the number.
+const BACKUP_RATIO_WARNING_MIN_COUNT = 15;
 
 // Returns null when nothing looks disproportionate (the common case) or total is unknown (a very
 // old/unreadable collection.json -- see sync-routes.js's totalCount), otherwise a ready-to-render
-// warning message covering whichever of ignored/disabled tripped the threshold.
+// warning message covering whichever of ignored/disabled tripped BOTH the ratio and the floor.
 function buildBackupRatioWarning(ignoredCount, disabledCount, totalCount) {
   if (!totalCount) return null;
   const flagged = [
     { label: 'Disabled', count: disabledCount },
     { label: 'Ignored', count: ignoredCount },
-  ].filter((f) => f.count / totalCount > BACKUP_RATIO_WARNING_THRESHOLD);
+  ].filter((f) => f.count / totalCount > BACKUP_RATIO_WARNING_THRESHOLD && f.count >= BACKUP_RATIO_WARNING_MIN_COUNT);
   if (flagged.length === 0) return null;
   const pct = (count) => Math.round((count / totalCount) * 100);
   const parts = flagged.map((f) => `${f.count} of your ${totalCount} mods (${pct(f.count)}%) marked **${f.label}**`);
   return `That's ${parts.join(' and ')} -- a bigger share than usual. If that's not what you meant, hop back into Vortex and fix it up before moving on to the next step.`;
 }
 
-function renderBackupRatioWarning(ignoredCount, disabledCount, totalCount) {
+// Persists this collection's dismissal (lib/backup-ratio-dismiss-state.js, gitignored, keyed by
+// collection NAME -- confirmed live that modId, including its "nexusModId" segment, is NOT stable
+// across an update, so keying by it would lose the dismissal exactly when Update Collection gets
+// used) then swaps the callout to a quiet success confirmation in place -- never silently hides it,
+// so clicking the link always gives visible feedback that it worked (or a clear error if it didn't,
+// rather than falsely claiming success when the write never landed).
+async function handleBackupRatioDismissClick(collectionName) {
   const el = $s('syncBackupRatioWarning');
+  try {
+    await syncApi('POST', '/api/sync/backup-ratio-dismiss', { collectionName });
+    el.className = 'callout callout--success';
+    el.innerHTML = `<p>${mdBold(escHtml(
+      `Got it — we won't flag this again for **${collectionName || 'this collection'}**. Turn these reminders back on anytime in Settings.`
+    ))}</p>`;
+  } catch (e) {
+    el.className = 'callout callout--critical';
+    el.innerHTML = `<div class="callout__title">🛑 Couldn't save that</div><p>${escHtml(e.message || 'Something went wrong -- try again.')}</p>`;
+  }
+}
+
+// dismissed/collectionName are only meaningful for a REAL warning render (the backup-success call
+// site below) -- the reset call sites (collection change, "backing up...") just want everything
+// hidden, so they pass none of it.
+function renderBackupRatioWarning(ignoredCount, disabledCount, totalCount, { dismissed, collectionName } = {}) {
+  const el = $s('syncBackupRatioWarning');
+  if (dismissed) { el.classList.add('hidden'); el.innerHTML = ''; return; }
   const message = buildBackupRatioWarning(ignoredCount, disabledCount, totalCount);
   if (!message) { el.classList.add('hidden'); el.innerHTML = ''; return; }
-  el.innerHTML = `<div class="callout__title">⚠️ Double-check this</div>${renderCriticalMessage(message)}`;
-  el.classList.remove('hidden');
+  el.className = 'callout callout--warning';
+  el.innerHTML = `<div class="callout__title">⚠️ Double-check this</div>${renderCriticalMessage(message)}` +
+    `<p><button type="button" class="af-inline-link-btn" id="syncRatioDismissBtn">This is normal for this collection</button></p>`;
+  $s('syncRatioDismissBtn').onclick = () => handleBackupRatioDismissClick(collectionName);
 }
 
 function renderBackupFreshnessWarning(message) {
@@ -636,7 +698,10 @@ $s('syncBackupBtn').addEventListener('click', async () => {
     setSyncStatus(statusEl, result.ignoredCount === 0 && result.disabledCount === 0
       ? "Backup created! No ignored or disabled mods were found for this collection, so there's nothing extra to save."
       : `Backup created! We saved ${result.ignoredCount} ignored mod(s) (and ${result.disabledCount} disabled mod(s)). Check out the "Next steps in Vortex" section below to finish setting things up.`);
-    renderBackupRatioWarning(result.ignoredCount, result.disabledCount, result.totalCount);
+    renderBackupRatioWarning(result.ignoredCount, result.disabledCount, result.totalCount, {
+      dismissed: result.ratioWarningDismissed,
+      collectionName: currentCollection.name,
+    });
     showBackupNextSteps(result.ignoredCount, result.disabledCount);
     await loadSyncBackups();
     currentBackup = mostRecentBackupFor(currentCollection.name);
@@ -644,6 +709,7 @@ $s('syncBackupBtn').addEventListener('click', async () => {
     // required on this step either way, matching the "required action" gate's own intent (see
     // DESIGN.md's "Gate 'Next' on a step's required action").
     $s('syncStep0NextBtn').disabled = false;
+    updateSyncNoDisablesState();
     checkBackupFreshnessAsync(collectionModId, profileId);
   } catch (e) {
     // Rare, real case: the collection moved on to a newer revision since this page loaded --
@@ -690,6 +756,7 @@ $s('syncRestoreBackupConfirmBtn').addEventListener('click', () => {
   if (!chosen) return;
   currentBackup = chosen;
   $s('syncStep0NextBtn').disabled = false;
+  updateSyncNoDisablesState();
   // A stale preview from whatever was previously current (the auto-picked most-recent backup, or a
   // different restored one) would otherwise keep showing results that no longer match what's
   // actually selected, until Preview is clicked again.
@@ -809,22 +876,12 @@ $s('syncIgnoresApplyBtn').addEventListener('click', async () => {
     setApplyDone($s('syncIgnoresApplyBtn'));
     $s('syncStep1NextBtn').disabled = false;
     // Step 3 (Apply Disables) has nothing to do when this backup captured zero disabled mods to
-    // begin with -- already known from the backup's own content (currentBackup.disabled, loaded
-    // with the rest of the backup list), no need to wait for the user to click Preview in Step 3
-    // just to find out. Same "captured no disabled mods" signal apply-disables/preview already uses.
-    // The "close Vortex completely" step only matters as a hand-off into that skipped Step 3, so it
-    // gets hidden too in that case, not just reworded -- otherwise it'd be a pointless instruction
-    // with nothing after it to close Vortex FOR. Hiding an <ol> item renumbers the rest
-    // automatically, so this correctly becomes "2. You can skip..." rather than staying "3.".
-    // With nothing left to do in THIS tool, syncResumeAlmostThere's own callout closes out the flow
-    // with a plain reminder to double-check things in Vortex itself before actually playing.
-    const nothingToDisable = (backup.disabled?.length ?? 0) === 0;
-    $s('syncResumeCloseVortexStep').classList.toggle('hidden', nothingToDisable);
-    $s('syncResumeStep3Text').textContent = nothingToDisable
-      ? "You can skip Apply Disables since you don't have any mods to disable."
-      : 'Continue to Apply Disables below.';
-    $s('syncResumeNextSteps').classList.remove('hidden');
-    $s('syncResumeAlmostThere').classList.toggle('hidden', !nothingToDisable);
+    // begin with -- already known from the backup's own content (syncNoDisablesInBackup, set the
+    // moment this backup became current, not just now). When true, this tool's whole job for this
+    // collection is already finished -- show the green "you're done here" completion callout
+    // instead of the normal "continue to Apply Disables" guidance (mutually exclusive, never both).
+    $s('syncResumeNextSteps').classList.toggle('hidden', syncNoDisablesInBackup);
+    $s('syncResumeAlmostThere').classList.toggle('hidden', !syncNoDisablesInBackup);
   } catch (e) {
     setSyncStatus(statusEl, '');
     if (!handleSyncApiError(e, $s('syncIgnoresCriticalError'))) {

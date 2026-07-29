@@ -927,6 +927,156 @@ Confirmed the Apply Disables `nothingToDo` branch enables Next without touching 
 Compare stays completely ungated and the stepper pills stay freely clickable throughout. No
 contrast or layout issues in light or dark mode.
 
+### Adaptive completion — skip the empty Apply Disables step, and a real green "done" state (2026-07-29)
+
+Confirmed real regression, fixed: the end-of-flow "You're almost there!" callout (shown when a
+backup captured zero disabled mods, so this tool's job is already finished) rendered as a blue
+`callout--info` — a completion/success state wearing the wrong color, most likely a leftover from
+whenever this box was first written, before `callout--success` existed as an established pattern
+elsewhere in the app. Also: with nothing to disable, the flow still forced the user through a
+genuinely empty Apply Disables step (or made them notice on their own that Preview would find
+nothing) before reaching Compare.
+
+**Green completion banner** (`#syncResumeAlmostThere` in `index.html`): now `callout--success`,
+title "✅ You're done here!", body "Nothing left in this tool for this collection — just reopen
+Vortex, click **Resume** to finish the update, and have fun gaming. (Compare below is optional if
+you want a before/after.)" — folds in the Resume instruction that used to live only in the separate
+numbered `#syncResumeNextSteps` list, so only ONE callout shows at the end of Apply Ignores, never
+both. The old "you can skip Apply Disables" line is gone entirely — redundant now that Next
+literally skips it (see below), no need to tell the user to do manually what the button already
+does. `#syncResumeNextSteps` itself reverted to fully static markup (no more per-`<li>`
+show/hide) since it's now only ever shown in the has-disables case, where all three of its steps
+always apply.
+
+**Next skips the empty step, and the pill shows it's empty** (`sync-app.js`):
+- New module-level `syncNoDisablesInBackup`, recomputed by `updateSyncNoDisablesState()` from
+  `currentBackup.disabled.length === 0` any time `currentBackup` changes (Create Backup success,
+  Restore Backup confirm, or the collection reset back to `null`) — known as soon as a backup
+  exists, not gated behind Apply Ignores actually running, since the underlying fact doesn't depend
+  on that.
+- `syncRenderStepper()` renders the Apply Disables pill (index 2) with a new `muted` class
+  (`opacity: 0.55`, new `.merge-step.muted` rule) whenever `syncNoDisablesInBackup` is true AND it
+  isn't the currently-active step — deliberately NOT shown as `done` (✓) even once the flow has
+  passed it by skipping over it, since nothing was actually completed there; still fully clickable
+  (`.merge-stepper--nav` already makes every pill clickable regardless of any state).
+- Apply Ignores' own `#syncStep1NextBtn` reads "Next: Apply Disables →" / jumps to step 2 normally,
+  or "Next: Compare →" / jumps straight to step 3 when `syncNoDisablesInBackup` — both the label and
+  the click target read the same flag, so they can never disagree with each other.
+- The Apply Ignores success handler now reads `syncNoDisablesInBackup` directly (previously
+  recomputed the same fact locally from `backup.disabled?.length` — now a single source of truth
+  shared with the pill/Next-label logic above) to choose which of the two end-of-flow callouts to
+  show.
+
+**Spacing**: `.sync-stepper-row` (holds the stepper pills + "Show Ignored & Disabled", see the
+header-tighten pass above) gained a top margin (`var(--stack-gap)`, matching its own existing bottom
+margin) — that pass removed the row that used to sit between the Profile/Collection pickers and the
+stepper, and `.collection-picker` has no bottom margin of its own, so the gap had collapsed to zero.
+
+**Verified live** (2026-07-29, `npm run web`, both themes, stubbed `fetch` for the same reason as
+above): a 0-disabled backup showed the Apply Disables pill muted immediately after Create Backup
+(before Apply Ignores even ran) and "Next: Compare →" on Apply Ignores from the same moment; running
+Preview → Apply showed the green "You're done here!" banner (Resume bolded) with the old numbered
+list correctly hidden, and clicking Next landed on Compare directly, skipping step 3 entirely with
+the pill still showing muted (not a false "done" checkmark) rather than active. A 1-disabled backup
+showed the pill normal (not muted), "Next: Apply Disables →", and the original 3-item blue numbered
+list after Apply Ignores succeeded — confirming the two paths don't cross-contaminate. Both scenarios
+checked in light and dark mode with no contrast or layout issues.
+
+**Flagged, not fixed (pre-existing, out of scope this round)**: clicking Preview again on Apply
+Ignores (the deliberate re-arm path from the previous task) does not currently hide either
+end-of-flow callout (`#syncResumeNextSteps`/`#syncResumeAlmostThere`) if one was already showing —
+so re-doing Apply Ignores could leave a stale "you're done"/"next steps" callout on screen until
+Apply succeeds again. This predates this task (the callouts were never wired into the Preview
+re-arm), not something introduced here; noted for a future pass rather than silently expanded.
+
+### Backup ratio warning: absolute floor + persistent per-collection dismiss (2026-07-29)
+
+**Absolute floor.** `buildBackupRatioWarning()` (`sync-app.js`) already required a count to exceed
+`BACKUP_RATIO_WARNING_THRESHOLD` (3%) of the collection's total mod count. A small collection could
+still trip that on a genuinely unremarkable count -- confirmed the exact failure mode requested: 2
+of 40 mods (5%) is completely ordinary at that size, not something worth a nudge. New
+`BACKUP_RATIO_WARNING_MIN_COUNT = 15`, required in addition to (not instead of) the ratio -- a flagged
+count must be over 3% of the total AND at least 15 for either ignored or disabled, independently.
+Verified at the exact boundaries: 2-of-40 → no warning (ratio clears, count doesn't), 14-of-100 → no
+warning (ratio clears, count one short), 15-of-100 → warns (both conditions exactly met),
+20-of-2000 → no warning (count clears, ratio doesn't) -- confirming this is a genuine AND, not
+either-or.
+
+**Persistent per-collection dismiss.** New `lib/backup-ratio-dismiss-state.js`, same minimal
+load/save-JSON-file pattern as `lib/work-through-state.js` (gitignored, `{ dismissed: {
+[normalizedName]: { dismissedAt, collectionName } } }`, no database). `isDismissed`/`setDismissed`/
+`getDismissedCount`/`resetAll`.
+
+**Keyed by collection NAME, not modId -- re-keyed 2026-07-29 after the first version (keyed by
+modId, per the task's own initial instruction) was confirmed broken against real data.** The
+initial assumption -- that only the revision/timestamp segments of `<name>-<nexusModId>-<revision>-
+<timestamp>` change across an update -- turned out to be wrong: read directly against this
+install's own real collections, "Body Swap updated"'s own middle "nexusModId" segment itself changed
+between two real revisions of the SAME collection (`745639` at rev 22, `747482` at rev 25). There is
+no substring of modId that survives an update, so keying by any part of it would have defeated the
+entire point of a *persistent* dismissal -- gone exactly when Update Collection gets used. Re-keyed
+by collection name instead, normalized via trim+lowercase (`normalizeKey()`) -- the same stable
+identity this codebase already relies on elsewhere for this identical problem (`sync-app.js`'s
+`backupsFor()`, which matches a backup file to its collection by name across updates for the same
+reason). Original casing is kept as a `collectionName` value purely for display.
+
+**Verified the fix directly, not just asserted it**: built an isolated temp-staging simulation (two
+fake collection folders, real `runlib.listInstalledCollections()`, no real user data touched) --
+dismissed a fake collection under its PRE-update modId, deleted that folder (mirroring Vortex
+replacing it on update) so only a POST-update folder with a **completely different modId** but the
+same name remained, and confirmed `isDismissed()` still returned true resolving through the new
+modId's name. This is the load-bearing verification for this whole feature; a live click-through
+alone couldn't have proven persistence across an actual revision change without staging fake data.
+
+**Wiring** (`web/sync-routes.js`): `POST /backup`'s response now includes
+`ratioWarningDismissed: backupRatioDismissState.isDismissed(matchedCollection.name)`, resolved from
+the SAME `listInstalledCollections().find(...)` lookup the route already does to confirm the
+collection still exists (never trusts a client-supplied name) -- avoids a second round-trip just to
+check. New `POST /backup-ratio-dismiss` (body `{collectionName}`), `GET /backup-ratio-dismiss-info`
+(`{count}`, for Settings), and `POST /backup-ratio-dismiss-reset` (Settings' "Remind me for all
+collections again").
+
+**Client** (`sync-app.js`): `renderBackupRatioWarning()` takes a 4th `{dismissed, collectionName}`
+opts arg -- `dismissed` short-circuits to hidden before anything else runs. A real warning's callout
+now also renders a `This is normal for this collection` link (reusing the existing
+`.af-inline-link-btn` inline-link-styled-as-button class rather than inventing a new one). Clicking
+it calls `handleBackupRatioDismissClick(collectionName)`: POSTs the dismissal, then swaps the SAME
+callout element in place to a quiet `callout--success` confirmation ("Got it — we won't flag this
+again for **{collection}**. Turn these reminders back on anytime in Settings.") -- never silently
+hides it, so the click always gives visible feedback, including a real error state if the persist
+call itself fails (rather than falsely confirming success).
+
+**Settings** (`web/public/index.html`'s `#pane-update`, `settings-app.js`): new "Backup heads-up
+reminders" section under Update Collection, body text built by `renderBackupRatioDismissBody(count)`
+(exact copy per the task, N=0 gets its own sentence rather than "0 collections"), populated on
+`loadSettings()` via the new `GET .../backup-ratio-dismiss-info`. "Remind me for all collections
+again" button calls the reset route directly -- deliberately NO confirm modal (unlike the
+destructive backup/log-delete buttons right above it in the same pane), since this only clears a
+preference; re-dismissing a still-normal collection later costs one click, nothing is actually lost.
+`mdBold`/`escHtml` are reused directly from `sync-app.js` (a global function declaration in a
+non-module script becomes a real `window` property, unlike `let`/`const` -- confirmed this project's
+existing convention of not redefining the same helper per file) rather than redefined here.
+
+**Verified live** (2026-07-29, both themes, against the REAL server, not a stub for anything
+persistence-related): ratio+floor math checked directly via console at every boundary (see above).
+Cross-update persistence verified via the isolated temp-staging simulation above. Real-restart
+persistence separately verified: direct API calls dismissed a test collection, a REAL server restart
+was triggered via Settings' own "Restart Server" button, confirmed the new re-keyed route code was
+actually live afterward (a dismiss call with only `collectionName`, no `collectionModId`, succeeded
+-- the pre-re-key code would have rejected it), and the dismissal was still there; a second,
+different test collection was confirmed unaffected throughout. Settings' reset button (clicked live,
+not just via API) correctly zeroed the count and flipped the body text to the N=0 copy. Full UI
+wiring checked against two real installed collections (fetch stubbed only for the `/backup` POST's
+returned ratio numbers, so the dismiss/info/reset calls all hit the real server for real): the
+41-of-100 warning rendered with the dismiss link, clicking it produced the green confirmation with
+the real collection name bolded and the dismissal genuinely persisted server-side under the
+normalized name key (confirmed via direct read of `backup-ratio-dismiss-state.json`), a second real
+collection with the same stubbed ratio still showed the normal warning (confirmed dismissal is
+scoped per-collection, not global), and re-running Create Backup for the dismissed collection with
+`ratioWarningDismissed: true` correctly suppressed the callout entirely. All test dismissals were
+reset via the Settings button (or `resetAll()`) afterward, leaving no residue in the real
+`backup-ratio-dismiss-state.json`.
+
 ## Safety notes
 
 - Vortex must be fully closed before any state-database read or write — both flows check this and
