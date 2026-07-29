@@ -75,7 +75,32 @@ Verify light + dark, npm run web. Write your wrap-up to prompts/handoff-latest.m
 
 ---
 
-## - [ ] 3 · Ratio-warning refinement — floor + per-collection dismiss + Settings
+## - [ ] 3 · Gate "Next" on each step's required action
+*So a distracted user always knows if they've acted. Same screens as #2 — run right after it.*
+
+```
+Update Collection stepper — gate "Next" on each step's required action, and show the action's done
+state. See DESIGN.md "Gate 'Next' on a step's required action". Load plain-language-writer.
+
+Apply Ignores (step 2) + Apply Disables (step 3):
+- Next starts DISABLED; enabled only after Apply succeeds. (The Preview → Apply gating stays; this adds
+  Apply → Next on top.)
+- Never two accent/primary buttons at once: while pending, Apply is the only primary and Next is
+  disabled/secondary.
+- On a successful Apply, flip the button: "Apply" → "Applied ✓", disabled, styled as done
+  (quiet/success, not the live accent). Then enable Next and make Next the primary.
+Backup (step 1): same logic — Next disabled until a backup is created (Create Backup → "Backup
+created", Next enables). A backup with nothing to save still counts as done; flag if unsure.
+Compare (step 4): no gating (optional, last step). Keep the navigable stepper pills freely clickable.
+
+Verify light + dark, npm run web: on a fresh step Next is disabled; after Apply the button reads
+"Applied ✓" (disabled) and Next enables. Document in TECHNICAL.md; write your wrap-up to
+prompts/handoff-latest.md.
+```
+
+---
+
+## - [ ] 4 · Ratio-warning refinement — floor + per-collection dismiss + Settings
 *Stops small-collection false positives; lets the user silence it per collection.*
 
 ```
@@ -113,7 +138,7 @@ Document in TECHNICAL.md; write your wrap-up to prompts/handoff-latest.md.
 
 ---
 
-## - [ ] 4 · Header tighten — "Show Ignored & Disabled" onto the stepper row
+## - [ ] 5 · Header tighten — "Show Ignored & Disabled" onto the stepper row
 *Reclaims a full row; right-justify it on the stepper line.*
 
 ```

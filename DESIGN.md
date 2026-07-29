@@ -284,6 +284,31 @@ choosing them *is* the first action — use judgment per tool.)
 the step with a quiet "→ Next, over in Vortex: …" callout telling them exactly what to do and that
 their place is saved. That connective tissue is the thing a single scroll can't give you.
 
+## Gate "Next" on a step's required action — and show the action's done state (2026-07-28)
+
+If a step has a **required action before you can move on** (Apply Ignores' **Apply**, Apply Disables'
+**Apply**), the step must make "have I done it yet?" impossible to get wrong — real users get pulled
+away mid-step (a phone call, the doorbell, a crying baby) and come back not knowing where they left
+off.
+
+- **Next starts disabled.** The step's **Next** button is disabled until the required action completes;
+  an *enabled* Next is itself the signal "you're clear to move on."
+- **One live primary at a time.** While the action is pending, the **action button is the only
+  primary** (accent); Next is secondary/disabled. Two accent buttons at once (Apply *and* Next) is the
+  exact trap that leaves a returning user unsure whether they already acted — never ship that.
+- **The action button shows its own done state.** On success it flips to a **past-tense, disabled,
+  confirmed** state — "Apply" → **"Applied ✓"**, no longer clickable, styled as done (a quiet/success
+  treatment, not the live accent). A glance tells a returning user it's finished.
+- **Then Next enables and becomes the primary** — the accent moves from the now-done action button to
+  Next, so the single accent thing on the page always points at "your next move."
+- Composes with the navigable stepper: the **pills stay freely clickable** (the re-entry escape hatch);
+  the Next-gating only guides the straight-through path. Skip gating where a step's action is genuinely
+  optional (Compare's Generate Report) — this is for *required* actions only.
+
+Confirmed real 2026-07-28: on Apply Ignores, **Apply** and **Next: Apply Disables** both rendered
+accent-blue at once; after a distraction the user couldn't tell if they'd applied and had to open
+Vortex to find out.
+
 ## Selectable lists — the standard select-and-act pattern (2026-07-28)
 
 **One selection pattern for every list the user checks items in and then acts on** — Archive
