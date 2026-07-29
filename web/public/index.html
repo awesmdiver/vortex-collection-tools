@@ -503,16 +503,17 @@
   </div>
   <div id="syncCollectionEmpty" class="empty-row hidden"></div>
 
-  <div class="view-actions">
-    <button id="syncListModsBtn" class="btn btn--ghost" disabled>Show Ignored & Disabled</button>
-  </div>
-
   <!-- Stepper (shared markup/CSS with The Forge -- see DESIGN.md's "Stepper" section). Unlike The
        Forge (one sitting, mostly linear), this flow is re-entered between steps -- the user leaves
        to act in Vortex and comes back -- so every pill is clickable to jump to any step, and no
        step's state is ever torn down between visits (each step's controls stay in the DOM the whole
-       time, just hidden/shown -- ordinary button-triggered actions, nothing to re-fetch on entry). -->
-  <div class="merge-stepper merge-stepper--nav" id="syncStepper"></div>
+       time, just hidden/shown -- ordinary button-triggered actions, nothing to re-fetch on entry).
+       "Show Ignored & Disabled" shares this row (pills left, button right via margin-left:auto on
+       .sync-stepper-row) instead of its own line above -- reclaims a row of vertical space. -->
+  <div class="sync-stepper-row">
+    <div class="merge-stepper merge-stepper--nav" id="syncStepper"></div>
+    <button id="syncListModsBtn" class="btn btn--ghost" disabled>Show Ignored & Disabled</button>
+  </div>
 
   <!-- Step 0: Backup -->
   <div id="syncStep0">
