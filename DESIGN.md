@@ -212,6 +212,17 @@ back**: on a sub-view it links to that tool's landing/first view (for Rebuild, t
 (Exception: a genuine *step-back within a multi-step flow* that goes somewhere other than the tool
 landing — keep that specific control and flag it.)
 
+**Confirmed during the all-views audit (2026-07-28):** only **Rebuild Collection** has separate
+routed sub-views (picker → plan / progress / logs / summary) — every other area (Update Collection,
+Rules Generator, all Reports/Utilities sub-tabs) is a single continuous page whose landing eyebrow
+already covers it. Its three "← Back to Collections" buttons became breadcrumb links to the picker.
+Two back controls were correctly **kept** (not "back to the tool landing," so the breadcrumb doesn't
+replace them) — **don't remove these**:
+- **Reports → Update Compare's "← Back to …"** — a *cross-tool jump*, not a return to Reports' own
+  landing.
+- **Archive Finder's "← Back to results"** — an *in-place content swap* within the same view (closes
+  the archive tree), not a separate routed view, so it's outside the breadcrumb model entirely.
+
 ## Tool page layout — group controls into cards, cap the width (2026-07-28)
 
 A tool page whose body is a stack of loose labels + inputs reads as unstructured (Archive Finder
