@@ -14,7 +14,10 @@ fix its biggest pain points: rebuilding a collection when files go missing or co
 collection without losing track of every mod you'd marked Ignored or Disabled, and keeping your
 custom mod-order rules intact when a collection gets updated. A set of smaller Utilities rounds it
 out — clearing away leftover mod clutter, catching missing master files before they crash your
-game, and finding any file inside any archive without unpacking it.
+game, and finding any file inside any archive without unpacking it. Every tool lives behind one
+Home page, so you're never more than a click away from the one you need.
+
+![The Home page — every tool, one click away](assets/readme-home-screenshot.png)
 
 ### 📋 At a Glance
 
@@ -29,6 +32,12 @@ game, and finding any file inside any archive without unpacking it.
 
 ## ✨ Key Features
 
+* **Puts every tool in one place:** The app opens to a Home page with every tool as its own card,
+  grouped by what it does. Pin the ones you use most so they're always the first thing you see, and
+  every page shows you exactly where you are, with one click back to Home.
+* **Settings, all in one easy-to-scan place:** Pick a category on the left, see just its settings
+  on the right — instead of one long scrolling page. Pin the ones you touch most, same as the Home
+  page.
 * **Rebuilds mods at full speed:** Extracting a big collection inside Vortex takes hours and can
   even run your PC out of memory. This tool extracts the same files — including FOMOD installer
   choices — outside of Vortex, at full speed. ⚡ Turn on parallel extraction (up to 8 mods at once)

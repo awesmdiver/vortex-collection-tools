@@ -442,6 +442,29 @@ function rgRenderReviewList() {
   rgSyncExpandAllButtonLabel('rgExpandAllReviewBtn', anomalies.map((a) => a.modKey), rgExpandedAnomalies);
 }
 
+// "Nothing to do" -- lowest-priority content on the page, so it's tucked behind a collapsed
+// disclosure that expands to a row of neutral, non-interactive chips instead of a full-width list
+// (see DESIGN.md's "Informational name lists -- collapsed neutral chips" section). Collapsed by
+// default every fresh render (a plain <details> with no `open` attribute) -- there's no saved
+// expand/collapse state to restore here, unlike Ready to copy/Needs your input's own per-item
+// expand tracking, since this bucket has no per-item detail to toggle into, just the one disclosure.
+function rgRenderNoLinkBody(noLinkFound, nameByKey) {
+  const body = $rg('rgNoLinkBody');
+  if (!noLinkFound.length) {
+    body.innerHTML = '<p class="muted">Everything in the new collection was matched or needs review above.</p>';
+    return;
+  }
+  const chips = noLinkFound.map((n) => `<span class="chip">${escHtmlRg(nameByKey[n.modKey] || n.modKey)}</span>`).join('');
+  body.innerHTML = `
+    <details class="chip-list-details">
+      <summary><span class="chip-list-details__caret">▸</span> <span class="chip-list-details__count">${noLinkFound.length}</span> mod${noLinkFound.length === 1 ? '' : 's'} added with nothing needed &mdash; show them</summary>
+      <div class="chip-list-details__body">
+        <p class="muted">Added to the new collection with no relationship to anything in the original one &mdash; nothing needed here.</p>
+        <div class="chip-row">${chips}</div>
+      </div>
+    </details>`;
+}
+
 // Rebuilds the 3 summary badges + "Show all", reflecting rgSectionFilter's current value, then
 // shows/hides the 3 section containers to match -- called on every fresh analysis AND every filter
 // toggle (the badges' own active/inactive styling needs to update either way). Wording/case here
@@ -494,9 +517,7 @@ function rgRender(result) {
   rgRenderReadyList();
   rgRenderReviewList();
 
-  $rg('rgNoLinkList').innerHTML = result.noLinkFound.length
-    ? result.noLinkFound.map((n) => `<li>${escHtmlRg(nameByKey[n.modKey] || n.modKey)}</li>`).join('')
-    : '<li class="muted">Everything in the new collection was matched or needs review above.</li>';
+  rgRenderNoLinkBody(result.noLinkFound, nameByKey);
 
   $rg('rgResults').classList.remove('hidden');
 }
