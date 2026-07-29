@@ -515,6 +515,13 @@ a **collapsed disclosure** that expands to a wrapping row of **neutral chips**.
   it tidy and pleasant when opened ("pretty noise"). Reuse this treatment for any future "here's the
   set, nothing to do about it" list. Reference mockup: `design/vortex-nothing-todo-mockup.html`
   (the "Chips, collapsed" treatment).
+- **Variant — a review / affected-set list the user is about to act on (chips, but SHOWN).** The same
+  neutral chip grid is also the standard for a list the user is *reviewing before a step* — e.g. Apply
+  Ignores / Apply Disables' Preview list ("15 mods will be set to Ignored"). Same chip styling, but
+  **shown by default**, not tucked behind a collapsed disclosure: the user clicked **Preview**
+  specifically to see it, and it precedes a database write, so it's review content, not noise. Keep a
+  "+N more / show less" cap for long lists and lead with the count. Rule of thumb: **chips-collapsed
+  for noise** (no action needed), **chips-shown for a set the user is about to act on**.
 
 ## External links open in a separate window, not a tab
 
