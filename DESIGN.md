@@ -265,8 +265,11 @@ another is a seam.
   not buried mid-paragraph. A hard "Vortex must be closed" requirement keeps the app's established
   serious-register + 🛑 treatment.
 
-**Navigable vs. linear — pick by whether the user leaves mid-flow.** The Forge is one sitting → mostly
-linear (its pills are clickable but you generally go Back/Next). Update Collection is **re-entered
+**Navigable vs. linear — pick by whether the user leaves mid-flow.** The Forge is one sitting, and its
+steps have hard prerequisites (you can't Review before you've picked plugins), so its pills are a
+**progress indicator only** — you move with Back/Next and in-step back-links ("← Add more files"), not
+by jumping ahead. Clickable jump-pills are reserved for re-entry flows (below), where skipping around
+is legitimate. Update Collection is **re-entered
 between steps** — the user leaves to act in Vortex (run the update, resume the install) and comes
 back — so its pills are **fully clickable to jump to any step**, and state persists across navigation;
 it is NOT a locked "Next-only" wizard that resets. When a flow interleaves with actions outside the
