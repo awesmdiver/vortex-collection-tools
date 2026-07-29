@@ -7,9 +7,17 @@ creative/imagery); these are the paste-ready prompts. Style reference: the v0.5.
 dark Nordic fantasy, carved wooden sign on iron chains, warm dramatic light, photorealistic-cinematic,
 wide **2816×1536**.
 
-When a banner comes back: archive the prior one as `-v1` (+ `-v1-original`), set the new full-res as
-`release-vX.Y.Z-banner-original.png`, compress to the canonical `release-vX.Y.Z-banner.png`
-(`scripts/compress-image.js`), commit those asset paths, push. Title via `gh release edit`.
+When a banner comes back: archive the prior one as `-v1` (+ `-v1-original`), save the new full-res as
+`assets/release-vX.Y.Z-banner-original.png`, then run:
+
+```
+node scripts/compress-image.js assets/release-vX.Y.Z-banner-original.png
+```
+
+That auto-emits the canonical `assets/release-vX.Y.Z-banner.png` (drops the `-original` suffix),
+resized to **1280px** wide and losslessly compressed to ~1.5–1.8 MB — matching every other banner.
+(`--width N` overrides; an explicit second arg overrides the output path.) Commit those asset paths,
+push. Title via `gh release edit`.
 
 ## v0.4.0 — The Augur (Missing Masters) 🔮
 
