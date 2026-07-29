@@ -284,6 +284,15 @@ choosing them *is* the first action — use judgment per tool.)
 the step with a quiet "→ Next, over in Vortex: …" callout telling them exactly what to do and that
 their place is saved. That connective tissue is the thing a single scroll can't give you.
 
+**Adaptive steps + a completion state (2026-07-29).** A step with nothing to do for the current
+collection (e.g. Apply Disables when there are no disabled mods) is **muted** (greyed, clearly
+not-required, still clickable), and **Next skips it** to the next applicable step. When all *applicable
+required* steps are done, show a **green completion callout** ("✅ You're all set here — reopen Vortex,
+click Resume, enjoy") instead of dead-ending on an empty step or an ambiguous Next. The flow adapts to
+what the collection actually has — don't march the user through a step that can't do anything.
+Confirmed real 2026-07-29: a collection with no disabled mods left Apply Disables as a live-looking
+"Next" pointing at an empty step.
+
 ## Gate "Next" on a step's required action — and show the action's done state (2026-07-28)
 
 If a step has a **required action before you can move on** (Apply Ignores' **Apply**, Apply Disables'
@@ -315,6 +324,11 @@ off.
   path discoverable** — in the done state, a small hint says how: e.g. "Need to redo it? Just hit
   **Preview** again" (bold the action, per the muted-hint rule). A clever re-do path nobody can find
   is a hidden feature.
+
+- **Exception — a re-doable action with no re-arm control** (e.g. Create Backup: backing up again
+  later is always legitimate, and there's no Preview to re-arm through) gets the **Next-gating but NOT
+  the sticky done-flip** — locking it in a permanent "done" would block a legitimate re-backup. Its
+  own status line ("Backup created!") carries the confirmation instead (confirmed 2026-07-29).
 
 Confirmed real 2026-07-28: on Apply Ignores, **Apply** and **Next: Apply Disables** both rendered
 accent-blue at once; after a distraction the user couldn't tell if they'd applied and had to open
