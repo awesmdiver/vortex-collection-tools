@@ -585,8 +585,8 @@ One theme = one plain-data object (its own JSON file, `web/public/themes/<id>.js
     "rebuild":  { "name": "Rebuild Collection", "emoji": "⚡",
                   "heroTitle": "Rebuild Collections in Minutes, Not Hours",
                   "function": "Rebuild Collection" },   // ← plain functional label, see below
-    "merge":    { "name": "Merge Plugins", "emoji": "🔨",
-                  "heroTitle": "…", "function": "Merge Plugins" }
+    "merge":    { "name": "Merge Plugins", "emoji": "🧬",
+                  "heroTitle": "…", "function": "Merge Plugins" }  // 🔨 is the Skyrim "The Forge" emoji, NOT Plain's
     // …one entry per stable tool ID
   }
 }
@@ -634,7 +634,7 @@ Plain theme content = the current values already in the app (do not rewrite them
 | `rebuild` | ⚡ | Rebuild Collection | Rebuild Collections in Minutes, Not Hours |
 | `update` | 🔄 | Update Collection | Update Without Redoing Your Mod Cleanup |
 | `rules` | 🔗 | Rules Generator | Skip Re-Resolving Conflicts You Already Fixed |
-| `merge` | 🔨 | Merge Plugins | *(new — from The Forge build)* |
+| `merge` | 🧬 | Merge Plugins | Merge Many Plugins Into One *(new in v1.0)* |
 | `missing-masters` | 🧩 | Missing Masters | Triage Missing Masters in Seconds |
 | `scrub` | 🧽 | Vortex Scrub | Scrub Away Clutter in Seconds |
 | `archive-finder` | 📦 | Archive Finder | Find Any File Inside Any Archive |

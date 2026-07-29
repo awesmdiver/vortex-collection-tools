@@ -15,6 +15,27 @@ Rough status key: ✅ done · ⏳ queued/in progress · ⭕ pending decision.
 
 - **Home landing page** → [`design/BUILD-PROMPT.md`](../design/BUILD-PROMPT.md) ✅
 - **Settings two-pane reorg** → [`design/BUILD-PROMPT-settings.md`](../design/BUILD-PROMPT-settings.md) ✅
+- **The Forge (Merge Plugins)** → [`design/BUILD-PROMPT-the-forge.md`](../design/BUILD-PROMPT-the-forge.md) ⏳ *(v1.0 Phase 1)*
+
+---
+
+# v1.0.0 — three phases (2026-07-28)
+
+v1.0 = **The Forge** (new merge tool) + a **brand-theming framework** + a **harmonization pass**.
+Run in order, each landing and verified before the next; game themes + per-game color come *after*
+1.0 as pure data on top of the framework. See DESIGN.md "Brand theming framework — names, icons &
+color as data".
+
+- **Phase 1 — The Forge** ⏳ → [`design/BUILD-PROMPT-the-forge.md`](../design/BUILD-PROMPT-the-forge.md).
+  Spike-first (which engine — `xelib`/`zmerge`/xEdit — can merge headless and ESL-flag the result),
+  report back for go/no-go, then build the 5-step tool. Strings hardcoded (framework is Phase 2).
+- **Phase 2 — Theming framework** ⭕ *(prompt written after The Forge lands)*. Pure extract-and-
+  indirect refactor across **all** tools incl. The Forge: lift every brand string into
+  `themes/plain.json`, route through a runtime that sets `--accent` + fills the DOM by stable tool
+  ID. Ships **Plain only** — app looks identical to v0.4.
+- **Phase 3 — Harmonization** ⭕ *(prompt written after Phase 2)*. Back-port The Forge's live
+  "chosen" window + the normalized select-and-act pattern (follow-up #9 below) into the older tools
+  that benefit, for one consistent feel.
 
 ---
 
