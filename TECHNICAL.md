@@ -1414,6 +1414,48 @@ Verified: the slice/delete logic against 5 synthetic backup folders correctly ke
 deleted the 3 oldest; the real, no-op case (`maxToKeep` set to the actual current count) against the
 9 real backups this session's own testing had accumulated correctly deleted zero.
 
+### "Nothing to do" collapsed to neutral chips (2026-07-28)
+
+Per DESIGN.md's "Informational name lists -- collapsed neutral chips" section (reference mockup
+`design/vortex-nothing-todo-mockup.html`'s "Chips, collapsed" treatment). The "Nothing to do" bucket
+is the lowest-priority content on the results page (mods added to the new collection with no
+relationship to the original one -- nothing to review, nothing to act on), so a full-width
+one-name-per-row `<ul>` overstated its importance. Replaced with a collapsed-by-default `<details>`
+that expands to a wrapping row of neutral, non-interactive chips.
+
+**Markup**: `index.html`'s `#rgNoLinkSection` now holds just the `<h2>` badge title plus an empty
+`#rgNoLinkBody` div -- the description paragraph moved OFF static markup and into the JS-rendered
+body (it's only shown once expanded, same "demote to match its importance" reasoning DESIGN.md
+gives for the chips themselves). `rules-generator-app.js`'s new `rgRenderNoLinkBody(noLinkFound,
+nameByKey)` builds the whole body: the empty-bucket case stays a plain `<p class="muted">` message
+(no point in a disclosure with nothing to disclose); the non-empty case renders a `<details
+class="chip-list-details">` with a `▸`-caret summary (`N mod(s) added with nothing needed -- show
+them`, singular/plural matching this app's own established convention) and a `.chip-row` of
+`.chip` spans inside `.chip-list-details__body`.
+
+**New reusable CSS classes** (`styles.css`, framed explicitly as reusable per DESIGN.md's own "reuse
+this for any future list of the same kind" note, not Rules-Generator-specific naming):
+`.chip-list-details` (bordered card, no open-state JS needed -- native `<details>`/`<summary>`
+handles toggling), `.chip-list-details__caret` (rotates 90° via `[open]`, same CSS-rotation technique
+as the mockup rather than an `.af-expander`-style glyph swap), `.chip-list-details__count`,
+`.chip-list-details__body`, `.chip-row`, `.chip` (neutral-severity background, matching the
+section's own `badge--neutral` color so the collapsed summary and the expanded chips read as one
+set).
+
+**No conflict with the existing badge-filter mechanism**: `rgRenderSummaryBadges()`'s
+`RG_SECTION_IDS`-driven show/hide still operates one level up (`#rgNoLinkSection` as a whole), so
+filtering to just "Nothing to do" via its summary badge works unchanged with the new markup --
+confirmed live the `<details>` also correctly stays in whatever expand/collapse state it was already
+in when the section is hidden/shown by the filter (no state loss, since filtering only toggles the
+section container's own `hidden` class, never touches `rgNoLinkBody`'s contents).
+
+**Verified live** (2026-07-28, real Vortex data via `npm run web`, read-only analyze call): ran a
+real analysis (Beauty Salon for GTS vs. a real Workshop collection) that returned 21 "nothing to do"
+mods -- collapsed summary correctly read "21 mods added with nothing needed"; expanding it rendered
+all 21 real mod names as neutral chips in a wrapping grid, caret rotated; clicking the "Nothing to
+do" summary badge correctly isolated the section (Ready to copy/Needs your input hidden) while the
+chip disclosure stayed expanded from the prior interaction.
+
 ## Vortex Scrub (Utilities area)
 
 Finds staging folders and downloaded archives Vortex has no real relationship with anymore --

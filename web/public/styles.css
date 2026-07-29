@@ -719,6 +719,32 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
   .settings-rail { position: static; flex-direction: row; flex-wrap: wrap; }
 }
 
+/* Informational name lists -- collapsed neutral chips (DESIGN.md's "Informational name lists"
+   section; reference mockup design/vortex-nothing-todo-mockup.html's "Chips, collapsed" treatment).
+   For a read-only "here's the set, nothing to do about it" list -- first used by Rules Generator's
+   "Nothing to do" bucket -- demotes the lowest-priority content on the page behind a collapsed
+   disclosure that expands to a wrapping row of neutral, non-interactive chips. Reuse this for any
+   future list of the same kind rather than inventing a one-off style. */
+.chip-list-details {
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+  margin-top: 8px;
+}
+.chip-list-details summary {
+  list-style: none; cursor: pointer; padding: 12px 16px;
+  display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-muted);
+}
+.chip-list-details summary::-webkit-details-marker { display: none; }
+.chip-list-details__caret { display: inline-block; transition: transform 0.15s ease; }
+.chip-list-details[open] .chip-list-details__caret { transform: rotate(90deg); }
+.chip-list-details__count { color: var(--neutral); font-weight: 600; }
+.chip-list-details__body { padding: 0 16px 16px; }
+.chip-list-details__body p { margin: 0 0 10px; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-size: 13px; color: var(--text-muted); background: var(--neutral-bg);
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px;
+}
+
 /* Rules Generator's review list: one radio-pair choice inside a .settings-group card, when a rule
    could point at either an original mod or its new-collection counterpart. See DESIGN.md's
    "Rules Generator review choice" note. */
