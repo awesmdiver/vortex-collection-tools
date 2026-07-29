@@ -311,7 +311,10 @@ off.
   (flips "Applied ✓" back to an enabled "Apply"). Reuses the existing Preview → Apply gate — no new UI —
   and Preview's own result even gives honest feedback ("0 mods — already applied" vs a real count if
   something changed). Don't leave the action button itself permanently live (that reintroduces the
-  "did I already?" ambiguity); route the rare re-do through the deliberate re-check.
+  "did I already?" ambiguity); route the rare re-do through the deliberate re-check. **And make that
+  path discoverable** — in the done state, a small hint says how: e.g. "Need to redo it? Just hit
+  **Preview** again" (bold the action, per the muted-hint rule). A clever re-do path nobody can find
+  is a hidden feature.
 
 Confirmed real 2026-07-28: on Apply Ignores, **Apply** and **Next: Apply Disables** both rendered
 accent-blue at once; after a distraction the user couldn't tell if they'd applied and had to open
