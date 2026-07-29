@@ -18,10 +18,10 @@
     }
   ],
   "roadmap": [
-    { "title": "Missing Masters — ESLifier filter", "note": "interlude · recognize ESLifier output, downgrade critical→warning", "doc": "TODO.md" },
+    { "title": "Missing Masters — ESLifier filter", "note": "interlude · recognize ESLifier output, downgrade critical→warning", "doc": "design/BUILD-PROMPT-eslifier-filter.md" },
     { "title": "Theming framework (Phase 2)", "note": "Plain theme first; first game theme drafted", "doc": "design/theme-content-skyrim.md" },
     { "title": "Harmonization (Phase 3)", "note": "back-port The Forge patterns + multi-select filter sweep", "doc": "DESIGN.md" },
-    { "title": "Dynamic dashboard (Normal / Developer mode)", "note": "customizable per audience", "doc": "TODO.md" }
+    { "title": "Dynamic dashboard (Normal / Developer mode)", "note": "customizable per audience" }
   ],
   "shipped": [
     { "title": "The Forge — Merge Plugins", "doc": "https://github.com/awesmdiver/vortex-collection-tools/releases/tag/v0.5.0" },
