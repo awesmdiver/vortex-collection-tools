@@ -224,16 +224,20 @@ let syncBackupRootConfigured = false;
 const PREVIEW_REQUIRED_HINT = 'Run **Preview** first to see what would change and enable **Apply**.';
 
 function resetIgnoresDisablesPreviewState() {
+  setApplyPending($s('syncIgnoresApplyBtn'));
   $s('syncIgnoresApplyBtn').disabled = true;
   setSyncStatusHtml($s('syncIgnoresStatus'), PREVIEW_REQUIRED_HINT);
   renderSyncList('syncIgnoresList', [], () => '');
   hideCriticalCallout($s('syncIgnoresCriticalError'));
+  $s('syncStep1NextBtn').disabled = true;
   $s('syncResumeNextSteps').classList.add('hidden');
   $s('syncResumeAlmostThere').classList.add('hidden');
+  setApplyPending($s('syncDisablesApplyBtn'));
   $s('syncDisablesApplyBtn').disabled = true;
   setSyncStatusHtml($s('syncDisablesStatus'), PREVIEW_REQUIRED_HINT);
   renderSyncList('syncDisablesList', [], () => '');
   hideCriticalCallout($s('syncDisablesCriticalError'));
+  $s('syncStep2NextBtn').disabled = true;
   $s('syncAllDoneInfo').classList.add('hidden');
 }
 
@@ -252,6 +256,7 @@ function showBackupNextSteps(ignoredCount, disabledCount) {
 // a leftover backup/preview from a DIFFERENT collection never lingers on screen.
 function resetSyncStepsForNewCollection() {
   currentBackup = null;
+  $s('syncStep0NextBtn').disabled = true;
   setSyncStatus($s('syncBackupStatus'), '');
   $s('syncBackupNextSteps').classList.add('hidden');
   $s('syncBackupNothingToDoInfo').classList.add('hidden');
@@ -453,6 +458,24 @@ function setSyncStatusHtml(el, text) {
   el.innerHTML = mdBold(escHtml(text));
 }
 
+// Flips an Apply-style button between its live pending state ("Apply", primary, enabled once
+// Preview permits) and its sticky DONE state (disabled, quiet/success styling, past-tense label) --
+// shared by Apply Ignores' and Apply Disables' own Apply buttons. See DESIGN.md's "Gate 'Next' on a
+// step's required action": the done state is STICKY -- it never re-enables itself on its own. The
+// only way back to a live Apply is re-running Preview (called at the top of both Preview handlers
+// below), which also re-disables the step's own Next button until Apply succeeds again.
+function setApplyDone(btn) {
+  btn.textContent = 'Applied ✓';
+  btn.disabled = true;
+  btn.classList.remove('btn--primary');
+  btn.classList.add('btn--done');
+}
+function setApplyPending(btn) {
+  btn.textContent = 'Apply';
+  btn.classList.remove('btn--done');
+  btn.classList.add('btn--primary');
+}
+
 // ---------- Collection picker (selecting a collection is step 0 -- everything below operates on
 // whichever one is currently selected, until you change it) ----------
 
@@ -617,6 +640,10 @@ $s('syncBackupBtn').addEventListener('click', async () => {
     showBackupNextSteps(result.ignoredCount, result.disabledCount);
     await loadSyncBackups();
     currentBackup = mostRecentBackupFor(currentCollection.name);
+    // A backup with 0 ignored/0 disabled still counts as done -- there's genuinely nothing more
+    // required on this step either way, matching the "required action" gate's own intent (see
+    // DESIGN.md's "Gate 'Next' on a step's required action").
+    $s('syncStep0NextBtn').disabled = false;
     checkBackupFreshnessAsync(collectionModId, profileId);
   } catch (e) {
     // Rare, real case: the collection moved on to a newer revision since this page loaded --
@@ -662,6 +689,7 @@ $s('syncRestoreBackupConfirmBtn').addEventListener('click', () => {
   $s('syncRestoreBackupModal').classList.add('hidden');
   if (!chosen) return;
   currentBackup = chosen;
+  $s('syncStep0NextBtn').disabled = false;
   // A stale preview from whatever was previously current (the auto-picked most-recent backup, or a
   // different restored one) would otherwise keep showing results that no longer match what's
   // actually selected, until Preview is clicked again.
@@ -689,6 +717,12 @@ $s('syncIgnoresPreviewBtn').addEventListener('click', async () => {
   const backup = currentBackup;
   const statusEl = $s('syncIgnoresStatus');
   hideCriticalCallout($s('syncIgnoresCriticalError'));
+  // Re-arms Apply (in case a previous run already flipped it to "Applied ✓") and re-gates Next --
+  // a fresh Preview means whatever Apply last did is no longer guaranteed current. See
+  // DESIGN.md's "Gate 'Next' on a step's required action" -- Preview is this step's re-check
+  // control, the deliberate path back into a live Apply.
+  setApplyPending($s('syncIgnoresApplyBtn'));
+  $s('syncStep1NextBtn').disabled = true;
   if (!backup) { setSyncStatus(statusEl, 'Create a backup first, or restore an existing one.'); return; }
   setSyncStatus(statusEl, 'Checking…');
   $s('syncIgnoresApplyBtn').disabled = true;
@@ -763,14 +797,17 @@ $s('syncIgnoresApplyBtn').addEventListener('click', async () => {
     const unmatchedItems = (result.unmatched || []).map((u) => ({ name: u.name, removed: true }));
     renderSyncList('syncIgnoresList', [...changedItems, ...unmatchedItems], ignoresListItem);
     const doneWord = result.changed.length === 1 ? 'mod' : 'mods';
-    let doneText = `Done — ${result.changed.length} ${doneWord} set to **Ignored**.`;
+    let doneText = `✓ Applied — ${result.changed.length} ${doneWord} set to **Ignored**.`;
     if (result.unmatched?.length > 0) {
       const unmatchedWord = result.unmatched.length === 1 ? 'mod' : 'mods';
       doneText += ` ${result.unmatched.length} ${unmatchedWord} removed by the update.`;
     }
     doneText += ' Vortex database was updated and backed up.';
+    doneText += ' Need to redo it? Just hit **Preview** again.';
     setSyncStatusHtml(statusEl, doneText);
     if (result.identityWarning) showCriticalCallout($s('syncIgnoresCriticalError'), result.identityWarning);
+    setApplyDone($s('syncIgnoresApplyBtn'));
+    $s('syncStep1NextBtn').disabled = false;
     // Step 3 (Apply Disables) has nothing to do when this backup captured zero disabled mods to
     // begin with -- already known from the backup's own content (currentBackup.disabled, loaded
     // with the rest of the backup list), no need to wait for the user to click Preview in Step 3
@@ -803,6 +840,10 @@ $s('syncDisablesPreviewBtn').addEventListener('click', async () => {
   const backup = currentBackup;
   const statusEl = $s('syncDisablesStatus');
   hideCriticalCallout($s('syncDisablesCriticalError'));
+  // Re-arms Apply (in case a previous run already flipped it to "Applied ✓") and re-gates Next --
+  // see the matching comment on Apply Ignores' own Preview handler above.
+  setApplyPending($s('syncDisablesApplyBtn'));
+  $s('syncStep2NextBtn').disabled = true;
   if (!backup) { setSyncStatus(statusEl, 'Create a backup first, or restore an existing one.'); return; }
   setSyncStatus(statusEl, 'Checking…');
   $s('syncDisablesApplyBtn').disabled = true;
@@ -811,6 +852,10 @@ $s('syncDisablesPreviewBtn').addEventListener('click', async () => {
     if (result.nothingToDo) {
       renderSyncList('syncDisablesList', [], () => '');
       setSyncStatus(statusEl, 'This backup captured no disabled mods — nothing to do.');
+      // Nothing to apply means this step's own required action is already satisfied -- same
+      // "counts as done" reasoning Backup's own step applies to a 0/0 backup (see DESIGN.md's
+      // "Gate 'Next' on a step's required action").
+      $s('syncStep2NextBtn').disabled = false;
       return;
     }
     renderSyncList('syncDisablesList', result.matches, (m) => escHtml(m.matchedRef.name));
@@ -848,8 +893,10 @@ $s('syncDisablesApplyBtn').addEventListener('click', async () => {
     const result = await syncApi('POST', '/api/sync/apply-disables/apply', { profileId: backup.profileId, backupPath: backup.filePath });
     renderSyncList('syncDisablesList', result.changed, (c) => escHtml(c.name));
     const disabledDoneWord = result.changed.length === 1 ? 'mod' : 'mods';
-    setSyncStatusHtml(statusEl, `Done — ${result.changed.length} ${disabledDoneWord} set to **Disabled**. Vortex database was updated and backed up.`);
+    setSyncStatusHtml(statusEl, `✓ Applied — ${result.changed.length} ${disabledDoneWord} set to **Disabled**. Vortex database was updated and backed up. Need to redo it? Just hit **Preview** again.`);
     if (result.identityWarning) showCriticalCallout($s('syncDisablesCriticalError'), result.identityWarning);
+    setApplyDone($s('syncDisablesApplyBtn'));
+    $s('syncStep2NextBtn').disabled = false;
     $s('syncAllDoneInfo').classList.remove('hidden');
   } catch (e) {
     setSyncStatus(statusEl, '');
