@@ -40,6 +40,7 @@ A dark, moody Skyrim-style Nordic fantasy scene, photorealistic and cinematic, w
 ```
 
 ## Status
-- Titles updated live 2026-07-29 (v0.4.0 → The Augur, v0.3.0 → The Scribe).
-- Banner images: **pending Gemini generation**, then swap per the flow above.
+- **Done 2026-07-29:** v0.5.0 The Forge, v0.4.0 The Augur, v0.3.0 The Scribe — titles, themed banners
+  (Gemini-generated, swapped + compressed to 1280px/~1.5 MB), and alt captions all live. Prior banners
+  archived as `-v1` (+ `-v1-original`).
 - v0.2.0 / v0.1.0: left as-is (per user).
