@@ -10,8 +10,9 @@
     "web": "node web/server.js"
   },
   "dependencies": {
+    "classic-level": "^1.4.1",
     "express": "^5.2.1",
     "fast-xml-parser": "^5.10.1",
-    "classic-level": "^1.4.1"
+    "xeditlib": "github:WingedGuardian/xeditlib"
   }
 }

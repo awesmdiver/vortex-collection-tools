@@ -3157,6 +3157,309 @@ build):
   proof, but worth confirming display-name lookups work correctly against real, fully-populated mod
   content before trusting the Review step's per-plugin UI.
 
+## Merge Plugins ("The Forge") — Part B build (2026-07-28)
+
+Built per `design/BUILD-PROMPT-the-forge.md`'s Part B, on the engine Part A above signed off on.
+New top-level tool area (`merge` in `shell.js`'s `TOOL_AREAS`), a 5-step stepper flow (Collections →
+Find files → Review → Merge → Done), following DESIGN.md's mockup and component rules throughout —
+no new colors, every table/selection-bar/badge/callout reuses an existing class.
+
+**xeditlib is now a real dependency of this project** (`npm install github:WingedGuardian/xeditlib`
+— not on the npm registry, confirmed via `npm view xeditlib` 404ing, so the GitHub-source install
+is the only option), not just borrowed from the Skyrim install's own tooling the way Part A's proof
+did. `XEditLib.dll` + its companion data files ship bundled inside the npm package itself, so
+`build-release.ps1`'s existing `npm ci --omit=dev` step picks it up automatically — no changes to
+that script were needed at all, better than Part A's own estimate (which assumed a manual
+vendor-the-DLL step matching Node/7-Zip's own bundling).
+
+**Plugin discovery is plain filesystem reads, no xelib, no Vortex-state dependency**
+(`lib/merge-plugin-scan.js`). Precisely resolving `collection.json`'s `mods[]` entries to their real
+staging folder names (the way `lib/rebuild-mod.js` does) needs a `knownVortexModId` from Vortex's
+own live state — too heavy a dependency for a read-only plugin search. Sidestepped entirely: every
+`collection.json` already carries its own authoritative `plugins: [{name, enabled}]` array (which
+FILENAMES belong to this collection), so `scanCollectionPlugins` does one plain walk of the whole
+staging directory (same technique as `lib/missing-masters-scan.js`'s `buildStagingModNameIndex`,
+confirmed fast there) and matches by filename against that list — zero Vortex-state reads. Real
+data point confirmed live: a genuine filename collision exists in the user's own real staging
+folder right now ("High Poly Head.esm" shipped by two unrelated mods, "ESLifier Output" and "High
+Poly Head v1.4 (SE)") — the search correctly lists both as distinct picks, and the merge worker's
+own collision check (below) would correctly refuse if both were ever chosen together.
+
+**The merge engine reuses Part A's proof almost verbatim** (`lib/merge-worker.js`, run via
+`lib/merge-runner.js`'s child-process spawn, mirroring `lib/state-query-worker.js`'s exact
+stdin-JSON/stdout-JSON/stderr-progress contract — required per Part A's own finding that `xelib`
+cannot be re-initialized within one process after a prior `close()`). Two modes:
+- `analyze` — loads every chosen plugin into a throwaway sandboxed "Data" folder (real plugins live
+  scattered across different staging mod folders; xelib only resolves by filename against ONE
+  Data folder, so everything chosen gets copied into a temp sandbox first, cleaned up in a
+  `finally` either way), and for each reports its record count, new-vs-override/injected record
+  counts, whether it touches any `CELL`/`WRLD` records, and its own declared masters (read straight
+  from the TES4 header via `lib/esp-header.js`'s already-existing `readPluginHeader` — cheaper than
+  round-tripping through xelib for this, and doesn't need the file loaded at all).
+- `merge` — same sandbox-staging approach, builds the real output plugin from only the records the
+  caller says to include (see "The real fix: FormID reference remapping" below for the actual copy
+  sequence — a naive `asNew=true` copy was NOT the final answer, despite Part A's proof suggesting
+  it was sufficient), tallies the new-record count, and sets the ESL flag via the same
+  `getAllFlags`-then-split-on-comma lookup Part A's proof established (never hardcoding the literal
+  string "ESL" without confirming the header actually offers it).
+- **Filename collisions are refused, not silently overwritten**: `stageItems()` detects two chosen
+  plugins sharing a filename before touching xelib at all, and throws a clear, specific message —
+  this is a real scenario, not a hypothetical (see the "High Poly Head.esm" case above).
+
+**v1.0 scope, exactly as the build prompt's own "decided from the spike" section specifies**: only
+new-record plugins actually get merged. A plugin containing so much as one override/injected record
+is reported back with `containsOverrides: true` and the Review step excludes it from the merge
+entirely — shown as its own honest status ("⚠️ Contains overrides — not merged in this version"),
+never silently dropping part of a patch's records. `lib/merge-worker.js`'s `merge` mode
+double-checks this per-record too (skips any override/injected record it encounters, even if the
+caller's item list should already exclude that whole plugin) rather than trusting the caller
+blindly — a slipped-through override record copied into the output would corrupt it silently
+otherwise.
+
+**ESPFE qualification** is computed client-side from the `analyze` response (no extra round-trip):
+sum `newRecordCount` across every INCLUDED (non-override) chosen plugin, OR together their
+`hasCellOrWorldspace` flags, and check the total against the hardcoded 4,096 light-plugin limit
+(per the spike's own "resolved, don't re-litigate" decision — documents "requires Skyrim SE
+1.6.1130+"). This same computation renders the Review step's ESL-verdict callout *before* the real
+merge even runs (so the user sees the verdict while deciding whether to proceed), and the actual
+`merge` worker call recomputes it authoritatively against the real final record set during the
+merge itself — the preview and the real result should always agree, since both use the identical
+`newRecordCount <= 4096 && !hasCellOrWorldspace` check, just computed at two different times against
+what should be the same included set.
+
+**"Needs a master" is a heads-up, never a blocker** — any master a plugin's own TES4 header
+declares (via `readPluginHeader`) is shown to the user with the exact master file name(s), matching
+the build prompt's own copy ("fine to merge — just make sure those masters are installed... if
+one's missing, Missing Masters will catch it").
+
+**The running cart is pure client-side state** (`mergeState.cart`, a `Map<fullPath, item>`,
+identical in spirit to Archive Finder's own `afState.selected` from the same session's earlier
+work) — never reset by a new search, unlike Archive Finder's own selection (which explicitly *does*
+reset on a new search). Checking a checkbox in the Step 2 results table directly adds/removes that
+item from this same Map; "Select All"/"Invert Selection"/"Clear Selection" and the header checkbox
+all operate on the CURRENT search's own result set only (`mergeState.searchResults`), never the
+whole cart — the cart itself only ever grows via individual/bulk picks across however many searches
+the user runs. Already-chosen plugins correctly render checked when they resurface in a completely
+different search (confirmed live: selecting two "eyes"-named plugins from one search, then
+searching "eyes" again later in the same session, showed both already checked).
+
+**"View chosen" is a genuine separate OS window**, not an in-page drawer (the browser mockup fakes
+it as a slide-in panel; the real app does the real thing) — same `window.open('', '_blank',
+'width=…,height=…')` + direct `document.write()` mechanism `rules-generator-app.js`'s own
+`rgOpenOldRulesWindow` already established (no static URL to point at since the content is
+client-side data, and no `noopener` since the reference needs to keep being written to later,
+confirmed live this session that `noopener` silently breaks that). Grouped by collection, each item
+individually removable — removing one from the popup window immediately unchecks it back in the
+main results table, and toggling a checkbox in the main table immediately updates the still-open
+popup's own list, confirmed live bidirectionally.
+
+**"Vortex must be closed"** is gated exactly like every other staging-reading operation in this
+app: `syncLib.isVortexRunning()` on both `/api/merge/analyze` and `/api/merge/merge`, surfaced via
+the same shared `#vortexRunningModal` every other tool already uses (no new modal invented).
+
+**Output safety**: the merge output folder is always user-chosen (a `Browse…` folder picker, same
+`/api/settings/browse-folder` endpoint every other tool's picker uses) and is explicitly checked
+against the configured `skyrimDataDir` before a merge starts — refuses with a clear message rather
+than ever writing into the live Data folder. `skyrimDataDir` itself is now REQUIRED (not just
+"checked if set") for both `/api/merge/analyze` and `/api/merge/merge` — see "Real base-game masters
+are required" below for why a configured Data folder became load-bearing, not optional. The
+last-used output folder is remembered in `config.json`'s new `mergeOutputDir` field (optional, same
+"blank is fine" treatment as `archiveFinderOutputDir`), updated only after a successful merge.
+
+### Five real bugs found only by testing against real data (2026-07-28)
+
+Live testing against the user's real collections surfaced a chain of issues Part A's proof (which
+only ever exercised two synthetic, zero-master, single-record test plugins) never hit. Each one
+individually looked like "the generic crash path," and each one masked the next until fixed:
+
+1. **Worker error messages were silently dropped.** `lib/merge-worker.js`'s `main().catch()` wrote
+   its final error via `process.stderr.write(e.message)` with no trailing `\n`; `lib/merge-runner.js`
+   buffers stderr by line (`stderrBuffer.indexOf('\n')`) and only ever flushes a line once it sees
+   one — so the last, newline-less line sat in the buffer forever and was silently dropped, and the
+   UI showed the generic `CRASH_HELP_TEXT` instead of the real, specific message. Fixed both sides:
+   the worker always appends `\n`, and the runner additionally flushes any remaining buffer content
+   in its `close` handler as defense-in-depth.
+2. **Sandbox cleanup could mask the real error.** `removeSandbox`'s `fs.rmSync` on the temp sandbox
+   folder could itself throw (see #3 below), and since this ran inside a `finally` block, a throw
+   there silently replaces whatever real error the `try` block was already propagating — a plain
+   JS/ECMAScript `finally` semantics gotcha, not xelib-specific. Fixed by making `removeSandbox`
+   log-and-swallow its own failure (`process.stderr.write` a non-fatal warning) instead of throwing
+   — a leftover temp folder is a harmless, low-cost failure next to losing the real error message.
+3. **xelib's loader needs a plugin's declared masters physically staged AND listed first.** A plugin
+   declaring `Skyrim.esm` as a master (e.g. `Loverboy_Eyes.esl`) hit `xelib.waitForLoader()`
+   rejecting with `"Loader failed: "` — both `getExceptionMessage()` and `getMessages()` came back
+   empty, no useful detail. Root cause, found via a standalone diagnostic: (a) the master file must
+   exist in the sandbox's `Data` folder at all, and (b) it must be listed BEFORE its dependents in
+   the same `loadPlugins()` call — merely being present on disk is not enough, even though nothing in
+   xeditlib's own docs states an ordering requirement. Fixed via `stageMaster()` (see the next section
+   for what actually gets staged) and reordering `loadAll`'s file list.
+4. **`copyElement` needs `addRequiredMasters` called first, unconditionally.** Without it, copying
+   failed outright on the very first record of the very first test file — a plain `QUST` record from
+   a plugin with ZERO declared masters of its own. Not a missing-master edge case; every record needs
+   this call before `copyElement`, regardless of whether it references anything external.
+5. **The real finding — a naive per-record `asNew=true` copy still requires the ORIGINAL source
+   plugins as masters of the merged output**, confirmed via a live header read after the first
+   "working" merge: `TestMerge.esp`'s own master list included all 3 source plugins. Reproduced with
+   a minimal repro (a single, fully self-contained `QUST` record, zero declared masters of its own)
+   — even that record still required its own source file as a master after an `asNew=true` copy. See
+   "The real fix" below.
+
+### Real base-game masters are required, not just their names (dummy masters aren't enough)
+
+A zero-record dummy master (`lib/esp-writer.js`'s `buildDummyPluginBuffer` — the same technique
+behind the existing "Create Dummy Master" Missing Masters feature) is enough for xelib's LOADER to
+resolve a master by name, but NOT enough for `copyElement`/`addRequiredMasters` on a record that
+references an actual FormID inside that master. Confirmed via a direct diagnostic: an `HDPT` "new"
+record's Extra Part list pointed at a real `Skyrim.esm` FormID — `copyElement` threw a bare
+`"CopyElement failed"` (no detail) against a dummy `Skyrim.esm`, and only succeeded once the real
+file was staged instead.
+
+Real masters are staged via `stageMaster()` (`lib/merge-worker.js`): hardlink from the real Data
+folder when possible (`fs.linkSync`, instant, zero extra disk use), copy as a fallback (e.g.
+cross-drive), or the dummy stub only when the real file genuinely isn't present at all (a rare edge
+case — the chosen plugin itself is almost certainly non-functional missing that master anyway; this
+fallback avoids a hard crash, it doesn't guarantee a correct merge for that one plugin). To make
+hardlinking actually work, the sandbox's parent folder (`pickSandboxParent()`) is chosen on the SAME
+DRIVE as the configured Data folder — a `.vct-merge-tmp` sibling folder next to `Data` itself (never
+inside it, per this project's own standing "never write into the live Data folder" rule), falling
+back to the OS temp folder only when no Data folder is configured. This is why `skyrimDataDir`
+became a hard requirement for both `/api/merge/analyze` and `/api/merge/merge` (a new
+`requireSkyrimDataDir` gate in `web/merge-routes.js`, mirroring the existing `requireStaging` gate)
+— the dummy-only fallback path is real but shouldn't be reachable from the actual UI.
+
+Verified real-file safety explicitly before trusting this design: `Skyrim.esm`'s own
+`LastWriteTime` was checked before and after a full merge run and confirmed unchanged (only
+`LastAccessTime` moved, from xelib reading it) — hardlinking never risks the real file's content
+since nothing in the merge path ever calls `saveFile` on a master's own file handle, only on the
+newly-created output file.
+
+### The real fix: FormID reference remapping (the actual v1.0-blocking gap)
+
+`copyElement(rec, dest, asNew=true)` gives the copied record a fresh top-level FormID but does NOT
+rewrite FormID references embedded WITHIN the record's own data — self-references, references to
+sibling records in the same source plugin. Those still point at the original file, which is why a
+naive per-record `asNew=true` copy leaves the destination still requiring every source plugin as a
+master. This isn't an edge case: it silently defeats the entire point of "The Forge" (freeing up
+plugin slots), since the user could never actually disable the originals afterward despite the Done
+step's own guidance telling them to.
+
+The fix was verified against the real, working reference implementation rather than guessed at:
+`zedit-revised`'s own local fork (`src/javascripts/Services/merge/recordMergingService.js`'s "Clean"
+method — confirmed via `mergeBuilder.js`'s `DEFAULT_MERGE_METHOD = 'Clean'` that this is zEdit's own
+default, not an obscure option) and `mergeMasterService.js`'s `cleanMasters`/`addMastersToMergedPlugin`
+pairing. `lib/merge-worker.js`'s `runMerge` now does, restricted to v1.0's new-record-only scope
+(the override/injected-record handling zEdit's own "Clean" method also does is explicitly deferred
+to v1.1, per the build prompt's own scope boundary — this is NOT patch merging):
+
+1. Copy every new (non-override/non-injected) record preserving its ORIGINAL FormID
+   (`copyElement(rec, outFile, false)` — note `asNew=false`, not `true`) — internal references keep
+   resolving correctly at this intermediate stage since nothing's been renumbered yet.
+   `addRequiredMasters(rec, outFile, false)` still runs first, same as before.
+2. `xelib.buildReferences(outFile)` on the DESTINATION file — populates its internal reference graph,
+   required for the next step's automatic reference-fixing to find every place a FormID is used.
+3. `xelib.setFormID(rec, nextFormId, false, true)` for each copied record (starting at `0x000801`,
+   Creation Kit's own default starting local FormID, incrementing sequentially) — the `fixRefs=true`
+   param rewrites every reference to that record's OLD FormID (both the record's own internal fields
+   and any sibling record's references to it) to the new one. Renumbering is unconditional (every
+   record gets a fresh ID, not just ones that would collide) — simpler and always-correct at the cost
+   of the merged file's FormIDs bearing no relationship to the originals', which doesn't matter here
+   since nothing diffs the merge against its sources record-by-record.
+4. `xelib.cleanMasters(outFile)` — now that nothing internal points at the original files anymore,
+   this actually drops them from the destination's own master list.
+5. **Hard safety check**: after `cleanMasters`, re-read `xelib.getMasterNames(outFile)` and confirm
+   none of the chosen plugins' own filenames remain. If any do, throw and refuse to save — mirroring
+   `mergeMasterService.js`'s own `builtWithErrors` check ("Failed to remove master X") — rather than
+   silently shipping a merge that still secretly depends on its originals.
+
+**The removal test** (the actual gate this fix had to pass, not just "does it run without
+throwing"): merged the 3 real test plugins (`Bitchcraft Tats.esl`, `Loverboy_Eyes.esl`, `Eyes of
+Aber.esl` → 1,426 records: 1 `QUST` + 1,250 `HDPT` + 175 `TXST`), then loaded the merged output in a
+**completely fresh sandbox containing only `Skyrim.esm`** — the 3 originals entirely absent, not
+just disabled. Loader succeeded, record count matched exactly, and the loaded file's own master list
+was `["Skyrim.esm"]` only. Independently re-verified via `lib/esp-header.js`'s own plain-JS header
+reader (not xelib) — same result both from a direct `mergeRunner.mergePlugins()` call and from the
+real live-UI-driven merge.
+
+**The override-exclusion test**: `analyzePlugins` run directly against a real compatibility patch in
+the test collection (`Better Argonian Horns - Kabu's Argonian Fins Patch.esp`) confirmed
+`containsOverrides: true`, `newRecordCount: 0` (all 78 records are overrides). Selected alongside the
+3 clean test plugins in the live UI; the Review step correctly showed "1 plugin contains overrides —
+not merged" and its own status pill, and the client's exclusion filter
+(`merge-app.js`'s `mergeStartMerge`: `reviewItems.filter(it => it.status !== 'override')`) excluded
+it from the actual `/api/merge/merge` payload — the button read "Merge 3 plugins," not 4, and the
+resulting output's master list never included the patch.
+
+### A sixth bug, found only by triggering the "Vortex is running" gate mid-session
+
+`mergeHandleError(e)` was hardcoding `window.showVortexRunningModal(() => {})` — a no-op retry
+callback — while every other tool's own call to this shared modal passes a real retry function (see
+`app.js`'s own `showVortexRunningModal(retryFn || loadCollections)`). This meant the modal's own
+"Try Again" button just dismissed itself and did nothing, leaving the user stuck on a blank Review
+step exactly where they were — confirmed real live when Vortex was reopened mid-testing. Fixed by
+giving `mergeHandleError` an optional `retryFn` parameter and threading it through from both call
+sites that actually hit the Vortex-running gate: `mergeEnterStep2`'s own catch passes itself
+(`mergeHandleError(e, mergeEnterStep2)`), and the merge-start handler was extracted into a named
+`mergeStartMerge()` function so its own catch could pass itself the same way.
+
+**Also confirmed the hard way**: after editing `lib/merge-runner.js`/`web/merge-routes.js` (adding
+the `gameDataDir` parameter), the ALREADY-RUNNING dev server kept using its stale in-memory version
+of `mergeRunner.mergePlugins` (the OLD 4-argument signature) until restarted — `merge-worker.js`
+itself is spawned fresh per-request and always runs its latest version, but `merge-runner.js` is
+`require()`'d once at server boot by the long-lived Express process. The symptom was misleading: the
+merge silently ran with `gameDataDir: undefined`, which reproduced the exact "dummy master
+insufficient" failure from bug #5 above, even though the fix was already in the source file. Any
+change to a file the server itself `require()`s (as opposed to `lib/merge-worker.js`, which never
+needs a restart) needs a server restart to take effect.
+
+**Progress streaming** reuses `web/sse-session.js` exactly like Archive Finder's own scan progress
+— POST `/api/merge/merge` starts a session (202) and kicks off the child-process merge in the
+background, GET `/api/merge/merge/events` subscribes; the worker's `##PROGRESS##`-prefixed stderr
+lines (`lib/merge-runner.js`'s own parser, same convention as `state-query-worker.js`) get bridged
+directly into SSE `progress` frames.
+
+**Home card + breadcrumb**: added as the first card under Main Tools (`HOME_CANONICAL_ORDER`'s new
+leading `'merge'` entry) — "it's the headline v1.0 feature" per the build prompt, pinnable like
+every other card. Every one of the 5 steps shares the same single `Home › Merge Plugins` breadcrumb
+eyebrow at the top of the tool area (the stepper's own "← Back" buttons handle in-flow step
+navigation; no legacy "← Back to X" button anywhere in this tool, consistent with this app's own
+"the breadcrumb replaces in-flow back buttons" rule).
+
+**Verified live** (2026-07-28, `npm run web`, against the user's real Vortex install — 7 real
+collections, real staging data): all 5 steps confirmed end to end, across two sessions (Steps 0–1
+first, then Steps 2–4 once Vortex was closed — the merge engine's five real bugs above were all
+found and fixed during this second pass).
+
+- **Steps 0–1**: picking a real collection surfaced 106 real plugins across 5 pages; shift-click
+  range-selected 6 rows correctly (accent-bg + inset-edge row states, no bright rows); the cart bar
+  and "View chosen" window both tracked the running total correctly and stayed in live bidirectional
+  sync (removing an item from the popup unchecked it in the main table and vice versa, confirmed via
+  direct DOM inspection of the popup's own document); running a brand-new search ("PBR", 0 matches,
+  then "eyes", 18 matches) correctly preserved the existing cart both times, and previously-chosen
+  plugins correctly rendered already-checked in later searches.
+- **Step 2 (Review)**: with 4 real plugins chosen (3 clean + 1 real override-containing patch), the
+  callouts, status pills, and badge filters all rendered correctly — "2 plugins depend on a master",
+  "1 plugin contains overrides — not merged", the ESL-verdict callout (1,426 new records, under the
+  4,096 limit, ESL-flagged), and per-row pills (`⚠️ Contains overrides`/`⚠️ Needs a master`/`—`) all
+  matched the underlying `analyze` data exactly. The "Merge N plugins" button correctly read 3 (the
+  override-containing patch excluded from the count).
+- **Step 3 → 4 (Merge → Done)**: a real merge of the 3 included plugins completed live end-to-end —
+  progress events streamed correctly ("Copying records from…" per plugin, then "Renumbering FormIDs
+  and fixing references…"), the Done step showed "Merge complete" with the correct tallies (3
+  plugins merged, 3 mods, 1 collection, 1,426 records), the ESL-flagged callout, and the "disable the
+  3 originals it replaces" guidance — now actually true, per the removal test above. "Open output
+  folder" opened Explorer correctly; the output file was independently re-verified via
+  `lib/esp-header.js` (ESL flag set, `["Skyrim.esm"]` as the only master) after the live-UI run, not
+  just the earlier direct-script run.
+- **Light/dark mode**: both themes checked on the Collections/Find-files steps (first pass) and the
+  Review/Done steps (second pass, after the engine fixes) — callouts, badges, status pills, and the
+  results table all keep correct contrast and layout in light mode, no color/spacing regressions
+  found in either theme.
+
+Two additional bugs surfaced only by this live pass, both fixed (see the numbered list and the
+"sixth bug" note above): the `mergeHandleError` no-op retry callback, and the stale-running-server
+trap where editing `lib/merge-runner.js`/`web/merge-routes.js` silently had no effect until the dev
+server was restarted (a `require()`'d file, unlike the per-request-spawned `lib/merge-worker.js`).
+
 ## Future work
 
 Tracked in the workspace `TODO.md` (not duplicated here — confirmed 2026-07-27, one place to check

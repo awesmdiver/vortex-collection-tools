@@ -77,6 +77,11 @@ Home page, so you're never more than a click away from the one you need.
 * **Finds any file inside any archive, instantly:** Archive Finder indexes every archive in your
   downloads folder up front — no unpacking required — so you can search across all of them by file
   or mod name and pull out exactly the file you need, whenever you need it.
+* **Merges plugins into one, freeing up load-order slots:** Skyrim's plugin limit fills up fast,
+  especially with lots of small mods. Merge Plugins bundles new-content plugins from your
+  collections into a single file — review exactly what's going in first — and flags the result ESL
+  automatically when it qualifies, so it costs you 0 slots and the originals are safe to disable
+  afterward.
 
 ---
 
