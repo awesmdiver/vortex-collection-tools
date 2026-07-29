@@ -89,6 +89,9 @@ Apply Ignores (step 2) + Apply Disables (step 3):
   disabled/secondary.
 - On a successful Apply, flip the button: "Apply" → "Applied ✓", disabled, styled as done
   (quiet/success, not the live accent). Then enable Next and make Next the primary.
+- Re-apply (rare): the "Applied ✓" state is STICKY — don't leave Apply permanently live. To act again,
+  clicking Preview re-runs and re-arms Apply (flips "Applied ✓" back to enabled "Apply"). Preview stays
+  available after Apply.
 Backup (step 1): same logic — Next disabled until a backup is created (Create Backup → "Backup
 created", Next enables). A backup with nothing to save still counts as done; flag if unsure.
 Compare (step 4): no gating (optional, last step). Keep the navigable stepper pills freely clickable.

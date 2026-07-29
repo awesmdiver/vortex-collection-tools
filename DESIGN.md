@@ -305,6 +305,14 @@ off.
   the Next-gating only guides the straight-through path. Skip gating where a step's action is genuinely
   optional (Compare's Generate Report) — this is for *required* actions only.
 
+- **Re-doing a completed action (rare, but real).** The done state is **sticky** — "Applied ✓" stays
+  disabled so a returning user never second-guesses it. To act again, the user re-enters through the
+  step's own **re-check control** (here, **Preview**): clicking it re-runs and **re-arms** the action
+  (flips "Applied ✓" back to an enabled "Apply"). Reuses the existing Preview → Apply gate — no new UI —
+  and Preview's own result even gives honest feedback ("0 mods — already applied" vs a real count if
+  something changed). Don't leave the action button itself permanently live (that reintroduces the
+  "did I already?" ambiguity); route the rare re-do through the deliberate re-check.
+
 Confirmed real 2026-07-28: on Apply Ignores, **Apply** and **Next: Apply Disables** both rendered
 accent-blue at once; after a distraction the user couldn't tell if they'd applied and had to open
 Vortex to find out.
