@@ -45,6 +45,9 @@ clean-up-exclude-list/
 # committed.
 prompts/handoff-latest.md
 
+# Board lifecycle state (Claude Workflow Board owns this; ephemeral check-off/sent state, not versioned)
+prompts/.board-state.json
+
 # OS
 Thumbs.db
 .DS_Store
