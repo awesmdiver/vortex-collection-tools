@@ -1,47 +1,14 @@
 # Terminal prompt queue
 
-**Send the Pending items below, top to bottom.** Open in a markdown preview (VS Code: `Ctrl+Shift+V`)
-for copy buttons. The design side keeps this current — single source of truth for "what's left." Run
-one at a time (several touch the same files).
+**Send the Pending item below.** Open in a markdown preview (VS Code: `Ctrl+Shift+V`) for copy buttons.
+The design side keeps this current — single source of truth for "what's left."
 
 ---
 
-## Pending — send these
+## Pending — send this
 
-### 1 · Adaptive completion — green banner, skip empty steps, + spacing
-*No-disables case: green "you're done" banner, Next skips the empty Apply Disables, breathing room fix.*
-
-```
-Update Collection stepper — completion banner should be GREEN, Next must skip empty steps, + a spacing
-fix. Load plain-language-writer. See DESIGN.md "Stepper — Adaptive steps + a completion state".
-
-1) GREEN COMPLETION BANNER (the main one). The "You're almost there!" / end-of-flow banner currently
-   renders as a BLUE .callout--info; it's a completion / success state, so it should be GREEN
-   (.callout--success). (User recalls it was green originally — check whether it regressed from
-   success→info.) When all APPLICABLE required steps are done (e.g. Backup + Apply Ignores, with no
-   disables to apply), show a green success callout that says the TOOL's work is done — e.g. "✅ You're
-   done here! Nothing left in this tool for this collection — just reopen Vortex, click **Resume** to
-   finish the update, and have fun gaming. (Compare below is optional if you want a before/after.)"
-   Fold in the existing "Resume in Vortex" guidance; drop the now-redundant "you can skip Apply
-   Disables" line.
-
-2) NEXT SKIPS EMPTY STEPS. When the collection has no disabled mods, MUTE the Apply Disables (step 3)
-   pill (greyed, nothing-to-do, still clickable) and make Next SKIP it — after Apply Ignores, Next
-   reads "Next: Compare →" and goes to step 4, not the empty step 3. (You already enable Next in the
-   nothingToDo branch; extend it to mute the pill + relabel/redirect Next.) Generalize to any empty
-   required step.
-
-3) SPACING. Add breathing room between the Profile/Collection selector dropdowns and the stepper pill
-   row — they're cramped now (the header-tighten removed the row that separated them). Match the app's
-   stack spacing.
-
-Verify light + dark, npm run web: a collection with ignores but no disables → green completion after
-Apply Ignores, step 3 muted, Next → Compare; a collection WITH disables → normal flow (step 3 active,
-Next → Apply Disables). Document in TECHNICAL.md; write your wrap-up to prompts/handoff-latest.md.
-```
-
-### 2 · Ratio-warning refinement — floor + per-collection dismiss + Settings
-*Stops small-collection false positives; lets the user silence it per collection.*
+### 1 · Ratio-warning refinement — floor + per-collection dismiss + Settings
+*Last queue item before the v0.5.0 release.*
 
 ```
 Refine the Update Collection backup ratio warning (buildBackupRatioWarning + the render/dismiss around
@@ -79,20 +46,19 @@ in TECHNICAL.md; write your wrap-up to prompts/handoff-latest.md.
 - **Disabled-count bug** — phantom "1 disabled" fixed (`f4976ab`)
 - **Step 2/3 polish** — chip-grid previews, bold action hints, pluralization (`16ebbc7`)
 - **Header tighten** — "Show Ignored & Disabled" onto the stepper row (`4f600d1`)
-- **Next-gating** — Applied ✓ done-state, one primary, sticky + Preview re-arm, Backup keeps
-  Next-gating only (no sticky flip) — *verified live; committing now*
+- **Next-gating** — Applied ✓ done-state, one primary, sticky + Preview re-arm (`3a19fc3`)
+- **Adaptive completion** — green "you're done here" banner, Next skips the empty step, spacing fix —
+  *done + verified; committing now*
 
 ---
 
-## Roadmap after the queue (order set 2026-07-28)
-1. Finish this queue.
-2. **Workflow board** — build the standalone dev tool (`utilities/claude-workflow-board`).
-3. **Theming** — brand-theming framework (Plain theme first).
-4. **Dynamic dashboard** — Normal/Developer audience mode + add/remove tools in Settings.
+## Then → **v0.5.0 release** (relay already provided): version bump → THIRD-PARTY-NOTICES check →
+build-release.ps1 → gh release with the notes + zip.
 
-*(Harmonization folds into the theming/dashboard era. Theming + the warm/fun voice apply to BOTH
-audiences — Developer mode only adds tools.)*
+## Known minor follow-up (post-v0.5.0, not blocking)
+- Re-doing Apply Ignores via **Preview** doesn't clear a stale end-of-flow banner ("you're done" /
+  "next steps") until Apply re-succeeds. Pre-existing; wire callout-clearing into the Preview re-arm in
+  a later polish pass.
 
-**Revisit (review-only, fire anytime):** does the Next-gating standard apply to The Forge's stepper?
-The Forge's action (Merge) *is* the advance, so the two-primary ambiguity likely doesn't occur —
-terminal reviews and reports (no code changes); we decide from that.
+## Roadmap after the release
+Workflow board → theming (first game theme: `design/theme-content-skyrim.md`) → dynamic dashboard.
