@@ -867,6 +867,66 @@ from Backup); a real Create Backup and a real Apply Ignores Preview both complet
 against real data (see above); light and dark mode both checked on every step — no contrast or
 layout issues in either theme.
 
+### Gate "Next" on a step's required action (2026-07-28)
+
+Per DESIGN.md's "Gate 'Next' on a step's required action" — confirmed real: **Apply** and
+**Next: Apply Disables** used to both render accent-blue at once on Apply Ignores, so a user pulled
+away mid-step had no way to tell, on return, whether they'd already applied. Fixed for all three
+gated steps (Backup, Apply Ignores, Apply Disables); Compare (step 4) is intentionally left
+ungated — its own action (Generate Report) is optional, matching DESIGN.md's own carve-out.
+
+**Apply Ignores / Apply Disables** (`web/public/sync-app.js`):
+- `syncStep1NextBtn`/`syncStep2NextBtn` start `disabled` in `index.html`. `syncIgnoresApplyBtn`/
+  `syncDisablesApplyBtn` start `disabled` too (unchanged from before).
+- New shared helpers `setApplyDone(btn)`/`setApplyPending(btn)` flip an Apply button between its
+  live state (`"Apply"`, `.btn--primary`) and its sticky done state (`"Applied ✓"`, `disabled`,
+  new `.btn--done` class — quiet/success styling, `var(--success)`/`var(--success-bg)`, matching
+  the existing `.badge--success`/`.status-pill--success` convention — deliberately NOT the live
+  accent, so the done action never competes with Next for attention).
+- On a successful Apply: `setApplyDone(...)` + the step's own Next button enables (becomes the
+  page's one live primary) + the status line's "Done — …" text becomes "✓ Applied — …" with a
+  trailing discoverable re-do hint: "Need to redo it? Just hit **Preview** again."
+- **Re-arm is unconditional at the top of both Preview handlers** — `setApplyPending(...)` +
+  re-disabling that step's Next button run before anything else (even before the `!backup` early
+  return), so clicking Preview always resets a previously "Applied ✓" button back to a live,
+  disabled-until-Preview-succeeds `"Apply"` state. This is the ONLY path back to a live Apply — the
+  done state never re-enables itself.
+- `resetIgnoresDisablesPreviewState()` (called on a new collection AND on Restore Backup) now also
+  resets both Apply buttons to pending and re-disables both step Next buttons, so switching
+  collections/backups never leaves a stale "Applied ✓"/enabled-Next from a different collection on
+  screen.
+- **Judgment call**: Apply Disables' existing `nothingToDo` preview branch (this backup captured 0
+  disabled mods) now enables that step's Next directly, without touching the Apply button's own
+  label — there's genuinely nothing to apply, so the "required action" is already satisfied, the
+  same reasoning DESIGN.md itself applies to a 0/0 backup on step 1. Apply Ignores has no equivalent
+  branch (it never did, pre-existing) and none was added, to avoid inventing new behavior beyond
+  what was asked.
+
+**Backup** (`web/public/sync-app.js`):
+- `syncStep0NextBtn` starts `disabled`; enables once `currentBackup` is set, via either Create
+  Backup succeeding or Restore Backup's confirm — a 0-ignored/0-disabled backup still counts as
+  done (nothing more is required either way), matching the task's own explicit "a backup with
+  nothing to save still counts as done" instruction.
+- `resetSyncStepsForNewCollection()` re-disables it (currentBackup resets to `null` there).
+- **Judgment call, flagged rather than silently decided**: Create Backup's own button was
+  deliberately NOT given the same sticky "Applied ✓"-style done-flip. Unlike Apply Ignores/Disables,
+  Backup has no separate Preview step to act as a re-arm control — creating a fresh backup is always
+  a normal, valid thing to do again later (e.g. after ignoring more mods in Vortex), not a one-shot
+  action that needs "redoing" through a deliberate re-check. Flipping it to a stuck disabled state
+  with no re-arm path would have permanently blocked a second legitimate backup. Create Backup keeps
+  its existing behavior (always re-enables after its own request finishes, success or failure) — only
+  the Next-gating was added.
+
+**Verified live** (2026-07-28, `npm run web`, both themes): fresh Backup/Apply Ignores/Apply
+Disables steps all start with Next correctly disabled. Exercised the full Preview → Apply → Next
+chain against a stubbed `fetch` (real Vortex was running this session, blocking real writes) for
+both Apply Ignores and Apply Disables: Apply flips to "Applied ✓" (quiet green, disabled), the
+redo hint renders with **Preview** bolded, and Next becomes the page's sole live primary. Clicking
+Preview again correctly re-armed Apply (back to enabled blue "Apply") and re-disabled Next.
+Confirmed the Apply Disables `nothingToDo` branch enables Next without touching Apply. Confirmed
+Compare stays completely ungated and the stepper pills stay freely clickable throughout. No
+contrast or layout issues in light or dark mode.
+
 ## Safety notes
 
 - Vortex must be fully closed before any state-database read or write — both flows check this and

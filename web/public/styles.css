@@ -401,6 +401,12 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   border-color: var(--border);
 }
 .btn--ghost:hover { background: var(--surface-2); border-color: var(--accent); }
+/* A step's action button once its required action has actually completed (Apply -> "Applied ✓") --
+   see DESIGN.md's "Gate 'Next' on a step's required action". Deliberately quiet/success, not the
+   live accent -- .btn--primary is reserved for whatever the user's next real move is (Next, once
+   it enables), so a finished action never competes with it for attention. Always paired with
+   `disabled` in markup/JS (the done state is sticky -- re-running Preview is what re-arms it). */
+.btn--done { background: var(--success-bg); color: var(--success); border-color: var(--success); cursor: not-allowed; }
 .btn--small { padding: 5px 12px; font-size: 13px; }
 /* A distinct blue for navigation ("back to collections") -- deliberately NOT the same shade as
    .btn--primary's --accent, so a nav button never reads as "an action to take" at a glance. */
