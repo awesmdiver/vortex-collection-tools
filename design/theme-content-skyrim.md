@@ -4,12 +4,11 @@ The content for the first game theme, captured for **Phase 2 (theming framework)
 the eventual `themes/skyrim.json` gets built from. See `DESIGN.md` "Brand theming framework" for how
 themes work (data keyed by stable tool ID; behavior never changes).
 
-**The flavor names below are the keepers** — the ones we landed on and liked. The **themed taglines are
-a first draft** (they didn't exist before; polish them at build time with `plain-language-writer`).
-Every tool keeps its **constant functional label** so a newcomer always knows what it does — *name for
-flavor, label for function*.
+**The flavor names are the keepers** — the ones we landed on and liked. The **themed taglines are a
+first draft** (polish them at build time with `plain-language-writer`). Every tool keeps its **constant
+functional label** so a newcomer always knows what it does — *name for flavor, label for function*.
 
-App title (themed): **The Arcaneum** · accent: TBD at build (a Skyrim gold/parchment, `palette` left
+App title (themed): **The Arcaneum** · accent: TBD at build (a Skyrim gold/parchment; `palette` left
 empty in v1.0).
 
 | Stable ID | Functional label (constant) | Skyrim name | Emoji | Draft themed tagline |
@@ -17,13 +16,17 @@ empty in v1.0).
 | `home` | Home | **The Arcaneum** | 📖 | Every tool in the collection, shelved and waiting. |
 | `rebuild` | Rebuild Collection | **Restoration** | ✨ | Restore a broken collection to full health — fast, no repair-by-hand. |
 | `update` | Update Collection | **The Ward** | 🛡️ | Update the collection without dropping the wards you set. |
-| `rules` | Rules Generator | **The Scribe** | ✒️ | The Scribe copies your conflict rules across to the new collection, so you never resolve them twice. |
+| `rules` | Rules Generator | **The Scribe** | ✒️ | The Scribe copies your conflict rules across, so you never resolve them twice. |
 | `merge` | Merge Plugins | **The Forge** | 🔨 | Forge many plugins into one — reclaim the slots, keep the load order. |
 | `missing-masters` | Missing Masters | **The Augur** | 🔮 | The Augur spots a missing master before it crashes your game. |
 | `scrub` | Vortex Scrub | **The Cleansing** | 🔥 | Cleanse the staging clutter Vortex quietly left behind. |
 | `archive-finder` | Archive Finder | **Clairvoyance** | 👁️ | See any file inside any archive — no unpacking, no digging. |
-| `reports` | Reports | **The Chronicle** | 📜 | The Chronicle of every rebuild, update, and change. |
-| `settings` | Settings | **The Standing Stones** *(new — proposal)* | 🗿 | Choose your paths and preferences once; every tool draws on them. |
+| `reports` | Reports | **The Chronicle** | 📜 | The chronicle of every rebuild, update, and change. |
+| ↳ `report-stats` | Stats | **The Ledger** | 📊 | Every rebuild's numbers, tallied over time. |
+| ↳ `report-workthrough` | Work Through | **The Quest Log** | ✅ | Every problem mod left to knock out, in one checklist. |
+| ↳ `report-compare` | Update Compare | **The Before-and-After** | 🔍 | Exactly what the update changed — kept, added, removed. |
+| ↳ `report-rules` | Rules Generator Report | **The Scribe's Ledger** | 📋 | Which rules are copied over, and which still need a look. |
+| `settings` | Settings | **The Standing Stones** | 🗿 | Choose your paths and preferences once; every tool draws on them. |
 
 ## Why these names (Skyrim lore → tool function)
 
@@ -48,20 +51,23 @@ decorative.
 - **Clairvoyance** — the Illusion spell that *reveals what's hidden* / lights the path. Archive Finder
   reveals what's inside any archive without opening it. *(see the hidden)*
 - **The Chronicle** — a *record of events over time*. Reports are the history of every rebuild, update,
-  and change. *(record the history)*
-- **The Standing Stones** *(settings proposal)* — you pick a passive blessing *once* and it shapes your
-  whole playthrough. Settings: set your paths and preferences once; every tool draws on them.
+  and change. Its sub-reports are entries in the Chronicle:
+  - **The Ledger** (Stats) — a ledger *tallies numbers over time*; Stats is the running count/history
+    of every rebuild. *(record the tallies)*
+  - **The Quest Log** (Work Through) — a quest log *lists what's left to do*; Work Through is the
+    checklist of problem mods to knock out. *(your to-do list)*
+  - **The Before-and-After** (Update Compare) — plainly *what changed* after the update (kept / added /
+    removed). *(the diff)* — alt if you want more lore: *The Reckoning* (an accounting of what happened).
+  - **The Scribe's Ledger** (Rules Generator Report) — the **Scribe's** own record of which rules got
+    copied and which still need a look. *(the Scribe's record)*
+- **The Standing Stones** — in Skyrim you pick a Standing Stone's passive blessing *once* and it shapes
+  your whole playthrough. Settings: set your paths and preferences once; every tool draws on them.
   *(set once, affects everything)*
 
-## Notes / open bits
-- **The keepers** (from the original draft, the ones you liked): The Arcaneum, Restoration, The Ward,
-  The Scribe, The Forge, The Augur, The Cleansing, Clairvoyance, The Chronicle.
-- **New proposals to accept or swap:** `settings` → **The Standing Stones** (you set a passive once,
-  like picking a Stone) — alternatives if you don't love it: *The Enchanter*, *Attunement*, *The
-  Sanctum*. `reports` sub-tabs currently all live under **The Chronicle**; they can each get a flavor
-  name later (e.g. Stats → *The Ledger*, Work Through → *The Quest Log*, Update Compare → *The
-  Before-and-After*, Rules Report → *The Scribe's Ledger*) or just keep their functional names.
-- **Emoji note:** `merge` is **🔨** in the Skyrim theme (The Forge) but **🧬** in the Plain theme
-  (Merge Plugins) — the theme carries the emoji, so this is expected, not a conflict.
-- Taglines above replace the Plain theme's hero copy per tool; the Plain functional lines stay as the
-  fallback/default theme.
+## Notes
+- **Emoji:** `merge` is **🔨** here (The Forge) but **🧬** in the Plain theme (Merge Plugins) — the
+  theme carries the emoji, so this is expected, not a conflict.
+- These themed names + taglines override the Plain theme's hero copy per tool; the Plain functional
+  lines stay as the fallback/default theme.
+- Only loose end: whether Update Compare stays **The Before-and-After** or becomes **The Reckoning** —
+  everything else is settled.
