@@ -5,7 +5,16 @@ action is the **v0.5.0 release** below.
 
 ---
 
-## → NEXT: v0.5.0 release
+## ✅ v0.5.0 SHIPPED — 2026-07-29 (pre-release, `1bcbcad`)
+The Forge + Update Collection stepper. Live: https://github.com/awesmdiver/vortex-collection-tools/releases/tag/v0.5.0
+(pre-release, matching v0.1–v0.4; promote with `gh release edit v0.5.0 --prerelease=false` once battle-tested.)
+
+**→ NEXT: build the Workflow Board** (`utilities/claude-workflow-board` — scaffolded: DESIGN.md + mockup).
+Then theming (`design/theme-content-skyrim.md`) → dynamic dashboard.
+
+*(The relay below is kept as the record of how v0.5.0 shipped.)*
+
+## (shipped) v0.5.0 release relay
 
 ```
 Release v0.5.0 — the queue is clear (all Update Collection work committed as f928c74).
