@@ -82,7 +82,21 @@ The spike proved the engine (`xelib` via `XEditLib.dll`) on **new-record** merge
 that path. **v1.0's Forge ships that path only.** Build accordingly:
 
 - **Merge scope = new-record plugins** — standalone mods whose content is genuinely new records
-  (`!isOverride(rec) && !isInjected(rec)`). This is the proven `asNew=true` path.
+  (`!isOverride(rec) && !isInjected(rec)`). This is the `asNew=true` path.
+- **REQUIRED for v1.0: a FormID reference-remapping + master-cleanup pass.** (Found in testing
+  2026-07-28 — Part A's proof copied records and set the ESL flag but never checked independence.)
+  `copyElement(asNew=true)` gives each copied record a new FormID but does **not** rewrite that
+  record's own internal FormID references, so the naive output still declares every original as a
+  master — meaning the user can't disable the originals and **no slots are freed** (the tool's entire
+  purpose). Fix: keep an old→new FormID map while copying, then rewrite every intra-merge reference to
+  its new target (leave references to genuine external masters — Skyrim.esm/Update.esm/DLC/CC —
+  alone), then strip the now-redundant original masters from the output header (`cleanMasters`-style).
+  zMerge does exactly this over the same xelib primitives (`BuildReferences`, `SetFormID`, reference
+  rewriting) — follow it as the reference implementation.
+  - **Acceptance test (the real definition of done):** merge the 3 test plugins → in a fresh load
+    order, **remove/disable all 3 source plugins** → the merged output still loads clean, every
+    reference resolves, and only genuine game masters remain in its header. Report this specific
+    result, not just "records copied + flag set."
 - **Build the engine scaffolding to ANTICIPATE override merges, but do NOT build or verify the
   override-merge logic now.** Do-now (cheap, shared): the child-process merge worker, the output /
   ESL-flag / qualification pipeline, and the per-record loop that already classifies each record
