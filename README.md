@@ -12,7 +12,8 @@ Vortex works fine for a small mod list, but at real scale (1,000+ mods) it freez
 settings, and burns hours on installs and updates. Vortex Collection Tools runs alongside Vortex to
 fix its biggest pain points: rebuilding a collection when files go missing or corrupted, updating a
 collection without losing track of every mod you'd marked Ignored or Disabled, and keeping your
-custom mod-order rules intact when a collection gets updated. A set of smaller Utilities rounds it
+custom mod-order rules intact when a collection gets updated, and merging plugins together to reclaim
+load-order slots. A set of smaller Utilities rounds it
 out — clearing away leftover mod clutter, catching missing master files before they crash your
 game, and finding any file inside any archive without unpacking it. Every tool lives behind one
 Home page, so you're never more than a click away from the one you need.
@@ -51,7 +52,8 @@ Home page, so you're never more than a click away from the one you need.
 * **Keeps your Ignored/Disabled choices:** Updating a collection in Vortex normally forgets which
   mods you'd marked Ignored or Disabled, leaving you to dig through a list of 1,900+ mods to turn
   off the same 35 again. This tool snapshots those choices before the update and restores them
-  automatically once it's done — no manual cleanup.
+  automatically once it's done — no manual cleanup. The whole update now walks you through it one
+  clear step at a time, so you always know what to do and when.
 * **Rebuilds your custom mod-order rules after an update:** Updating a collection can leave the
   "load after"-style rules you'd set up pointing at nothing. Rules Generator matches your old rules
   to their counterparts in the updated collection automatically — even auto-updating a rule that
