@@ -127,6 +127,11 @@ Write your wrap-up to prompts/handoff-latest.md.
 
 ---
 
-## After the queue (not yet prompted)
-Missing Masters ESLifier filter → Phase 2 (theming framework) → Phase 3 (harmonization: slide-out
-back-port + multi-select filter badges).
+## Roadmap after the queue (order set 2026-07-28)
+1. **Finish this queue** — incl. the Missing Masters ESLifier filter interlude.
+2. **Workflow board** — build the standalone dev tool (`utilities/claude-workflow-board`).
+3. **Theming** — the brand-theming framework (Plain theme first).
+4. **Dynamic dashboard** — Normal/Developer audience mode + add/remove tools in Settings.
+
+*(Harmonization — slide-out back-port + multi-select filter badges — folds into the theming/dashboard
+era. Theming and the warm/fun voice apply to BOTH audiences; Developer mode only adds tools.)*
