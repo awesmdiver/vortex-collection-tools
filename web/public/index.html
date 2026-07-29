@@ -98,6 +98,15 @@
   <div class="home-section-title">Main tools</div>
   <div class="home-grid">
     <div class="home-card-wrap" data-section="homeSectionMainTools">
+      <button class="home-card" data-area="merge">
+        <div class="home-card__icon">🧬</div>
+        <div class="home-card__name">Merge Plugins</div>
+        <div class="home-card__desc">Bundle several plugins into one file and free up load-order slots.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="merge" title="Pin to top">☆</button>
+    </div>
+    <div class="home-card-wrap" data-section="homeSectionMainTools">
       <button class="home-card" data-area="rebuild">
         <div class="home-card__icon">⚡</div>
         <div class="home-card__name">Rebuild Collection</div>
@@ -1769,6 +1778,172 @@
 
 </section>
 
+<section id="area-merge" class="tool-area hidden">
+<main class="app-main">
+  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span>Merge Plugins</div>
+  <div class="tool-hero">
+    <h2 class="tool-hero__title">🧬 Merge Many Plugins Into One</h2>
+    <p class="tool-hero__body">Skyrim's plugin slots fill up fast. Pick plugins from one or more collections and this tool bundles them into a single file&mdash;freeing up slots without touching xEdit. Review exactly what's going in first, and it'll flag the result as ESL automatically when it fits.</p>
+  </div>
+
+  <div class="merge-stepper" id="mergeStepper"></div>
+  <div id="mergeCriticalError" class="callout callout--critical hidden"></div>
+
+  <!-- Step 0: Choose collections -->
+  <div id="mergeStep0" class="settings-group">
+    <h2>Choose collections</h2>
+    <p class="muted">Pick one or more collections. The next step searches the plugins in their installed mods (in your staging folder).</p>
+    <div class="view-actions">
+      <button id="mergeCollSelectAllBtn" class="btn btn--ghost btn--small">Select All</button>
+      <button id="mergeCollClearBtn" class="btn btn--ghost btn--small">Clear</button>
+      <span id="mergeCollCount" class="muted"></span>
+    </div>
+    <div id="mergeCollLoading" class="loading-row"><span class="spinner"></span> Loading installed collections&hellip;</div>
+    <div id="mergeCollList" class="hidden"></div>
+    <div id="mergeCollEmpty" class="empty-row hidden"></div>
+    <div class="merge-navrow">
+      <span></span>
+      <button id="mergeStep0NextBtn" class="btn btn--primary" disabled>Next: Find files →</button>
+    </div>
+  </div>
+
+  <!-- Step 1: Find & select plugins -->
+  <div id="mergeStep1" class="hidden">
+    <div class="settings-group">
+      <h2>Find &amp; select plugins</h2>
+      <p class="muted" id="mergeStep1Sub"></p>
+      <div class="field-group" style="max-width: 520px;">
+        <label class="field-label" for="mergeSearchInput">Search plugins</label>
+        <input type="text" id="mergeSearchInput" class="input input--wide" placeholder="e.g. LOTD, PBR, armor" autocomplete="off">
+      </div>
+      <h3 class="settings-section-title">Extensions to include</h3>
+      <div id="mergeExtensionTags" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;"></div>
+      <div class="path-input-row" style="margin-top: 10px; max-width: 220px;">
+        <input type="text" id="mergeNewExtensionInput" class="input" placeholder=".ext">
+        <button id="mergeAddExtensionBtn" class="btn btn--ghost btn--small">Add</button>
+      </div>
+    </div>
+
+    <div class="merge-cart-bar" id="mergeCartBar">
+      🧬 <strong><span id="mergeCartCount">0</span> plugins chosen for the merge</strong>
+      <span class="muted">&mdash; building up across every search you run</span>
+      <div class="spacer"></div>
+      <button id="mergeViewCartBtn" class="btn btn--ghost btn--small">View chosen (<span id="mergeCartCount2">0</span>) ↗</button>
+    </div>
+
+    <div class="settings-group">
+      <h3 class="settings-section-title" id="mergeResultsSummary" style="margin-top: 2px;"></h3>
+      <div class="af-selection-bar" id="mergeSelectionActions">
+        <div class="af-selection-bar__left">
+          <button id="mergeSelectAllBtn" class="btn btn--ghost btn--small">Select All</button>
+          <button id="mergeInvertBtn" class="btn btn--ghost btn--small">Invert Selection</button>
+          <button id="mergeClearSearchBtn" class="btn btn--ghost btn--small">Clear Selection</button>
+          <span id="mergeSelectionCount" class="muted"></span>
+        </div>
+      </div>
+      <div id="mergeSelectAllBanner" class="callout callout--info hidden">
+        <p>All <strong id="mergeSelectAllBannerPageCount"></strong> on this page are selected. <button id="mergeSelectAllBannerBtn" class="af-inline-link-btn">Select all <span id="mergeSelectAllBannerTotalCount"></span> results?</button></p>
+      </div>
+      <div id="mergePaginationBar" class="view-actions hidden">
+        <span class="muted">Show:</span>
+        <button class="btn btn--ghost btn--small merge-page-size-btn" data-size="10">10</button>
+        <button class="btn btn--ghost btn--small merge-page-size-btn" data-size="25">25</button>
+        <button class="btn btn--ghost btn--small merge-page-size-btn" data-size="50">50</button>
+        <button class="btn btn--ghost btn--small merge-page-size-btn" data-size="all">All</button>
+        <button id="mergePrevPageBtn" class="btn btn--ghost btn--small">&larr; Prev</button>
+        <span id="mergePageIndicator" class="muted"></span>
+        <button id="mergeNextPageBtn" class="btn btn--ghost btn--small">Next &rarr;</button>
+      </div>
+      <div class="plan-table-wrap">
+        <table class="plan-table hidden" id="mergeResultsTable">
+          <thead><tr><th class="col-check"><input type="checkbox" id="mergeHeaderCheckbox" title="Select all on this page"></th><th>File</th><th>Mod</th><th>Collection</th><th>Type</th></tr></thead>
+          <tbody id="mergeResultsBody"></tbody>
+        </table>
+      </div>
+      <p class="muted" id="mergeNoResults" style="font-size: 13px;"></p>
+      <p class="muted" style="font-size: 12.5px; margin: 12px 2px 0;">Already-chosen plugins show checked here even if they came from a different search. Run a new search anytime &mdash; your cart stays put.</p>
+    </div>
+
+    <div class="merge-navrow">
+      <button id="mergeStep1BackBtn" class="btn btn--ghost">← Back</button>
+      <button id="mergeStep1NextBtn" class="btn btn--primary" disabled>Next: Review →</button>
+    </div>
+  </div>
+
+  <!-- Step 2: Review your merge -->
+  <div id="mergeStep2" class="hidden">
+    <div class="settings-group">
+      <h2>Review your merge</h2>
+      <p class="muted" id="mergeReviewSub"></p>
+      <div id="mergeReviewLoading" class="loading-row hidden"><span class="spinner"></span> Reading each plugin&hellip;</div>
+      <div id="mergeReviewBody" class="hidden">
+        <div id="mergeMasterCallout" class="callout callout--warning hidden"></div>
+        <div id="mergeOverrideCallout" class="callout callout--warning hidden"></div>
+        <div id="mergeEslCallout" class="callout callout--info hidden"></div>
+        <div class="summary-badges" id="mergeReviewBadges"></div>
+        <div class="plan-table-wrap">
+          <table class="plan-table" id="mergeReviewTable">
+            <thead><tr><th>File</th><th>Mod</th><th>Collection</th><th>Records</th><th>Status</th><th></th></tr></thead>
+            <tbody id="mergeReviewTableBody"></tbody>
+          </table>
+        </div>
+        <h3 class="settings-section-title">Output</h3>
+        <div style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+          <div class="field-group" style="flex: 1; min-width: 240px;">
+            <label class="field-label" for="mergeOutputNameInput">Name the merged plugin</label>
+            <input type="text" id="mergeOutputNameInput" class="input input--wide" value="Merged Patch">
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="mergeOutputDirInput">Output folder</label>
+            <div class="path-input-row">
+              <input type="text" id="mergeOutputDirInput" class="input input--wide">
+              <button id="mergeOutputBrowseBtn" class="btn btn--ghost btn--small">Browse&hellip;</button>
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Result</label>
+            <code id="mergeResultPreview" class="muted"></code>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="merge-navrow">
+      <button id="mergeStep2BackBtn" class="btn btn--ghost">← Add more files</button>
+      <button id="mergeStartBtn" class="btn btn--primary" disabled>Merge →</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Merging -->
+  <div id="mergeStep3" class="hidden">
+    <div class="settings-group">
+      <h2>Merging&hellip;</h2>
+      <p class="muted" id="mergeProgressSub"></p>
+      <div class="progress-bar-wrap"><div id="mergeProgressBar" class="progress-bar"></div></div>
+      <p class="muted" id="mergeProgressText" style="font-size: 13px;"></p>
+    </div>
+  </div>
+
+  <!-- Step 4: Done -->
+  <div id="mergeStep4" class="hidden">
+    <div class="settings-group">
+      <h2 id="mergeDoneTitle">✅ Merge complete</h2>
+      <p class="muted">Your plugins were bundled into one file.</p>
+      <div class="merge-stat-grid" id="mergeDoneStats"></div>
+      <div id="mergeDoneEslCallout" class="callout callout--info hidden"></div>
+      <div class="callout callout--info">
+        <div class="callout__title">Next: turn it on in Vortex</div>
+        <p id="mergeDoneNextStepsText"></p>
+      </div>
+    </div>
+    <div class="merge-navrow">
+      <button id="mergeOpenOutputBtn" class="btn btn--ghost">Open output folder</button>
+      <button id="mergeAnotherBtn" class="btn btn--primary">Merge another →</button>
+    </div>
+  </div>
+
+</main>
+</section>
+
 <!-- Outside every .tool-area on purpose, same reason as #unsavedChangesModal below -- these were
      previously nested inside <section id="area-reports">, which has display:none whenever Reports
      isn't the active tab. That silently suppressed the modal (display:none on an ancestor always
@@ -1823,5 +1998,6 @@
 <script src="cleanup-app.js"></script>
 <script src="missing-masters-app.js"></script>
 <script src="archive-finder-app.js"></script>
+<script src="merge-app.js"></script>
 </body>
 </html>

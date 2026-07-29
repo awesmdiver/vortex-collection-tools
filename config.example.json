@@ -21,5 +21,6 @@
   "dummyMastersOutputDir": null,
   "archiveFinderDbDir": null,
   "archiveFinderOutputDir": null,
-  "archiveFinderExtensions": [".esp"]
+  "archiveFinderExtensions": [".esp"],
+  "mergeOutputDir": null
 }

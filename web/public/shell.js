@@ -5,7 +5,7 @@
 // index.html; this only toggles which one is visible. app.js and sync-app.js each own their own
 // internal view-state exactly as before -- this file knows nothing about either.
 
-const TOOL_AREAS = ['home', 'rebuild', 'sync', 'settings', 'reports', 'rules-generator', 'utilities'];
+const TOOL_AREAS = ['home', 'rebuild', 'sync', 'settings', 'reports', 'rules-generator', 'utilities', 'merge'];
 let currentArea = null;
 
 // "What page am I on" was genuinely hard to tell across several of this app's pages -- confirmed
@@ -109,7 +109,7 @@ fetch('/api/settings')
   })
   .catch(() => {});
 
-const AREA_LABELS = { home: 'Home', rebuild: 'Rebuild Collection', sync: 'Update Collection', settings: 'Settings', reports: 'Reports', 'rules-generator': 'Rules Generator', utilities: 'Utilities' };
+const AREA_LABELS = { home: 'Home', rebuild: 'Rebuild Collection', sync: 'Update Collection', settings: 'Settings', reports: 'Reports', 'rules-generator': 'Rules Generator', utilities: 'Utilities', merge: 'Merge Plugins' };
 
 function showToolArea(id) {
   currentArea = id;
@@ -225,7 +225,7 @@ function setStarVisual(star, on) {
 // put. Reused for both directions (into Pinned, back into a section) since a section's own order is
 // already just a sub-sequence of this same list.
 const HOME_CANONICAL_ORDER = [
-  'rebuild', 'sync', 'rules-generator',
+  'merge', 'rebuild', 'sync', 'rules-generator',
   'stats', 'workthrough', 'updatecompare', 'rulesgen',
   'missingmasters', 'scrub', 'archivefinder',
 ];
