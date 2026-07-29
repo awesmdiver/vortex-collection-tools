@@ -161,7 +161,7 @@ $m('mergeStep0NextBtn').addEventListener('click', () => mergeGoToStep(1));
 
 function mergeEnterStep1() {
   const names = mergeState.collections.filter((c) => mergeState.collSelected.has(c.modId)).map((c) => c.name);
-  $m('mergeStep1Sub').textContent = `Searching the plugins in your ${names.length} chosen collection${names.length === 1 ? '' : 's'}. Search as many times as you like -- each pick adds to the merge and stays put.`;
+  $m('mergeStep1Sub').textContent = `Searching the plugins in your ${names.length} chosen collection${names.length === 1 ? '' : 's'}. Search as many times as you like — each pick adds to the merge and stays put.`;
   mergeRenderExtensionTags();
   mergeUpdateCartBar();
   if (!mergeState.searchResults.length) mergeRunSearch();
