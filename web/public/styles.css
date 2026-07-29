@@ -1184,6 +1184,16 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .merge-stepper--nav .merge-step { cursor: pointer; }
 .merge-stepper--nav .merge-step:hover { border-color: var(--accent-hover); }
 
+/* Update Collection: "Show Ignored & Disabled" shares the stepper's own row instead of sitting on
+   its own line above it (2026-07-28 -- reclaims a full row of vertical space). Pills stay left
+   (.merge-stepper keeps its own internal flex-wrap for the pills themselves); the button pushes to
+   the right edge via margin-left: auto. On a narrow window the row wraps as a whole -- the button
+   drops to its own line below the pills (still right-aligned there, via the same auto margin)
+   rather than crowding or overlapping them. */
+.sync-stepper-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin: 0 0 var(--stack-gap); }
+.sync-stepper-row .merge-stepper { margin: 0; }
+.sync-stepper-row #syncListModsBtn { margin-left: auto; }
+
 .merge-navrow { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; }
 
 /* Collection-picker rows (Step 1) -- a small, rarely-more-than-a-handful list, so a full
