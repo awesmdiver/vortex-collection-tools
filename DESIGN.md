@@ -242,6 +242,45 @@ big gaps, running edge-to-edge on a wide monitor). Two fixes, both reusing what'
 
 Apply the same grouping to any other tool page that has grown into a loose stack of controls.
 
+## Stepper — the standard for multi-step tools (2026-07-28)
+
+Some tools are a **sequence**, not a single page: The Forge (Collections → Find files → Review →
+Merge → Done) and Update Collection (Backup → Apply Ignores → Apply Disables → Compare). These use a
+shared **stepper** — one step per screen — rather than one long scroll. Reference mockups:
+`design/vortex-merge-tool-mockup.html` and `design/vortex-update-stepper-mockup.html`.
+
+Why: each step is a natural stopping point, the screen stays short (no scrolling to find "what do I do
+now"), and each step earns room to breathe or grow without bloating a mega-page. Interaction
+consistency across tools matters as much as visual consistency — a stepper in one tool and a scroll in
+another is a seam.
+
+**The pattern:**
+- A **step indicator** row on top (`.stepper`): numbered pills — current = `--accent`, completed =
+  `--success` with a ✓, upcoming = muted. Below it, a single `#stage` renders only the current step.
+- **One step per screen.** The step's controls live in a card; nothing from the other steps shows.
+- **Back / Next** nav at the bottom; Next is the primary action, labeled with its destination
+  ("Next: Apply Ignores →"). Back is hidden on the first step.
+- **Precondition-first.** If a step must only run at a certain time ("before you click Update in
+  Vortex," "only after you've closed Vortex"), that condition is a **callout at the top of the step**,
+  not buried mid-paragraph. A hard "Vortex must be closed" requirement keeps the app's established
+  serious-register + 🛑 treatment.
+
+**Navigable vs. linear — pick by whether the user leaves mid-flow.** The Forge is one sitting → mostly
+linear (its pills are clickable but you generally go Back/Next). Update Collection is **re-entered
+between steps** — the user leaves to act in Vortex (run the update, resume the install) and comes
+back — so its pills are **fully clickable to jump to any step**, and state persists across navigation;
+it is NOT a locked "Next-only" wizard that resets. When a flow interleaves with actions outside the
+app, make the stepper navigable and remember where the user was.
+
+**Persistent header for a shared selector.** When every step operates on one selection (Update
+Collection's Profile + Collection), that selector is a **persistent bar above the stepper**, set once
+and always visible — not a step you redo. (The Forge's "Collections" is a genuine first step because
+choosing them *is* the first action — use judgment per tool.)
+
+**Between-step handoffs.** When the user must go do something outside the app before the next step, end
+the step with a quiet "→ Next, over in Vortex: …" callout telling them exactly what to do and that
+their place is saved. That connective tissue is the thing a single scroll can't give you.
+
 ## Selectable lists — the standard select-and-act pattern (2026-07-28)
 
 **One selection pattern for every list the user checks items in and then acts on** — Archive

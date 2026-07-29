@@ -1,0 +1,121 @@
+<title>Update Collection — stepper flow concept</title>
+<style>
+  :root{
+    --bg:#0d0f14;--surface:#161922;--surface-2:#1d212c;--border:#2a2f3d;--text:#e6e9ef;--text-muted:#8b93a3;
+    --accent:#5b8def;--accent-hover:#75a1f5;--accent-bg:rgba(91,141,239,.12);
+    --success:#3ecf8e;--success-bg:rgba(62,207,142,.12);--warning:#f5b942;--warning-bg:rgba(245,185,66,.12);
+    --danger:#f0546b;--danger-bg:rgba(240,84,107,.12);--neutral:#7c8494;--neutral-bg:rgba(124,132,148,.12);--radius:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;font-size:15px;line-height:1.5}
+  .main{max-width:min(920px,95vw);margin:0 auto;padding:26px 24px 70px}
+  .eyebrow{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--text-muted);margin:0 0 8px}
+  .eyebrow a{color:var(--accent);text-decoration:none}
+  .hero__title{font-size:22px;margin:0 0 8px}
+  .hero__body{margin:0 0 20px;color:var(--text);font-size:14px;line-height:1.6;max-width:820px}
+
+  .selbar{display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin:0 0 22px}
+  .field{display:flex;flex-direction:column;gap:5px} .field label{font-size:12px;color:var(--text-muted)}
+  .select{font-size:14px;padding:9px 13px;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;min-width:230px}
+  .selbar .ghostlink{margin-left:auto;font-size:13px;color:var(--accent);background:none;border:1px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer}
+
+  .stepper{display:flex;gap:8px;margin:0 0 24px;flex-wrap:wrap}
+  .step{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-muted);padding:7px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface);cursor:pointer}
+  .step b{width:20px;height:20px;border-radius:50%;background:var(--surface-2);color:var(--text-muted);display:grid;place-items:center;font-size:12px;font-weight:700}
+  .step.active{border-color:var(--accent);color:var(--accent)} .step.active b{background:var(--accent);color:#0b1220}
+  .step.done{color:var(--success)} .step.done b{background:var(--success);color:#0b1220}
+  .step:hover{border-color:var(--accent-hover)}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;margin:0 0 22px}
+  .card h2{font-size:18px;margin:0 0 4px} .card .sub{color:var(--text-muted);font-size:13.5px;margin:0 0 16px}
+
+  .callout{border-radius:var(--radius);padding:13px 16px;margin:0 0 16px;border:1px solid} .callout p{margin:0;font-size:13.5px} .callout .t{font-weight:700;margin-bottom:3px}
+  .callout--info{background:var(--accent-bg);border-color:var(--accent)}
+  .callout--warn{background:var(--warning-bg);border-color:var(--warning)}
+  .callout--next{background:var(--neutral-bg);border-color:var(--border)} .callout--next .t{color:var(--text)}
+
+  .field-in{display:flex;flex-direction:column;gap:5px;margin:0 0 16px;max-width:560px}
+  .input{font-size:14px;padding:9px 13px;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px}
+  .hint{font-size:12.5px;color:var(--text-muted);margin:6px 0 0}
+
+  .btnrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .btn{font-family:inherit;font-size:14px;font-weight:500;padding:9px 18px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);cursor:pointer;white-space:nowrap}
+  .btn:hover{border-color:var(--accent)} .btn--primary{background:var(--accent);border-color:var(--accent);color:#0b1220;font-weight:600}
+  .btn--ghost{background:transparent} .btn[disabled]{opacity:.5;cursor:not-allowed}
+  .btnrow .note{font-size:12.5px;color:var(--text-muted)}
+  .navrow{display:flex;justify-content:space-between;gap:10px;margin-top:4px}
+</style>
+
+<div class="main">
+  <div class="eyebrow"><a href="#">Home</a> › Update Collection</div>
+  <h2 class="hero__title">🔄 Update Without Redoing Your Mod Cleanup</h2>
+  <p class="hero__body">Updating a collection in Vortex often resets your carefully-set <strong>Ignored</strong> and <strong>Disabled</strong> mods. This tool remembers how you had things set and restores it after the update — so that cleanup never has to happen twice. Work through the steps in order; you'll hop over to Vortex between some of them.</p>
+
+  <div class="selbar">
+    <div class="field"><label>Profile</label><select class="select"><option>Skyrim SE — Main</option></select></div>
+    <div class="field"><label>Collection</label><select class="select"><option>Lorerim</option></select></div>
+    <button class="ghostlink">Show Ignored &amp; Disabled</button>
+  </div>
+
+  <div class="stepper" id="stepper"></div>
+  <div id="stage"></div>
+</div>
+
+<script>
+  const STEPS=["Backup","Apply Ignores","Apply Disables","Compare"];
+  let cur=0, done=[false,false,false,false];
+  const el=id=>document.getElementById(id);
+
+  function renderStepper(){
+    el("stepper").innerHTML=STEPS.map((s,i)=>{
+      const cls=i===cur?'active':done[i]?'done':'';
+      const mark=done[i]&&i!==cur?'✓':i+1;
+      return `<div class="step ${cls}" onclick="go(${i})"><b>${mark}</b>${s}</div>`;
+    }).join('');
+  }
+  function nav(showBack,nextLabel){
+    return `<div class="navrow">
+      <button class="btn btn--ghost" onclick="go(${cur-1})" ${showBack?'':'style="visibility:hidden"'}>← Back</button>
+      ${nextLabel?`<button class="btn btn--primary" onclick="go(${cur+1})">${nextLabel}</button>`:'<span></span>'}</div>`;
+  }
+
+  function step0(){ return `<div class="card">
+    <h2>1 · Back up your Ignored &amp; Disabled mods</h2>
+    <p class="sub">Snapshots which mods are currently Ignored or Disabled for this collection, so they can be restored after the update.</p>
+    <div class="callout callout--info"><div class="t">Do this BEFORE you click Update in Vortex.</div><p>Run the backup first, then start the update over in Vortex.</p></div>
+    <div class="btnrow"><button class="btn btn--primary">Create Backup</button><button class="btn">Restore Backup</button><span class="note">A full backup is taken automatically before any later step writes to Vortex.</span></div>
+    </div>
+    <div class="callout callout--next"><div class="t">→ Next, over in Vortex</div><p>Click <strong>Update</strong> on this collection and let it run, then <strong>close Vortex</strong>. Come back here for step 2 — your place is saved.</p></div>
+    ${nav(false,"Next: Apply Ignores →")}`;
+  }
+  function step1(){ return `<div class="card">
+    <h2>2 · Apply Ignores</h2>
+    <p class="sub">Sets the updated collection's mods back to Ignored in Vortex, so they don't get downloaded and installed when you resume the update.</p>
+    <div class="callout callout--warn"><div class="t">🛑 Only after you've updated the collection in Vortex and closed it.</div><p>This writes directly to Vortex's database (a full backup is taken first). Vortex must be closed.</p></div>
+    <div class="field-in"><label style="font-size:12px;color:var(--text-muted)">Updated Vortex collection id <span style="opacity:.6">(optional)</span></label>
+      <input class="input" placeholder="e.g. My-Collection-123456-2-…">
+      <p class="hint">Know the updated collection's id? Enter it here. Otherwise leave it blank and we'll grab the current id when you click Preview.</p></div>
+    <div class="btnrow"><button class="btn">Preview</button><button class="btn btn--primary" disabled>Apply</button><span class="note">Run Preview first to see what would change and enable Apply.</span></div>
+    </div>
+    <div class="callout callout--next"><div class="t">→ Next, over in Vortex</div><p>Resume the collection's install, let it finish, then <strong>close Vortex</strong> again. Then continue to step 3.</p></div>
+    ${nav(true,"Next: Apply Disables →")}`;
+  }
+  function step2(){ return `<div class="card">
+    <h2>3 · Apply Disables</h2>
+    <p class="sub">Sets the updated mods back to Disabled in Vortex.</p>
+    <div class="callout callout--warn"><div class="t">🛑 Only after you've resumed the update install and closed Vortex.</div><p>This writes directly to Vortex's database (a full backup is taken first). Vortex must be closed.</p></div>
+    <div class="btnrow"><button class="btn">Preview</button><button class="btn btn--primary" disabled>Apply</button><span class="note">Run Preview first to see what would change and enable Apply.</span></div>
+    </div>
+    ${nav(true,"Next: Compare →")}`;
+  }
+  function step3(){ return `<div class="card">
+    <h2>4 · Compare <span style="color:var(--text-muted);font-weight:400;font-size:14px">(optional — run anytime)</span></h2>
+    <p class="sub">Generates a report showing what changed during the update — what stayed, what was added, what was removed.</p>
+    <div class="btnrow"><button class="btn btn--primary">Generate Report</button></div>
+    </div>
+    ${nav(true,"")}`;
+  }
+  const RENDER=[step0,step1,step2,step3];
+  window.go=i=>{ if(i<0||i>3)return; if(i>cur)done[cur]=true; cur=i; renderStepper(); el("stage").innerHTML=RENDER[cur](); window.scrollTo({top:0,behavior:'smooth'}); };
+  go(0);
+</script>
