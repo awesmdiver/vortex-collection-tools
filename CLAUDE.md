@@ -9,20 +9,22 @@ collections (Rebuild Collection, Update Collection, Rules Generator, Reports, an
 Vortex Scrub, Missing Masters, Archive Finder). See [`README.md`](README.md) for the user-facing
 overview and [`TECHNICAL.md`](TECHNICAL.md) for the full technical reference.
 
-## Keep README.md's Key Features list in sync
+## Keep README.md's Key Features list in sync — flag it in the handoff
 
-**Whenever a new tool or Utilities feature ships, add a bullet to README.md's "Key Features" list
-in the same change** — not deferred to a later doc pass. Match the existing bullets' voice and
-shape exactly: bold verb-first lead-in + colon, then 1-2 plain-language sentences (pain point, then
-what this tool does about it) — run it through the `plain-language-writer` skill like any other
-user-facing text. If the new feature changes the app's actual elevator pitch (not just adds to the
-list), also touch the "Overview" paragraph right above it — but the one-line tagline blockquote at
-the very top is deliberately terse and names only the flagship features; don't dilute it by trying
-to list everything there.
+`README.md` is user-facing, so the **design side owns its copy** (see the workspace `CLAUDE.md`
+audience split). **Terminal does not edit README directly.** Instead, whenever a new tool or Utilities
+feature ships, **flag it in `prompts/handoff-latest.md`** — one sentence on what it does — so the
+design side folds it into README's "Key Features" (and the "Overview" paragraph, if the elevator pitch
+actually changed) in the right voice, in the same session, not a deferred pass.
 
-This drifted once already (2026-07-28): Vortex Scrub, Missing Masters, and Archive Finder all
-shipped without a README update, and it sat stale for a full extra session before the user caught
-it and asked for a catch-up pass. Don't let it happen again.
+For whoever writes that copy (the design side): match the existing bullets' shape exactly — bold
+verb-first lead-in + colon, then 1-2 plain-language sentences (pain point, then what the tool does
+about it), via the `plain-language-writer` skill. The one-line tagline blockquote at the very top
+stays deliberately terse (flagship features only) — don't dilute it.
+
+This drifted once already (2026-07-28): Vortex Scrub, Missing Masters, and Archive Finder all shipped
+without a README update and sat stale for a full extra session. Routing it through the handoff is what
+prevents a repeat — terminal flags, design writes.
 
 ## Design guide — read before any user-facing change
 
