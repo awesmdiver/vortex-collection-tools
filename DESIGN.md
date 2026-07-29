@@ -378,14 +378,28 @@ Collection, before Reports) — Settings is the one and only exception that goes
   `.badge--info/success/warning/critical/neutral` and
   `.status-pill--info/success/warning/critical/neutral` (added 2026-07-25 for the Compare Report,
   meant to be reused by anything future, not just that one report).
-- **The "click a stat to filter a list" pattern**: `.badge--clickable` + a `data-status` attribute,
-  paired with table rows carrying a matching `data-status` — clicking a badge shows only matching
-  rows, clicking `.badge--show-all` clears the filter. This is **the** standard way to let a user
-  narrow a categorized list in this app. Used by Stats Report's Current Issues, Work Through Report,
-  the Ignored/Disabled report, and the Update Compare Report. **Any new report or list that shows
-  categorized data should copy this exact mechanism** (badges above, one combined table below, same
-  small inline filter script) rather than inventing per-page filtering, multiple stacked tables, or a
-  collapsible-sections approach.
+- **The "click stats to filter a list" pattern — multi-select toggle** (upgraded 2026-07-28 from
+  single-select; reference mockup `design/vortex-filter-multiselect-mockup.html`): `.badge--clickable`
+  + a `data-status` attribute, paired with table/list rows carrying a matching `data-status`. Each
+  badge is an **independent toggle** — click to add its status to the visible set, click again to
+  remove it — so several can be active at once and the list shows the **union** of every active
+  status (e.g. Missing + Disabled on, Pending filtered out). `.badge--show-all` clears all toggles.
+  This is **general to every tool**, not per-list behavior. The standard:
+  - **None selected = show everything**, with `.badge--show-all` in the active state. This is the
+    default/resting state — the filter-chip model users know from Gmail/GitHub — **not** "every badge
+    must be on to see all." (Replaces the old single-select "click one badge, it replaces the last.")
+  - **No dead-end:** turning the last active status off falls straight back to show-all (everything),
+    so the user can never land on an empty list.
+  - **Active vs inactive is explicit:** an active badge fills with its status color + a ✓; an inactive
+    one goes quiet (muted chip + a small status-color dot) so it still reads as available.
+    `.badge--show-all` mirrors the same active/inactive treatment.
+  - Visible set = rows whose `data-status` is in the active set (all rows when none active). Same
+    small inline filter script, generalized from single- to multi-select — build it once and share it.
+  This is **the** standard way to narrow a categorized list in this app. Used by Stats Report's
+  Current Issues, Work Through Report, the Ignored/Disabled report, Update Compare, Missing Masters,
+  Archive Finder, and the Merge review. **Any new report or list that shows categorized data copies
+  this exact mechanism** (badges above, one combined table/list below) rather than inventing per-page
+  filtering, multiple stacked tables, or a collapsible-sections approach.
 - **Callouts**: `.callout.callout--{severity}` — an inline, non-blocking status/warning/note box on
   a page. This is the default choice for "something the user should know," short of a full modal.
 - **Modals**: `.modal-overlay > .modal.modal--{severity}` for anything that **blocks** the user until

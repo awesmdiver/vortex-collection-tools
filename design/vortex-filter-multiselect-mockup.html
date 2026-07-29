@@ -1,0 +1,109 @@
+<title>Multi-select filter badges — shared pattern</title>
+<style>
+  :root{
+    --bg:#0d0f14;--surface:#161922;--surface-2:#1d212c;--border:#2a2f3d;--border-strong:#3a4152;
+    --text:#e6e9ef;--text-muted:#8b93a3;--accent:#5b8def;--accent-bg:rgba(91,141,239,.12);
+    --success:#3ecf8e;--success-bg:rgba(62,207,142,.12);--warning:#f5b942;--warning-bg:rgba(245,185,66,.12);
+    --danger:#f0546b;--danger-bg:rgba(240,84,107,.12);--neutral:#7c8494;--neutral-bg:rgba(124,132,148,.12);--radius:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;font-size:15px;line-height:1.5}
+  .main{max-width:min(880px,94vw);margin:0 auto;padding:28px 24px 70px}
+  .eyebrow{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--text-muted);margin:0 0 8px}
+  .eyebrow a{color:var(--accent);text-decoration:none}
+  h1{font-size:22px;margin:0 0 6px}
+  .lead{color:var(--text-muted);font-size:14px;margin:0 0 22px;max-width:640px;line-height:1.6}
+
+  .callout{border-radius:var(--radius);padding:12px 16px;margin:0 0 20px;border:1px solid var(--accent);background:var(--accent-bg);font-size:13.5px}
+  .callout b{color:var(--accent)}
+
+  .badges{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px}
+  .badge{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:16px;cursor:pointer;border:1.5px solid transparent;background:var(--surface-2);color:var(--text-muted);user-select:none}
+  .badge .dot{width:8px;height:8px;border-radius:50%}
+  .badge .ck{display:none;font-weight:800;font-size:13px}
+  .badge.off{border:1.5px solid var(--border)}
+  .badge.on .dot{display:none} .badge.on .ck{display:inline}
+  .badge[data-status="missing"].on{background:var(--danger-bg);color:var(--danger);border-color:var(--danger)}
+  .badge[data-status="missing"] .dot{background:var(--danger)}
+  .badge[data-status="disabled"].on{background:var(--warning-bg);color:var(--warning);border-color:var(--warning)}
+  .badge[data-status="disabled"] .dot{background:var(--warning)}
+  .badge[data-status="pending"].on{background:var(--success-bg);color:var(--success);border-color:var(--success)}
+  .badge[data-status="pending"] .dot{background:var(--success)}
+  .sep{width:1px;height:20px;background:var(--border);margin:0 3px}
+  .badge--all.on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+  .badge--all .dot{background:var(--neutral)}
+
+  .readout{font-size:13px;color:var(--text-muted);margin:0 0 14px}
+  .readout b{color:var(--text)}
+
+  .ptw{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  thead th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;color:var(--text-muted);padding:11px 14px;background:var(--surface-2);border-bottom:1px solid var(--border)}
+  td{padding:11px 14px;border-bottom:1px solid var(--border)} tr:last-child td{border-bottom:none}
+  tbody tr:nth-child(even){background:rgba(255,255,255,.022)}
+  .file{font-family:Consolas,monospace;font-size:13px}
+  .pill{font-size:11px;font-weight:700;padding:2px 9px;border-radius:12px}
+  .pill--missing{background:var(--danger-bg);color:var(--danger)}
+  .pill--disabled{background:var(--warning-bg);color:var(--warning)}
+  .pill--pending{background:var(--success-bg);color:var(--success)}
+</style>
+
+<div class="main">
+  <div class="eyebrow"><a href="#">Home</a> › Missing Masters</div>
+  <h1>Multi-select filter badges</h1>
+  <p class="lead">The shared "click stats to filter a list" pattern, upgraded from single-select to
+  multi-select toggles. Each badge toggles its status in or out; the list shows the union. Shown here on
+  Missing Masters, but this is the standard for every filtered list in the app.</p>
+
+  <div class="callout">Fixing something here only updates your staging folder — open Vortex and click <b>Deploy Mods</b> afterward.</div>
+
+  <div class="badges" id="badges"></div>
+  <div class="readout" id="readout"></div>
+  <div class="ptw"><table><thead><tr><th>Problem master</th><th>Depended on by</th><th style="text-align:right">Status</th></tr></thead><tbody id="rows"></tbody></table></div>
+</div>
+
+<script>
+  var META={
+    missing:{label:'Missing'}, disabled:{label:'Disabled'}, pending:{label:'Pending'}
+  };
+  var ORDER=['missing','disabled','pending'];
+  var ROWS=[
+    ['Update.esm','Lorerim, WACCF','missing'],
+    ['Water for ENB.esm','Nordic Souls','missing'],
+    ['Lux Orbis.esm','Elysium','missing'],
+    ['Cutting Room Floor.esp','Museum Fixes','disabled'],
+    ['3DNPC.esp','Interesting NPCs patch','pending'],
+    ['Book Covers Skyrim.esp','LOTD patch','pending'],
+    ['Immersive Sounds Compendium.esp','Audio Overhaul','pending'],
+    ['WACCF.esp','Armor patches','pending'],
+    ['RaceMenu.esp','Body mods','pending']
+  ];
+  var counts={missing:0,disabled:0,pending:0};
+  ROWS.forEach(function(r){counts[r[2]]++});
+  var active={missing:false,disabled:false,pending:false};
+  var badges=document.getElementById('badges'), readout=document.getElementById('readout'), rows=document.getElementById('rows');
+  function anyOn(){return ORDER.some(function(s){return active[s]})}
+
+  function render(){
+    var h='';
+    ORDER.forEach(function(s){
+      var on=active[s];
+      h+='<span class="badge '+(on?'on':'off')+'" data-status="'+s+'" onclick="toggle(\''+s+'\')">'
+        +'<span class="dot"></span><span class="ck">✓</span>'+counts[s]+' '+META[s].label+'</span>';
+    });
+    h+='<span class="sep"></span>';
+    h+='<span class="badge badge--all '+(!anyOn()?'on':'off')+'" onclick="showAll()"><span class="dot"></span><span class="ck">✓</span>Show all</span>';
+    badges.innerHTML=h;
+
+    var vis=anyOn()?ROWS.filter(function(r){return active[r[2]]}):ROWS.slice();
+    var names=ORDER.filter(function(s){return anyOn()?active[s]:true}).map(function(s){return META[s].label.toLowerCase()});
+    readout.innerHTML='Showing <b>'+vis.length+'</b> of '+ROWS.length+' problem masters — '+names.join(', ');
+    rows.innerHTML=vis.map(function(r){
+      return '<tr><td class="file">'+r[0]+'</td><td style="color:var(--text-muted)">'+r[1]+'</td>'
+        +'<td style="text-align:right"><span class="pill pill--'+r[2]+'">'+META[r[2]].label+'</span></td></tr>';
+    }).join('');
+  }
+  window.toggle=function(s){active[s]=!active[s];render()};
+  window.showAll=function(){ORDER.forEach(function(s){active[s]=false});render()};
+  render();
+</script>

@@ -35,7 +35,36 @@ color as data".
   ID. Ships **Plain only** — app looks identical to v0.4.
 - **Phase 3 — Harmonization** ⭕ *(prompt written after Phase 2)*. Back-port The Forge's live
   "chosen" window + the normalized select-and-act pattern (follow-up #9 below) into the older tools
-  that benefit, for one consistent feel.
+  that benefit, for one consistent feel. Also includes the **multi-select filter badges** sweep
+  (below) — it's a shared-pattern change, so it lands with the rest of the harmonization.
+
+### Multi-select filter badges — general to every filtered list ⭕ (Phase 3)
+*Approved 2026-07-28. Upgrades the shared "click stats to filter a list" pattern from single-select to
+multi-select toggles. Reference: DESIGN.md "The 'click stats to filter a list' pattern — multi-select
+toggle" + `design/vortex-filter-multiselect-mockup.html`.*
+```
+Upgrade the shared "click stats to filter a list" pattern from single-select to multi-select toggles,
+across EVERY filtered list in the app. See DESIGN.md "The 'click stats to filter a list' pattern —
+multi-select toggle" and design/vortex-filter-multiselect-mockup.html (open it, toggle the badges).
+AUDIT first: list every place the app uses .badge--clickable + data-status filtering, and confirm each
+routes through the shared mechanism BEFORE editing. Known instances (find any I missed): Stats Report
+Current Issues, Work Through Report, Ignored/Disabled report, Update Compare Report, Missing Masters,
+Archive Finder, the Merge review step.
+Then generalize the single inline filter script into ONE shared multi-select helper and wire every
+instance to it (not copy-pasted). Behavior (the new standard):
+- Each badge is an independent toggle — click to add its status to the visible set, click again to
+  remove it; the list shows the UNION of active statuses.
+- None selected = show everything, with .badge--show-all in the active state (NOT "all badges on").
+- .badge--show-all clears all toggles. Turning the last active status off falls back to show-all —
+  never a dead-end empty list.
+- Active badge: fills with its status color + a ✓. Inactive badge: muted chip + a small status-color
+  dot (still reads as available). .badge--show-all mirrors the same active/inactive treatment.
+- Visible set = rows whose data-status is in the active set (all rows when none active).
+Preserve each list's existing rows/data and any counts — you're changing only the filter interaction,
+not what's shown or what the rows do. Verify with npm run web on several filtered lists (Missing
+Masters especially): combine two statuses, clear via Show all, toggle the last one off. Note it in
+TECHNICAL.md.
+```
 
 ---
 
