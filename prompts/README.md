@@ -74,7 +74,8 @@ Verify with npm run web: every tool page names where you are, Home returns to th
 in TECHNICAL.md.
 ```
 
-### 5. Rules Generator "Nothing to do" — collapsed chips ⏳
+### 5. Rules Generator "Nothing to do" — collapsed chips ✅
+*Shipped in v0.4.0.*
 ```
 Clean up Rules Generator's "Nothing to do" section (mods added to the new collection with no
 relationship to anything in the original — currently a flat one-name-per-row list). See DESIGN.md
@@ -210,7 +211,7 @@ you are and Home works from all of them.
 
 ---
 
-## Docs & release ⭕
+## Docs & release ✅ (v0.4.0 shipped 2026-07-28 — https://github.com/awesmdiver/vortex-collection-tools/releases/tag/v0.4.0)
 
 ### README refresh
 ```
