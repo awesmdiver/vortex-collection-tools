@@ -15,7 +15,8 @@ Rough status key: ✅ done · ⏳ queued/in progress · ⭕ pending decision.
 
 - **Home landing page** → [`design/BUILD-PROMPT.md`](../design/BUILD-PROMPT.md) ✅
 - **Settings two-pane reorg** → [`design/BUILD-PROMPT-settings.md`](../design/BUILD-PROMPT-settings.md) ✅
-- **The Forge (Merge Plugins)** → [`design/BUILD-PROMPT-the-forge.md`](../design/BUILD-PROMPT-the-forge.md) ⏳ *(v1.0 Phase 1)*
+- **The Forge (Merge Plugins)** → [`design/BUILD-PROMPT-the-forge.md`](../design/BUILD-PROMPT-the-forge.md) ✅ *(v1.0 Phase 1 — built; final copy pass in flight)*
+- **Update Collection → stepper** → [`design/BUILD-PROMPT-update-stepper.md`](../design/BUILD-PROMPT-update-stepper.md) ⏳ *(harmonize to the shared multi-step pattern; approved 2026-07-28)*
 
 ---
 
