@@ -3,6 +3,13 @@
   "inFlight": null,
   "items": [
     {
+      "id": "eslifier-awareness",
+      "tag": "feature",
+      "title": "ESLifier awareness — Settings path + Missing Masters downgrade",
+      "why": "kills the false-positive 'missing master' when ESLifier deliberately swapped a file",
+      "prompt": "Read vortex-tools/vortex-collection-tools/design/BUILD-PROMPT-eslifier-filter.md and build it. CRITICAL: verify the detection against a real ESLifier output folder + a live Missing Masters scan FIRST (disabled-count lesson) — don't ship a guessed trace. v1 = Settings ESLifier output-folder path + Nexus helper link, and the Missing Masters ON-by-default toggle that downgrades ESLifier-traced files from critical to warning (surfaced, not hidden). Update config.example.json for both new fields. Handoff with what the real ESLifier→Vortex deploy actually looked like and which scan signal the false positive fired on."
+    },
+    {
       "id": "preview-stale-banner",
       "tag": "polish",
       "title": "Clear stale end-of-flow banner on Preview re-arm",
