@@ -540,9 +540,9 @@ async function mergeEnterStep2() {
 }
 
 function mergeReviewStatusPill(status, masters) {
-  if (status === 'override') return '<span class="status-pill status-pill--warning">⚠️ Contains overrides &mdash; not merged in this version</span>';
+  if (status === 'override') return '<span class="status-pill status-pill--warning">⚠️ Contains overrides — skipped</span>';
   if (status === 'master') return `<span class="status-pill status-pill--warning" title="Needs ${escMergeHtml(masters.join(', '))}">⚠️ Needs a master</span>`;
-  return '<span class="muted">&mdash;</span>';
+  return '<span class="muted">—</span>';
 }
 
 function mergeRenderReviewStep() {
@@ -555,12 +555,12 @@ function mergeRenderReviewStep() {
   const nOverride = items.filter((it) => it.status === 'override').length;
   const nClean = items.filter((it) => it.status === 'ok').length;
 
-  $m('mergeReviewSub').textContent = `${items.length} plugin${items.length === 1 ? '' : 's'} chosen. Filter by status, drop anything that shouldn't go in, or go back to add more. None of these stop the merge -- they're heads-ups.`;
+  $m('mergeReviewSub').textContent = `${items.length} plugin${items.length === 1 ? '' : 's'} chosen. Filter by status, drop anything that shouldn't go in, or go back to add more. None of these stop the merge — they're just heads-ups.`;
 
   const masterCallout = $m('mergeMasterCallout');
   if (nMaster > 0) {
     masterCallout.classList.remove('hidden');
-    masterCallout.innerHTML = `<div class="callout__title">⚠️ ${nMaster} plugin${nMaster === 1 ? '' : 's'} depend${nMaster === 1 ? 's' : ''} on a master</div><p>Fine to merge -- just make sure those masters are installed in Vortex. If one's missing after you install the merge, <strong>Missing Masters</strong> will catch it.</p>`;
+    masterCallout.innerHTML = `<div class="callout__title">⚠️ ${nMaster} plugin${nMaster === 1 ? '' : 's'} depend${nMaster === 1 ? 's' : ''} on a master</div><p>Fine to merge — just make sure those masters are installed in Vortex. If one's missing after you install the merge, <strong>Missing Masters</strong> will catch it.</p>`;
   } else {
     masterCallout.classList.add('hidden');
   }
@@ -568,7 +568,11 @@ function mergeRenderReviewStep() {
   const overrideCallout = $m('mergeOverrideCallout');
   if (nOverride > 0) {
     overrideCallout.classList.remove('hidden');
-    overrideCallout.innerHTML = `<div class="callout__title">⚠️ ${nOverride} plugin${nOverride === 1 ? '' : 's'} contain${nOverride === 1 ? 's' : ''} overrides &mdash; not merged</div><p>These are compatibility patches (they change records from another mod), not standalone new content. Merging only part of a patch could break it, so this version leaves them out entirely -- remove them from the cart, or merge everything else and handle these separately.</p>`;
+    const overrideAreIs = nOverride === 1 ? 'is' : 'are';
+    const overridePatchNoun = nOverride === 1 ? 'a patch' : 'patches';
+    const overridePatchWordBare = nOverride === 1 ? 'patch' : 'patches';
+    const overrideThemIt = nOverride === 1 ? 'it' : 'them';
+    overrideCallout.innerHTML = `<div class="callout__title">⚠️ ${nOverride} of these ${overrideAreIs} ${overridePatchNoun} — we'll skip ${overrideThemIt}</div><p>Patches change records from other mods instead of adding their own new content, so they're not a fit for this merge — bundling in just part of a patch could break it. Leave ${overrideThemIt} in the cart and ${nOverride === 1 ? "it'll" : "they'll"} be skipped automatically, or take ${overrideThemIt} out and merge the rest, then handle the ${overridePatchWordBare} on ${nOverride === 1 ? 'its' : 'their'} own.</p>`;
   } else {
     overrideCallout.classList.add('hidden');
   }
@@ -582,12 +586,12 @@ function mergeRenderReviewStep() {
   } else {
     eslCallout.classList.remove('hidden');
     if (qualifies) {
-      eslCallout.innerHTML = `<div class="callout__title">🪶 The merge will be ESL-flagged &mdash; it won't cost a load-order slot</div><p>${totalNewRecords.toLocaleString()} new records (under the 4,096 light-plugin limit), and no risky cell/worldspace overrides &mdash; so it keeps its .esp name but is flagged ESL (an "ESPFE"), costing 0 slots.</p>`;
+      eslCallout.innerHTML = `<div class="callout__title">🪶 This merge will be ESL-flagged — it won't cost a load-order slot</div><p>${totalNewRecords.toLocaleString()} new records (under the 4,096-record light-plugin limit) and no risky cell or worldspace edits — so it keeps its .esp name but loads as a light plugin (an "ESPFE"). Zero slots used.</p>`;
     } else {
       const reason = anyCellWorldspace
-        ? 'it contains cell/worldspace records, which is too risky to ESL-flag automatically'
-        : `${totalNewRecords.toLocaleString()} new records is over the 4,096-record light-plugin limit`;
-      eslCallout.innerHTML = `<div class="callout__title">The merge will stay a full .esp</div><p>Because ${reason}, this won't be ESL-flagged -- it'll still take up one load-order slot.</p>`;
+        ? 'It has cell or worldspace edits — too risky to flag as an ESL automatically'
+        : `It has ${totalNewRecords.toLocaleString()} new records — over the 4,096 light-plugin limit`;
+      eslCallout.innerHTML = `<div class="callout__title">This merge will stay a full .esp</div><p>${reason} — so it takes one load-order slot like a normal plugin.</p>`;
     }
   }
 
@@ -732,9 +736,9 @@ function mergeRenderDoneStep(result, included) {
   const eslCallout = $m('mergeDoneEslCallout');
   eslCallout.classList.remove('hidden');
   if (result.eslFlagged) {
-    eslCallout.innerHTML = `<div class="callout__title">🧬 ${escMergeHtml(outFile)} created &mdash; ESL-flagged</div><p>Saved to <code>${escMergeHtml(result.outputPath)}</code>. It's ESL-flagged, so it costs <strong>0</strong> of your 254 load-order slots.</p>`;
+    eslCallout.innerHTML = `<div class="callout__title">🧬 ${escMergeHtml(outFile)} created — ESL-flagged</div><p>Saved to <code>${escMergeHtml(result.outputPath)}</code>. Because it's light-flagged, it costs <strong>0</strong> of your 254 load-order slots — you just freed up the ones its originals were using.</p>`;
   } else {
-    eslCallout.innerHTML = `<div class="callout__title">🧬 ${escMergeHtml(outFile)} created</div><p>Saved to <code>${escMergeHtml(result.outputPath)}</code>. ${escMergeHtml(result.qualificationReason || "It didn't qualify for the ESL flag, so it's a full .esp.")}</p>`;
+    eslCallout.innerHTML = `<div class="callout__title">🧬 ${escMergeHtml(outFile)} created</div><p>Saved to <code>${escMergeHtml(result.outputPath)}</code>. It's a full .esp, so it takes one of your 254 load-order slots.</p>`;
   }
   $m('mergeDoneNextStepsText').innerHTML = `Install <strong>${escMergeHtml(outFile)}</strong> as a mod in Vortex and enable it, then disable the ${included.length} original${included.length === 1 ? '' : 's'} it replaces &mdash; same as adding a Dummy Master or DynDOLOD output.`;
 }
