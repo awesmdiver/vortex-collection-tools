@@ -623,14 +623,18 @@
         <div class="callout__title">&#9432; Next steps in Vortex</div>
         <ol>
           <li>Reopen Vortex and click <strong>Resume</strong> on the collection.</li>
-          <li id="syncResumeCloseVortexStep">Once it finishes, close Vortex completely.</li>
-          <li id="syncResumeStep3Text">Continue to Apply Disables below.</li>
+          <li>Once it finishes, close Vortex completely.</li>
+          <li>Continue to Apply Disables below.</li>
         </ol>
       </div>
-      <div id="syncResumeAlmostThere" class="callout callout--info hidden">
-        <div class="callout__title">&#9432; You're almost there!</div>
-        <p>Don't forget to open Vortex to review your collections and make any quick adjustments. Be sure to check your plugins to make sure everything is enabled properly, and run a quick check for missing masters.</p>
-        <p>If everything looks good, happy gaming!</p>
+      <!-- Shown INSTEAD of syncResumeNextSteps when this backup captured no disabled mods -- Apply
+           Disables (step 3) has nothing to do, so this tool's whole job for this collection is
+           already finished the moment Apply Ignores succeeds. Success, not info -- this IS a
+           completion state, not routine guidance (confirmed real 2026-07-29: this used to render as
+           a blue callout--info, a success->info regression from when this box was first written). -->
+      <div id="syncResumeAlmostThere" class="callout callout--success hidden">
+        <div class="callout__title">&#9989; You're done here!</div>
+        <p>Nothing left in this tool for this collection &mdash; just reopen Vortex, click <strong>Resume</strong> to finish the update, and have fun gaming. (Compare below is optional if you want a before/after.)</p>
       </div>
     </div>
     <div class="merge-navrow">
@@ -841,6 +845,13 @@
       <div class="view-actions">
         <button id="settingsSyncDeleteBackupsBtn" class="btn btn--ghost btn--small">Delete all backups</button>
         <span id="settingsSyncDeleteBackupsStatus" class="muted"></span>
+      </div>
+
+      <h3 class="settings-section-title">Backup heads-up reminders</h3>
+      <p class="muted" id="settingsBackupRatioDismissBody"></p>
+      <div class="view-actions">
+        <button id="settingsBackupRatioResetBtn" class="btn btn--ghost btn--small">Remind me for all collections again</button>
+        <span id="settingsBackupRatioResetStatus" class="muted"></span>
       </div>
     </div>
     </section>

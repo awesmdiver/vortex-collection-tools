@@ -12,6 +12,7 @@ const fs = require('fs');
 const runner = require('../lib/sync-runner');
 const { buildHtmlReport } = require('../lib/vortex-sync/report');
 const syncLock = require('./sync-lock');
+const backupRatioDismissState = require('../lib/backup-ratio-dismiss-state');
 
 function escHtml(s) {
     return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -204,8 +205,8 @@ function createSyncRouter(config) {
         // not in Vortex's state. Caught HERE, before ever touching the state DB, so it surfaces as
         // its own clear, distinct error instead of falling into getRules()'s generic "mod not found"
         // message (which reads as a possible crash/transient issue, not "this id is simply gone").
-        const stillExists = runner.listInstalledCollections(staging).some((c) => c.modId === collectionModId);
-        if (!stillExists) {
+        const matchedCollection = runner.listInstalledCollections(staging).find((c) => c.modId === collectionModId);
+        if (!matchedCollection) {
             return res.status(409).json({
                 error: 'collection-stale',
                 message: 'The version of the collection you are attempting to create a backup for is no longer available. You will need to refresh this collection.',
@@ -217,12 +218,18 @@ function createSyncRouter(config) {
             // oldMods is the full collection.json member list (null only if it couldn't be read) --
             // the denominator the UI needs to flag an ignored/disabled COUNT that's fine on its own
             // but way out of proportion for the collection's actual size (see sync-app.js's
-            // buildBackupRatioWarning).
+            // buildBackupRatioWarning). ratioWarningDismissed lets the client skip that warning
+            // entirely for a collection the user has already marked "normal" via
+            // POST /backup-ratio-dismiss, without a second round-trip just to check -- keyed by
+            // matchedCollection.name (NOT collectionModId, which changes across every update -- see
+            // lib/backup-ratio-dismiss-state.js's own comment), resolved fresh from the same
+            // just-verified-still-installed lookup above rather than trusting a client-supplied name.
             res.json({
                 ok: true, filePath,
                 ignoredCount: snapshot.ignored.length,
                 disabledCount: snapshot.disabled.length,
                 totalCount: snapshot.oldMods ? snapshot.oldMods.length : null,
+                ratioWarningDismissed: backupRatioDismissState.isDismissed(matchedCollection.name),
             });
         } catch (e) {
             res.status(500).json({ error: e.message });
@@ -399,6 +406,26 @@ function createSyncRouter(config) {
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
+    });
+
+    // ---------- Backup ratio warning dismissals ("This is normal for this collection") ----------
+    // Keyed by collection NAME, not modId -- see lib/backup-ratio-dismiss-state.js's own comment for
+    // why (modId changes on every update, confirmed not stable even in its "nexusModId" segment).
+
+    router.post('/backup-ratio-dismiss', (req, res) => {
+        const { collectionName } = req.body || {};
+        if (!collectionName) return res.status(400).json({ error: 'collectionName is required.' });
+        backupRatioDismissState.setDismissed(collectionName);
+        res.json({ ok: true });
+    });
+
+    // Settings page: how many collections are currently silenced, and the reset button.
+    router.get('/backup-ratio-dismiss-info', (req, res) => {
+        res.json({ count: backupRatioDismissState.getDismissedCount() });
+    });
+    router.post('/backup-ratio-dismiss-reset', (req, res) => {
+        backupRatioDismissState.resetAll();
+        res.json({ ok: true, count: 0 });
     });
 
     // Optional Compare -- pure computation, never touches the state DB (matches lib.js's own

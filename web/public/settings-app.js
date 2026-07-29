@@ -218,7 +218,28 @@ async function loadSettings() {
     renderCleanupIgnoredList('staging', []);
     renderCleanupIgnoredList('archives', []);
   }
+  await loadBackupRatioDismissInfo();
   settingsDirty = false;
+}
+
+// mdBold/escHtml are globals defined in sync-app.js (loaded before this file, same page) -- reused
+// here rather than redefined, per this project's own "no duplicate helpers across files on the same
+// page" convention.
+function renderBackupRatioDismissBody(count) {
+  const intro = "Before a backup, we flag any collection with an unusually large share of mods Ignored or Disabled — a nudge in case it was accidental.";
+  const tail = count > 0
+    ? `You've marked **${count} collection${count === 1 ? '' : 's'}** as normal, so we skip the nudge for those.`
+    : "You haven't silenced this for any collections yet.";
+  $g('settingsBackupRatioDismissBody').innerHTML = `${mdBold(escHtml(intro))} ${mdBold(escHtml(tail))}`;
+}
+
+async function loadBackupRatioDismissInfo() {
+  try {
+    const { count } = await settingsApi('GET', '/api/sync/backup-ratio-dismiss-info');
+    renderBackupRatioDismissBody(count);
+  } catch {
+    renderBackupRatioDismissBody(0);
+  }
 }
 
 loadSettings().catch((e) => {
@@ -587,6 +608,22 @@ $g('settingsStateDeleteBackupsConfirmBtn').addEventListener('click', async () =>
   try {
     const { deletedCount } = await settingsApi('POST', '/api/sync/delete-state-backups');
     statusEl.textContent = deletedCount > 0 ? `Deleted ${deletedCount} backup${deletedCount === 1 ? '' : 's'}.` : 'Nothing to delete.';
+  } catch (e) {
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+  }
+});
+
+// ---------- Backup ratio warning: "Remind me for all collections again" ----------
+// No confirm modal -- unlike the destructive backup/log deletes above, this only clears a preference
+// (see lib/backup-ratio-dismiss-state.js's own comment); re-dismissing a still-normal collection
+// later costs one click.
+$g('settingsBackupRatioResetBtn').addEventListener('click', async () => {
+  const statusEl = $g('settingsBackupRatioResetStatus');
+  statusEl.textContent = 'Resetting…';
+  try {
+    await settingsApi('POST', '/api/sync/backup-ratio-dismiss-reset');
+    renderBackupRatioDismissBody(0);
+    statusEl.textContent = 'Done -- every collection will get the nudge again if it qualifies.';
   } catch (e) {
     if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
   }
