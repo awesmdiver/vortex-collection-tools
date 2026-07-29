@@ -474,13 +474,12 @@
   <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span>Update Collection</div>
   <div class="tool-hero">
     <h2 class="tool-hero__title">🔄 Update Without Redoing Your Mod Cleanup</h2>
-    <p class="tool-hero__body">Updating a collection in Vortex often resets your carefully-set <strong>Ignored</strong> and <strong>Disabled</strong> mods back to their defaults. This tool remembers exactly how you had things set and restores it after the update, so that cleanup work never has to happen twice.</p>
+    <p class="tool-hero__body">Updating a collection in Vortex often resets your carefully-set <strong>Ignored</strong> and <strong>Disabled</strong> mods back to their defaults. This tool remembers exactly how you had things set and restores it after the update, so that cleanup work never has to happen twice. Work through the steps below in order &mdash; you'll hop over to Vortex between some of them, and your place here is saved while you do.</p>
   </div>
 
-  <div id="syncBackupRootMissingBanner" class="callout callout--warning hidden">
-    A backups folder for Update Collection isn't configured yet -- <a href="/?area=settings">open Settings</a> to set one up before creating a backup.
-  </div>
-
+  <!-- Persistent header (per DESIGN.md's stepper pattern) -- every step below operates on whichever
+       collection/profile is picked here, so this stays visible above the stepper on every step
+       instead of being just another step to redo. -->
   <div class="callout callout--warning">
     <div class="callout__title">⚠️ Quick heads-up before you start!</div>
     <ul>
@@ -508,138 +507,182 @@
     <button id="syncListModsBtn" class="btn btn--ghost" disabled>Show Ignored & Disabled</button>
   </div>
 
-  <div class="sync-phase">
-    <div class="sync-phase__header">
-      <span class="sync-phase__num">1</span>
-      <h2>Backup/Restore</h2>
-      <span class="muted">Run <strong>BEFORE</strong> clicking <strong>Update</strong> in Vortex.</span>
-    </div>
-    <p>Snapshots which mods are currently ignored/disabled for the selected collection.</p>
-    <div class="view-actions">
-      <button id="syncBackupBtn" class="btn btn--primary" disabled>Create Backup</button>
-      <button id="syncRestoreBackupBtn" class="btn btn--ghost" disabled>Restore Backup</button>
-      <span class="help-marker" title="You would use Restore Backup if you have created a backup before updating the collection in Vortex but didn't continue to step 2. This lets you restore the backup you created and move to step 2, without having to create a new one.">?</span>
-      <span id="syncBackupStatus" class="muted"></span>
-    </div>
-    <!-- Same triangle-alert icon this app already uses for warnings -- confirmed against Vortex's
-         own real source that error/critical severity there uses the identical shape, just red
-         instead of amber, not a different icon. Rare case: the collection was updated to a newer
-         revision (a new Vortex-tracked mod id) since this page was last loaded, so the id this page
-         still has in memory no longer exists anywhere -- reloading is the only real fix, since
-         everything else on this page (the collection picker, the backup list) needs to be re-read
-         fresh too, not just this one id patched in place. -->
-    <div id="syncCollectionStaleError" class="callout callout--critical hidden">
-      <div class="callout__title">🛑 Collection out of date</div>
-      <p>The version you're backing up isn't available anymore -- refresh this collection to continue.</p>
+  <!-- Stepper (shared markup/CSS with The Forge -- see DESIGN.md's "Stepper" section). Unlike The
+       Forge (one sitting, mostly linear), this flow is re-entered between steps -- the user leaves
+       to act in Vortex and comes back -- so every pill is clickable to jump to any step, and no
+       step's state is ever torn down between visits (each step's controls stay in the DOM the whole
+       time, just hidden/shown -- ordinary button-triggered actions, nothing to re-fetch on entry). -->
+  <div class="merge-stepper merge-stepper--nav" id="syncStepper"></div>
+
+  <!-- Step 0: Backup -->
+  <div id="syncStep0">
+    <div class="settings-group">
+      <h2>Backup &amp; Restore</h2>
+      <p class="muted">Snapshots which mods are currently ignored/disabled for the selected collection, so they can be restored after the update.</p>
+      <div class="callout callout--info">
+        <div class="callout__title">Do this before you click Update in Vortex.</div>
+        <p>Run the backup first, then start the update over in Vortex.</p>
+      </div>
+      <div id="syncBackupRootMissingBanner" class="callout callout--warning hidden">
+        A backups folder for Update Collection isn't configured yet &mdash; <a href="/?area=settings">open Settings</a> to set one up before creating a backup.
+      </div>
       <div class="view-actions">
-        <button id="syncCollectionStaleRetryBtn" class="btn btn--ghost">Retry</button>
+        <button id="syncBackupBtn" class="btn btn--primary" disabled>Create Backup</button>
+        <button id="syncRestoreBackupBtn" class="btn btn--ghost" disabled>Restore Backup</button>
+        <span class="help-marker" title="You would use Restore Backup if you have created a backup before updating the collection in Vortex but didn't continue to step 2. This lets you restore the backup you created and move to step 2, without having to create a new one.">?</span>
+        <span id="syncBackupStatus" class="muted"></span>
+      </div>
+      <!-- Same triangle-alert icon this app already uses for warnings -- confirmed against Vortex's
+           own real source that error/critical severity there uses the identical shape, just red
+           instead of amber, not a different icon. Rare case: the collection was updated to a newer
+           revision (a new Vortex-tracked mod id) since this page was last loaded, so the id this page
+           still has in memory no longer exists anywhere -- reloading is the only real fix, since
+           everything else on this page (the collection picker, the backup list) needs to be re-read
+           fresh too, not just this one id patched in place. -->
+      <div id="syncCollectionStaleError" class="callout callout--critical hidden">
+        <div class="callout__title">🛑 Collection out of date</div>
+        <p>The version you're backing up isn't available anymore -- refresh this collection to continue.</p>
+        <div class="view-actions">
+          <button id="syncCollectionStaleRetryBtn" class="btn btn--ghost">Retry</button>
+        </div>
+      </div>
+      <!-- Filled in dynamically by showCriticalCallout() in sync-app.js when a step fails for real
+           (e.g. the crash/can't-read-write-Vortex's-database error). -->
+      <div id="syncBackupCriticalError" class="callout callout--critical hidden"></div>
+      <!-- Filled in dynamically by buildBackupRatioWarning() in sync-app.js -- a nudge, not a
+           blocker, for when the ignored/disabled count captured looks disproportionate for the
+           collection's size (e.g. hundreds of mods disabled that were probably meant to be re-enabled
+           first). Never prevents moving on to the next step. -->
+      <div id="syncBackupRatioWarning" class="callout callout--warning hidden"></div>
+      <!-- Filled in dynamically by sync-app.js's checkBackupFreshness() -- a follow-up, best-effort
+           check that runs automatically right after a successful backup, comparing Vortex's database
+           two different ways to see if it looks like Vortex closed before saving its very latest
+           changes. Never blocks anything; stays hidden entirely if the check couldn't run. -->
+      <div id="syncBackupFreshnessWarning" class="callout callout--warning hidden"></div>
+      <!-- Informational, not warning -- these are plain next-steps to follow, nothing is wrong. This
+           IS this step's handoff-to-Vortex callout (per DESIGN.md's "Between-step handoffs"), just
+           the existing detailed version rather than a separate, redundant terse one. -->
+      <div id="syncBackupNextSteps" class="callout callout--info hidden">
+        <div class="callout__title">&#9432; Next steps in Vortex</div>
+        <ol>
+          <li>Open Vortex and click <strong>Update</strong> on '<span id="syncCollectionNameSpan"></span>'.</li>
+          <li>When prompted, click <strong>Download Update</strong>.</li>
+          <li>If a 'Remove mods from old revision?' screen appears, choose an option.</li>
+          <li>On the '<span id="syncGameNameSpan">collection</span> added' screen, choose <strong>Later</strong> -- NOT <strong>Install Now</strong>.</li>
+          <li>Once Vortex closes the update window, click <strong>Refresh</strong> in the upper-right corner of the 'Added Collections' page.</li>
+          <li>When the refresh finishes, close Vortex.</li>
+          <li>Come back here for Apply Ignores &mdash; your place is saved.</li>
+        </ol>
+      </div>
+      <!-- Shown INSTEAD of syncBackupNextSteps when the backup captured 0 ignored AND 0 disabled mods
+           -- Apply Ignores/Apply Disables (steps 2-3) would have nothing to do either way, so the
+           careful Later-not-Install-Now/Refresh choreography above isn't needed for this collection. -->
+      <div id="syncBackupNothingToDoInfo" class="callout callout--success hidden">
+        <div class="callout__title">&#10003; You're all set!</div>
+        <p>You don't have any ignored or disabled mods right now, so there's nothing to do here. Enjoy your game!</p>
       </div>
     </div>
-    <!-- Filled in dynamically by showCriticalCallout() in sync-app.js when a step fails for real
-         (e.g. the crash/can't-read-write-Vortex's-database error). -->
-    <div id="syncBackupCriticalError" class="callout callout--critical hidden"></div>
-    <!-- Filled in dynamically by buildBackupRatioWarning() in sync-app.js -- a nudge, not a
-         blocker, for when the ignored/disabled count captured looks disproportionate for the
-         collection's size (e.g. hundreds of mods disabled that were probably meant to be re-enabled
-         first). Never prevents moving on to the next step. -->
-    <div id="syncBackupRatioWarning" class="callout callout--warning hidden"></div>
-    <!-- Filled in dynamically by sync-app.js's checkBackupFreshness() -- a follow-up, best-effort
-         check that runs automatically right after a successful backup, comparing Vortex's database
-         two different ways to see if it looks like Vortex closed before saving its very latest
-         changes. Never blocks anything; stays hidden entirely if the check couldn't run. -->
-    <div id="syncBackupFreshnessWarning" class="callout callout--warning hidden"></div>
-    <!-- Informational, not warning -- these are plain next-steps to follow, nothing is wrong. -->
-    <div id="syncBackupNextSteps" class="callout callout--info hidden">
-      <div class="callout__title">&#9432; Next steps in Vortex</div>
-      <ol>
-        <li>Open Vortex and click <strong>Update</strong> on '<span id="syncCollectionNameSpan"></span>'.</li>
-        <li>When prompted, click <strong>Download Update</strong>.</li>
-        <li>If a 'Remove mods from old revision?' screen appears, choose an option.</li>
-        <li>On the '<span id="syncGameNameSpan">collection</span> added' screen, choose <strong>Later</strong> -- NOT <strong>Install Now</strong>.</li>
-        <li>Once Vortex closes the update window, click <strong>Refresh</strong> in the upper-right corner of the 'Added Collections' page.</li>
-        <li>When the refresh finishes, close Vortex.</li>
-        <li>Continue to step 2, 'Apply Ignores' below.</li>
-      </ol>
-    </div>
-    <!-- Shown INSTEAD of syncBackupNextSteps when the backup captured 0 ignored AND 0 disabled mods
-         -- Apply Ignores/Apply Disables (steps 2-3) would have nothing to do either way, so the
-         careful Later-not-Install-Now/Refresh choreography above isn't needed for this collection. -->
-    <div id="syncBackupNothingToDoInfo" class="callout callout--success hidden">
-      <div class="callout__title">&#10003; You're all set!</div>
-      <p>You don't have any ignored or disabled mods right now, so there's nothing to do here. Enjoy your game!</p>
+    <div class="merge-navrow">
+      <span></span>
+      <button id="syncStep0NextBtn" class="btn btn--primary">Next: Apply Ignores &rarr;</button>
     </div>
   </div>
 
-  <div class="sync-phase">
-    <div class="sync-phase__header">
-      <span class="sync-phase__num">2</span>
+  <!-- Step 1: Apply Ignores -->
+  <div id="syncStep1" class="hidden">
+    <div class="settings-group">
       <h2>Apply Ignores</h2>
-      <span class="muted">Run this only <strong>AFTER</strong> you've completed the steps above, updated the collection, and closed Vortex.</span>
-    </div>
-    <p>Sets the updated collection's mods back to Ignored in Vortex, so they don't get downloaded and installed when you resume the update.</p>
-    <div class="field-group">
-      <div style="display: flex; align-items: center; gap: 6px;">
-        <label class="field-label" for="syncNewModIdInput">Updated Vortex collection id</label>
-        <span class="help-marker" title="If we couldn't automatically find the collection ID, no worries! Just open your staging folder and locate the folder for that collection—the folder name is your collection ID.">?</span>
+      <p class="muted">Sets the updated collection's mods back to Ignored in Vortex, so they don't get downloaded and installed when you resume the update.</p>
+      <!-- Matches this app's established 🛑 "Vortex must be closed" hard-blocker treatment exactly
+           (see #mmRebuildConfirmModal's own identical callout--critical + 🛑 pairing) -- this really
+           is a hard block, not just a caution: /api/sync/apply-ignores/* refuses the request outright
+           while Vortex is running. -->
+      <div class="callout callout--critical">
+        <div class="callout__title">🛑 Only after you've updated the collection in Vortex and closed it.</div>
+        <p>This writes directly to Vortex's database &mdash; a full backup is taken first.</p>
       </div>
-      <input id="syncNewModIdInput" class="input" type="text" placeholder="e.g. My-Collection-123456-2-...">
-      <span class="muted">If you know the updated collection's id, enter it here.
-        Otherwise, leave it blank and we'll grab the current id when you click Preview.</span>
+      <div class="field-group">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <label class="field-label" for="syncNewModIdInput">Updated Vortex collection id</label>
+          <span class="help-marker" title="If we couldn't automatically find the collection ID, no worries! Just open your staging folder and locate the folder for that collection—the folder name is your collection ID.">?</span>
+        </div>
+        <input id="syncNewModIdInput" class="input" type="text" placeholder="e.g. My-Collection-123456-2-...">
+        <span class="muted">If you know the updated collection's id, enter it here.
+          Otherwise, leave it blank and we'll grab the current id when you click Preview.</span>
+      </div>
+      <div class="view-actions">
+        <button id="syncIgnoresPreviewBtn" class="btn btn--ghost">Preview</button>
+        <button id="syncIgnoresApplyBtn" class="btn btn--primary" disabled>Apply</button>
+        <span id="syncIgnoresStatus" class="muted">Run Preview first to see what would change and enable Apply.</span>
+      </div>
+      <ul id="syncIgnoresList" class="sync-result-list"></ul>
+      <div id="syncIgnoresCriticalError" class="callout callout--critical hidden"></div>
+      <!-- Informational, not warning -- this step's own handoff-to-Vortex callout. -->
+      <div id="syncResumeNextSteps" class="callout callout--info hidden">
+        <div class="callout__title">&#9432; Next steps in Vortex</div>
+        <ol>
+          <li>Reopen Vortex and click <strong>Resume</strong> on the collection.</li>
+          <li id="syncResumeCloseVortexStep">Once it finishes, close Vortex completely.</li>
+          <li id="syncResumeStep3Text">Continue to Apply Disables below.</li>
+        </ol>
+      </div>
+      <div id="syncResumeAlmostThere" class="callout callout--info hidden">
+        <div class="callout__title">&#9432; You're almost there!</div>
+        <p>Don't forget to open Vortex to review your collections and make any quick adjustments. Be sure to check your plugins to make sure everything is enabled properly, and run a quick check for missing masters.</p>
+        <p>If everything looks good, happy gaming!</p>
+      </div>
     </div>
-    <div class="view-actions">
-      <button id="syncIgnoresPreviewBtn" class="btn btn--ghost">Preview</button>
-      <button id="syncIgnoresApplyBtn" class="btn btn--primary" disabled>Apply</button>
-      <span id="syncIgnoresStatus" class="muted">Run Preview first to see what would change and enable Apply.</span>
-    </div>
-    <ul id="syncIgnoresList" class="sync-result-list"></ul>
-    <div id="syncIgnoresCriticalError" class="callout callout--critical hidden"></div>
-    <!-- Informational, not warning -- same reasoning as syncBackupNextSteps above. -->
-    <div id="syncResumeNextSteps" class="callout callout--info hidden">
-      <div class="callout__title">&#9432; Next steps in Vortex</div>
-      <ol>
-        <li>Reopen Vortex and click <strong>Resume</strong> on the collection.</li>
-        <li id="syncResumeCloseVortexStep">Once it finishes, close Vortex completely.</li>
-        <li id="syncResumeStep3Text">Continue to step 3, 'Apply Disables' below.</li>
-      </ol>
-    </div>
-    <div id="syncResumeAlmostThere" class="callout callout--info hidden">
-      <div class="callout__title">&#9432; You're almost there!</div>
-      <p>Don't forget to open Vortex to review your collections and make any quick adjustments. Be sure to check your plugins to make sure everything is enabled properly, and run a quick check for missing masters.</p>
-      <p>If everything looks good, happy gaming!</p>
+    <div class="merge-navrow">
+      <button id="syncStep1BackBtn" class="btn btn--ghost">&larr; Back</button>
+      <button id="syncStep1NextBtn" class="btn btn--primary">Next: Apply Disables &rarr;</button>
     </div>
   </div>
 
-  <div class="sync-phase">
-    <div class="sync-phase__header">
-      <span class="sync-phase__num">3</span>
+  <!-- Step 2: Apply Disables -->
+  <div id="syncStep2" class="hidden">
+    <div class="settings-group">
       <h2>Apply Disables</h2>
-      <span class="muted">Run this only <strong>AFTER</strong> you've resumed the installation of the update and closed Vortex.</span>
+      <p class="muted">Sets the updated mods back to Disabled in Vortex.</p>
+      <div class="callout callout--critical">
+        <div class="callout__title">🛑 Only after you've resumed the update install and closed Vortex.</div>
+        <p>This writes directly to Vortex's database &mdash; a full backup is taken first.</p>
+      </div>
+      <div class="view-actions">
+        <button id="syncDisablesPreviewBtn" class="btn btn--ghost">Preview</button>
+        <button id="syncDisablesApplyBtn" class="btn btn--primary" disabled>Apply</button>
+        <span id="syncDisablesStatus" class="muted">Run Preview first to see what would change and enable Apply.</span>
+      </div>
+      <ul id="syncDisablesList" class="sync-result-list"></ul>
+      <div id="syncDisablesCriticalError" class="callout callout--critical hidden"></div>
+      <!-- Success, not info -- the whole three-step sync is genuinely done at this point. -->
+      <div id="syncAllDoneInfo" class="callout callout--success hidden">
+        <div class="callout__title">&#10003; Completed</div>
+        <p>Vortex is ready for deployment. Enjoy your game.</p>
+      </div>
     </div>
-    <p>Sets the updated mods back to Disabled in Vortex.</p>
-    <div class="view-actions">
-      <button id="syncDisablesPreviewBtn" class="btn btn--ghost">Preview</button>
-      <button id="syncDisablesApplyBtn" class="btn btn--primary" disabled>Apply</button>
-      <span id="syncDisablesStatus" class="muted">Run Preview first to see what would change and enable Apply.</span>
-    </div>
-    <ul id="syncDisablesList" class="sync-result-list"></ul>
-    <div id="syncDisablesCriticalError" class="callout callout--critical hidden"></div>
-    <!-- Success, not info -- the whole three-step sync is genuinely done at this point. -->
-    <div id="syncAllDoneInfo" class="callout callout--success hidden">
-      <div class="callout__title">&#10003; Completed</div>
-      <p>Vortex is ready for deployment. Enjoy your game.</p>
+    <div class="merge-navrow">
+      <button id="syncStep2BackBtn" class="btn btn--ghost">&larr; Back</button>
+      <button id="syncStep2NextBtn" class="btn btn--primary">Next: Compare &rarr;</button>
     </div>
   </div>
 
-  <div class="sync-phase">
-    <div class="sync-phase__header">
-      <span class="sync-phase__num">4</span>
-      <h2>Compare <span class="muted">(optional, anytime)</span></h2>
+  <!-- Step 3: Compare -->
+  <div id="syncStep3" class="hidden">
+    <div class="settings-group">
+      <h2>Compare</h2>
+      <div class="callout callout--info">
+        <div class="callout__title">Optional &mdash; run anytime.</div>
+      </div>
+      <p class="muted">Generates a report showing what changed during the update.</p>
+      <div class="view-actions">
+        <button id="syncCompareBtn" class="btn btn--ghost">Generate Report</button>
+      </div>
+      <div id="syncCompareCriticalError" class="callout callout--critical hidden"></div>
     </div>
-    <p>Generates a report showing what changed during the update.</p>
-    <div class="view-actions">
-      <button id="syncCompareBtn" class="btn btn--ghost">Generate Report</button>
+    <div class="merge-navrow">
+      <button id="syncStep3BackBtn" class="btn btn--ghost">&larr; Back</button>
+      <span></span>
     </div>
-    <div id="syncCompareCriticalError" class="callout callout--critical hidden"></div>
   </div>
 </main>
 

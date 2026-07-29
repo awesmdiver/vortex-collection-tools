@@ -731,6 +731,91 @@ now:
   per-mod enabled/disabled field", "confirmed against Vortex's own source", and similar internal
   implementation detail that had leaked into user-facing text).
 
+### Stepper restructure (2026-07-28)
+
+Per `design/BUILD-PROMPT-update-stepper.md`, restructured the four stacked "phase" cards
+(Backup/Restore, Apply Ignores, Apply Disables, Compare) into the shared stepper pattern The Forge
+already established (see DESIGN.md's "Stepper — the standard for multi-step tools") — one step per
+screen instead of one long scroll. **Presentation only**: every element id `sync-app.js` queries via
+`$s()` is unchanged, so every existing behavior (Preview→Apply gating, the collection-id
+autofill-on-Preview, the ratio/freshness warnings, the Vortex-running gate, Compare's report
+generation) kept working with zero logic changes — confirmed live (Vortex closed, real data): a real
+Create Backup wrote a real backup and correctly triggered the "3 of 98 mods marked Ignored" ratio
+warning, and a real Apply Ignores Preview correctly auto-filled the collection id and returned "0
+mod(s) will be set to ignored" (accurate — those mods were already ignored from the backup step),
+enabling Apply.
+
+**Navigable, not linear** — the key difference from The Forge's own stepper: Update Collection is
+re-entered between steps (the user leaves to act in Vortex and comes back), so every pill is fully
+clickable to jump to any step (DESIGN.md's "Navigable vs. linear" rule), unlike The Forge's pills
+(display-only today — see the flagged gap below). Nothing about a step's content is destroyed or
+regenerated on navigation — every control simply stays hidden/shown via `classList.toggle('hidden')`
+on its wrapper div, so whatever state a previous visit left (a Preview result, a typed collection id)
+is exactly where the user left it going both forward AND backward. This needed no special "remember
+state" mechanism at all, since nothing was ever torn down to begin with — a deliberately simpler
+approach than The Forge's own step-entry re-fetches (`mergeEnterStep1`/`mergeEnterStep2`), which
+aren't needed here since nothing in this flow needs a fresh fetch just from arriving at a step (every
+action here is still explicitly button-triggered, same as before the restructure).
+
+**Shares The Forge's stepper CSS/markup exactly** (`.merge-stepper`/`.merge-step` + `.active`/`.done`
+in `styles.css`) rather than forking a second implementation — `sync-app.js`'s own `syncRenderStepper`
+mirrors `merge-app.js`'s `mergeRenderStepper` almost line for line, just reading from `SYNC_STEPS`
+and a module-level `syncStep` instead of `mergeState.step`. The one addition: a new
+`.merge-stepper--nav` modifier (cursor:pointer + hover border) applied only to sync's own stepper
+wrapper, not the base `.merge-step` class — this keeps The Forge's pills visually unchanged rather
+than silently making them look clickable when they aren't wired to jump anywhere (see below).
+
+**Step cards switched from `.sync-phase` to `.settings-group`** (visually identical — confirmed by
+direct comparison, `.settings-group`'s own CSS comment already said as much) and the
+`.sync-phase__header`'s numbered circle badge was dropped, since the stepper pill above the card now
+carries that number — keeping both would have shown the step number twice. `.sync-phase`/
+`.sync-phase__header`/`.sync-phase__num` were removed from `styles.css` entirely (confirmed nothing
+else referenced them).
+
+**Persistent header** (breadcrumb, hero, the "Quick heads-up before you start!" callout, the Profile
++ Collection selector, "Show Ignored & Disabled") stays above the stepper, set once and always
+visible on every step — per DESIGN.md's "Persistent header for a shared selector" rule, since every
+step operates on whichever collection/profile is currently picked, not a per-step choice to redo.
+The existing 3-bullet warning callout was relocated here unchanged rather than folded into Step 1
+specifically, since its content (close Vortex, mark mods, delete unwanted mods) is prep advice for
+the whole flow, not just the Backup step — matches its original always-visible position above the
+old single scroll.
+
+**Precondition callouts** — new, per the build prompt's exact spec:
+- Step 1 (Backup): `callout--info`, "Do this before you click Update in Vortex."
+- Step 2 (Apply Ignores) / Step 3 (Apply Disables): `callout--critical` + 🛑, matching this app's
+  ALREADY-established "Vortex must be closed" convention exactly (`#mmRebuildConfirmModal`'s own
+  identical icon+class pairing, confirmed by reading it rather than inventing a new phrasing/severity
+  for this one) plus a "This writes directly to Vortex's database — a full backup is taken first"
+  line, matching the plain-language-writer skill's own confirmed serious-register voice example for
+  this exact flow.
+- Step 4 (Compare): `callout--info`, "Optional — run anytime."
+
+**Judgment call — the existing "Next steps in Vortex" callouts already ARE the required handoff
+callouts.** The build prompt asks each step to "end with a between-step handoff callout" with
+specific suggested wording ("→ Next, over in Vortex: …"). Rather than adding a second, redundant
+callout on top of the existing detailed step-by-step guidance (`#syncBackupNextSteps`,
+`#syncResumeNextSteps` — which already tell the user exactly what to do in Vortex and that "your
+place is saved" once the last list item was reworded from "Continue to step 2" to "Come back here
+for Apply Ignores"), the existing content was kept as-is and treated as already satisfying this
+requirement — the suggested mockup wording is terser than the real, hard-won guidance already there
+(e.g. "choose Later — NOT Install Now" is specific, load-bearing advice the terse version doesn't
+capture), and stacking both would just be two callouts saying the same thing at different levels of
+detail. Flagging this as a judgment call rather than a silent decision.
+
+**Flagged inconsistency, not fixed (out of scope for this task)**: DESIGN.md states The Forge's own
+pills "are clickable" (mostly-linear, but navigable), but the shipped `mergeRenderStepper`/
+`mergeGoToStep` never actually wire a click handler on them — confirmed by reading `merge-app.js`
+directly. This is a pre-existing gap in The Forge, not something introduced or fixed here; noted per
+the build prompt's own "flag any inconsistency rather than inventing a new one" instruction.
+
+**Verified live** (2026-07-28, `npm run web`, real Vortex data, Vortex closed for the write-gated
+steps): all 4 steps render correctly with a real collection selected; jump-around navigation via the
+stepper pills works in both directions (forward and backward, including skipping directly to Compare
+from Backup); a real Create Backup and a real Apply Ignores Preview both completed successfully
+against real data (see above); light and dark mode both checked on every step — no contrast or
+layout issues in either theme.
+
 ## Safety notes
 
 - Vortex must be fully closed before any state-database read or write — both flows check this and
