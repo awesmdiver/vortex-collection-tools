@@ -9,8 +9,9 @@ freely.
 
 ---
 
-## - [ ] 1 · Bug — disabled-count miscount
-*Functional. Affects what gets written to Vortex's database, so it goes first.*
+## - [x] 1 · Bug — disabled-count miscount — ✅ SHIPPED (f4976ab)
+*Shipped 2026-07-28. Real cause wasn't the profile-scoping we first guessed — a same-hash duplicate
+install was fooling the identity match. Count now matches Vortex (6 ignored, 0 disabled). **Next up: #2.***
 
 ```
 BUG — Update Collection backup miscounts "disabled". Repro: a collection whose Vortex Mods tab shows
