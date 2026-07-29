@@ -545,6 +545,128 @@ snippet (see below), and reuses the same badge/table components as its two sibli
      real navigation, like the Ignored/Disabled report) DOES get its own header/nav, matching
      `sync-routes.js`'s `renderIgnoredDisabledReport` exactly.
 
+## Brand theming framework — names, icons & color as data, not code (2026-07-28, v1.0)
+
+There are now **two orthogonal theming layers**, and they must stay independent:
+
+1. **Appearance** (the section above) — dark / light / follow-system, driven by the shared CSS
+   variables. Unchanged. This is *how bright the room is.*
+2. **Brand** (this section) — the app's identity: its name, each tool's name, emoji, hero copy,
+   accent color, and eventually banners. This is *whose room it is.* The whole point: a Skyrim
+   player and a Fallout player run the **same binary** and see the tool branded for **their** game,
+   with byte-for-byte identical functionality underneath.
+
+Appearance and Brand compose freely — Skyrim-brand in light mode, Plain-brand in dark mode, any
+combination. Never entangle them.
+
+### The golden rule of the framework
+
+**Every brand string and the accent color are DATA, read from the active theme at runtime. Nothing
+about behavior, layout, or tool identity is.** A tool is referenced everywhere in code by a **stable
+tool ID** that never changes; only its *presentation* (name/emoji/copy/accent) is looked up from the
+theme. Swapping themes swaps what the user reads and the accent hue — never what a button does, which
+API it calls, or where a card routes.
+
+If you ever find yourself about to hardcode a tool's display name, emoji, or hero title in markup or
+JS again, stop — it belongs in the theme map, keyed by the tool's stable ID.
+
+### The theme object (schema)
+
+One theme = one plain-data object (its own JSON file, `web/public/themes/<id>.json`):
+
+```jsonc
+{
+  "id": "plain",                    // stable, lowercase; the localStorage value
+  "label": "Plain",                 // what the (future) picker shows
+  "appName": "Vortex Collection Tools",
+  "accent": "#5b8def",              // the ONE color a theme sets in v1.0 (Plain keeps today's blue)
+  "palette": {},                    // RESERVED — empty in v1.0; full per-game palettes fill this later
+  "tools": {
+    "rebuild":  { "name": "Rebuild Collection", "emoji": "⚡",
+                  "heroTitle": "Rebuild Collections in Minutes, Not Hours",
+                  "function": "Rebuild Collection" },   // ← plain functional label, see below
+    "merge":    { "name": "Merge Plugins", "emoji": "🔨",
+                  "heroTitle": "…", "function": "Merge Plugins" }
+    // …one entry per stable tool ID
+  }
+}
+```
+
+- `accent` is the **only** color v1.0 exposes. Everything downstream (buttons, links, focus rings,
+  active badges, icon chips via `--accent-bg`) already reads `--accent`, so setting this one variable
+  re-tints the whole app for free and safely.
+- `palette` is a **reserved, empty slot** in v1.0. It exists now so full per-game palettes
+  (`--bg`/`--surface`/`--surface-2`/`--border`/`--text`) can be filled in later as pure data with
+  **zero re-plumbing**. Do not populate it in v1.0.
+- **Severity colors are NEVER themed.** `--success`/`--warning`/`--danger`/`--neutral` carry meaning,
+  not brand, and stay constant across every theme. Not even the deferred full-palette work touches
+  them.
+
+### Stable tool IDs — the contract
+
+These IDs are the permanent join between code and theme. They must match `shell.js`'s `TOOL_AREAS`
+keys and never change once shipped:
+
+`home`, `rebuild`, `update`, `rules`, `merge` (The Forge, new in v1.0), `missing-masters`, `scrub`,
+`archive-finder`, `settings`, and the four reports `report-stats`, `report-workthrough`,
+`report-compare`, `report-rules`.
+
+### Name for flavor, subtitle for function — the discoverability rule
+
+A fantasy name alone ("The Forge") tells a new user nothing about what the tool does. So **every
+themed tool carries a constant plain-language functional label** (`function` in the schema) that does
+**not** change between themes. The branded name is the headline; the functional label always rides
+with it (as the card's second line / the hero's eyebrow), so "The Forge" always visibly means "Merge
+Plugins." Plain theme's `name` and `function` are simply identical.
+
+### v1.0 ships exactly one theme: Plain
+
+**Plain** holds **today's exact strings and today's blue accent**, extracted verbatim from the
+current `index.html` — the app looks and reads *identically* to v0.4 after the refactor. That's the
+success criterion: the plumbing is proven end-to-end by a theme that changes nothing visible. The
+build pass is a pure **extract-and-indirect refactor**, not a redesign.
+
+Plain theme content = the current values already in the app (do not rewrite them):
+
+| Tool ID | Emoji | Name | Hero title |
+| :-- | :-- | :-- | :-- |
+| `home` | 🧰 | Home | Your Whole Vortex Toolkit, in One Place |
+| `rebuild` | ⚡ | Rebuild Collection | Rebuild Collections in Minutes, Not Hours |
+| `update` | 🔄 | Update Collection | Update Without Redoing Your Mod Cleanup |
+| `rules` | 🔗 | Rules Generator | Skip Re-Resolving Conflicts You Already Fixed |
+| `merge` | 🔨 | Merge Plugins | *(new — from The Forge build)* |
+| `missing-masters` | 🧩 | Missing Masters | Triage Missing Masters in Seconds |
+| `scrub` | 🧽 | Vortex Scrub | Scrub Away Clutter in Seconds |
+| `archive-finder` | 📦 | Archive Finder | Find Any File Inside Any Archive |
+| `report-stats` | 📊 | Stats | See Every Rebuild at a Glance |
+| `report-workthrough` | ✅ | Work Through | Work Through Every Problem Mod, One by One |
+| `report-compare` | 🔍 | Update Compare | See Exactly What an Update Changed |
+| `report-rules` | 📋 | Rules Generator Report | Check Your Rules Generator Progress |
+| `settings` | ⚙️ | Settings | Set It Up Once, Use It Everywhere |
+
+The `.tool-hero__body` paragraphs and Home card pitches come across **verbatim** too — the build pass
+lifts the current copy into the theme map; it does not rewrite it.
+
+### Runtime (engineer-facing summary; full detail → TECHNICAL.md)
+
+On boot: read the active theme ID from `localStorage` (default `plain`) → set `--accent` (and, later,
+any `palette` keys) on `:root` → fill every brand slot in the DOM (app title, tool-hero titles/bodies,
+breadcrumbs, Home card names/emoji/pitches, settings labels) from the active theme's `tools` map by
+stable ID. One source of truth; no brand string appears twice.
+
+### Deferred to after v1.0 (pure data + one UI piece — NOT this milestone)
+
+- **Game themes** as new JSON files (Skyrim, Fallout, Starfield, …) — name/emoji/hero/`function`
+  per tool + an `accent`.
+- **Full per-game palettes** — filling the reserved `palette` slot.
+- **The game/theme picker UI** and the optional "pick your game on first launch" moment.
+- **Per-game banners.**
+
+Draft Skyrim name map (flavor only — captured so it isn't lost; each still pairs with its constant
+functional label): The Arcaneum = `home`, Restoration = `rebuild`, The Ward = `update`, The Scribe =
+`rules`, **The Forge = `merge`**, The Augur = `missing-masters`, The Cleansing = `scrub`,
+Clairvoyance = `archive-finder`, The Chronicle = `reports`.
+
 ## Home / landing page — card-based launcher (2026-07-28)
 
 The app opens on a **Home** page — a card-based launcher for every tool — instead of dropping the
