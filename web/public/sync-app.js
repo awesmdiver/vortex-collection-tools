@@ -23,6 +23,46 @@ function escHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// ---------- Stepper (shared markup/CSS with The Forge -- see DESIGN.md's "Stepper" section) ----------
+//
+// Unlike The Forge (one sitting, mostly linear), this flow is re-entered between steps -- the user
+// leaves to act in Vortex (run the update, resume the install) and comes back -- so every pill is
+// fully clickable to jump to any step (DESIGN.md's "Navigable vs. linear" rule), not locked to
+// Next-only. Nothing about a step is destroyed/recreated on navigation here, only hidden/shown --
+// every control keeps whatever state a previous visit left it in for free.
+const SYNC_STEPS = ['Backup', 'Apply Ignores', 'Apply Disables', 'Compare'];
+let syncStep = 0;
+
+function syncRenderStepper() {
+  $s('syncStepper').innerHTML = SYNC_STEPS.map((label, i) => {
+    const cls = i === syncStep ? 'active' : i < syncStep ? 'done' : '';
+    const num = i < syncStep ? '✓' : String(i + 1);
+    return `<div class="merge-step ${cls}" data-step="${i}"><b>${num}</b>${label}</div>`;
+  }).join('');
+}
+
+function syncGoToStep(n) {
+  if (n < 0 || n > 3) return;
+  syncStep = n;
+  syncRenderStepper();
+  for (let i = 0; i < 4; i++) $s(`syncStep${i}`).classList.toggle('hidden', i !== n);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+$s('syncStepper').addEventListener('click', (e) => {
+  const pill = e.target.closest('.merge-step');
+  if (!pill) return;
+  syncGoToStep(Number(pill.dataset.step));
+});
+
+$s('syncStep0NextBtn').addEventListener('click', () => syncGoToStep(1));
+$s('syncStep1BackBtn').addEventListener('click', () => syncGoToStep(0));
+$s('syncStep1NextBtn').addEventListener('click', () => syncGoToStep(2));
+$s('syncStep2BackBtn').addEventListener('click', () => syncGoToStep(1));
+$s('syncStep2NextBtn').addEventListener('click', () => syncGoToStep(3));
+$s('syncStep3BackBtn').addEventListener('click', () => syncGoToStep(2));
+
+syncRenderStepper();
+
 // Pulled from the SELECTED collection's own collection.json (info.domainName -- Vortex/Nexus's own
 // domain slug, not something this tool invents), not a hardcoded GAME_ID -- this project only
 // targets Skyrim SE today, but this is per-collection so it stays correct if that ever changes.
