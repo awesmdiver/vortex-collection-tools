@@ -20,6 +20,16 @@ only showed up in the user's actual Vortex data. **Do not ship a guessed detecti
 way an ESLifier-generated file "traces to the ESLifier output folder" depends on (a) ESLifier's real
 output naming/structure and (b) how Vortex deploys it — both of which you must confirm live.
 
+**What actually happens (user-confirmed 2026-07-29 — build against THIS, not a guess):** The user's
+ESL folder holds **compressed "light" copies** of certain plugins (to save ESP slots); the **originals
+still exist**. The user has told **Vortex to use the compressed copy instead of the original** — a
+deliberate per-file override. So the file Vortex actually deploys comes **from the ESL folder**, and
+Missing Masters flags it as "not the right file" (the deployed file isn't the original it expected).
+It's a real override the user set up on purpose — not a missing/wrong file. This makes the
+deployment-manifest `source` trace (below) the right hook: the file in use resolves back to the ESL
+folder. **Still verify live which exact scan signal this surfaces as** (`missing` /
+`present-but-inactive` / `activeAlternate` / a manifest-source mismatch) and attach the downgrade there.
+
 **Sequence:**
 1. **Reproduce the false positive first.** With the user's real ESLifier output folder configured, run
    the live Missing Masters scan and *observe which signal actually fires* — is the offending master
@@ -91,13 +101,13 @@ Helper-icon link label: **Learn more about ESLifier**
 **Copy — the downgraded row callout** (casual; reassuring — this is a genuine false positive, the file
 is fine):
 
-> **This one's an ESLifier swap — nothing to fix.** **{MasterName}** was replaced by an ESL-flagged
-> version from your ESLifier output folder, so even though it looks missing, it's working exactly as
-> intended.
+> **You swapped this one on purpose — nothing to fix.** You're using a lighter, compressed copy of
+> **{MasterName}** from your ESLifier folder instead of the original, exactly the way you set it up in
+> Vortex. So even though it looks like the wrong file, it's working just as you meant it to.
 
 *(If the real case surfaces via `present-but-inactive` or `activeAlternate` rather than `missing`,
-keep the same reassuring message but adjust "looks missing" to fit what the row actually shows — flag
-the wording back to the design side if unsure.)*
+keep the same reassuring message but adjust "looks like the wrong file" to fit what the row actually
+shows — flag the wording back to the design side if unsure.)*
 
 ---
 
