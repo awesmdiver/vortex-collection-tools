@@ -552,7 +552,7 @@ function renderBackupRatioWarning(ignoredCount, disabledCount, totalCount) {
 function renderBackupFreshnessWarning(message) {
   const el = $s('syncBackupFreshnessWarning');
   if (!message) { el.classList.add('hidden'); el.innerHTML = ''; return; }
-  el.innerHTML = `<div class="callout__title">⚠️ Double-check this</div>${renderCriticalMessage(message)}`;
+  el.innerHTML = `<div class="callout__title">⚠️ Vortex didn't finish saving</div>${renderCriticalMessage(message)}`;
   el.classList.remove('hidden');
 }
 
@@ -567,9 +567,9 @@ async function checkBackupFreshnessAsync(collectionModId, profileId) {
     const result = await syncApi('POST', '/api/sync/backup/check-freshness', { collectionModId, profileId });
     if (result.checked && result.stale) {
       renderBackupFreshnessWarning(
-        "Vortex may have closed before saving your most recent changes, so this might not be fully up to date. " +
+        "We spotted unsaved changes still sitting in Vortex's database, so this backup might be missing your most recent tweaks. " +
         "Reopen Vortex, wait a few seconds (or click **Refresh** on the 'Added Collections' page), close it again, " +
-        'and run **Create Backup** once more to be sure.'
+        'and run **Create Backup** once more to capture everything.'
       );
     }
   } catch {
