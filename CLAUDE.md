@@ -26,6 +26,20 @@ This drifted once already (2026-07-28): Vortex Scrub, Missing Masters, and Archi
 without a README update and sat stale for a full extra session. Routing it through the handoff is what
 prevents a repeat — terminal flags, design writes.
 
+## Release notes: the header follows the themed-banner pattern
+
+Every GitHub release header sells **one flagship**, branded in the active game theme — not a flat list.
+The header is a full-bleed **themed banner image** (carved-sign Nordic-fantasy style, like the v0.5.0
+Forge banner) showing the highlighted tool's **Skyrim theme name + tagline**, plus a matching release
+**title** (`gh release edit --title`) — same name + tagline, or a shorter size-appropriate version.
+
+- **If a release shipped more than one feature, ASK which tool/feature to highlight** before writing the
+  header — don't choose for the user.
+- The banner **image is Gemini's job** (four-brain). Spec it in the Forge-banner style; paste-ready
+  prompts + the swap flow (archive prior as `-v1`, compress via `scripts/compress-image.js`, push) live
+  in [`design/gemini-release-banner-prompts.md`](design/gemini-release-banner-prompts.md).
+- The **What's new** body still lists everything that shipped — only the header is single-flagship.
+
 ## Design guide — read before any user-facing change
 
 Before making **any** visual or user-facing change — a new page, a new modal, a restyled report, new
