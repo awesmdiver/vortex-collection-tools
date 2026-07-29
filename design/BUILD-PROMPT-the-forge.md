@@ -76,6 +76,42 @@ a go/no-go on the engine.** Note anything in `TECHNICAL.md` under a new "Merge e
 Build **Merge Plugins** as a new top-level tool area, matching `design/vortex-merge-tool-mockup.html`
 and the DESIGN.md sections above. Reuse existing tokens/components — no new colors.
 
+### v1.0 scope — decided from the Part A spike (read before building)
+
+The spike proved the engine (`xelib` via `XEditLib.dll`) on **new-record** merges and signed off on
+that path. **v1.0's Forge ships that path only.** Build accordingly:
+
+- **Merge scope = new-record plugins** — standalone mods whose content is genuinely new records
+  (`!isOverride(rec) && !isInjected(rec)`). This is the proven `asNew=true` path.
+- **Build the engine scaffolding to ANTICIPATE override merges, but do NOT build or verify the
+  override-merge logic now.** Do-now (cheap, shared): the child-process merge worker, the output /
+  ESL-flag / qualification pipeline, and the per-record loop that already classifies each record
+  (new vs override vs injected — needed for the qualification count regardless). Defer to v1.1 (the
+  expensive, unproven part): the `asNew=false` preserve-FormID copy, reference rebuilding, and the
+  FormID-spread qualification math. Structure the code so v1.1 adds that as a contained branch, not a
+  rewrite.
+- **Be HONEST about override / patch plugins — never silently drop their overrides.** In the Review
+  step, any selected plugin that contains override records (a compatibility patch, etc.) is flagged
+  clearly — e.g. **"⚠️ Contains overrides — not merged in this version"** — and left out of the merge
+  (or the user removes it). Merging only part of a patch's records would produce a broken result;
+  don't. This is what the mockup's "Overrides a pick" status becomes for v1.0 — an honest,
+  merge-excluding signal, not a soft warning. Run this copy through `plain-language-writer`.
+- Where the mockup and the step descriptions below show richer override-aware review, treat that
+  override *merging* behavior as v1.1 and substitute the honest "contains overrides → not merged yet"
+  handling. Everything else (collections → search → cart → review → merge → done, the ESL verdict for
+  new-record merges, output to a chosen folder) is v1.0 exactly as described.
+
+**Resolved from the spike (don't re-litigate):**
+- **Light-plugin limit: hardcode 4,096**; document "requires Skyrim SE 1.6.1130+." (Can become
+  game-aware later with per-game theming.)
+- **Run each merge in its own short-lived child process** — `xelib` can't re-init in-process; mirror
+  `lib/state-query-worker.js`'s isolated-worker pattern.
+- **Verify `xelib.displayName()` against a real, fully-populated mod early** (it returned empty on
+  the synthetic test data) before trusting the Review step's mod-name column.
+- **Licensing / release-gate:** before any release that bundles `XEditLib.dll`, add a
+  `THIRD-PARTY-NOTICES.md` crediting xEdit/TES5Edit + `matortheeternal/xedit-lib` (MPL-1.1 / MPL-2.0,
+  real repos) and the `xeditlib` wrapper (MIT). Not needed to build, but it blocks the v1.0 zip.
+
 ### Wiring & chrome
 - New tool area `merge` in `shell.js`'s `TOOL_AREAS`. Add a **Home card** for it under **Main tools**
   (it's the headline v1.0 feature): icon 🧬, name **Merge Plugins**, one-line pitch condensed from the
