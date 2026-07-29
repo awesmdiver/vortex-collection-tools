@@ -1,0 +1,236 @@
+<title>Merge tool — flow concept</title>
+<style>
+  :root{
+    --bg:#0d0f14;--surface:#161922;--surface-2:#1d212c;--border:#2a2f3d;--text:#e6e9ef;--text-muted:#8b93a3;
+    --accent:#5b8def;--accent-hover:#75a1f5;--accent-bg:rgba(91,141,239,.12);--nav:#3d6ba8;
+    --success:#3ecf8e;--success-bg:rgba(62,207,142,.12);--warning:#f5b942;--warning-bg:rgba(245,185,66,.10);
+    --danger:#f0546b;--danger-bg:rgba(240,84,107,.12);--neutral:#7c8494;--neutral-bg:rgba(124,132,148,.12);--radius:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;font-size:15px;line-height:1.5}
+  .app-header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:16px 28px;border-bottom:1px solid var(--border);background:var(--surface)}
+  .app-header__title{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:600;justify-self:start}
+  .app-header__right{justify-self:end;color:var(--text-muted);font-size:13px;display:flex;gap:12px;align-items:center}
+  .main{max-width:min(1080px,95vw);margin:0 auto;padding:26px 24px 70px}
+
+  .eyebrow{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--text-muted);margin:0 0 8px}
+  .eyebrow a{color:var(--accent);text-decoration:none}
+  .hero__title{font-size:22px;margin:0 0 8px}
+  .hero__body{margin:0 0 22px;color:var(--text);font-size:14px;line-height:1.6;max-width:820px}
+
+  .stepper{display:flex;gap:8px;margin:0 0 24px;flex-wrap:wrap}
+  .step{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-muted);padding:7px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface)}
+  .step b{width:20px;height:20px;border-radius:50%;background:var(--surface-2);color:var(--text-muted);display:grid;place-items:center;font-size:12px;font-weight:700}
+  .step.active{border-color:var(--accent);color:var(--accent)} .step.active b{background:var(--accent);color:#0b1220}
+  .step.done{color:var(--success)} .step.done b{background:var(--success);color:#0b1220}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;margin:0 0 24px}
+  .card h2{font-size:17px;margin:0 0 2px} .card .sub{color:var(--text-muted);font-size:13.5px;margin:0 0 14px}
+  .section-title{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);font-weight:600;margin:18px 0 10px}
+
+  .btn{font-family:inherit;font-size:14px;font-weight:500;padding:9px 18px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);cursor:pointer;white-space:nowrap}
+  .btn:hover{border-color:var(--accent)} .btn--primary{background:var(--accent);border-color:var(--accent);color:#0b1220;font-weight:600}
+  .btn--ghost{background:transparent} .btn--sm{padding:6px 12px;font-size:13px}
+  .navrow{display:flex;justify-content:space-between;gap:10px;margin-top:6px}
+
+  .chk-row{display:flex;align-items:center;gap:12px;padding:11px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer}
+  .chk-row:hover{border-color:var(--accent-bg)} .chk-row.on{background:var(--accent-bg);border-color:var(--accent)}
+  .chk-row input{width:16px;height:16px;accent-color:var(--accent)}
+  .chk-row .nm{font-weight:600} .chk-row .meta{color:var(--text-muted);font-size:13px;margin-left:auto}
+
+  .selbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  .selbar .count{font-size:13px;color:var(--text-muted)} .selbar .count b{color:var(--accent)} .spacer{flex:1}
+
+  /* running cart bar — always visible on step 2 */
+  .cart-bar{display:flex;align-items:center;gap:10px;background:var(--accent-bg);border:1px solid var(--accent);border-radius:var(--radius);padding:12px 16px;margin:0 0 18px;font-size:14px;flex-wrap:wrap}
+  .cart-bar b{color:var(--accent)}
+
+  .field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+  .field label{font-size:12px;color:var(--text-muted)} .input{font-size:14px;padding:9px 13px;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--accent);background:var(--accent-bg);border:1px solid var(--border);border-radius:8px;padding:5px 10px}
+
+  .ptw{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  thead th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;color:var(--text-muted);padding:11px 14px;background:var(--surface-2);border-bottom:1px solid var(--border)}
+  td{padding:10px 14px;border-bottom:1px solid var(--border)} tr:last-child td{border-bottom:none}
+  tbody tr:nth-child(even){background:rgba(255,255,255,.022)} tbody tr:hover{background:var(--surface-2)}
+  tbody tr.on{background:var(--accent-bg)} .muted{color:var(--text-muted)}
+  .type{font-size:11px;font-weight:700;padding:2px 7px;border-radius:5px;background:var(--neutral-bg);color:var(--neutral)}
+  .type.esl{background:var(--accent-bg);color:var(--accent)}
+  .grp{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.03em;padding:12px 14px 6px}
+  .rm{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px} .rm:hover{color:var(--danger)}
+
+  .callout{border-radius:var(--radius);padding:13px 16px;margin:10px 0;border:1px solid} .callout p{margin:0;font-size:13.5px}
+  .callout .t{font-weight:700;margin-bottom:3px} .callout--warn{background:var(--warning-bg);border-color:var(--warning)} .callout--crit{background:var(--danger-bg);border-color:var(--danger)} .callout--info{background:var(--accent-bg);border-color:var(--accent)}
+
+  .progress{height:8px;background:var(--surface-2);border-radius:6px;overflow:hidden;margin:14px 0} .progress i{display:block;height:100%;width:64%;background:var(--accent)}
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:8px 0 16px}
+  .stat{background:var(--surface-2);border-radius:8px;padding:14px} .stat .n{font-size:24px;font-weight:600} .stat .l{font-size:12.5px;color:var(--text-muted)}
+  .out{font-family:Consolas,monospace;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:3px 8px;font-size:13px}
+
+  /* "chosen" window (a real separate OS window in the app; a slide-in panel here) */
+  .drawer{position:fixed;top:0;right:0;height:100%;width:380px;max-width:92vw;background:var(--surface);border-left:1px solid var(--border);box-shadow:-24px 0 70px -34px #000;transform:translateX(100%);transition:transform .22s ease;z-index:60;overflow:auto;padding:18px 20px}
+  .drawer.open{transform:translateX(0)}
+  .drawer .head{display:flex;align-items:center;justify-content:space-between} .drawer h3{font-size:15px;margin:0}
+  .drawer .close{background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer}
+  .drawer .tip{font-size:12px;color:var(--text-muted);background:var(--surface-2);border-radius:8px;padding:9px 11px;margin:12px 0 6px;line-height:1.5}
+  .bk-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+  .bk-row .rm{margin-left:auto}
+  /* report-style filter badges + per-item status (reused pattern) */
+  .badges{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 14px}
+  .badge{font-size:12.5px;font-weight:600;padding:5px 12px;border-radius:16px;cursor:pointer;border:2px solid transparent}
+  .badge--all{background:var(--neutral-bg);color:var(--text-muted)} .badge--warn{background:var(--warning-bg);color:var(--warning)} .badge--ok{background:var(--success-bg);color:var(--success)}
+  .badge.on{border-color:currentColor}
+  .pill{font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px} .pill--warn{background:var(--warning-bg);color:var(--warning)}
+  #revTable tr[data-status="master"] td:first-child,#revTable tr[data-status="override"] td:first-child{box-shadow:inset 3px 0 0 var(--warning)}
+</style>
+
+<header class="app-header">
+  <div class="app-header__title"><span style="font-size:20px;opacity:.85">&#9881;</span><span>Vortex Collection Tools</span></div>
+  <div></div><div class="app-header__right"><span>Merge</span><span style="opacity:.85">&#9881;</span></div>
+</header>
+
+<div class="main">
+  <div class="eyebrow"><a href="#">Home</a> › Merge</div>
+  <h2 class="hero__title">🧬 Merge Many Plugins Into One</h2>
+  <p class="hero__body">Skyrim's plugin slots fill up fast. Pick plugins from one or more collections and this tool bundles them into a single file&mdash;freeing up slots without touching xEdit. Review exactly what's going in first, and it'll flag the result as <strong>.esl</strong> automatically when it fits.</p>
+
+  <div class="stepper" id="stepper"></div>
+  <div id="stage"></div>
+</div>
+
+<aside class="drawer" id="basket">
+  <div class="head"><h3>🧬 Chosen for merge (14)</h3><button class="close" onclick="closeBasket()">✕</button></div>
+  <div class="tip">In the app this opens in its <strong>own window</strong> (same trick as the Rules Generator reference view) so you can keep it open beside the search — and it updates <strong>live</strong> as you add more plugins.</div>
+  <div id="basketBody"></div>
+</aside>
+
+<script>
+  const STEPS=["Collections","Find files","Review","Merge","Done"];
+  let cur=0;
+  const el=id=>document.getElementById(id);
+
+  const COLLS=[["Beauty Salon for GTS","98 mods",1],["Lorerim","1,940 mods",1],["Nordic Souls","760 mods",1],["Elysium Remastered","1,100 mods",0],["Wildlander","430 mods",0]];
+  const FILES=[ // current search view ("PBR")
+    ["PBR - Landscapes.esp","PBR Landscapes","Beauty Salon for GTS","esp",1],
+    ["PBR - Architecture.esp","PBR Architecture","Beauty Salon for GTS","esp",1],
+    ["PBR - Whiterun.esp","PBR Whiterun","Nordic Souls","esp",1],
+    ["Skin PBR Patch.esp","Skin PBR","Beauty Salon for GTS","esp",1],
+    ["Dwarven PBR.esl","Dwarven PBR","Lorerim","esl",1],
+    ["PBR - Dungeons.esp","PBR Dungeons","Lorerim","esp",0],
+    ["PBR Parallax Fix.esp","Parallax Fix","Nordic Souls","esp",0],
+    ["Weathers PBR.esl","Weathers PBR","Elysium Remastered","esl",0],
+  ];
+  // the running cart — accumulated across earlier searches too (e.g. an "LOTD" search)
+  const BASKET=[
+    ["LOTD - Fabled Forests Patch.esp","Fabled Forests","Lorerim"],
+    ["LOTD Patch - Rich Merchants.esp","Rich Merchants","Lorerim"],
+    ["WACCF_Armor_Patch.esp","WACCF","Lorerim"],
+    ["Dwarven PBR.esl","Dwarven PBR","Lorerim"],
+    ["Immersive Sounds - Compendium.esp","ISC","Nordic Souls"],
+    ["3DNPC.esl","Interesting NPCs","Nordic Souls"],
+    ["Book Covers Skyrim.esl","Book Covers","Nordic Souls"],
+    ["PBR - Whiterun.esp","PBR Whiterun","Nordic Souls"],
+    ["Cutting Room Floor.esp","CRF","Beauty Salon for GTS"],
+    ["RaceMenu.esp","RaceMenu","Beauty Salon for GTS"],
+    ["PBR - Landscapes.esp","PBR Landscapes","Beauty Salon for GTS"],
+    ["PBR - Architecture.esp","PBR Architecture","Beauty Salon for GTS"],
+    ["Skin PBR Patch.esp","Skin PBR","Beauty Salon for GTS"],
+    ["LOTD Museum Fixes.esp","Museum Fixes","Beauty Salon for GTS"],
+  ];
+  // review rows with per-item status + note: [file, mod, collection, records, status, note]
+  const REVIEW=[
+    ["LOTD - Fabled Forests Patch.esp","Fabled Forests","Lorerim",40,"ok",""],
+    ["LOTD Patch - Rich Merchants.esp","Rich Merchants","Lorerim",12,"ok",""],
+    ["WACCF_Armor_Patch.esp","WACCF","Lorerim",210,"master","Needs Update.esm"],
+    ["Dwarven PBR.esl","Dwarven PBR","Lorerim",90,"override","Overlaps Skin PBR Patch"],
+    ["Immersive Sounds - Compendium.esp","ISC","Nordic Souls",180,"master","Needs Update.esm"],
+    ["3DNPC.esl","Interesting NPCs","Nordic Souls",300,"ok",""],
+    ["Book Covers Skyrim.esl","Book Covers","Nordic Souls",260,"ok",""],
+    ["PBR - Whiterun.esp","PBR Whiterun","Nordic Souls",55,"override","Overlaps PBR - Landscapes"],
+    ["Cutting Room Floor.esp","CRF","Beauty Salon for GTS",400,"ok",""],
+    ["RaceMenu.esp","RaceMenu","Beauty Salon for GTS",120,"ok",""],
+    ["PBR - Landscapes.esp","PBR Landscapes","Beauty Salon for GTS",70,"override","Overlaps PBR - Whiterun"],
+    ["PBR - Architecture.esp","PBR Architecture","Beauty Salon for GTS",65,"override","Overlaps PBR - Landscapes"],
+    ["Skin PBR Patch.esp","Skin PBR","Beauty Salon for GTS",30,"override","Overlaps Dwarven PBR"],
+    ["LOTD Museum Fixes.esp","Museum Fixes","Beauty Salon for GTS",85,"master","Needs Legacy of the Dragonborn.esm"],
+  ];
+
+  function renderStepper(){el("stepper").innerHTML=STEPS.map((s,i)=>`<div class="step ${i===cur?'active':i<cur?'done':''}"><b>${i<cur?'✓':i+1}</b>${s}</div>`).join('')}
+  function nav(back,next,nextLabel){
+    return `<div class="navrow"><button class="btn btn--ghost" onclick="go(${back})" ${back<0?'style="visibility:hidden"':''}>← Back</button><button class="btn btn--primary" onclick="go(${next})">${nextLabel}</button></div>`;
+  }
+  function renderBasket(){
+    const g={};BASKET.forEach(b=>{(g[b[2]]=g[b[2]]||[]).push(b)});
+    let h="";for(const c in g){h+=`<div class="section-title" style="margin:14px 0 4px">${c} · ${g[c].length}</div>`+g[c].map(b=>`<div class="bk-row"><span>${b[0]}</span><button class="rm" title="Remove">✕</button></div>`).join('')}
+    el("basketBody").innerHTML=h;
+  }
+  window.openBasket=()=>{renderBasket();el("basket").classList.add("open")};
+  window.closeBasket=()=>el("basket").classList.remove("open");
+  window.filt=(f,badge)=>{
+    document.querySelectorAll('#revTable tbody tr').forEach(tr=>{tr.style.display=(f==='all'||tr.dataset.status===f)?'':'none'});
+    document.querySelectorAll('.badge').forEach(b=>b.classList.remove('on'));badge.classList.add('on');
+  };
+
+  function step0(){
+    const rows=COLLS.map(c=>`<label class="chk-row ${c[2]?'on':''}"><input type="checkbox" ${c[2]?'checked':''} onchange="this.closest('.chk-row').classList.toggle('on',this.checked)"><span class="nm">${c[0]}</span><span class="meta">${c[1]}</span></label>`).join('');
+    return `<div class="card"><h2>Choose collections</h2><p class="sub">Pick one or more collections. The next step searches the plugins in their installed mods (in your staging folder).</p>
+      <div class="selbar"><button class="btn btn--sm">Select all</button><button class="btn btn--sm">Clear</button><span class="count"><b>3</b> of 5 selected</span></div>${rows}</div>${nav(-1,1,"Next: Find files →")}`;
+  }
+  function step1(){
+    const rows=FILES.map(f=>`<tr class="${f[4]?'on':''}"><td><input type="checkbox" ${f[4]?'checked':''} onchange="this.closest('tr').classList.toggle('on',this.checked)"></td><td>${f[0]}</td><td class="muted">${f[1]}</td><td class="muted">${f[2]}</td><td><span class="type ${f[3]}">${f[3].toUpperCase()}</span></td></tr>`).join('');
+    return `<div class="card"><h2>Find & select plugins</h2><p class="sub">Searching the plugins in your 3 chosen collections. <strong>Search as many times as you like</strong> — each pick adds to the merge and stays put.</p>
+      <div class="field" style="max-width:520px"><label>Search plugins</label><input class="input" value="PBR" placeholder="e.g. LOTD, PBR, armor"></div>
+      <div class="section-title">Extensions to include</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="chip">.esp ✕</span><span class="chip">.esl ✕</span><span class="chip">.esm ✕</span><input class="input" style="width:120px" placeholder="add ext"></div></div>
+
+      <div class="cart-bar">🧬 <b>14</b> plugins chosen for the merge <span class="muted">— building up across every search you run</span><div class="spacer"></div><button class="btn btn--sm" onclick="openBasket()">View chosen (14) ↗</button></div>
+
+      <div class="card"><div class="section-title" style="margin-top:2px">Results for "PBR" · 42 matches</div>
+      <div class="selbar"><button class="btn btn--sm">Select All</button><button class="btn btn--sm">Invert Selection</button><button class="btn btn--sm">Clear Selection</button><span class="count"><b>5</b> of 42 in this search selected</span></div>
+      <div class="ptw"><table><thead><tr><th style="width:34px"></th><th>File</th><th>Mod</th><th>Collection</th><th>Type</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p class="muted" style="font-size:12.5px;margin:12px 2px 0">Already-chosen plugins show checked here even if they came from a different search. Run a new search anytime — your cart of 14 stays put.</p></div>
+      ${nav(0,2,"Next: Review (14) →")}`;
+  }
+  function step2(){
+    const pill=s=>s==="master"?`<span class="pill pill--warn">⚠️ Needs a master</span>`:s==="override"?`<span class="pill pill--warn">⚠️ Overrides a pick</span>`:`<span class="muted">—</span>`;
+    const rows=REVIEW.map(r=>`<tr data-status="${r[4]}"><td>${r[0]}</td><td class="muted">${r[1]}</td><td class="muted">${r[2]}</td><td class="muted">${r[3]}</td><td title="${r[5]}">${pill(r[4])}</td><td style="text-align:right"><button class="rm" title="Remove">✕</button></td></tr>`).join('');
+    const nM=REVIEW.filter(r=>r[4]==="master").length,nO=REVIEW.filter(r=>r[4]==="override").length,nK=REVIEW.filter(r=>r[4]==="ok").length;
+    return `<div class="card"><h2>Review your merge</h2><p class="sub">14 plugins from 3 collections. Filter by status, drop anything that shouldn't go in, or go back to add more. <strong>None of these stop the merge</strong> — they're heads-ups.</p>
+      <div class="callout callout--warn"><div class="t">⚠️ ${nM} plugins depend on a master</div><p>These need a master plugin present (Update.esm, Legacy of the Dragonborn.esm). Fine to merge — just make sure those masters are installed in Vortex. If one's missing after you install the merge, <strong>Missing Masters</strong> will catch it.</p></div>
+      <div class="callout callout--info"><div class="t">🪶 The merge will be ESL-flagged — it won't cost a load-order slot</div><p>~2,300 new records (under the 4,096 light-plugin limit), FormIDs compact fine, and no risky cell/worldspace overrides — so it keeps its .esp name but is flagged ESL (an "ESPFE"). If it didn't qualify, it'd stay a standard full .esp and the tool would tell you why.</p></div>
+      <div class="badges">
+        <span class="badge badge--all on" onclick="filt('all',this)">Show all (14)</span>
+        <span class="badge badge--warn" onclick="filt('master',this)">⚠️ Needs a master (${nM})</span>
+        <span class="badge badge--warn" onclick="filt('override',this)">⚠️ Overrides a pick (${nO})</span>
+        <span class="badge badge--ok" onclick="filt('ok',this)">Clean (${nK})</span>
+      </div>
+      <div class="ptw"><table id="revTable"><thead><tr><th>File ↕</th><th>Mod ↕</th><th>Collection ↕</th><th>Records ↕</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="section-title">Output</div>
+      <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+        <div class="field" style="flex:1;min-width:240px;margin:0"><label>Name the merged plugin</label><input class="input" value="Merged Patch"></div>
+        <div class="field" style="margin:0"><label>Result</label><div class="out">Merged Patch.esp <span class="muted">· ESL-flagged ✓ (frees a slot)</span></div></div>
+      </div></div>
+      <div class="navrow"><button class="btn btn--ghost" onclick="go(1)">← Add more files</button><button class="btn btn--primary" onclick="go(3)">Merge 14 plugins →</button></div>`;
+  }
+  function step3(){
+    return `<div class="card"><h2>Merging…</h2><p class="sub">Building <strong>Merged Patch.esp</strong> from 14 plugins. Vortex must stay closed while this runs.</p>
+      <div class="progress"><i></i></div><p class="muted" style="font-size:13px">Copying records from Cutting Room Floor.esp… (9 of 14)</p></div>
+      <div class="navrow"><span></span><button class="btn btn--primary" onclick="go(4)">(demo) Finish →</button></div>`;
+  }
+  function step4(){
+    return `<div class="card"><h2>✅ Merge complete</h2><p class="sub">Your plugins were bundled into one file.</p>
+      <div class="stat-grid">
+        <div class="stat"><div class="n">14</div><div class="l">plugins merged</div></div>
+        <div class="stat"><div class="n">14</div><div class="l">mods</div></div>
+        <div class="stat"><div class="n">3</div><div class="l">collections</div></div>
+        <div class="stat"><div class="n">2,310</div><div class="l">records</div></div>
+      </div>
+      <div class="callout callout--info"><div class="t">🧬 Merged Patch.esp created — ESL-flagged</div><p>Saved to <span class="out">E:\\Vortex Mods\\skyrimse\\Merge Output</span>. It's ESL-flagged, so it costs <strong>0</strong> of your 254 load-order slots — you just freed up 14.</p></div>
+      <div class="callout callout--info"><div class="t">Next: turn it on in Vortex</div><p>Install <strong>Merged Patch.esp</strong> as a mod in Vortex and enable it, then disable the 14 originals it replaces — same as adding a Dummy Master or DynDOLOD output.</p></div>
+      <div class="navrow"><button class="btn btn--ghost">Open output folder</button><button class="btn btn--primary" onclick="go(0)">Merge another →</button></div>`;
+  }
+  const RENDER=[step0,step1,step2,step3,step4];
+  window.go=i=>{cur=Math.max(0,Math.min(4,i));renderStepper();el("stage").innerHTML=RENDER[cur]();window.scrollTo({top:0,behavior:'smooth'})};
+  go(0);
+</script>
