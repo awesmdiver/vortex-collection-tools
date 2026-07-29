@@ -1,37 +1,43 @@
 # Terminal prompt queue
 
 **Send the Pending items below, top to bottom.** Open in a markdown preview (VS Code: `Ctrl+Shift+V`)
-for copy buttons. The design side keeps this current — this file is the single source of truth for
-"what's left." Run them one at a time (several touch the same files).
+for copy buttons. The design side keeps this current — single source of truth for "what's left." Run
+one at a time (several touch the same files).
 
 ---
 
 ## Pending — send these
 
-### 1 · Gate "Next" on each step's required action
-*So a distracted user always knows whether they've acted (the Apply/Next "did I or didn't I?" fix).*
+### 1 · Adaptive completion — green banner, skip empty steps, + spacing
+*No-disables case: green "you're done" banner, Next skips the empty Apply Disables, breathing room fix.*
 
 ```
-Update Collection stepper — gate "Next" on each step's required action, and show the action's done
-state. See DESIGN.md "Gate 'Next' on a step's required action". Load plain-language-writer.
+Update Collection stepper — completion banner should be GREEN, Next must skip empty steps, + a spacing
+fix. Load plain-language-writer. See DESIGN.md "Stepper — Adaptive steps + a completion state".
 
-Apply Ignores (step 2) + Apply Disables (step 3):
-- Next starts DISABLED; enabled only after Apply succeeds. (The Preview → Apply gating stays; this adds
-  Apply → Next on top.)
-- Never two accent/primary buttons at once: while pending, Apply is the only primary and Next is
-  disabled/secondary.
-- On a successful Apply, flip the button: "Apply" → "Applied ✓", disabled, styled as done
-  (quiet/success, not the live accent). Then enable Next and make Next the primary.
-- Re-apply (rare): the "Applied ✓" state is STICKY — don't leave Apply permanently live. To act again,
-  clicking Preview re-runs and re-arms Apply. Preview stays available after Apply. MAKE IT
-  DISCOVERABLE — in the done state show a small hint, e.g. "✓ Applied — {N} mods set to Ignored. Need
-  to redo it? Just hit **Preview** again." (bold Preview per the bold-action-in-hints rule).
-Backup (step 1): same logic — Next disabled until a backup is created (Create Backup → "Backup
-created", Next enables). A backup with nothing to save still counts as done; flag if unsure.
-Compare (step 4): no gating (optional, last step). Keep the navigable stepper pills freely clickable.
+1) GREEN COMPLETION BANNER (the main one). The "You're almost there!" / end-of-flow banner currently
+   renders as a BLUE .callout--info; it's a completion / success state, so it should be GREEN
+   (.callout--success). (User recalls it was green originally — check whether it regressed from
+   success→info.) When all APPLICABLE required steps are done (e.g. Backup + Apply Ignores, with no
+   disables to apply), show a green success callout that says the TOOL's work is done — e.g. "✅ You're
+   done here! Nothing left in this tool for this collection — just reopen Vortex, click **Resume** to
+   finish the update, and have fun gaming. (Compare below is optional if you want a before/after.)"
+   Fold in the existing "Resume in Vortex" guidance; drop the now-redundant "you can skip Apply
+   Disables" line.
 
-Verify light + dark, npm run web: fresh step → Next disabled; after Apply → button reads "Applied ✓"
-(disabled) and Next enables. Document in TECHNICAL.md; write your wrap-up to prompts/handoff-latest.md.
+2) NEXT SKIPS EMPTY STEPS. When the collection has no disabled mods, MUTE the Apply Disables (step 3)
+   pill (greyed, nothing-to-do, still clickable) and make Next SKIP it — after Apply Ignores, Next
+   reads "Next: Compare →" and goes to step 4, not the empty step 3. (You already enable Next in the
+   nothingToDo branch; extend it to mute the pill + relabel/redirect Next.) Generalize to any empty
+   required step.
+
+3) SPACING. Add breathing room between the Profile/Collection selector dropdowns and the stepper pill
+   row — they're cramped now (the header-tighten removed the row that separated them). Match the app's
+   stack spacing.
+
+Verify light + dark, npm run web: a collection with ignores but no disables → green completion after
+Apply Ignores, step 3 muted, Next → Compare; a collection WITH disables → normal flow (step 3 active,
+Next → Apply Disables). Document in TECHNICAL.md; write your wrap-up to prompts/handoff-latest.md.
 ```
 
 ### 2 · Ratio-warning refinement — floor + per-collection dismiss + Settings
@@ -73,6 +79,8 @@ in TECHNICAL.md; write your wrap-up to prompts/handoff-latest.md.
 - **Disabled-count bug** — phantom "1 disabled" fixed (`f4976ab`)
 - **Step 2/3 polish** — chip-grid previews, bold action hints, pluralization (`16ebbc7`)
 - **Header tighten** — "Show Ignored & Disabled" onto the stepper row (`4f600d1`)
+- **Next-gating** — Applied ✓ done-state, one primary, sticky + Preview re-arm, Backup keeps
+  Next-gating only (no sticky flip) — *verified live; committing now*
 
 ---
 
@@ -85,8 +93,6 @@ in TECHNICAL.md; write your wrap-up to prompts/handoff-latest.md.
 *(Harmonization folds into the theming/dashboard era. Theming + the warm/fun voice apply to BOTH
 audiences — Developer mode only adds tools.)*
 
-**Revisit (review-only, fire anytime):** does the Next-gating standard (#1) apply to The Forge's
-stepper? The Forge is a one-sitting flow with no leave-and-return step, and its main action (Merge)
-*is* the advance — so the two-primary "did I act?" ambiguity likely doesn't occur. Rather than wait on
-manual testing, **terminal reviews The Forge's stepper logic and reports whether/where the standard
-applies** (no code changes); we decide from that. Doesn't block the two pending builds above.
+**Revisit (review-only, fire anytime):** does the Next-gating standard apply to The Forge's stepper?
+The Forge's action (Merge) *is* the advance, so the two-primary ambiguity likely doesn't occur —
+terminal reviews and reports (no code changes); we decide from that.
