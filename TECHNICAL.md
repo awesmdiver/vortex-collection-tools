@@ -3042,6 +3042,121 @@ Reports' Update Compare page shows both `HOME › REPORTS` AND its own "← Back
 button side by side (no conflict); Archive Finder's tree panel still opens/closes via its own "Back
 to results" button, entirely independent of the page's own `HOME › UTILITIES` eyebrow above it.
 
+## Merge engine — feasibility spike for "The Forge" (Merge Plugins), Part A (2026-07-28)
+
+Per `design/BUILD-PROMPT-the-forge.md`'s Part A (a feasibility spike; Part B — the actual tool build
+— is explicitly gated on sign-off from this spike and has NOT started). Full write-up of the
+recommendation, proof, and open questions lives in the chat response to the user; this section is
+the durable engineering record of what was found and built.
+
+**Recommendation: `xelib` (koffi FFI wrapper) directly against `XEditLib.dll`**, not zEdit's full
+Electron app and not shelling out to a bundled xEdit executable. Confirmed via a real, headless,
+two-process proof (merge script + a separate fresh-process verify script, both plain `node
+script.js`, zero Electron): loaded two standalone test plugins (created via
+`tools/automod-cli.sh esp create`/`add-weapon` in the Skyrim install), copied their records into a
+brand-new output plugin via `xelib.copyElement(rec, outFile, true)` (records renumbered to compact,
+non-colliding FormIDs `000800`/`000801` in the new file — compact-by-construction, no separate
+"Compact FormIDs" pass needed), set the ESL header flag via the generic `xelib.setFlag(outFile,
+'File Header\Record Header\Record Flags', 'ESL', true)`, saved, then re-opened the saved file in a
+**separate Node process** and confirmed the record count (2) and the ESL flag (`true`) both read
+back correctly from disk — not just an in-memory artifact. Ran under Node v24.18.0, the exact
+version this project already bundles.
+
+**Why xelib over the alternatives:**
+- **zEdit's own merge module** (`mergeBuilder.js`/`recordMergingService.js` in `zEdit-Revised`) is
+  itself just orchestration around plain `xelib.*` FFI calls (`GetRecords`/`CopyElement`/
+  `SetFormID`/`IsOverride`/`IsInjected`/`BuildReferences`) with no Electron/DOM/`$scope` coupling in
+  the actual record-copy path — confirmed by reading the source. So "use zmerge" and "use xelib
+  directly" aren't really different engines, they're the same engine with or without zEdit's
+  reusable orchestration layer on top. For a first version, driving `xelib` directly (as the proof
+  does) is simpler than extracting `mergeBuilder`'s Angular-service-shaped functions out of a live
+  Electron app; zEdit's own JS is worth revisiting later as a reference implementation for
+  edge cases (master/override handling, reference rebuilding) once basic new-record merges are
+  solid.
+- **Shelling out to a bundled xEdit executable** was not pursued — xEdit itself is a full GUI app
+  (Delphi/VCL), not designed for a scriptable headless CLI mode; `xelib`'s FFI already gives direct,
+  fine-grained programmatic control without needing to drive a GUI process.
+
+**ESL flag mechanism**: no dedicated "SetIsESL" call exists in `xeditlib`'s wrapped API (163
+functions) — same generic `getFlag`/`setFlag(handle, path, flagName)` primitive the wrapper's own
+`GetIsESM`/`SetIsESM`-equivalent helpers are built on. `GetAllFlags` returns the file header's valid
+flag names as ONE comma-separated string (`"ESM,,,,,,,Localized,,ESL,,,Ignored,,,..."`, empty
+entries for reserved bits) — split on comma, don't treat it as one array element per flag (a real
+bug hit and fixed during the proof).
+
+**ESPFE qualification** (per `docs/reference-espfe.md`): xelib doesn't have a purpose-built "can
+this be ESL-flagged" call, but exposes exactly the primitives needed to compute it ourselves:
+- **New-record count**: `!xelib.isOverride(rec) && !xelib.isInjected(rec)` per copied record (same
+  check zEdit's own `recordMergingService.js` uses) — count these across the whole merge, compare
+  against the target game's light-plugin limit (4,096 on SSE 1.6.1130+, 2,048 on older builds — the
+  version threshold itself needs to come from somewhere; not yet decided where, see Open questions).
+- **Compact FormIDs**: not a separate step — copying into a brand-new output file with
+  `asNew=true` already assigns sequential, gap-free FormIDs by construction (confirmed live: two
+  single-record source plugins produced `000800`/`000801` in the merged file). A "needs compacting"
+  case would only arise if records were copied `asNew=false` (preserving original FormIDs, e.g. for
+  actual overrides) — the qualification check would need to inspect the resulting FormID spread in
+  that case, not yet implemented/tested.
+- **Cell/worldspace caution**: not yet implemented — would use the same `xelib.signature(rec)` call
+  the proof already uses for `WEAP`, checking for `CELL`/`WRLD`-type signatures among the new-record
+  set.
+- Setting the flag itself is the same `setFlag(...)` call already proven above; "doesn't qualify"
+  just means skipping that call and reporting the specific reason (over the limit / cell-worldspace
+  present) instead.
+
+**Licensing** (bundling `XEditLib.dll` + a JS wrapper inside this GitHub-released, MIT-ish app):
+- **`XEditLib.dll` itself** is compiled from `matortheeternal/xedit-lib` — confirmed via that repo's
+  actual `LICENSE` file (GitHub's own license detection reports "Other"/unrecognized, so don't trust
+  the badge — the file content is plain **Mozilla Public License 1.1** text). The broader xEdit/
+  TES5Edit application it's extracted from is separately MPL-2.0 (confirmed via
+  `gh api repos/TES5Edit/TES5Edit --jq '.license'` + fetching its real `LICENSE.txt`). Both are weak,
+  file-level copyleft — permit combining with differently-licensed code in a "Larger Work," require
+  keeping the covered source available under its own MPL terms (already public on GitHub) and
+  attribution, but do NOT require this app to relicense.
+- **Correction to a misleading credit**: the `xeditlib` npm package's own README credits "XEditLib
+  ... MIT license" for the bundled DLL — this is inaccurate for the DLL itself (verified directly
+  against `matortheeternal/xedit-lib`'s real LICENSE file, which is MPL-1.1, not MIT). The MIT
+  license the README states correctly covers only the wrapper package's own JS code.
+- **JS/FFI wrapper layers** (`WingedGuardian/xeditlib`, the npm package this proof used; and the
+  older `z-edit/xelib` native-addon wrapper zEdit itself uses) are both genuinely MIT — confirmed
+  via their own `LICENSE` files.
+- **Practical requirement if this ships**: a `THIRD-PARTY-NOTICES.md` (or similar) crediting (a)
+  xEdit/TES5Edit + `matortheeternal/xedit-lib` — MPL-1.1/MPL-2.0, link to their real repos — and (b)
+  the `xeditlib` wrapper — MIT, WingedGuardian — rather than bundling the DLL with no attribution at
+  all. Not yet written; needed before any real release bundling `XEditLib.dll`.
+
+**Platform/packaging fit**: `XEditLib.dll` + its companion data files (`icudtl.dat`, a handful of
+small `*.Hardcoded.dat` per-game files) total **~19 MB** — confirmed by measuring the actual
+installed `node_modules/xeditlib/` folder. This app already bundles a portable Node runtime + 7-Zip
+via `build-release.ps1`'s "download the official artifact, extract, vendor it" pattern (see that
+script's own Node/7-Zip steps) — adding `XEditLib.dll` the same way is a direct precedent match, not
+a new packaging model. Windows-x64-only, matching this app's own existing constraint exactly.
+
+**A real, non-obvious limitation found during the proof, relevant to Part B's eventual
+architecture**: `xelib.init()` cannot be cleanly re-initialized within the same Node process after a
+prior `xelib.close()` — a second `init()`/`setGameMode()` call in the same process crashed
+(`SetGameMode failed` immediately followed by a native segfault). The proof's own two scripts work
+around this by using two separate `node` process invocations (merge, then a fresh-process verify).
+**This means Part B's own merge operation should run in its own short-lived child process per merge
+request** (matching this project's own already-established pattern for other native/risky calls —
+e.g. `lib/state-query-worker.js`'s isolated LevelDB reads), not as a long-lived xelib session kept
+open inside the main Express server process across multiple requests.
+
+**Open questions carried into Part B** (not yet resolved, need a decision before or during that
+build):
+- Where the game-version-dependent light-plugin limit (4,096 vs. 2,048) should come from — a
+  Settings field, auto-detected some other way, or just hardcode the modern 4,096 threshold and
+  document the SSE 1.6.1130+ requirement.
+- The `asNew=false` (preserve-FormID, for real overrides) qualification path is unverified — the
+  proof only exercised `asNew=true` (genuinely new records with no destination master
+  relationship), since that matches "The Forge"'s actual use case (bundling separate mods' own new
+  content, not building an override-merge patch). Confirm this is the right default before Part B,
+  and flag it as a real gap if actual override-record merging turns out to matter for the tool as
+  scoped.
+- `xelib.displayName()` returned an empty string for the test weapon records (no FULL/NAME subrecord
+  populated by the AutoMod-created test data) — not investigated further since it didn't block the
+  proof, but worth confirming display-name lookups work correctly against real, fully-populated mod
+  content before trusting the Review step's per-plugin UI.
+
 ## Future work
 
 Tracked in the workspace `TODO.md` (not duplicated here — confirmed 2026-07-27, one place to check
