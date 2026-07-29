@@ -89,7 +89,8 @@ that path. **v1.0's Forge ships that path only.** Build accordingly:
   (new vs override vs injected — needed for the qualification count regardless). Defer to v1.1 (the
   expensive, unproven part): the `asNew=false` preserve-FormID copy, reference rebuilding, and the
   FormID-spread qualification math. Structure the code so v1.1 adds that as a contained branch, not a
-  rewrite.
+  rewrite. (Reference for that future v1.1 work: **ESLifier**, https://github.com/MaskPlague/ESLifier
+  — an open-source implementation of ESL compacting + patching FormID references across dependents.)
 - **Be HONEST about override / patch plugins — never silently drop their overrides.** In the Review
   step, any selected plugin that contains override records (a compatibility patch, etc.) is flagged
   clearly — e.g. **"⚠️ Contains overrides — not merged in this version"** — and left out of the merge
