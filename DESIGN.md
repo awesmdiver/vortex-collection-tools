@@ -778,7 +778,10 @@ stable ID. One source of truth; no brand string appears twice.
 Draft Skyrim name map (flavor only — captured so it isn't lost; each still pairs with its constant
 functional label): The Arcaneum = `home`, Restoration = `rebuild`, The Ward = `update`, The Scribe =
 `rules`, **The Forge = `merge`**, The Augur = `missing-masters`, The Cleansing = `scrub`,
-Clairvoyance = `archive-finder`, The Chronicle = `reports`.
+Clairvoyance = `archive-finder`, The Chronicle = `reports`. **Full first-theme content — those names
+plus emoji, draft themed taglines, and each tool's constant functional label — lives in
+[`design/theme-content-skyrim.md`](design/theme-content-skyrim.md)** (the source for `themes/skyrim.json`
+at Phase 2).
 
 ## Home / landing page — card-based launcher (2026-07-28)
 
