@@ -608,14 +608,14 @@
         </div>
         <input id="syncNewModIdInput" class="input" type="text" placeholder="e.g. My-Collection-123456-2-...">
         <span class="muted">If you know the updated collection's id, enter it here.
-          Otherwise, leave it blank and we'll grab the current id when you click Preview.</span>
+          Otherwise, leave it blank and we'll grab the current id when you click <strong>Preview</strong>.</span>
       </div>
       <div class="view-actions">
         <button id="syncIgnoresPreviewBtn" class="btn btn--ghost">Preview</button>
         <button id="syncIgnoresApplyBtn" class="btn btn--primary" disabled>Apply</button>
-        <span id="syncIgnoresStatus" class="muted">Run Preview first to see what would change and enable Apply.</span>
+        <span id="syncIgnoresStatus" class="muted">Run <strong>Preview</strong> first to see what would change and enable <strong>Apply</strong>.</span>
       </div>
-      <ul id="syncIgnoresList" class="sync-result-list"></ul>
+      <div id="syncIgnoresList" class="chip-row"></div>
       <div id="syncIgnoresCriticalError" class="callout callout--critical hidden"></div>
       <!-- Informational, not warning -- this step's own handoff-to-Vortex callout. -->
       <div id="syncResumeNextSteps" class="callout callout--info hidden">
@@ -650,9 +650,9 @@
       <div class="view-actions">
         <button id="syncDisablesPreviewBtn" class="btn btn--ghost">Preview</button>
         <button id="syncDisablesApplyBtn" class="btn btn--primary" disabled>Apply</button>
-        <span id="syncDisablesStatus" class="muted">Run Preview first to see what would change and enable Apply.</span>
+        <span id="syncDisablesStatus" class="muted">Run <strong>Preview</strong> first to see what would change and enable <strong>Apply</strong>.</span>
       </div>
-      <ul id="syncDisablesList" class="sync-result-list"></ul>
+      <div id="syncDisablesList" class="chip-row"></div>
       <div id="syncDisablesCriticalError" class="callout callout--critical hidden"></div>
       <!-- Success, not info -- the whole three-step sync is genuinely done at this point. -->
       <div id="syncAllDoneInfo" class="callout callout--success hidden">

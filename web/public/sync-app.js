@@ -87,7 +87,11 @@ function gameCollectionPhrase(domainName) {
 // global scope).
 function showSyncApplyConfirmModal(message) {
   const overlay = $s('syncApplyConfirmModal');
-  $s('syncApplyConfirmModalText').textContent = message;
+  // innerHTML (escHtml + mdBold, same combo renderCriticalMessage below already uses) so the
+  // message can bold the Vortex status name (**Ignored**/**Disabled**) -- message may embed a
+  // real collection name, so it's escaped first and the ** markers converted to <strong> after,
+  // never the other way around.
+  $s('syncApplyConfirmModalText').innerHTML = mdBold(escHtml(message));
   overlay.classList.remove('hidden');
   return new Promise((resolve) => {
     const cleanup = (result) => { overlay.classList.add('hidden'); resolve(result); };
@@ -217,17 +221,17 @@ let syncBackupRootConfigured = false;
 // this read as "the button is just broken" with a mod id already filled in and nothing else to go
 // on -- restoring this same hint (not blank) every time the preview state resets keeps it visible
 // until Preview is actually clicked.
-const PREVIEW_REQUIRED_HINT = 'Run Preview first to see what would change and enable Apply.';
+const PREVIEW_REQUIRED_HINT = 'Run **Preview** first to see what would change and enable **Apply**.';
 
 function resetIgnoresDisablesPreviewState() {
   $s('syncIgnoresApplyBtn').disabled = true;
-  setSyncStatus($s('syncIgnoresStatus'), PREVIEW_REQUIRED_HINT);
+  setSyncStatusHtml($s('syncIgnoresStatus'), PREVIEW_REQUIRED_HINT);
   renderSyncList('syncIgnoresList', [], () => '');
   hideCriticalCallout($s('syncIgnoresCriticalError'));
   $s('syncResumeNextSteps').classList.add('hidden');
   $s('syncResumeAlmostThere').classList.add('hidden');
   $s('syncDisablesApplyBtn').disabled = true;
-  setSyncStatus($s('syncDisablesStatus'), PREVIEW_REQUIRED_HINT);
+  setSyncStatusHtml($s('syncDisablesStatus'), PREVIEW_REQUIRED_HINT);
   renderSyncList('syncDisablesList', [], () => '');
   hideCriticalCallout($s('syncDisablesCriticalError'));
   $s('syncAllDoneInfo').classList.add('hidden');
@@ -390,25 +394,30 @@ function mostRecentBackupFor(collectionName) {
 // clicking through Steps 2-3, not tucked into a Detail column.
 const SYNC_RESULT_LIST_TRUNCATE_AT = 3;
 
-// Shared by both Apply Ignores' Preview and Apply result lists -- "(removed)" gets the same grey
-// .muted styling as everywhere else in this app, instead of reading as equally-important plain text
-// next to the mod name.
+// Neutral chip grid, SHOWN by default (not a collapsed disclosure) -- DESIGN.md's "Informational
+// name lists" section, the "chips, but shown" variant: the user clicked Preview specifically to
+// see this list, and it precedes a database write, so it's review content, not noise. Same chip
+// styling as Rules Generator's own "Nothing to do" chips (.chip/.chip-row, shared CSS), just never
+// tucked behind a <details> here. Returns an HTML STRING (escaped), since renderSyncList below
+// builds the whole row via innerHTML rather than appendChild -- callers must escape their own
+// interpolated values themselves (see escHtml usage below).
 function ignoresListItem(item) {
-  return item.removed ? [item.name, ' ', elS('span', { class: 'muted' }, '(removed)')] : item.name;
+  return item.removed ? `${escHtml(item.name)} <span class="muted">(removed)</span>` : escHtml(item.name);
 }
 
-function renderSyncList(elId, items, textFn) {
-  const list = $s(elId);
-  list.innerHTML = '';
-  items.forEach((item, i) => {
-    const attrs = i >= SYNC_RESULT_LIST_TRUNCATE_AT ? { class: 'sync-list-extra hidden' } : {};
-    list.appendChild(elS('li', attrs, textFn(item)));
-  });
-  if (items.length > SYNC_RESULT_LIST_TRUNCATE_AT) {
-    const extraCount = items.length - SYNC_RESULT_LIST_TRUNCATE_AT;
-    const toggle = elS('a', { class: 'sync-list-toggle', 'data-more': `+${extraCount} more`, 'data-less': 'Show less' }, `+${extraCount} more`);
-    list.appendChild(elS('li', { class: 'sync-list-toggle-row' }, toggle));
+// elId's own element is a `.chip-row` (flex + wrap), not a `<ul>` -- each item becomes a `.chip`
+// span instead of an `<li>`. labelHtmlFn must return safe, already-escaped HTML (see
+// ignoresListItem above for the pattern) since it's spliced directly into innerHTML.
+function renderSyncList(elId, items, labelHtmlFn) {
+  const container = $s(elId);
+  const visible = items.slice(0, SYNC_RESULT_LIST_TRUNCATE_AT);
+  const extra = items.slice(SYNC_RESULT_LIST_TRUNCATE_AT);
+  let html = visible.map((item) => `<span class="chip">${labelHtmlFn(item)}</span>`).join('');
+  if (extra.length > 0) {
+    html += extra.map((item) => `<span class="chip sync-list-extra hidden">${labelHtmlFn(item)}</span>`).join('');
+    html += `<a class="sync-list-toggle" data-more="+${extra.length} more" data-less="Show less">+${extra.length} more</a>`;
   }
+  container.innerHTML = html;
 }
 
 // One delegated handler per list, attached once (not re-attached on every render, since
@@ -417,10 +426,10 @@ function renderSyncList(elId, items, textFn) {
 function handleSyncListToggleClick(e) {
   const toggle = e.target.closest('.sync-list-toggle');
   if (!toggle) return;
-  const list = toggle.closest('ul');
-  const extras = list.querySelectorAll('.sync-list-extra');
+  const row = toggle.closest('.chip-row');
+  const extras = row.querySelectorAll('.sync-list-extra');
   const collapsed = extras.length > 0 && extras[0].classList.contains('hidden');
-  extras.forEach((li) => li.classList.toggle('hidden', !collapsed));
+  extras.forEach((chip) => chip.classList.toggle('hidden', !collapsed));
   toggle.textContent = collapsed ? toggle.dataset.less : toggle.dataset.more;
 }
 $s('syncIgnoresList').addEventListener('click', handleSyncListToggleClick);
@@ -433,6 +442,15 @@ $s('syncDisablesList').addEventListener('click', handleSyncListToggleClick);
 // replaced once "normalize this to a critical error, like a red box" came in).
 function setSyncStatus(el, text) {
   el.textContent = text;
+}
+
+// Same escHtml + mdBold combo renderCriticalMessage above already uses, for a status line that
+// needs an inline **bold** run -- Apply Ignores/Apply Disables' own Preview/Done text bolds the
+// actual Vortex status name (**Ignored**/**Disabled**) to match its UI label. setSyncStatus stays
+// plain textContent for every status line that never needs markup (Backup's own status, generic
+// progress text) -- only syncIgnoresStatus/syncDisablesStatus route through this one.
+function setSyncStatusHtml(el, text) {
+  el.innerHTML = mdBold(escHtml(text));
 }
 
 // ---------- Collection picker (selecting a collection is step 0 -- everything below operates on
@@ -671,7 +689,7 @@ $s('syncIgnoresPreviewBtn').addEventListener('click', async () => {
   const backup = currentBackup;
   const statusEl = $s('syncIgnoresStatus');
   hideCriticalCallout($s('syncIgnoresCriticalError'));
-  if (!backup) { setSyncStatus(statusEl, 'Create a backup in Step 1 first, or restore a backup to use an existing one.'); return; }
+  if (!backup) { setSyncStatus(statusEl, 'Create a backup first, or restore an existing one.'); return; }
   setSyncStatus(statusEl, 'Checking…');
   $s('syncIgnoresApplyBtn').disabled = true;
   try {
@@ -702,11 +720,13 @@ $s('syncIgnoresPreviewBtn').addEventListener('click', async () => {
     const unmatchedItems = (result.unmatched || []).map((u) => ({ name: u.name, removed: true }));
     renderSyncList('syncIgnoresList', [...changedItems, ...unmatchedItems], ignoresListItem);
     lastIgnoresChangedCount = result.changed.length;
-    let text = `Preview — ${result.changed.length} mod(s) will be set to ignored.`;
+    const changedWord = result.changed.length === 1 ? 'mod' : 'mods';
+    let text = `Preview — ${result.changed.length} ${changedWord} will be set to **Ignored**.`;
     if (result.unmatched?.length > 0) {
-      text += ` ${result.unmatched.length} mod(s) removed by the update.`;
+      const unmatchedWord = result.unmatched.length === 1 ? 'mod' : 'mods';
+      text += ` ${result.unmatched.length} ${unmatchedWord} removed by the update.`;
     }
-    setSyncStatus(statusEl, text);
+    setSyncStatusHtml(statusEl, text);
     // Distinct from the normal "removed by the update" explanation above -- see lib.js's
     // identityDriftWarning: this means the "removed"/"unmatched" counts above may not reflect real
     // removal at all, but a tool/Vortex compatibility problem, so it gets its own alarming callout
@@ -729,8 +749,9 @@ $s('syncIgnoresApplyBtn').addEventListener('click', async () => {
   if (!modId || !backup) return;
   const count = lastIgnoresChangedCount;
   const collectionName = currentCollection?.name || modId;
+  const countWord = count === 1 ? 'mod' : 'mods';
   const confirmed = await showSyncApplyConfirmModal(
-    `Sets ${count} mod(s) to ignored for the "${collectionName}" collection. We'll take a full backup first, then write the changes directly to Vortex.`
+    `Sets ${count} ${countWord} to **Ignored** for the "${collectionName}" collection. We'll take a full backup first, then write the changes directly to Vortex.`
   );
   if (!confirmed) return;
   const btn = $s('syncIgnoresApplyBtn');
@@ -741,10 +762,14 @@ $s('syncIgnoresApplyBtn').addEventListener('click', async () => {
     const changedItems = result.changed.map((c) => ({ name: c.name, removed: false }));
     const unmatchedItems = (result.unmatched || []).map((u) => ({ name: u.name, removed: true }));
     renderSyncList('syncIgnoresList', [...changedItems, ...unmatchedItems], ignoresListItem);
-    let doneText = `Done — ${result.changed.length} rule(s) set to ignored.`;
-    if (result.unmatched?.length > 0) doneText += ` ${result.unmatched.length} mod(s) removed by the update.`;
+    const doneWord = result.changed.length === 1 ? 'mod' : 'mods';
+    let doneText = `Done — ${result.changed.length} ${doneWord} set to **Ignored**.`;
+    if (result.unmatched?.length > 0) {
+      const unmatchedWord = result.unmatched.length === 1 ? 'mod' : 'mods';
+      doneText += ` ${result.unmatched.length} ${unmatchedWord} removed by the update.`;
+    }
     doneText += ' Vortex database was updated and backed up.';
-    setSyncStatus(statusEl, doneText);
+    setSyncStatusHtml(statusEl, doneText);
     if (result.identityWarning) showCriticalCallout($s('syncIgnoresCriticalError'), result.identityWarning);
     // Step 3 (Apply Disables) has nothing to do when this backup captured zero disabled mods to
     // begin with -- already known from the backup's own content (currentBackup.disabled, loaded
@@ -759,8 +784,8 @@ $s('syncIgnoresApplyBtn').addEventListener('click', async () => {
     const nothingToDisable = (backup.disabled?.length ?? 0) === 0;
     $s('syncResumeCloseVortexStep').classList.toggle('hidden', nothingToDisable);
     $s('syncResumeStep3Text').textContent = nothingToDisable
-      ? "You can skip Step 3 since you don't have any mods to disable."
-      : "Continue to step 3, 'Apply Disables' below.";
+      ? "You can skip Apply Disables since you don't have any mods to disable."
+      : 'Continue to Apply Disables below.';
     $s('syncResumeNextSteps').classList.remove('hidden');
     $s('syncResumeAlmostThere').classList.toggle('hidden', !nothingToDisable);
   } catch (e) {
@@ -778,7 +803,7 @@ $s('syncDisablesPreviewBtn').addEventListener('click', async () => {
   const backup = currentBackup;
   const statusEl = $s('syncDisablesStatus');
   hideCriticalCallout($s('syncDisablesCriticalError'));
-  if (!backup) { setSyncStatus(statusEl, 'Create a backup in Step 1 first, or restore a backup to use an existing one.'); return; }
+  if (!backup) { setSyncStatus(statusEl, 'Create a backup first, or restore an existing one.'); return; }
   setSyncStatus(statusEl, 'Checking…');
   $s('syncDisablesApplyBtn').disabled = true;
   try {
@@ -788,10 +813,11 @@ $s('syncDisablesPreviewBtn').addEventListener('click', async () => {
       setSyncStatus(statusEl, 'This backup captured no disabled mods — nothing to do.');
       return;
     }
-    renderSyncList('syncDisablesList', result.matches, (m) => m.matchedRef.name);
-    let text = `Preview — ${result.matches.length} mod(s) will be set to disabled.`;
+    renderSyncList('syncDisablesList', result.matches, (m) => escHtml(m.matchedRef.name));
+    const matchWord = result.matches.length === 1 ? 'mod' : 'mods';
+    let text = `Preview — ${result.matches.length} ${matchWord} will be set to **Disabled**.`;
     if (result.missing.length > 0) text += ` ${result.missing.length} not found yet (Resume may still be running, or they weren't part of this revision).`;
-    setSyncStatus(statusEl, text);
+    setSyncStatusHtml(statusEl, text);
     if (result.identityWarning) showCriticalCallout($s('syncDisablesCriticalError'), result.identityWarning);
     $s('syncDisablesApplyBtn').disabled = result.matches.length === 0;
   } catch (e) {
@@ -810,8 +836,9 @@ $s('syncDisablesApplyBtn').addEventListener('click', async () => {
   if (!backup.profileId) { setSyncStatus(statusEl, "This backup has no profile recorded -- can't apply disables."); return; }
   const disablesCount = $s('syncDisablesList').children.length;
   const disablesCollectionName = currentCollection?.name || backup.collectionName || '';
+  const disablesCountWord = disablesCount === 1 ? 'mod' : 'mods';
   const disablesConfirmed = await showSyncApplyConfirmModal(
-    `Sets ${disablesCount} mod(s) to disabled for the "${disablesCollectionName}" collection. We'll take a full backup first, then write the changes directly to Vortex.`
+    `Sets ${disablesCount} ${disablesCountWord} to **Disabled** for the "${disablesCollectionName}" collection. We'll take a full backup first, then write the changes directly to Vortex.`
   );
   if (!disablesConfirmed) return;
   const btn = $s('syncDisablesApplyBtn');
@@ -819,8 +846,9 @@ $s('syncDisablesApplyBtn').addEventListener('click', async () => {
   setSyncStatus(statusEl, "Writing to Vortex's database…");
   try {
     const result = await syncApi('POST', '/api/sync/apply-disables/apply', { profileId: backup.profileId, backupPath: backup.filePath });
-    renderSyncList('syncDisablesList', result.changed, (c) => c.name);
-    setSyncStatus(statusEl, `Done — ${result.changed.length} mod(s) set to disabled. Vortex database was updated and backed up.`);
+    renderSyncList('syncDisablesList', result.changed, (c) => escHtml(c.name));
+    const disabledDoneWord = result.changed.length === 1 ? 'mod' : 'mods';
+    setSyncStatusHtml(statusEl, `Done — ${result.changed.length} ${disabledDoneWord} set to **Disabled**. Vortex database was updated and backed up.`);
     if (result.identityWarning) showCriticalCallout($s('syncDisablesCriticalError'), result.identityWarning);
     $s('syncAllDoneInfo').classList.remove('hidden');
   } catch (e) {
@@ -843,7 +871,7 @@ $s('syncCompareBtn').addEventListener('click', () => {
   // per-step callout--critical div instead.
   if (!currentCollection) { showCriticalCallout(errEl, 'Select a collection above first, then run this report.'); return; }
   const backup = currentBackup;
-  if (!backup) { showCriticalCallout(errEl, 'Create a backup in Step 1 first (or restore a backup to use an existing one).'); return; }
+  if (!backup) { showCriticalCallout(errEl, 'Create a backup first (or restore an existing one).'); return; }
   // collectionJsonPath comes straight from scanStagingCollections (see the /api/sync/collections
   // response) -- the staging folder's own collection.json, no separate lookup or user-entered path
   // needed.

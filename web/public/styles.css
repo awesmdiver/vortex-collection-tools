@@ -202,9 +202,12 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .nav-tab--active { background: var(--accent); color: #0b1220; font-weight: 600; }
 .tool-area.hidden { display: none !important; }
 
-/* Update Collection now uses The Forge's own stepper (see .merge-stepper/.merge-step below) instead
-   of these numbered phase cards -- the step number lives in the stepper pill now, so each step's own
-   card is a plain .settings-group like every other tool. */
+/* Shared "N-per-row" result list -- used well beyond Update Collection now (Rules Generator's
+   report, Cleanup, Archive Finder, Missing Masters, Settings' cleanup-ignored lists all reuse this
+   same class), so it stays even though Update Collection's own Preview lists (Apply Ignores/Apply
+   Disables) moved OFF this component onto the shared .chip-row/.chip grid instead (DESIGN.md's
+   "Informational name lists" -- the shown, not collapsed, variant) -- don't remove this without
+   checking every one of those other call sites first. */
 .sync-result-list { list-style: none; margin: 10px 0 0; padding: 0; font-size: 13.5px; }
 .sync-result-list li { padding: 4px 0; border-bottom: 1px solid var(--border); }
 .sync-result-list li:last-child { border-bottom: none; }
@@ -224,7 +227,10 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    Adding this same 20px on top would double up and break that alignment again. */
 /* "+N more / Show less" toggle -- same collapsed-by-default convention as Rebuild Collection's own
    long file lists (.file-list-toggle), just its own class since that one is scoped under
-   .detail-cell and this list isn't nested inside one. */
+   .detail-cell and this list isn't nested inside one. .sync-list-toggle-row wraps it as its own
+   <li> for .sync-result-list's own callers (Missing Masters, etc); Update Collection's own chip-row
+   usage doesn't need that wrapper -- the toggle sits inline as a plain <a>, and the chip-row's own
+   flex+gap already spaces it out correctly among the .chip elements. */
 .sync-list-toggle-row { padding-top: 6px !important; }
 .sync-list-toggle { display: inline-block; color: var(--accent); cursor: pointer; text-decoration: underline; }
 .sync-list-toggle:hover { color: var(--accent-hover); }
