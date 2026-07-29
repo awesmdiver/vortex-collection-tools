@@ -36,6 +36,11 @@ collection-backups/
 # to a project-relative folder during testing) -- personal, install-specific folder/archive names.
 clean-up-exclude-list/
 
+# Ephemeral terminal→design handoff wrap-up (see CLAUDE.md "End every task by writing a handoff
+# file"). Overwritten each run, read by the design-side session off the shared filesystem, never
+# committed.
+prompts/handoff-latest.md
+
 # OS
 Thumbs.db
 .DS_Store

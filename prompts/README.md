@@ -281,3 +281,9 @@ templates for future versions.
 *Convention that emerged this session: point the terminal at the relevant `DESIGN.md` section + the
 `design/*.html` mockup, list the concrete changes, and end with a `npm run web` verify step. Keep the
 design side and the terminal to one owner per file (design docs vs. `TECHNICAL.md`/code).*
+
+*Handoff back to the design side (added 2026-07-28, now standing in [`CLAUDE.md`](../CLAUDE.md)):
+terminal ends every task by writing its results / findings / judgment calls / open questions to
+`prompts/handoff-latest.md` (ephemeral, gitignored, overwritten each run). The design-side session
+reads it straight off the shared filesystem — no copy-pasting terminal output, nothing lost or
+truncated. Because it's in CLAUDE.md, individual build prompts don't need to repeat the instruction.*
