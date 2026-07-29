@@ -703,6 +703,57 @@ Surfaced distinctly everywhere a result reaches a person — never blended into 
 errors; `sync-cli.js` prints it as its own `⚠ WARNING:` line, separate from the dry-run/apply output
 above it.
 
+### Bug fix: phantom "disabled" count from a same-content, different-fileId orphaned duplicate install (2026-07-28)
+
+**Repro**: "Body Swap updated" showed 6 Ignored / 0 Disabled in Vortex's own Mods tab, but this
+tool's backup-capture reported "...and 1 disabled mod(s)".
+
+**Root cause, confirmed against real state.v2 data** (not assumed): a single Nexus mod
+(`modId 109528`, "ColdSun's Visions - Assets - 3BA-CBBE-TBD" / "Visions Asset Pack - 3BA CBBE TBD")
+was installed **twice**, under two different Nexus `fileId`s that happen to produce an **identical
+file hash**:
+- `fileId 613450` — installed 2026-07-03, **disabled**, no `referenceTag` attribute. An orphaned
+  leftover — no currently-installed collection's rules reference this exact fileId at all (checked
+  all 7 installed collections directly).
+- `fileId 779479` — installed 2026-07-21, **enabled**. This is the exact `modId`+`fileId` "Body Swap
+  updated"'s own collection rule points at.
+
+`identityKeys()` (`lib/vortex-sync/lib.js`) prioritizes `fileMD5` as a sufficient match on its own —
+correct and necessary for its intended purpose (recognizing "the same rule's dependency, after the
+collection author re-uploaded it under a new fileId" across time, where only one candidate exists).
+But it breaks when, as here, **two mods are simultaneously installed** sharing one content hash:
+`filterToCollectionMembers()` (used to scope `getDisabledInstalledMods()`'s profile-wide raw result
+down to "this collection's own members" — already wired into the real backup-capture path,
+contradicting the initial "it's just unscoped" bug theory) matched the OLD, disabled, orphaned
+613450 entry to "Body Swap updated" purely because it shared content with the member the collection
+actually references — even though 613450's own `modId`+`fileId` plainly disagrees with that member's.
+
+**Fix**: `filterToCollectionMembers()` now requires `modId`+`fileId` to actually agree whenever
+*both* the candidate item and its matched member expose that data — a shared content hash alone is
+no longer sufficient once a more specific identity axis is available and it disagrees. When either
+side lacks `modId`/`fileId` (off-site mods, legacy data), it still falls back to the looser
+md5/tag-only match — unchanged from before.
+
+**Deliberately NOT folded into `makeIdentityMatcher()` itself** — that function is shared by
+`applyIgnoresToRules()` and `findCurrentModIdsCore()` (the latter is what Apply Disables uses to
+find a backed-up disabled mod's *new* vortexModId after Update Collection reinstalls it), where the
+legitimate "same rule, fileId changed between backup time and now" case has only ONE current
+candidate whose `fileId` genuinely differs from the backup ref's — requiring agreement there would
+wrongly report a real, currently-installed mod as "not found". The stricter check only makes sense
+at `filterToCollectionMembers()`, whose job is "does this specific disabled item, right now, belong
+to this collection's member set" — a fundamentally different question from "track this one ref
+across a legitimate fileId bump over time".
+
+**Verified against real data**: re-ran the same live diagnostic used to find this — "Body Swap
+updated" now reports 0 disabled (matching Vortex). Swept all 7 installed collections before and
+after the fix via `git stash`: only "Body Swap updated" changed (1 → 0); the other 6 were 0 both
+times, confirming no regression. No collection in this install currently has a genuine
+collection-scoped disabled member to test the positive case against live, so also ran a synthetic
+unit-style check directly against `filterToCollectionMembers()`: an item with an exact `modId`+
+`fileId` agreement is still correctly included, an md5-only item with no `modId`/`fileId` of its own
+is still correctly included (lenient fallback preserved), and only the exact bug shape (same md5,
+disagreeing `modId`+`fileId`) is excluded.
+
 ### Compare Report (`lib/vortex-sync/report.js`)
 
 Restyled 2026-07-25 to match the other two Reports sub-tabs (Stats Report, Work Through Report)
