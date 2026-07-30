@@ -3,6 +3,13 @@
   "inFlight": null,
   "items": [
     {
+      "id": "merge-friendly-errors",
+      "tag": "bug",
+      "title": "Forge: friendly merge errors (no raw xelib/EPERM dumps) + cleanup hardening",
+      "why": "a real tester saw a raw 'EPERM … Loader failed' dump on the Forge's plugin list instead of a nice message — the worker's raw stderr leaks straight to the UI; also harden the non-fatal sandbox cleanup (their C:-drive Steam install invites Defender file locks).",
+      "prompt": "Read vortex-tools/vortex-collection-tools/design/BUILD-PROMPT-merge-error-handling.md and build it. A tester saw a raw EPERM sandbox-cleanup warning + xelib 'Loader failed' verbatim on the Forge instead of a friendly error. (1) Tag the removeSandbox cleanup warning `##WARN## ` in merge-worker.js and have merge-runner.js SKIP those lines like it already skips `##PROGRESS## ` — the non-fatal cleanup warning must NEVER reach the user. (2) Mark ONLY the worker's own intentional friendly errors with a `##USERERR## ` prefix; in merge-runner.js surface those verbatim and fall back to the existing CRASH_HELP_TEXT for ALL other stderr (native xelib errors, unmarked crashes) — defensive by default; keep raw text in a console.error. (3) Harden removeSandbox: maxRetries 5→10, retryDelay 200→300, and best-effort-sweep leftover .vct-merge-tmp/vct-merge-* dirs on the next run. Use the EXISTING CRASH_HELP_TEXT copy (design-owned) — don't invent new user-facing text; flag in the handoff if a case genuinely needs its own message. Verify + handoff."
+    },
+    {
       "id": "eslifier-awareness",
       "tag": "feature",
       "title": "ESLifier awareness — Settings path + Missing Masters downgrade",
