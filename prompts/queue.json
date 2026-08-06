@@ -22,14 +22,6 @@
       "title": "Clear stale end-of-flow banner on Preview re-arm",
       "why": "post-v0.5.0 polish, non-blocking",
       "prompt": "In Update Collection: re-doing Apply Ignores via Preview doesn't clear the stale end-of-flow completion banner until Apply re-succeeds. Wire callout-clearing into the Preview re-arm so the banner clears the moment the step is re-armed. Pre-existing minor issue; not blocking."
-    },
-    {
-      "id": "rebuild-progress-counter",
-      "tag": "feature",
-      "title": "Rebuilding mods… needs an X-of-X counter and a % complete indicator",
-      "why": "Backing up and downloading both show live '(index/total)' progress, but Rebuilding is the one phase that just sits static the whole time with no sense of how far along it is.",
-      "prompt": "Real gap, confirmed by reading the actual code (not guessed): the 'Rebuilding mods…' phase (web/public/app.js's PHASE_TEXT.rebuilding) is the ONLY phase with no live progress detail — 'Backing up' and 'Downloading missing' both already show '(index/total): modName' via their own backup-progress/download-progress events (setPhase calls in handleRunEvent), but rebuilding just sits static the whole time. Per-mod mod-start/mod-complete events DO already exist and update each mod's own table row (lib/collection-runner.js's runRebuild onModStart/onModComplete, wired in web/rebuild-routes.js ~line 621-635) — they just carry no index/total, and nothing aggregates them into an overall counter.\n\nGOAL (director's ask): show 'X out of X mods rebuilt' and a % complete indicator while rebuilding is in progress.\n\nBACKEND (web/rebuild-routes.js): runRebuild's onModComplete callback already fires once per finished mod, in completion order (not necessarily start order, since concurrency can be >1) — track a running completedCount there (starts at 0, increments each call) and include it plus rebuildQueue.length as `completed`/`total` fields on the existing `mod-complete` SSE emit. Don't add a new event type — extend the existing one, matching how mod-complete already carries the full result entry.\n\nFRONTEND (web/public/app.js): in the `case 'mod-complete':` handler (~line 1096), after the existing per-row update, call setPhase() with a new persistent progress string — 'Rebuilding mods… (X of Y — Z%)', computed from the new completed/total fields (Math.round(completed/total*100) for the percentage). This REPLACES the static 'Rebuilding mods…' phase text with a live-updating one, same spirit as backup-progress/download-progress's own setPhase calls right above it. Keep the per-mod-row status updates exactly as they are — this is purely an ADDITIONAL aggregate summary line, not a replacement for the per-row detail.\n\nCheck DESIGN.md for whether phase-indicator text has any established formatting convention (percentage display, parenthetical style) to match — don't invent new formatting if one already exists for the sibling phases.\n\nVERIFY: a real rebuild run (multiple mods, concurrency both 1 and >1 if easy to test) showing the counter/percentage advance correctly and landing on the true total at completion. Handoff with what you tested.",
-      "ready": true
     }
   ],
   "roadmap": [
@@ -49,6 +41,10 @@
     }
   ],
   "shipped": [
+    {
+      "title": "Rebuilding mods… needs an X-of-X counter and a % complete indicator",
+      "doc": null
+    },
     {
       "title": "The Forge — Merge Plugins",
       "doc": "https://github.com/awesmdiver/vortex-collection-tools/releases/tag/v0.5.0"
