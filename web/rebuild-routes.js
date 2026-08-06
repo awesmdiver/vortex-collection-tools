@@ -620,13 +620,15 @@ function createRouter(config) {
 
                 const rebuildStart = Date.now();
                 runState.emit({ type: 'phase', phase: 'rebuilding' });
+                let rebuildCompletedCount = 0;
                 const { haltedCritical, pausedConfirmed } = await runner.runRebuild({
                     rebuildQueue, collectionJsonPath: collectionInfo.collectionJsonPath,
                     downloadsDir: downloads, stagingDir: staging, modEntries,
                     concurrency: concurrentExtractions, pauseController: currentPauseController,
                     onModStart: (mod) => runState.emit({ type: 'mod-start', modName: mod.name }),
                     onModComplete: (entry) => {
-                        runState.emit({ type: 'mod-complete', ...entry });
+                        rebuildCompletedCount += 1;
+                        runState.emit({ type: 'mod-complete', ...entry, completed: rebuildCompletedCount, total: rebuildQueue.length });
                         runner.writeLog(logPath, currentLog('in-progress'));
                         if (entry.status === 'CRITICAL_MANUAL_RESTORE_NEEDED') {
                             runState.emit({ type: 'critical-halt', modName: entry.name, oldContentDir: entry.oldContentDir, rebuildingDir: entry.rebuildingDir, stagingModDir: entry.stagingModDir, logPath });

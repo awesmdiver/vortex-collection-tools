@@ -1103,6 +1103,13 @@ function handleRunEvent(frame) {
       updateProgressRow(frame.name, frame.status, detail);
       state.inFlightMods.delete(frame.name);
       updatePauseModalCount();
+      // Same "persistent, live-updating phase text" pattern as backup-progress/download-progress
+      // above -- concurrency > 1 means these arrive out of start order, but completed/total still
+      // advance monotonically since every mod fires mod-complete exactly once.
+      if (frame.total) {
+        const percent = Math.round((frame.completed / frame.total) * 100);
+        setPhase(`Rebuilding mods… (${frame.completed}/${frame.total} — ${percent}%)`);
+      }
       break;
     }
     case 'critical-halt':
