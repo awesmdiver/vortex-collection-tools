@@ -56,3 +56,13 @@ Thumbs.db
 # "bundled copy, checked first, never committed" convention lib/sevenzip.js already uses for
 # tools/7-Zip/7z.exe. compress-image.js auto-downloads this on first use if missing.
 tools/oxipng/
+
+# claude-workflow-board's own local runtime state -- this project's queue.json + CLAUDE.md match its
+# multi-project auto-discovery criteria, so its own app can write these here if it's ever pointed at
+# this repo. Never real project content; safe to ignore/regenerate.
+prompts/.board-state.json.bak*
+prompts/.board-index.sqlite*
+prompts/.session-log.json
+prompts/.run-current.*
+prompts/.run-last.*
+prompts/handoffs/
