@@ -226,7 +226,7 @@ function setStarVisual(star, on) {
 // already just a sub-sequence of this same list.
 const HOME_CANONICAL_ORDER = [
   'merge', 'rebuild', 'sync', 'rules-generator',
-  'stats', 'workthrough', 'updatecompare', 'rulesgen',
+  'stats', 'workthrough', 'updatecompare', 'rulesgen', 'workshopreport',
   'missingmasters', 'scrub', 'archivefinder', 'missingfiles',
 ];
 function pinKeyOf(wrap) {
