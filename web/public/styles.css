@@ -1273,6 +1273,9 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .coll-card .meta { min-width: 0; }
 .coll-card .name { color: var(--text); font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .coll-card .sub { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+/* Sits inside the card's own <label> -- its click handler calls preventDefault/stopPropagation so
+   clicking it doesn't also toggle the card's checkbox (see rebuild-missing-app.js). */
+.rmf-refresh-btn { margin-top: 8px; }
 
 /* A mod row whose archive isn't on disk -- warning-colored (not danger; the row itself isn't a
    failure, it's a "here's what to do next" note), matching the small-note treatment .mismatch-note

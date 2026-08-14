@@ -12,8 +12,11 @@
 //
 // The scan itself needs no "Vortex must be closed" gate (same reasoning as Missing Masters' own
 // /scan) -- it only ever reads collection.json files, archive listings, and the staging folder,
-// never Vortex's live state.v2. /extract is the one write in this router (staging folder files),
-// so it's gated exactly like every other staging-folder write in this app.
+// never Vortex's live state.v2. /extract is one write in this router (staging folder files), gated
+// exactly like every other staging-folder write in this app. /refresh-from-nexus is the other
+// (collection.json itself) -- see its own comment below. /nexus-slug is the one place this router
+// reads Vortex's live state at all, and only as a one-off, explicitly user-triggered lookup (see
+// its own comment) -- it doesn't touch the read-only scan path above.
 
 const fs = require('fs');
 const os = require('os');
@@ -25,6 +28,8 @@ const { listPickableCollections, scanCollections, scanOneMod } = require('../lib
 const { loadCollection } = require('../lib/collection-parser');
 const { findSevenZip, extractMany } = require('../lib/sevenzip');
 const nexusModDownload = require('../lib/nexus-mod-download');
+const nexusCollectionDownload = require('../lib/nexus-collection-download');
+const runner = require('../lib/collection-runner');
 const syncLib = require('../lib/vortex-sync/lib');
 const { createSseSession } = require('./sse-session');
 
@@ -32,7 +37,7 @@ const scanSession = createSseSession();
 
 function createRebuildMissingRouter(config) {
     const router = express.Router();
-    const { staging, downloads } = config;
+    const { staging, downloads, state } = config;
     const sevenZipExe = findSevenZip();
 
     function isInside(baseDir, targetPath) {
@@ -54,6 +59,128 @@ function createRebuildMissingRouter(config) {
             res.json({ installed, workshop, configured: true });
         } catch (e) {
             res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Looks up a picked collection's Nexus id, so the "Refresh from Nexus" button knows what to
+    // fetch -- unlike Rebuild Collection's picker, listPickableCollections has no live Vortex-state
+    // read at all (see missing-files-scan.js's own header comment), and collection.json itself
+    // never records its own slug (confirmed directly against real collection.json files this
+    // session -- only `info.name`/`author`/etc., nothing identifying). The only place this id is
+    // recorded at all is Vortex's own live state (`attributes###collectionSlug`, the same one
+    // rebuild-routes.js's picker already reads for its "View on Nexus" button) -- so this is a
+    // real, one-off isolated state.v2 read, run ONLY when the user explicitly clicks the button,
+    // never as part of the plain filesystem scan/picker load above.
+    router.post('/nexus-slug', async (req, res) => {
+        if (!requireConfigured(res)) return;
+        const { collectionModId } = req.body || {};
+        if (!collectionModId || typeof collectionModId !== 'string') {
+            return res.status(400).json({ error: 'Missing collectionModId.' });
+        }
+        let collectionInfo;
+        try {
+            collectionInfo = runner.resolveCollectionInfo(staging, collectionModId);
+        } catch (e) {
+            return res.status(400).json({ error: e.message });
+        }
+        try {
+            const syncState = await runner.loadSyncState({
+                state, collectionModId, collection: collectionInfo.collection, stagingDir: staging,
+            });
+            if (!syncState.collectionSlug) {
+                return res.status(404).json({
+                    error: 'no-slug',
+                    message: "Vortex doesn't have a Nexus id on record for this collection yet -- it needs to have been installed (or, for a Workshop collection, opened in Vortex) at least once before this can look it up on Nexus.",
+                });
+            }
+            res.json({ slug: syncState.collectionSlug, collectionName: collectionInfo.name });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Lists every real revision of a Nexus collection, draft or published (mirrors rebuild-routes.js's
+    // own /workshop/nexus-revisions verbatim -- same reasoning: REAL, LIVE-CONFIRMED finding while
+    // testing THIS feature against the director's own actual Workshop collections -- "Refresh from
+    // Nexus" without an explicit revisionNumber only ever asks for the latest PUBLISHED revision, and
+    // every one of the director's own Workshop collections tested came back "No PUBLISHED revision
+    // found... it may still be in draft." That's not an edge case here -- Rebuild Collection's own
+    // "draft" status genuinely means "not publicly listed yet," not "not real/not downloadable" (see
+    // that file's own lookupRevisions comment for the fuller story), and it's the NORMAL state for a
+    // collection still being actively authored in Workshop. Without this, the button would be
+    // effectively unusable for the exact collections most likely to need it.
+    router.get('/nexus-revisions', async (req, res) => {
+        if (!requireConfigured(res)) return;
+        const { slug } = req.query;
+        if (!slug || typeof slug !== 'string' || !slug.trim()) {
+            return res.status(400).json({ error: 'Missing or invalid "slug".' });
+        }
+        try {
+            const apiKey = nexusCollectionDownload.resolveApiKey();
+            const result = await nexusCollectionDownload.fetchCollectionRevisions(apiKey, slug.trim());
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Pulls a specific revision (chosen from the /nexus-revisions list above -- draft or published,
+    // defaulting to the newest) straight from Nexus and overwrites the local collection.json -- the
+    // fix for the "archive mismatch" false-positives a stale local collection.json can cause (Rebuild
+    // Missing Files diffs against whatever collection.json says SHOULD be installed, so a stale copy
+    // makes correctly-installed mods look broken). The current file is always backed up first,
+    // alongside itself, before anything is overwritten -- extractFile's own `7z e -y` has no undo of
+    // its own. For a Workshop row specifically, the frontend shows a confirm step first: this only
+    // ever fetches a revision already saved to Nexus, which can be behind not-yet-uploaded local
+    // Workshop edits -- never assumed here to be "the latest," just "the latest saved to Nexus."
+    router.post('/refresh-from-nexus', async (req, res) => {
+        if (!requireConfigured(res)) return;
+        const { collectionModId, slug, revisionNumber } = req.body || {};
+        if (!collectionModId || typeof collectionModId !== 'string') {
+            return res.status(400).json({ error: 'Missing collectionModId.' });
+        }
+        if (!slug || typeof slug !== 'string') {
+            return res.status(400).json({ error: 'Missing slug.' });
+        }
+        // BUG FIX, caught live while testing this: the <select> value arrives as a string, but the
+        // underlying GraphQL query's $revision variable is typed Int! and rejects a quoted "1" with
+        // no coercion. Same conversion rebuild-routes.js's own working /workshop/fetch-from-nexus
+        // already uses.
+        const revNum = revisionNumber ? parseInt(revisionNumber, 10) : undefined;
+        const destDir = path.join(staging, collectionModId);
+        const collectionJsonPath = path.join(destDir, 'collection.json');
+        if (!fs.existsSync(collectionJsonPath)) {
+            return res.status(400).json({ error: `No collection.json found for "${collectionModId}".` });
+        }
+
+        let previousModCount = null;
+        try {
+            const previous = JSON.parse(fs.readFileSync(collectionJsonPath, 'utf8'));
+            previousModCount = Array.isArray(previous.mods) ? previous.mods.length : null;
+        } catch { /* best-effort -- missing before/after count doesn't block the refresh itself */ }
+
+        // Same timestamp convention as this app's other backups (e.g. vortex-sync/lib.js's
+        // backupLiveState) -- ISO timestamp with ':'/'.' replaced so it's a valid Windows filename.
+        // Kept right next to the file it backs up (not a separate backups folder) so it's the
+        // easiest possible thing to find and restore by hand if a refresh turns out unwanted.
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const backupPath = path.join(destDir, `collection.json.backup-${stamp}`);
+        try {
+            fs.copyFileSync(collectionJsonPath, backupPath);
+        } catch (e) {
+            return res.status(500).json({ error: `Could not back up the current collection.json before refreshing -- refusing to overwrite it without one: ${e.message}` });
+        }
+
+        try {
+            const result = await nexusCollectionDownload.fetchAndExtractCollectionJson({
+                slug, revisionNumber: revNum, destDir, sevenZipExe,
+            });
+            res.json({ ok: true, backupPath, previousModCount, ...result });
+        } catch (e) {
+            // The backup above is real and untouched -- extractFile only overwrites collection.json
+            // once 7z itself succeeds, so a failure here (network, bad slug, no matching revision)
+            // never leaves the original file in a half-written state.
+            res.status(500).json({ ok: false, error: e.message, backupPath });
         }
     });
 

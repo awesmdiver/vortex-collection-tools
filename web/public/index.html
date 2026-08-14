@@ -1803,6 +1803,8 @@
 
     <div id="rmfPickerLoading" class="loading-row"><span class="spinner"></span> Loading collections&hellip;</div>
     <div id="rmfPickerEmpty" class="empty-row hidden"></div>
+    <div id="rmfRefreshError" class="callout callout--critical hidden"></div>
+    <div id="rmfRefreshResult" class="callout callout--success hidden"></div>
 
     <div id="rmfInstalledSection" class="hidden">
       <div class="group-head"><h2>Installed collections</h2><span class="n" id="rmfInstalledCount"></span></div>
@@ -1886,6 +1888,48 @@
       <div class="modal-actions">
         <button id="rmfExtractConfirmCancelBtn" class="btn btn--ghost">Cancel</button>
         <button id="rmfExtractConfirmOkBtn" class="btn btn--primary">Extract</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="rmfRefreshConfirmModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>🔄 Refresh from Nexus</h2>
+      <p id="rmfRefreshConfirmModalText"></p>
+      <!-- Hidden for an installed-collection row; shown only for a Workshop row (JS toggles this).
+           ⚠️, not 🛑 -- this is real risk, not a hard blocker (nothing refuses the request), per
+           DESIGN.md's "tread lightly" definition. SEQUENCED, per the director's own explicit call:
+           the pull mechanism itself was built and verified working FIRST (real live test, see this
+           task's own handoff) before this warning was added. The "Before fetching, read this"
+           title/list below is reused VERBATIM from Rebuild Collection's own #workshopOnlySection
+           warning (index.html, same file, further down) -- identical copy AND identical
+           markup/classes (callout callout--warning, <ol>), matching DESIGN.md's "copy an existing
+           report's markup, don't design from a blank page" rule. NOT reusing that section's own
+           OUTER title ("Workshop-only collections found...") -- that one describes a whole picker
+           SCREEN of Workshop-only collections, which doesn't apply to this single per-card modal. -->
+      <div id="rmfRefreshWorkshopCaveat" class="callout callout--warning hidden">
+        <div class="callout__title">⚠️ Before fetching, read this</div>
+        <ol>
+          <li>This only fetches a revision <strong>already saved to NexusMods</strong> (published or not) -- pick the one you want from the Revision dropdown below.</li>
+          <li>If you've made changes in the Workshop since your last save/upload, this download will <strong>not</strong> include them.</li>
+          <li><strong>Recommended:</strong> save/upload your latest Workshop changes to NexusMods first, then fetch here.</li>
+          <li>If you skip that, you'll need to manually reconcile any unsaved changes yourself after rebuilding.</li>
+        </ol>
+      </div>
+      <!-- Real gap found while testing this feature: a Workshop-authored collection is very often
+           draft/unlisted-only on Nexus (never fully published) -- "latest published" alone came back
+           empty for every one of the director's own real collections. Mirrors Rebuild Collection's
+           own #workshopRevSelect -- same reasoning, draft or published, newest first, real and
+           fetchable either way. Hidden/disabled until a lookup actually resolves at least one. -->
+      <div class="field-group">
+        <label class="field-label" for="rmfRefreshRevSelect">Revision</label>
+        <select id="rmfRefreshRevSelect" class="select select--small" disabled>
+          <option value="">Looking up revisions…</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button id="rmfRefreshConfirmCancelBtn" class="btn btn--ghost">Cancel</button>
+        <button id="rmfRefreshConfirmOkBtn" class="btn btn--primary">Refresh</button>
       </div>
     </div>
   </div>

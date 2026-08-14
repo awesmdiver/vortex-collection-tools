@@ -2,7 +2,7 @@
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body>
-<title>Rebuild Missing Files — new tool mockup v1 (Approved ✓ 2026-08-05)</title>
+<title>Rebuild Missing Files — new tool mockup v1 (Approved ✓ 2026-08-05) + v2 addendum (Approved ✓ 2026-08-14)</title>
 <style>
   :root{
     --bg:#0d0f14; --surface:#161922; --surface-2:#1d212c; --border:#2a2f3d; --border-strong:#3a4152;
@@ -110,6 +110,63 @@
     </div>
     <p class="note">Scanning reads each collection's <code>collection.json</code> and checks whether every
     mod's expected files actually exist in that collection's staging folder — nothing is changed yet.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- v2 ADDENDUM (Approved ✓ 2026-08-14) -- "Refresh from Nexus" per-card action.               -->
+  <!-- Real bug driving this: a STALE local collection.json (never re-synced with what's actually  -->
+  <!-- published on Nexus) makes correctly-installed mods show as false "archive mismatch" results -->
+  <!-- further down this same tool -- the scan diffs against whatever collection.json SAYS should  -->
+  <!-- be there. This button pulls a fresh copy. Placement: directly on the Step 1 picker card,     -->
+  <!-- same tier as the existing checkbox/name/sub -- no new screen needed. A ghost/small button so -->
+  <!-- it doesn't compete visually with the checkbox as the card's primary action.                 -->
+  <!-- ============================================================ -->
+  <div style="margin-top:40px">
+    <span class="stepnote" style="background:var(--success-bg);color:var(--success)">v2 addendum — per-card "Refresh from Nexus"</span>
+    <div class="group-head"><h2>Installed collections (with the new action)</h2></div>
+    <div class="picker-grid" style="max-width:280px">
+      <label class="coll-card" style="cursor:default">
+        <input type="checkbox">
+        <div class="meta">
+          <div class="name">Beauty Salon for GTS</div>
+          <div class="sub">95 mods · installed</div>
+          <button class="btn btn--ghost" style="margin-top:8px;font-size:12px;padding:5px 10px">↻ Refresh from Nexus</button>
+        </div>
+      </label>
+    </div>
+    <p class="note" style="max-width:520px">Clicking it looks up this collection's Nexus id (a quick,
+    one-off check of Vortex's own records — this tool otherwise never reads Vortex's live state),
+    then shows a confirm step before overwriting anything. The current <code>collection.json</code>
+    is always backed up first, right next to itself.</p>
+
+    <div class="group-head" style="margin-top:26px"><h2>Confirm modal — installed collection</h2></div>
+    <div style="max-width:420px;border:1px solid var(--border);border-radius:var(--radius);padding:18px;background:var(--surface)">
+      <div style="font-weight:700;margin-bottom:8px">🔄 Refresh from Nexus</div>
+      <p style="font-size:13.5px;color:var(--text);margin:0 0 12px">This replaces the local collection.json
+      for "Beauty Salon for GTS" with the latest version published on Nexus. The current file is backed
+      up first, right next to it, so you can always undo this.</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn--ghost">Cancel</button>
+        <button class="btn btn--primary">Refresh</button>
+      </div>
+    </div>
+
+    <div class="group-head" style="margin-top:26px"><h2>Confirm modal — Workshop collection (extra caveat)</h2></div>
+    <div style="max-width:420px;border:1px solid var(--border);border-radius:var(--radius);padding:18px;background:var(--surface)">
+      <div style="font-weight:700;margin-bottom:8px">🔄 Refresh from Nexus</div>
+      <p style="font-size:13.5px;color:var(--text);margin:0 0 12px">This replaces the local collection.json
+      for "My WIP Overhaul" with the latest version published on Nexus. The current file is backed up
+      first, right next to it, so you can always undo this.</p>
+      <div class="callout callout--danger" style="border-color:var(--warning);background:var(--warning-bg);margin-bottom:12px">
+        <b style="color:var(--warning)">⚠️ This pulls the version you last published to Nexus</b>
+        <p style="margin:6px 0 0">It won't include any local changes you've made in Workshop since
+        then. If you have edits you haven't published yet, they'll be overwritten if you continue.</p>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn--ghost">Cancel</button>
+        <button class="btn btn--primary">Refresh</button>
+      </div>
+    </div>
   </div>
 
   <!-- ============================================================ -->

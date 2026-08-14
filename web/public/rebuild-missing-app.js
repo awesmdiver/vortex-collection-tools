@@ -82,17 +82,31 @@ function rmfRenderPickerGroup(sectionId, gridId, countId, items, prefix, countTe
   $g(countId).textContent = countText;
   const grid = $g(gridId);
   grid.innerHTML = '';
+  const isWorkshop = prefix === 'w';
   for (const item of items) {
+    item.isWorkshop = isWorkshop;
     rmfState.collectionsById.set(item.modId, item);
     const checkbox = el('input', { type: 'checkbox' });
     checkbox.checked = rmfState.picked.has(item.modId);
+    const subLine = el('div', { class: 'sub' }, `${item.modCount} mod${item.modCount === 1 ? '' : 's'}`);
+    // type="button" (never submits) + preventDefault/stopPropagation in the click handler below --
+    // this button sits inside the card's own <label>, whose default click behavior is to toggle the
+    // checkbox, which we don't want to fire when the user meant to click this instead.
+    const refreshBtn = el('button', { type: 'button', class: 'btn btn--ghost btn--small rmf-refresh-btn' }, '↻ Refresh from Nexus');
+    refreshBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      rmfStartRefresh(item, refreshBtn);
+    });
     const card = el('label', { class: `coll-card${checkbox.checked ? ' sel' : ''}` }, [
       checkbox,
       el('div', { class: 'meta' }, [
         el('div', { class: 'name' }, item.name),
-        el('div', { class: 'sub' }, `${item.modCount} mod${item.modCount === 1 ? '' : 's'}`),
+        subLine,
+        refreshBtn,
       ]),
     ]);
+    item.subLineEl = subLine;
     checkbox.addEventListener('change', () => {
       card.classList.toggle('sel', checkbox.checked);
       if (checkbox.checked) rmfState.picked.add(item.modId);
@@ -416,4 +430,100 @@ async function rmfOpenStagingFolder(row) {
   } catch (e) {
     rmfHandleError(e, $g('rmfScanError'));
   }
+}
+
+// ---------- Refresh from Nexus (Screen 1 -- overwrites collection.json, confirm modal, serious register) ----------
+// A stale local collection.json (never updated to match what's actually published on Nexus) is a
+// real cause of false "archive mismatch" results further down the line in this same tool -- it
+// diffs against whatever collection.json SAYS should be installed, so a stale copy makes correctly-
+// installed mods look broken. This pulls a fresh copy straight from Nexus, same download path
+// Rebuild Collection's own Workshop "Fetch from Nexus" button already uses.
+
+let rmfPendingRefresh = null;
+
+async function rmfStartRefresh(item, btn) {
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Looking up…';
+  $g('rmfRefreshError').classList.add('hidden');
+  $g('rmfRefreshResult').classList.add('hidden');
+  let slugInfo;
+  try {
+    slugInfo = await rmfApi('POST', '/api/rebuild-missing/nexus-slug', { collectionModId: item.modId });
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = original;
+    rmfHandleError(e, $g('rmfRefreshError'));
+    return;
+  }
+  btn.disabled = false;
+  btn.textContent = original;
+  rmfPendingRefresh = { item, slug: slugInfo.slug };
+  $g('rmfRefreshConfirmModalText').textContent =
+    `This replaces the local collection.json for "${item.name}" with the revision you pick below. ` +
+    `The current file is backed up first, right next to it, so you can always undo this.`;
+  $g('rmfRefreshWorkshopCaveat').classList.toggle('hidden', !item.isWorkshop);
+  $g('rmfRefreshConfirmModal').classList.remove('hidden');
+  await rmfLoadRefreshRevisions(slugInfo.slug);
+}
+
+// Real gap found live while testing this feature (queue: rebuild-missing-refresh-collection-json):
+// a Workshop-authored collection is very often draft/unlisted-only on Nexus (never fully published)
+// -- fetching "the latest published revision" alone came back "No PUBLISHED revision found... it may
+// still be in draft" for every one of the director's own real collections tested. Mirrors app.js's
+// own lookupRevisions -- same reasoning: "draft" means "not publicly listed yet," not "not real,"
+// so every revision is listed, newest first, defaulting to the newest (whatever its status).
+async function rmfLoadRefreshRevisions(slug) {
+  const select = $g('rmfRefreshRevSelect');
+  select.innerHTML = '';
+  select.disabled = true;
+  select.appendChild(el('option', { value: '' }, 'Looking up revisions…'));
+  try {
+    const data = await rmfApi('GET', `/api/rebuild-missing/nexus-revisions?slug=${encodeURIComponent(slug)}`);
+    select.innerHTML = '';
+    if (!data.revisions || data.revisions.length === 0) {
+      select.appendChild(el('option', { value: '' }, 'No revisions found'));
+      return;
+    }
+    for (const r of data.revisions) {
+      const when = new Date(r.updatedAt).toLocaleDateString();
+      const statusTag = r.revisionStatus === 'published' ? 'published' : 'draft, not public';
+      select.appendChild(el('option', { value: String(r.revisionNumber) }, `Revision ${r.revisionNumber} — updated: ${when} (${statusTag})`));
+    }
+    select.disabled = false;
+  } catch (e) {
+    select.innerHTML = '';
+    select.appendChild(el('option', { value: '' }, 'Lookup failed'));
+  }
+}
+
+$g('rmfRefreshConfirmCancelBtn').addEventListener('click', () => {
+  rmfPendingRefresh = null;
+  $g('rmfRefreshConfirmModal').classList.add('hidden');
+});
+
+$g('rmfRefreshConfirmOkBtn').addEventListener('click', async () => {
+  $g('rmfRefreshConfirmModal').classList.add('hidden');
+  const pending = rmfPendingRefresh;
+  rmfPendingRefresh = null;
+  if (!pending) return;
+  const { item, slug } = pending;
+  const revisionNumber = $g('rmfRefreshRevSelect').value || undefined;
+  $g('rmfRefreshResult').classList.add('hidden');
+  try {
+    const result = await rmfApi('POST', '/api/rebuild-missing/refresh-from-nexus', { collectionModId: item.modId, slug, revisionNumber });
+    rmfApplyRefreshResult(item, result);
+  } catch (e) {
+    rmfHandleError(e, $g('rmfRefreshError'));
+  }
+});
+
+function rmfApplyRefreshResult(item, result) {
+  item.modCount = result.modCount;
+  if (item.subLineEl) item.subLineEl.textContent = `${item.modCount} mod${item.modCount === 1 ? '' : 's'}`;
+  const before = result.previousModCount != null ? `${result.previousModCount} mod${result.previousModCount === 1 ? '' : 's'}` : 'unknown';
+  $g('rmfRefreshResult').textContent =
+    `Refreshed "${item.name}" from Nexus (revision ${result.revisionNumber}) — now ${result.modCount} mod${result.modCount === 1 ? '' : 's'}, was ${before}. ` +
+    `The previous file is saved at ${result.backupPath}.`;
+  $g('rmfRefreshResult').classList.remove('hidden');
 }
