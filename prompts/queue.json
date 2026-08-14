@@ -3,25 +3,20 @@
   "inFlight": null,
   "items": [
     {
-      "id": "merge-friendly-errors",
-      "tag": "bug",
-      "title": "Forge: friendly merge errors (no raw xelib/EPERM dumps) + cleanup hardening",
-      "why": "a real tester saw a raw 'EPERM … Loader failed' dump on the Forge's plugin list instead of a nice message — the worker's raw stderr leaks straight to the UI; also harden the non-fatal sandbox cleanup (their C:-drive Steam install invites Defender file locks).",
-      "prompt": "Read vortex-tools/vortex-collection-tools/design/BUILD-PROMPT-merge-error-handling.md and build it. A tester saw a raw EPERM sandbox-cleanup warning + xelib 'Loader failed' verbatim on the Forge instead of a friendly error. (1) Tag the removeSandbox cleanup warning `##WARN## ` in merge-worker.js and have merge-runner.js SKIP those lines like it already skips `##PROGRESS## ` — the non-fatal cleanup warning must NEVER reach the user. (2) Mark ONLY the worker's own intentional friendly errors with a `##USERERR## ` prefix; in merge-runner.js surface those verbatim and fall back to the existing CRASH_HELP_TEXT for ALL other stderr (native xelib errors, unmarked crashes) — defensive by default; keep raw text in a console.error. (3) Harden removeSandbox: maxRetries 5→10, retryDelay 200→300, and best-effort-sweep leftover .vct-merge-tmp/vct-merge-* dirs on the next run. Use the EXISTING CRASH_HELP_TEXT copy (design-owned) — don't invent new user-facing text; flag in the handoff if a case genuinely needs its own message. Verify + handoff."
-    },
-    {
       "id": "eslifier-awareness",
       "tag": "feature",
       "title": "ESLifier awareness — Settings path + Missing Masters downgrade",
       "why": "kills the false-positive 'missing master' when ESLifier deliberately swapped a file",
-      "prompt": "Read vortex-tools/vortex-collection-tools/design/BUILD-PROMPT-eslifier-filter.md and build it. CRITICAL: verify the detection against a real ESLifier output folder + a live Missing Masters scan FIRST (disabled-count lesson) — don't ship a guessed trace. v1 = Settings ESLifier output-folder path + Nexus helper link, and the Missing Masters ON-by-default toggle that downgrades ESLifier-traced files from critical to warning (surfaced, not hidden). Update config.example.json for both new fields. Handoff with what the real ESLifier→Vortex deploy actually looked like and which scan signal the false positive fired on."
+      "prompt": "Read vortex-tools/vortex-collection-tools/design/BUILD-PROMPT-eslifier-filter.md and build it. CRITICAL: verify the detection against a real ESLifier output folder + a live Missing Masters scan FIRST (disabled-count lesson) — don't ship a guessed trace. v1 = Settings ESLifier output-folder path + Nexus helper link, and the Missing Masters ON-by-default toggle that downgrades ESLifier-traced files from critical to warning (surfaced, not hidden). Update config.example.json for both new fields. Handoff with what the real ESLifier→Vortex deploy actually looked like and which scan signal the false positive fired on.",
+      "ready": true
     },
     {
       "id": "preview-stale-banner",
       "tag": "polish",
       "title": "Clear stale end-of-flow banner on Preview re-arm",
       "why": "post-v0.5.0 polish, non-blocking",
-      "prompt": "In Update Collection: re-doing Apply Ignores via Preview doesn't clear the stale end-of-flow completion banner until Apply re-succeeds. Wire callout-clearing into the Preview re-arm so the banner clears the moment the step is re-armed. Pre-existing minor issue; not blocking."
+      "prompt": "In Update Collection: re-doing Apply Ignores via Preview doesn't clear the stale end-of-flow completion banner until Apply re-succeeds. Wire callout-clearing into the Preview re-arm so the banner clears the moment the step is re-armed. Pre-existing minor issue; not blocking.",
+      "ready": true
     },
     {
       "id": "rebuild-missing-files-tool",
@@ -49,6 +44,10 @@
     }
   ],
   "shipped": [
+    {
+      "title": "Forge: friendly merge errors (no raw xelib/EPERM dumps) + cleanup hardening",
+      "doc": null
+    },
     {
       "title": "Rebuilding mods… needs an X-of-X counter and a % complete indicator",
       "doc": null
