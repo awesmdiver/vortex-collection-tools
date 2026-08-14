@@ -70,6 +70,11 @@ async function rmfLoadCollections() {
     // un-fetched collections" at least once this session (queue: rebuild-missing-vortex-db-read) --
     // empty until then, same as before this feature existed.
     rmfRenderUnfetchedGroup(data.notDownloaded || []);
+    // Batch "refresh before scan" toggle's own persisted state (queue: rebuild-missing-batch-
+    // refresh-toggle) -- synced here so it survives a picker reload, same as the checkbox
+    // selections above already implicitly do via rmfState.picked.
+    $g('rmfRefreshToggle').checked = !!data.refreshWorkshopBeforeScan;
+    rmfUpdateRefreshWarning();
     $g('rmfPickerEmpty').classList.toggle('hidden', data.installed.length + data.workshop.length > 0);
     if (data.installed.length + data.workshop.length === 0) {
       $g('rmfPickerEmpty').textContent = 'No collections found in your staging folder yet.';
@@ -77,6 +82,42 @@ async function rmfLoadCollections() {
   } catch (e) {
     $g('rmfPickerLoading').classList.add('hidden');
     rmfHandleError(e, $g('rmfNotConfigured'));
+  }
+}
+
+// Persists immediately on toggle -- own small route, not the Settings page's Save button, same
+// pattern as Missing Masters' own recognizeEslifierInput (missing-masters-app.js).
+$g('rmfRefreshToggle').addEventListener('change', async (e) => {
+  const enabled = e.target.checked;
+  try {
+    await rmfApi('POST', '/api/rebuild-missing/set-refresh-workshop-before-scan', { enabled });
+  } catch (err) {
+    // Best-effort -- the toggle's own on-screen state is already correct either way; a failed save
+    // just means it won't be remembered next visit, not worth blocking the director over.
+  }
+  rmfUpdateRefreshWarning();
+});
+
+// Recomputes the ONE consolidated warning (queue: rebuild-missing-batch-refresh-toggle) -- shown
+// only when the toggle is on AND at least one Workshop collection is currently selected, naming
+// every affected one, instead of a confirm modal per card (the v2 flow this replaces). Called
+// whenever either input changes: the toggle itself, or any checkbox (via rmfRenderPickerGroup's
+// own change handler).
+function rmfUpdateRefreshWarning() {
+  const enabled = $g('rmfRefreshToggle').checked;
+  const names = [...rmfState.picked]
+    .map((id) => rmfState.collectionsById.get(id))
+    .filter((item) => item && item.isWorkshop)
+    .map((item) => item.name);
+  const show = enabled && names.length > 0;
+  $g('rmfRefreshWarning').classList.toggle('hidden', !show);
+  if (show) {
+    // el() with a text-node child (not raw innerHTML/template strings) -- same convention every
+    // other list in this file already uses, so a collection name never needs its own separate
+    // HTML-escaping pass.
+    const list = $g('rmfRefreshWarningList');
+    list.innerHTML = '';
+    names.forEach((n) => list.appendChild(el('li', {}, n)));
   }
 }
 
@@ -114,21 +155,14 @@ function rmfRenderPickerGroup(sectionId, gridId, countId, items, prefix, countTe
     const checkbox = el('input', { type: 'checkbox' });
     checkbox.checked = rmfState.picked.has(item.modId);
     const subLine = el('div', { class: 'sub' }, `${item.modCount} mod${item.modCount === 1 ? '' : 's'}`);
-    // type="button" (never submits) + preventDefault/stopPropagation in the click handler below --
-    // this button sits inside the card's own <label>, whose default click behavior is to toggle the
-    // checkbox, which we don't want to fire when the user meant to click this instead.
-    const refreshBtn = el('button', { type: 'button', class: 'btn btn--ghost btn--small rmf-refresh-btn' }, '↻ Refresh from Nexus');
-    refreshBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      rmfStartRefresh(item, refreshBtn);
-    });
+    // The per-card "↻ Refresh from Nexus" button (v2, commit 4fedf7d) is gone -- replaced by the
+    // batch toggle under the Workshop group (queue: rebuild-missing-batch-refresh-toggle, approved
+    // v3 mockup addendum). Nothing here refreshes on a per-card basis anymore, Installed or Workshop.
     const card = el('label', { class: `coll-card${checkbox.checked ? ' sel' : ''}` }, [
       checkbox,
       el('div', { class: 'meta' }, [
         el('div', { class: 'name' }, item.name),
         subLine,
-        refreshBtn,
       ]),
     ]);
     item.subLineEl = subLine;
@@ -137,6 +171,7 @@ function rmfRenderPickerGroup(sectionId, gridId, countId, items, prefix, countTe
       if (checkbox.checked) rmfState.picked.add(item.modId);
       else rmfState.picked.delete(item.modId);
       rmfUpdatePickCount();
+      rmfUpdateRefreshWarning();
     });
     grid.appendChild(card);
   }
@@ -200,18 +235,28 @@ async function rmfStartScan() {
   $g('rmfReportView').classList.remove('hidden');
   $g('rmfResults').classList.add('hidden');
   $g('rmfScanError').classList.add('hidden');
+  $g('rmfRefreshFailuresCallout').classList.add('hidden');
   $g('rmfScanLoading').classList.remove('hidden');
   $g('rmfScanLoadingText').textContent = 'Starting scan…';
 
+  // Batch "refresh before scan" (queue: rebuild-missing-batch-refresh-toggle) -- only the SELECTED
+  // Workshop collections, and only when the toggle is on; Installed ones never refresh, matching
+  // rmfUpdateRefreshWarning's own filter.
+  const refreshFirst = $g('rmfRefreshToggle').checked
+    ? [...rmfState.picked].filter((id) => rmfState.collectionsById.get(id)?.isWorkshop)
+    : [];
+
   try {
-    await rmfApi('POST', '/api/rebuild-missing/scan', { collectionModIds: [...rmfState.picked] });
+    await rmfApi('POST', '/api/rebuild-missing/scan', { collectionModIds: [...rmfState.picked], refreshFirst });
   } catch (e) {
-    if (e.status !== 409) {
+    // A 409 from "a scan is already running" (e.g. another tab) is safe to just attach below --
+    // but /scan can ALSO 409 for a genuinely running Vortex now that refreshFirst needs a real
+    // state.v2 read, which is a real failure, not something to silently attach past.
+    if (e.status !== 409 || e.body?.error === 'vortex-running') {
       $g('rmfScanLoading').classList.add('hidden');
       rmfHandleError(e, $g('rmfScanError'));
       return;
     }
-    // A 409 just means a scan is already running (e.g. another tab) -- still attach below.
   }
 
   if (rmfState.eventSource) rmfState.eventSource.close();
@@ -221,12 +266,14 @@ async function rmfStartScan() {
 }
 
 function rmfHandleScanEvent(frame) {
-  if (frame.type === 'mod-scanned') {
+  if (frame.type === 'collection-refreshing') {
+    $g('rmfScanLoadingText').textContent = `${frame.name}: refreshing from Nexus…`;
+  } else if (frame.type === 'mod-scanned') {
     $g('rmfScanLoadingText').textContent = `${frame.collectionName}: ${frame.index} / ${frame.total} — ${frame.modName}`;
   } else if (frame.type === 'scan-complete') {
     $g('rmfScanLoading').classList.add('hidden');
     if (rmfState.eventSource) { rmfState.eventSource.close(); rmfState.eventSource = null; }
-    rmfRenderReport(frame.collectionResults, frame.stats);
+    rmfRenderReport(frame.collectionResults, frame.stats, frame.refreshFailures);
   } else if (frame.type === 'scan-error') {
     $g('rmfScanLoading').classList.add('hidden');
     if (rmfState.eventSource) { rmfState.eventSource.close(); rmfState.eventSource = null; }
@@ -234,7 +281,7 @@ function rmfHandleScanEvent(frame) {
   }
 }
 
-function rmfRenderReport(collectionResults, stats) {
+function rmfRenderReport(collectionResults, stats, refreshFailures) {
   rmfState.rows = [];
   rmfState.selected = new Set();
   const failedCollections = collectionResults.filter((c) => c.error);
@@ -242,6 +289,16 @@ function rmfRenderReport(collectionResults, stats) {
     $g('rmfScanError').textContent = `Couldn't check ${failedCollections.length} collection(s): ` +
       failedCollections.map((c) => `${c.name} (${c.error})`).join('; ');
     $g('rmfScanError').classList.remove('hidden');
+  }
+  // A batch refresh failing for one collection (queue: rebuild-missing-batch-refresh-toggle, scope
+  // item 6) never aborts the scan -- that collection was still scanned with whatever collection.json
+  // it already had on disk, so results for it below may be stale. Surfaced here, not silently
+  // dropped.
+  if (refreshFailures && refreshFailures.length > 0) {
+    $g('rmfRefreshFailuresCallout').textContent =
+      `Couldn't refresh ${refreshFailures.length} collection(s) from Nexus before scanning -- results for these are based on whatever collection.json they already had: ` +
+      refreshFailures.map((f) => `${f.name} (${f.error})`).join('; ');
+    $g('rmfRefreshFailuresCallout').classList.remove('hidden');
   }
   for (const c of collectionResults) {
     if (c.error) continue;
@@ -496,128 +553,35 @@ async function rmfOpenStagingFolder(row) {
   }
 }
 
-// ---------- Refresh from Nexus (Screen 1 -- overwrites collection.json, confirm modal, serious register) ----------
-// A stale local collection.json (never updated to match what's actually published on Nexus) is a
-// real cause of false "archive mismatch" results further down the line in this same tool -- it
-// diffs against whatever collection.json SAYS should be installed, so a stale copy makes correctly-
-// installed mods look broken. This pulls a fresh copy straight from Nexus, same download path
-// Rebuild Collection's own Workshop "Fetch from Nexus" button already uses.
-
-let rmfPendingRefresh = null;
-
-async function rmfStartRefresh(item, btn) {
+// ---------- Fetch from Nexus (Screen 1 -- "not yet downloaded" rows only) ----------
+// The v2 per-card "Refresh from Nexus" button/confirm-modal (commit 4fedf7d) is gone -- replaced by
+// the batch toggle above (queue: rebuild-missing-batch-refresh-toggle, approved v3 mockup addendum).
+// This one action survives, simplified to match: a "not yet downloaded" row still can't join the
+// batch toggle (nothing on disk yet to select/scan), so it keeps its own explicit one-time Fetch
+// action -- but per the director's own explicit call ("no case for going back to an older
+// revision"), it's no longer a confirm-modal + revision picker either: always the newest saved
+// revision, same as the batch toggle, no picker anywhere in this tool anymore.
+async function rmfStartFirstFetch(item, btn) {
   const original = btn.textContent;
   btn.disabled = true;
-  btn.textContent = 'Looking up…';
+  btn.textContent = 'Fetching…';
   $g('rmfRefreshError').classList.add('hidden');
   $g('rmfRefreshResult').classList.add('hidden');
-  let slugInfo;
   try {
-    slugInfo = await rmfApi('POST', '/api/rebuild-missing/nexus-slug', { collectionModId: item.modId });
+    const result = await rmfApi('POST', '/api/rebuild-missing/refresh-from-nexus', {
+      collectionModId: item.folder, slug: item.collectionSlug,
+    });
+    $g('rmfRefreshResult').textContent =
+      `Fetched "${item.name}" from Nexus (revision ${result.revisionNumber}) — ${result.modCount} mod${result.modCount === 1 ? '' : 's'}. ` +
+      `It now shows up under "Workshop collections" above, ready to scan.`;
+    $g('rmfRefreshResult').classList.remove('hidden');
+    // The server already dropped this from "not yet downloaded" (a real collection.json exists
+    // now); a full reload picks that up plus the new "Workshop collections" card via the plain
+    // filesystem scan, same one every other row already goes through.
+    await rmfLoadCollections();
   } catch (e) {
     btn.disabled = false;
     btn.textContent = original;
     rmfHandleError(e, $g('rmfRefreshError'));
-    return;
   }
-  btn.disabled = false;
-  btn.textContent = original;
-  rmfPendingRefresh = { item, slug: slugInfo.slug, collectionModId: item.modId, isFirstFetch: false };
-  $g('rmfRefreshConfirmModalText').textContent =
-    `This replaces the local collection.json for "${item.name}" with the revision you pick below. ` +
-    `The current file is backed up first, right next to it, so you can always undo this.`;
-  $g('rmfRefreshWorkshopCaveat').classList.toggle('hidden', !item.isWorkshop);
-  $g('rmfRefreshConfirmModal').classList.remove('hidden');
-  await rmfLoadRefreshRevisions(slugInfo.slug);
-}
-
-// A "not yet downloaded" row's own Fetch action (queue: rebuild-missing-vortex-db-read) -- unlike
-// rmfStartRefresh above, the Nexus slug is already known directly from the Vortex-DB scan
-// (scanAllCollections reads attributes###collectionSlug itself), so this skips the /nexus-slug
-// lookup entirely and goes straight to the revision picker. Reuses the SAME confirm modal --
-// `isFirstFetch: true` on the pending state below is what the modal text and the Workshop caveat
-// (always shown here -- every "not yet downloaded" row is inherently Workshop-only, unlike
-// rmfStartRefresh's per-item `item.isWorkshop` check) branch on.
-async function rmfStartFirstFetch(item, btn) {
-  rmfPendingRefresh = { item, slug: item.collectionSlug, collectionModId: item.folder, isFirstFetch: true };
-  $g('rmfRefreshError').classList.add('hidden');
-  $g('rmfRefreshResult').classList.add('hidden');
-  $g('rmfRefreshConfirmModalText').textContent =
-    `This fetches "${item.name}" from Nexus and creates its local collection.json — it's never been ` +
-    `downloaded here before, so there's nothing to back up.`;
-  $g('rmfRefreshWorkshopCaveat').classList.remove('hidden');
-  $g('rmfRefreshConfirmModal').classList.remove('hidden');
-  await rmfLoadRefreshRevisions(item.collectionSlug);
-}
-
-// Real gap found live while testing this feature (queue: rebuild-missing-refresh-collection-json):
-// a Workshop-authored collection is very often draft/unlisted-only on Nexus (never fully published)
-// -- fetching "the latest published revision" alone came back "No PUBLISHED revision found... it may
-// still be in draft" for every one of the director's own real collections tested. Mirrors app.js's
-// own lookupRevisions -- same reasoning: "draft" means "not publicly listed yet," not "not real,"
-// so every revision is listed, newest first, defaulting to the newest (whatever its status).
-async function rmfLoadRefreshRevisions(slug) {
-  const select = $g('rmfRefreshRevSelect');
-  select.innerHTML = '';
-  select.disabled = true;
-  select.appendChild(el('option', { value: '' }, 'Looking up revisions…'));
-  try {
-    const data = await rmfApi('GET', `/api/rebuild-missing/nexus-revisions?slug=${encodeURIComponent(slug)}`);
-    select.innerHTML = '';
-    if (!data.revisions || data.revisions.length === 0) {
-      select.appendChild(el('option', { value: '' }, 'No revisions found'));
-      return;
-    }
-    for (const r of data.revisions) {
-      const when = new Date(r.updatedAt).toLocaleDateString();
-      const statusTag = r.revisionStatus === 'published' ? 'published' : 'draft, not public';
-      select.appendChild(el('option', { value: String(r.revisionNumber) }, `Revision ${r.revisionNumber} — updated: ${when} (${statusTag})`));
-    }
-    select.disabled = false;
-  } catch (e) {
-    select.innerHTML = '';
-    select.appendChild(el('option', { value: '' }, 'Lookup failed'));
-  }
-}
-
-$g('rmfRefreshConfirmCancelBtn').addEventListener('click', () => {
-  rmfPendingRefresh = null;
-  $g('rmfRefreshConfirmModal').classList.add('hidden');
-});
-
-$g('rmfRefreshConfirmOkBtn').addEventListener('click', async () => {
-  $g('rmfRefreshConfirmModal').classList.add('hidden');
-  const pending = rmfPendingRefresh;
-  rmfPendingRefresh = null;
-  if (!pending) return;
-  const { item, slug, collectionModId, isFirstFetch } = pending;
-  const revisionNumber = $g('rmfRefreshRevSelect').value || undefined;
-  $g('rmfRefreshResult').classList.add('hidden');
-  try {
-    const result = await rmfApi('POST', '/api/rebuild-missing/refresh-from-nexus', { collectionModId, slug, revisionNumber });
-    if (isFirstFetch) {
-      $g('rmfRefreshResult').textContent =
-        `Fetched "${item.name}" from Nexus (revision ${result.revisionNumber}) — ${result.modCount} mod${result.modCount === 1 ? '' : 's'}. ` +
-        `It now shows up under "Workshop collections" below, ready to scan.`;
-      $g('rmfRefreshResult').classList.remove('hidden');
-      // The server already dropped this from "not yet downloaded" (a real collection.json exists
-      // now); a full reload picks that up plus the new "Workshop collections" card via the plain
-      // filesystem scan, same one every other row already goes through.
-      await rmfLoadCollections();
-    } else {
-      rmfApplyRefreshResult(item, result);
-    }
-  } catch (e) {
-    rmfHandleError(e, $g('rmfRefreshError'));
-  }
-});
-
-function rmfApplyRefreshResult(item, result) {
-  item.modCount = result.modCount;
-  if (item.subLineEl) item.subLineEl.textContent = `${item.modCount} mod${item.modCount === 1 ? '' : 's'}`;
-  const before = result.previousModCount != null ? `${result.previousModCount} mod${result.previousModCount === 1 ? '' : 's'}` : 'unknown';
-  $g('rmfRefreshResult').textContent =
-    `Refreshed "${item.name}" from Nexus (revision ${result.revisionNumber}) — now ${result.modCount} mod${result.modCount === 1 ? '' : 's'}, was ${before}. ` +
-    `The previous file is saved at ${result.backupPath}.`;
-  $g('rmfRefreshResult').classList.remove('hidden');
 }

@@ -31,6 +31,7 @@ const nexusModDownload = require('../lib/nexus-mod-download');
 const nexusCollectionDownload = require('../lib/nexus-collection-download');
 const runner = require('../lib/collection-runner');
 const syncLib = require('../lib/vortex-sync/lib');
+const appConfig = require('../lib/app-config');
 const { createSseSession } = require('./sse-session');
 
 const scanSession = createSseSession();
@@ -52,18 +53,73 @@ function createRebuildMissingRouter(config) {
         return false;
     }
 
+    // Best-effort display name for a collectionModId, for the "refreshing from Nexus…" progress line
+    // (queue: rebuild-missing-batch-refresh-toggle) -- fires BEFORE scanCollections itself runs (which
+    // is the only other place this app resolves a collection's display name), so this can't just read
+    // scanCollections' own result. Same fallback shape as that function's own name resolution: the
+    // collection's own info.name, or the raw collectionModId if collection.json can't be read at all.
+    function collectionDisplayName(collectionModId) {
+        try {
+            const collection = loadCollection(path.join(staging, collectionModId, 'collection.json'));
+            return collection.info?.name || collectionModId;
+        } catch {
+            return collectionModId;
+        }
+    }
+
     router.get('/collections', (req, res) => {
-        if (!staging) return res.json({ installed: [], workshop: [], notDownloaded: [], configured: false });
+        // Batch "refresh before scan" toggle's own persisted state (queue: rebuild-missing-batch-
+        // refresh-toggle) -- same lightweight, page-owned-not-Settings-owned pattern as Missing
+        // Masters' own recognizeEslifierEnabled (missing-masters-routes.js), read fresh here rather
+        // than cached, same reasoning: cheap, and stays correct if changed from another tab/window.
+        const { rebuildMissingRefreshWorkshopBeforeScan } = appConfig.loadConfig();
+        const refreshWorkshopBeforeScan = !!rebuildMissingRefreshWorkshopBeforeScan;
+        if (!staging) return res.json({ installed: [], workshop: [], notDownloaded: [], refreshWorkshopBeforeScan, configured: false });
         try {
             const { installed, workshop } = listPickableCollections(staging);
             // Cached, not re-read here -- populated by the explicit POST /load-vortex-data action
             // above (a live Vortex-state read shouldn't fire silently on every picker load). Empty
             // until the user has clicked that at least once this session.
-            res.json({ installed, workshop, notDownloaded: notDownloadedCollections, configured: true });
+            res.json({ installed, workshop, notDownloaded: notDownloadedCollections, refreshWorkshopBeforeScan, configured: true });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
     });
+
+    // Persists the batch "refresh before scan" toggle -- lives on this page itself (not Settings),
+    // same "own small immediate-save route" pattern as Missing Masters' own /set-recognize-eslifier.
+    router.post('/set-refresh-workshop-before-scan', (req, res) => {
+        const { enabled } = req.body || {};
+        appConfig.saveConfig({ rebuildMissingRefreshWorkshopBeforeScan: !!enabled });
+        res.json({ enabled: !!enabled });
+    });
+
+    // Shared by /nexus-slug below and the batch "refresh before scan" step in /scan (queue:
+    // rebuild-missing-batch-refresh-toggle) -- one real, isolated state.v2 read per collection, same
+    // logic either way. Throws with `.kind` set to one of 'bad-collection' (resolveCollectionInfo
+    // itself failed -- a genuinely bad collectionModId), 'no-slug' (state read succeeded, Vortex just
+    // has no Nexus id on record), or left unset for any other state-read failure (a real crash/
+    // timeout, not a "this collection doesn't have one" case) -- callers map these to the same
+    // 400/404/500 split the original two-try/catch version of this route used, not flattened into
+    // one status for every failure.
+    async function resolveSlugForCollection(collectionModId) {
+        let collectionInfo;
+        try {
+            collectionInfo = runner.resolveCollectionInfo(staging, collectionModId);
+        } catch (e) {
+            e.kind = 'bad-collection';
+            throw e;
+        }
+        const syncState = await runner.loadSyncState({
+            state, collectionModId, collection: collectionInfo.collection, stagingDir: staging,
+        });
+        if (!syncState.collectionSlug) {
+            const err = new Error("Vortex doesn't have a Nexus id on record for this collection yet -- it needs to have been installed (or, for a Workshop collection, opened in Vortex) at least once before this can look it up on Nexus.");
+            err.kind = 'no-slug';
+            throw err;
+        }
+        return { slug: syncState.collectionSlug, collectionName: collectionInfo.name };
+    }
 
     // Looks up a picked collection's Nexus id, so the "Refresh from Nexus" button knows what to
     // fetch -- unlike Rebuild Collection's picker, listPickableCollections has no live Vortex-state
@@ -89,24 +145,11 @@ function createRebuildMissingRouter(config) {
         if (!collectionModId || typeof collectionModId !== 'string') {
             return res.status(400).json({ error: 'Missing collectionModId.' });
         }
-        let collectionInfo;
         try {
-            collectionInfo = runner.resolveCollectionInfo(staging, collectionModId);
+            res.json(await resolveSlugForCollection(collectionModId));
         } catch (e) {
-            return res.status(400).json({ error: e.message });
-        }
-        try {
-            const syncState = await runner.loadSyncState({
-                state, collectionModId, collection: collectionInfo.collection, stagingDir: staging,
-            });
-            if (!syncState.collectionSlug) {
-                return res.status(404).json({
-                    error: 'no-slug',
-                    message: "Vortex doesn't have a Nexus id on record for this collection yet -- it needs to have been installed (or, for a Workshop collection, opened in Vortex) at least once before this can look it up on Nexus.",
-                });
-            }
-            res.json({ slug: syncState.collectionSlug, collectionName: collectionInfo.name });
-        } catch (e) {
+            if (e.kind === 'bad-collection') return res.status(400).json({ error: e.message });
+            if (e.kind === 'no-slug') return res.status(404).json({ error: 'no-slug', message: e.message });
             res.status(500).json({ error: e.message });
         }
     });
@@ -158,56 +201,40 @@ function createRebuildMissingRouter(config) {
         }
     });
 
-    // Lists every real revision of a Nexus collection, draft or published (mirrors rebuild-routes.js's
-    // own /workshop/nexus-revisions verbatim -- same reasoning: REAL, LIVE-CONFIRMED finding while
-    // testing THIS feature against the director's own actual Workshop collections -- "Refresh from
-    // Nexus" without an explicit revisionNumber only ever asks for the latest PUBLISHED revision, and
-    // every one of the director's own Workshop collections tested came back "No PUBLISHED revision
-    // found... it may still be in draft." That's not an edge case here -- Rebuild Collection's own
-    // "draft" status genuinely means "not publicly listed yet," not "not real/not downloadable" (see
-    // that file's own lookupRevisions comment for the fuller story), and it's the NORMAL state for a
-    // collection still being actively authored in Workshop. Without this, the button would be
-    // effectively unusable for the exact collections most likely to need it.
-    router.get('/nexus-revisions', async (req, res) => {
-        if (!requireConfigured(res)) return;
-        const { slug } = req.query;
-        if (!slug || typeof slug !== 'string' || !slug.trim()) {
-            return res.status(400).json({ error: 'Missing or invalid "slug".' });
+    // Resolves the revision to actually fetch when the caller doesn't ask for a specific one --
+    // ALWAYS the newest revision, draft or published, BY updatedAt (queue: rebuild-missing-batch-
+    // refresh-toggle, per the approved v3 mockup's own explicit call: "director confirmed there's no
+    // case for going back to an older revision", replacing the v2 per-collection revision picker
+    // entirely). Deliberately NOT fetchCollectionRevisions' own default sort (revisionNumber
+    // descending) -- that mockup's own comment (and this project's real, live-confirmed finding) is
+    // that Nexus updates a draft/unlisted revision's CONTENT in place rather than assigning it a new
+    // revisionNumber, so a genuinely fresher revision can still sort BEHIND an older, larger
+    // revisionNumber if only picked that way. updatedAt is the only field that actually reflects "was
+    // this the one most recently changed."
+    async function resolveNewestRevisionNumber(slug) {
+        const apiKey = nexusCollectionDownload.resolveApiKey();
+        const { revisions } = await nexusCollectionDownload.fetchCollectionRevisions(apiKey, slug);
+        if (!revisions || revisions.length === 0) {
+            throw new Error(`No revisions found on Nexus for slug="${slug}".`);
         }
-        try {
-            const apiKey = nexusCollectionDownload.resolveApiKey();
-            const result = await nexusCollectionDownload.fetchCollectionRevisions(apiKey, slug.trim());
-            res.json(result);
-        } catch (e) {
-            res.status(500).json({ error: e.message });
-        }
-    });
+        const newest = revisions.reduce((a, b) => (new Date(b.updatedAt) > new Date(a.updatedAt) ? b : a));
+        return newest.revisionNumber;
+    }
 
-    // Pulls a specific revision (chosen from the /nexus-revisions list above -- draft or published,
-    // defaulting to the newest) straight from Nexus, either REFRESHING an existing collection.json
-    // (the fix for the "archive mismatch" false-positives a stale one can cause -- Rebuild Missing
-    // Files diffs against whatever collection.json says SHOULD be installed, so a stale copy makes
-    // correctly-installed mods look broken) or FETCHING one for the first time, for a Workshop-only
-    // row that's never been extracted at all (queue: rebuild-missing-vortex-db-read -- the same
-    // route now serves both, since the only real difference is "is there something to back up
-    // first," not a different operation). For a Workshop row specifically, the frontend shows a
-    // confirm step first: this only ever fetches a revision already saved to Nexus, which can be
-    // behind not-yet-uploaded local Workshop edits -- never assumed here to be "the latest," just
-    // "the latest saved to Nexus."
-    router.post('/refresh-from-nexus', async (req, res) => {
-        if (!requireConfigured(res)) return;
-        const { collectionModId, slug, revisionNumber } = req.body || {};
-        if (!collectionModId || typeof collectionModId !== 'string') {
-            return res.status(400).json({ error: 'Missing collectionModId.' });
-        }
-        if (!slug || typeof slug !== 'string') {
-            return res.status(400).json({ error: 'Missing slug.' });
-        }
-        // BUG FIX, caught live while testing this: the <select> value arrives as a string, but the
-        // underlying GraphQL query's $revision variable is typed Int! and rejects a quoted "1" with
-        // no coercion. Same conversion rebuild-routes.js's own working /workshop/fetch-from-nexus
-        // already uses.
-        const revNum = revisionNumber ? parseInt(revisionNumber, 10) : undefined;
+    // Pulls a collection's newest saved revision from Nexus (always -- see
+    // resolveNewestRevisionNumber's own comment, no picker) and writes it to collectionModId's own
+    // staging folder -- either REFRESHING an existing collection.json (the fix for the "archive
+    // mismatch" false-positives a stale one can cause -- Rebuild Missing Files diffs against whatever
+    // collection.json says SHOULD be installed, so a stale copy makes correctly-installed mods look
+    // broken) or FETCHING one for the first time, for a Workshop-only row that's never been extracted
+    // at all (the only real difference is "is there something to back up first," not a different
+    // operation). Shared by POST /refresh-from-nexus below AND /scan's own batch "refresh before
+    // scan" step (queue: rebuild-missing-batch-refresh-toggle) -- one real implementation, not two
+    // copies that could drift. Returns the same shape either caller needs; never throws for an
+    // ALREADY-handled case (a missing backup write, a fetch failure) -- callers get a normal
+    // {ok:false, error} back instead, since /scan's own batch loop must keep going past one
+    // collection's failure (see its own comment) rather than unwind on an exception.
+    async function refreshCollectionFromNexus(collectionModId, slug) {
         const destDir = path.join(staging, collectionModId);
         const collectionJsonPath = path.join(destDir, 'collection.json');
         const isFirstFetch = !fs.existsSync(collectionJsonPath);
@@ -230,13 +257,14 @@ function createRebuildMissingRouter(config) {
             try {
                 fs.copyFileSync(collectionJsonPath, backupPath);
             } catch (e) {
-                return res.status(500).json({ error: `Could not back up the current collection.json before refreshing -- refusing to overwrite it without one: ${e.message}` });
+                return { ok: false, error: `Could not back up the current collection.json before refreshing -- refusing to overwrite it without one: ${e.message}`, backupPath: null };
             }
         }
 
         try {
+            const revisionNumber = await resolveNewestRevisionNumber(slug);
             const result = await nexusCollectionDownload.fetchAndExtractCollectionJson({
-                slug, revisionNumber: revNum, destDir, sevenZipExe,
+                slug, revisionNumber, destDir, sevenZipExe,
             });
             // A first fetch means this collectionModId is no longer "not downloaded" -- drop it from
             // that cached list so the picker doesn't keep offering it there once a real
@@ -245,14 +273,27 @@ function createRebuildMissingRouter(config) {
             if (isFirstFetch) {
                 notDownloadedCollections = notDownloadedCollections.filter((w) => w.modId !== collectionModId);
             }
-            res.json({ ok: true, isFirstFetch, backupPath, previousModCount, ...result });
+            return { ok: true, isFirstFetch, backupPath, previousModCount, ...result };
         } catch (e) {
             // The backup above (if any) is real and untouched -- extractFile only overwrites
             // collection.json once 7z itself succeeds, so a failure here (network, bad slug, no
             // matching revision) never leaves an existing file in a half-written state, and never
             // creates a stray one for a first fetch either.
-            res.status(500).json({ ok: false, error: e.message, backupPath });
+            return { ok: false, error: e.message, backupPath };
         }
+    }
+
+    router.post('/refresh-from-nexus', async (req, res) => {
+        if (!requireConfigured(res)) return;
+        const { collectionModId, slug } = req.body || {};
+        if (!collectionModId || typeof collectionModId !== 'string') {
+            return res.status(400).json({ error: 'Missing collectionModId.' });
+        }
+        if (!slug || typeof slug !== 'string') {
+            return res.status(400).json({ error: 'Missing slug.' });
+        }
+        const result = await refreshCollectionFromNexus(collectionModId, slug);
+        res.status(result.ok ? 200 : 500).json(result);
     });
 
     router.get('/scan/events', (req, res) => {
@@ -263,12 +304,22 @@ function createRebuildMissingRouter(config) {
 
     // Streams per-mod progress, then a final 'scan-complete' carrying the full report -- same
     // POST-starts-202/GET-.../events-subscribes shape as every other scan/plan in this app
-    // (sse-session.js).
+    // (sse-session.js). `refreshFirst` (queue: rebuild-missing-batch-refresh-toggle): the Workshop
+    // collectionModIds to pull fresh from Nexus BEFORE this same scan reads their collection.json --
+    // the v3 mockup's own batch toggle, replacing the shipped v2 per-card button/modal entirely (see
+    // rmfRenderPickerGroup's own comment in the frontend for why the per-card action is gone). Gated
+    // on isVortexRunning() up front, synchronously, before the SSE session even starts -- every
+    // refresh needs a real state.v2 read to resolve its own slug, so this fails fast with the normal
+    // 409 shape instead of starting a scan session that's doomed to fail partway through.
     router.post('/scan', (req, res) => {
         if (!requireConfigured(res)) return;
         const collectionModIds = Array.isArray(req.body?.collectionModIds) ? req.body.collectionModIds : [];
+        const refreshFirst = Array.isArray(req.body?.refreshFirst) ? req.body.refreshFirst : [];
         if (collectionModIds.length === 0) return res.status(400).json({ error: 'Pick at least one collection to check.' });
         if (scanSession.isActive()) return res.status(409).json({ error: 'A scan is already in progress.' });
+        if (refreshFirst.length > 0 && syncLib.isVortexRunning()) {
+            return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
+        }
 
         const mySession = scanSession.start({ id: `scan-${Date.now()}` });
         res.status(202).json({});
@@ -278,6 +329,24 @@ function createRebuildMissingRouter(config) {
 
         (async () => {
             try {
+                // Real, not hypothetical: refreshing one collection failing (network, no Nexus id on
+                // record, no revision found) must not abort the WHOLE scan -- the other picked
+                // collections, refreshed or not, still deserve a real scan result. Each failure is
+                // collected and surfaced in the final report instead, per-collection, not silently
+                // dropped.
+                const refreshFailures = [];
+                for (const collectionModId of refreshFirst) {
+                    const name = collectionDisplayName(collectionModId);
+                    emitIfCurrent({ type: 'collection-refreshing', collectionModId, name });
+                    try {
+                        const { slug } = await resolveSlugForCollection(collectionModId);
+                        const result = await refreshCollectionFromNexus(collectionModId, slug);
+                        if (!result.ok) refreshFailures.push({ collectionModId, name, error: result.error });
+                    } catch (e) {
+                        refreshFailures.push({ collectionModId, name, error: e.message });
+                    }
+                }
+
                 const collectionResults = await scanCollections(collectionModIds, {
                     stagingDir: staging, downloadsDir: downloads, sevenZipExe,
                     onProgress: (p) => emitIfCurrent({ type: 'mod-scanned', ...p }),
@@ -286,7 +355,7 @@ function createRebuildMissingRouter(config) {
                 const statMods = collectionResults.reduce((n, c) => n + (c.modsWithMissing?.length || 0), 0);
                 const statFiles = collectionResults.reduce((n, c) => n + (c.modsWithMissing || []).reduce((m, mod) => m + mod.missing.length, 0), 0);
                 emitIfCurrent({
-                    type: 'scan-complete', done: true, collectionResults,
+                    type: 'scan-complete', done: true, collectionResults, refreshFailures,
                     stats: { collectionsChecked: statColls, modsWithMissing: statMods, filesMissing: statFiles },
                 });
             } catch (e) {
