@@ -3,14 +3,6 @@
   "inFlight": null,
   "items": [
     {
-      "id": "rebuild-missing-vortex-db-read",
-      "tag": "feature",
-      "title": "Rebuild Missing Files: read Vortex's DB so Workshop collections with no local collection.json show up at all",
-      "why": "Shipped: the per-card \"Refresh from Nexus\" button for collections already on disk (commit 4fedf7d). Still open: Missing Files' picker only scans local staging folders, so a Workshop collection that's never been extracted (no collection.json on disk yet, e.g. \"My GTS Audio Overhaul\") is invisible to it — Rebuild Collection solves this today by reading Vortex's DB directly. Bring that same read here so those collections can be bootstrapped through this tool too.",
-      "prompt": "REMAINING SCOPE after the \"Refresh from Nexus\" button shipped (commit 4fedf7d) — that part is done and verified live, don't redo it.\n\nStill open, director's own follow-up: some Workshop collections have NO collection.json on disk at all (e.g. \"My GTS Audio Overhaul\", confirmed in the last handoff — never been extracted), so `listPickableCollections` (`lib/missing-files-scan.js`, scans local staging folders only) never sees them. Rebuild Collection already solves exactly this by reading Vortex's own database directly to discover 'Workshop-only' collections — name, modId, and the Nexus `collectionSlug` (not recoverable from anywhere on disk if there's no collection.json). See `lib/collection-runner.js`'s `loadSyncStateBatch` and `web/rebuild-routes.js`'s `/vortex-data/refresh` (~line 24, 41-58, 292-305), which populates `workshopOnlyCollections`, then `/collections` (~line 127-167) merges that into what the picker shows.\n\nSCOPE:\n1. Add the same Vortex-DB read to `listPickableCollections`/its own `/collections` route, reusing `collection-runner.js`'s shared primitive — don't reimplement Vortex-DB reading from scratch. Surface Workshop-only collections (no local collection.json) as pickable rows, each carrying its `collectionSlug`.\n2. For an already-on-disk collection, the existing per-card 'Refresh from Nexus' action already covers refreshing it — no change needed there.\n3. For a genuinely NEW Workshop-only row (no local collection.json yet — nothing to scan against), the flow is necessarily 'fetch from Nexus first, THEN scan' rather than 'scan, then optionally refresh.' Check whether the existing Step 1 → Step 2 picker flow needs a small branch for this (fetch-then-continue), or whether it's simplest to require a fetch before that row becomes scannable at all. This changes the picker's own basic behavior, not just adding a button — flag it as a judgment call with a small mockup addendum if the right UI flow isn't obvious, rather than guessing silently.\n4. Add the 'Vortex must be closed' gate to this new DB read — the previous task deliberately deferred this (hit live: Vortex was open, the read failed with a confusing error) and the director's own call was to fold the fix in here rather than bolt it on piecemeal.\n\nVERIFY live against \"My GTS Audio Overhaul\" specifically (confirmed in the last handoff to have no local collection.json) — confirm it now appears in the picker, can be fetched from Nexus, and becomes scannable afterward. Handoff with what you tested.",
-      "ready": true
-    },
-    {
       "id": "preview-stale-banner",
       "tag": "polish",
       "title": "Clear stale end-of-flow banner on Preview re-arm",
@@ -85,6 +77,9 @@
     },
     {
       "title": "Rebuild Missing Files: \"Refresh from Nexus\" per-card action"
+    },
+    {
+      "title": "Rebuild Missing Files: read Vortex's DB so Workshop collections with no local collection.json show up at all"
     }
   ]
 }
