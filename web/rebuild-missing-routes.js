@@ -16,6 +16,7 @@
 // so it's gated exactly like every other staging-folder write in this app.
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const express = require('express');
@@ -97,10 +98,19 @@ function createRebuildMissingRouter(config) {
     });
 
     // Extracts just the missing files for one or more mods, straight from their already-resolved
-    // archive -- the same sevenzip.js extractMany a full Rebuild Collection run uses, just scoped to
-    // the specific paths a scan found absent. Re-verifies every path is STILL actually missing right
-    // before extracting (cheap fs.existsSync checks) rather than trusting the client-held scan
-    // result outright -- real time may have passed since the scan ran.
+    // archive. Re-verifies every path is STILL actually missing right before extracting (cheap
+    // fs.existsSync checks) rather than trusting the client-held scan result outright -- real time
+    // may have passed since the scan ran.
+    //
+    // Each file is a {source, destination} pair (see missing-files-scan.js's own resolveExpectedDestinations
+    // header comment) -- source is the file's REAL archive-internal path, destination is where it
+    // belongs in the staging folder, and the two differ whenever a mod-root wrapper was stripped
+    // (e.g. an archive with everything under a "Patches\" subfolder that Vortex's installer strips
+    // on install). extractMany needs the real SOURCE path to find the member at all, and preserves
+    // the archive's own internal folder structure verbatim into destDir -- only correct when nothing
+    // was stripped -- so this replays the same scratch-dir-then-copy pattern extract-mod.js's own
+    // installResolvedFiles already uses for a real rebuild: extract every source into a scratch temp
+    // dir in one 7z call, then copy each into its real destination under the staging folder.
     router.post('/extract', (req, res) => {
         if (!requireConfigured(res)) return;
         if (syncLib.isVortexRunning()) {
@@ -122,21 +132,35 @@ function createRebuildMissingRouter(config) {
                     continue;
                 }
                 const stagingModDir = path.join(staging, targetFolderName);
-                const stillMissing = files.filter((f) => !fs.existsSync(path.join(stagingModDir, f)));
+                const stillMissing = files.filter((f) => !fs.existsSync(path.join(stagingModDir, f.destination)));
                 if (stillMissing.length === 0) {
                     results.push({ name, ok: true, extracted: [], note: 'Already fixed -- nothing was actually missing anymore.' });
                     continue;
                 }
+                const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rmf-extract-'));
                 try {
-                    await extractMany(sevenZipExe, archivePath, stillMissing, stagingModDir);
-                    const reallyThere = stillMissing.filter((f) => fs.existsSync(path.join(stagingModDir, f)));
-                    const stillGone = stillMissing.filter((f) => !fs.existsSync(path.join(stagingModDir, f)));
+                    await extractMany(sevenZipExe, archivePath, stillMissing.map((f) => f.source), scratchDir);
+                    const reallyThere = [];
+                    const stillGone = [];
+                    for (const f of stillMissing) {
+                        const scratchPath = path.join(scratchDir, f.source);
+                        if (!fs.existsSync(scratchPath)) {
+                            stillGone.push(f.destination);
+                            continue;
+                        }
+                        const destFullPath = path.join(stagingModDir, f.destination);
+                        fs.mkdirSync(path.dirname(destFullPath), { recursive: true });
+                        fs.copyFileSync(scratchPath, destFullPath);
+                        reallyThere.push(f.destination);
+                    }
                     results.push({
                         name, ok: stillGone.length === 0, extracted: reallyThere,
                         error: stillGone.length > 0 ? `${stillGone.length} file(s) were not found inside the archive: ${stillGone.join(', ')}` : undefined,
                     });
                 } catch (e) {
                     results.push({ name, ok: false, error: e.message });
+                } finally {
+                    fs.rmSync(scratchDir, { recursive: true, force: true });
                 }
             }
             res.json({ results });

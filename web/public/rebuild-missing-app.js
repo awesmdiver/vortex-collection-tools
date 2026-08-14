@@ -238,8 +238,8 @@ function rmfBuildMissingCell(row, idx) {
   const wrap = el('div', { class: 'detail-cell' }, [
     el('span', { class: 'status-pill status-pill--critical' }, `${row.missing.length} missing`),
   ]);
-  const shown = row.missing.slice(0, RMF_FILE_LIST_TRUNCATE_AT);
-  const rest = row.missing.slice(RMF_FILE_LIST_TRUNCATE_AT);
+  const shown = row.missing.slice(0, RMF_FILE_LIST_TRUNCATE_AT).map((f) => f.destination);
+  const rest = row.missing.slice(RMF_FILE_LIST_TRUNCATE_AT).map((f) => f.destination);
   const list = el('div', { class: 'file-list' }, shown.join(', '));
   if (rest.length > 0) {
     const extra = el('span', { class: 'file-list-extra hidden' }, `, ${rest.join(', ')}`);
@@ -349,7 +349,7 @@ function rmfApplyExtractResults(indices, results) {
     if (result.ok) {
       restoredFiles += (result.extracted || []).length;
       restoredMods += 1;
-      row.missing = row.missing.filter((f) => !(result.extracted || []).includes(f));
+      row.missing = row.missing.filter((f) => !(result.extracted || []).includes(f.destination));
       rmfState.selected.delete(idx);
     } else {
       failures.push(`${row.name}: ${result.error}`);
