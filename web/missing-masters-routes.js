@@ -21,7 +21,7 @@ const { rebuildSingleMod } = require('../lib/rebuild-single-mod');
 
 function createMissingMastersRouter(config) {
     const router = express.Router();
-    const { skyrimDataDir, pluginsListDir, dummyMastersOutputDir, staging, downloads, state } = config;
+    const { skyrimDataDir, pluginsListDir, dummyMastersOutputDir, staging, downloads, state, eslifierOutputDir } = config;
 
     // Shared by both folder-opening routes -- validates targetPath actually resolves inside baseDir
     // before ever handing it to Explorer. Both callers only ever pass a path this project's own scan
@@ -50,12 +50,19 @@ function createMissingMastersRouter(config) {
             // Collection both depend on it) -- reused here purely to enrich results with a friendly
             // mod name per plugin (see buildStagingModNameIndex's own comment); Missing Masters
             // itself still works without it, just without the mod-name column populated.
-            const result = missingMastersScan.scanMissingMasters(skyrimDataDir, pluginsTxtPath, staging, dummyMastersOutputDir);
+            const result = missingMastersScan.scanMissingMasters(skyrimDataDir, pluginsTxtPath, staging, dummyMastersOutputDir, eslifierOutputDir);
             // Lets the Rebuild This Mod confirm dialog state plainly whether it WILL auto-download a
             // missing archive, rather than hedging with "if turned on in Settings" -- the client
             // already knows the answer by the time it needs to say anything.
-            const { downloadMissingArchives } = appConfig.loadConfig();
-            res.json({ configured: true, ...result, downloadMissingArchivesEnabled: !!downloadMissingArchives });
+            const { downloadMissingArchives, missingMastersRecognizeEslifier } = appConfig.loadConfig();
+            res.json({
+                configured: true, ...result, downloadMissingArchivesEnabled: !!downloadMissingArchives,
+                // Read fresh per scan (like downloadMissingArchivesEnabled above) -- lets the client
+                // apply/withhold the ESLifier soft-tier downgrade without a restart, and show its own
+                // empty-state hint when there's no folder configured for it to match against yet.
+                recognizeEslifierEnabled: missingMastersRecognizeEslifier !== false,
+                eslifierOutputDirConfigured: !!eslifierOutputDir,
+            });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
@@ -118,6 +125,15 @@ function createMissingMastersRouter(config) {
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
+    });
+
+    // Persists the "Recognize ESLifier output" scan-option toggle -- lives on the Missing Masters
+    // page itself (not Settings, unlike this project's other toggles), so it gets its own small,
+    // immediate-save route rather than going through /api/settings' Save button.
+    router.post('/set-recognize-eslifier', (req, res) => {
+        const { enabled } = req.body || {};
+        appConfig.saveConfig({ missingMastersRecognizeEslifier: !!enabled });
+        res.json({ enabled: !!enabled });
     });
 
     // Opens a staging folder directly in Explorer (navigates INTO it, same "no single file to

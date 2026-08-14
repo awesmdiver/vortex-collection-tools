@@ -91,6 +91,9 @@ function main() {
         skyrimDataDir: fileConfig.skyrimDataDir || null,
         pluginsListDir: fileConfig.pluginsListDir || null,
         dummyMastersOutputDir: fileConfig.dummyMastersOutputDir || null,
+        // ESLifier awareness -- optional, blank is a supported state (see app-config.js's own
+        // comment). No CLI flag, config.json/Settings only.
+        eslifierOutputDir: fileConfig.eslifierOutputDir || null,
         // Archive Finder utility -- no CLI flag, config.json/Settings only. Deliberately reuses
         // `downloads` above as its own scan folder, no separate field for that.
         archiveFinderDbDir: fileConfig.archiveFinderDbDir || null,

@@ -1109,6 +1109,11 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .mm-row--critical { border-left-color: var(--danger); background: var(--danger-bg); }
 .mm-row--warning { border-left-color: var(--warning); background: var(--warning-bg); }
 .mm-row--success { border-left-color: var(--success); background: var(--success-bg); }
+/* ESLifier-recognized swap -- a calmer, muted tier that sits BELOW mm-row--warning (an
+   acknowledged, intentional swap, not a real problem to flag), reusing --neutral/--neutral-bg (the
+   same "no severity implied" grey already used for badge--neutral elsewhere) rather than inventing
+   a new color. See missing-masters-app.js's mmDisplayStatus/MM_STATUS for how a row lands here. */
+.mm-row--soft { border-left-color: var(--neutral); background: var(--neutral-bg); }
 /* Grid, not flex -- gives the mod-name its own genuine column (confirmed 2026-07-27: a raw plugin
    filename alone doesn't say which mod it's from) instead of just appending it as more inline text.
    [badge] [filename] [mod name] [actions] -- the two middle columns are both `fr` so they expand to

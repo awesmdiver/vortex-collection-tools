@@ -19,6 +19,12 @@ let mmPendingRebuild = null;
 // last scan -- lets the Rebuild This Mod confirm dialog state plainly what WILL happen rather than
 // hedging with "if turned on in Settings" (the answer's already known by the time it matters).
 let mmDownloadMissingArchivesEnabled = false;
+// ESLifier awareness -- current persisted "Recognize ESLifier output" toggle value, and whether an
+// output folder is even configured for it to match against (see Settings' own eslifierOutputDir
+// field). Both set fresh from every /scan response, same convention as
+// mmDownloadMissingArchivesEnabled above.
+let mmRecognizeEslifierEnabled = true;
+let mmEslifierOutputDirConfigured = false;
 const MM_NEEDED_BY_TRUNCATE_AT = 3;
 
 async function mmApi(method, path, body) {
@@ -82,6 +88,11 @@ const MM_STATUS = {
   // as a different shape breaking the consistency). The rocket still appears in the callout title
   // below, a different, larger context where it reads fine.
   'ready-to-deploy': { icon: '\u{1F7E2}', label: 'Pending', badgeClass: 'badge--success', cardClass: 'mm-row--success' },
+  // Recognized ESLifier swap -- a calmer, muted tier BELOW warning (see mmDisplayStatus below for
+  // when this applies). White circle, not a colored one -- confirmed real-world precedent above
+  // (ready-to-deploy's own comment): same dot SHAPE as the other three keeps the visual family
+  // consistent, while white/muted (not red/amber/green) signals "acknowledged, not a severity."
+  'eslifier-swap': { icon: '\u{26AA}', label: 'ESLifier', badgeClass: 'badge--neutral', cardClass: 'mm-row--soft' },
 };
 
 function mmCopyNameBtn(name) {
@@ -137,8 +148,21 @@ function mmRenderNeededByList(neededBy) {
 // The row's own effective status for display purposes -- readyToDeploy overrides the real
 // (still-'missing') scan status, same override MM_STATUS's own comment above describes. Shared by
 // the row renderer and the summary-badge filter below so both always agree on what a row "is."
+function mmIsEslifierSwap(master) {
+  return mmRecognizeEslifierEnabled && !!(master.activeAlternate && master.activeAlternate.eslifierSwap);
+}
+
 function mmDisplayStatus(master) {
-  return master.readyToDeploy ? 'ready-to-deploy' : master.status;
+  if (master.readyToDeploy) return 'ready-to-deploy';
+  if (mmIsEslifierSwap(master)) return 'eslifier-swap';
+  return master.status;
+}
+
+// Whenever the ESLifier soft tier applies, there's genuinely nothing left to fix (same reasoning as
+// readyToDeploy suppressing these same actions below) -- offering "Create Dummy Master" or "Open
+// Staging Folder" right next to a callout that says "nothing to fix" would read as a contradiction.
+function mmActionsSuppressed(master) {
+  return master.readyToDeploy || mmIsEslifierSwap(master);
 }
 
 function mmRenderMasterRow(master) {
@@ -163,7 +187,7 @@ function mmRenderMasterRow(master) {
   // Vortex's own missing-master check with a STUB instead of the real, already-restored file the
   // instant it's deployed), and Rebuild This Mod has nothing left to do either.
   const actions = [];
-  if (!master.readyToDeploy && master.possibleHollowInstall) {
+  if (!mmActionsSuppressed(master) && master.possibleHollowInstall) {
     const rebuildBtn = el('button', { class: 'btn btn--primary btn--small' }, 'Rebuild This Mod');
     rebuildBtn.addEventListener('click', () => mmShowRebuildConfirm(master.possibleHollowInstall, rebuildBtn));
     actions.push(rebuildBtn);
@@ -171,7 +195,7 @@ function mmRenderMasterRow(master) {
   // Left of Create Dummy Master, per explicit request -- lets the user go look at (and manually fix,
   // e.g. the active-alternate .esp-vs-.esl case below) the real folder themselves, whenever we
   // actually know where it is. Not shown once readyToDeploy, same reasoning as the other two buttons.
-  if (!master.readyToDeploy && master.stagingFolderPath) {
+  if (!mmActionsSuppressed(master) && master.stagingFolderPath) {
     const openBtn = el('button', { class: 'btn btn--primary btn--small' }, 'Open Staging Folder');
     openBtn.addEventListener('click', async () => {
       try {
@@ -185,7 +209,7 @@ function mmRenderMasterRow(master) {
   // Points at the folder INSIDE Data itself the misplaced file was actually found in (not staging) --
   // see missing-masters-scan.js's deployedMisplaced. Shown alongside Open Staging Folder, not instead
   // of it, since the user may want to compare both.
-  if (!master.readyToDeploy && master.deployedMisplaced) {
+  if (!mmActionsSuppressed(master) && master.deployedMisplaced) {
     const openDeployedBtn = el('button', { class: 'btn btn--primary btn--small' }, 'Open Deployed Folder');
     openDeployedBtn.addEventListener('click', async () => {
       try {
@@ -196,7 +220,7 @@ function mmRenderMasterRow(master) {
     });
     actions.push(openDeployedBtn);
   }
-  if (!master.readyToDeploy && master.status === 'missing') {
+  if (!mmActionsSuppressed(master) && master.status === 'missing') {
     const btn = el('button', { class: 'btn btn--primary btn--small' }, 'Create Dummy Master');
     btn.addEventListener('click', () => mmShowCreateDummyConfirm(master.name));
     actions.push(btn);
@@ -260,24 +284,43 @@ function mmRenderMasterRow(master) {
     ]);
     children.push(callout);
   } else if (master.activeAlternate && !master.activeAlternate.sameModAsMaster) {
-    const callout = el('div', { class: 'callout callout--critical' }, [
-      el('div', { class: 'callout__title' }, '🛑 Manual Action Needed: Name Collides With a Different Mod'),
-      el('p', {}, [
-        el('strong', {}, master.activeAlternate.name),
-        ' is active right now, but it didn’t come from this mod — it was deployed by ',
-        el('strong', {}, master.activeAlternate.modName),
-        ', a separate mod that happens to share the same file name. The actual missing file, ',
-        el('strong', {}, master.name),
-        ', lives in ',
-        el('strong', {}, master.modName),
-        '’s own staging folder. Click ',
-        el('strong', {}, 'Open Staging Folder'),
-        ' to find and restore it — we can’t tell whether ',
-        el('strong', {}, master.activeAlternate.modName),
-        '’s version is meant to replace it, so that decision is yours.',
-      ]),
-    ]);
-    children.push(callout);
+    // ESLifier awareness -- confirmed real 2026-08-14 (live vortex.deployment.json case): what LOOKS
+    // like a name collision with an unrelated mod is actually the user's own deliberate ESLifier
+    // swap whenever the active file's true source resolves back to their configured ESLifier output
+    // folder (mmIsEslifierSwap). Replaces the red hedging callout below with a calm, reassuring one
+    // — same row, soft tier (see mmDisplayStatus/MM_STATUS), nothing left for the user to decide.
+    if (mmIsEslifierSwap(master)) {
+      const callout = el('div', { class: 'callout callout--info' }, [
+        el('div', { class: 'callout__title' }, 'ⓘ You swapped this one on purpose — nothing to fix.'),
+        el('p', {}, [
+          'A lighter, compressed copy of ',
+          el('strong', {}, master.name),
+          ' from your ',
+          el('strong', {}, 'ESLifier output folder'),
+          ' is active instead of the original, exactly the way you set it up in Vortex. It looks like a name collision, but it’s working just as you meant it to.',
+        ]),
+      ]);
+      children.push(callout);
+    } else {
+      const callout = el('div', { class: 'callout callout--critical' }, [
+        el('div', { class: 'callout__title' }, '🛑 Manual Action Needed: Name Collides With a Different Mod'),
+        el('p', {}, [
+          el('strong', {}, master.activeAlternate.name),
+          ' is active right now, but it didn’t come from this mod — it was deployed by ',
+          el('strong', {}, master.activeAlternate.modName),
+          ', a separate mod that happens to share the same file name. The actual missing file, ',
+          el('strong', {}, master.name),
+          ', lives in ',
+          el('strong', {}, master.modName),
+          '’s own staging folder. Click ',
+          el('strong', {}, 'Open Staging Folder'),
+          ' to find and restore it — we can’t tell whether ',
+          el('strong', {}, master.activeAlternate.modName),
+          '’s version is meant to replace it, so that decision is yours.',
+        ]),
+      ]);
+      children.push(callout);
+    }
   }
   // Best-effort name match against a staging folder found completely empty on disk (see
   // missing-masters-scan.js's findPossibleHollowInstall) -- shown plainly as a GUESS, not asserted
@@ -355,9 +398,10 @@ function mmRenderSummaryBadges() {
     const key = mmDisplayStatus(m);
     counts[key] = (counts[key] || 0) + 1;
   }
-  // Fixed severity order (critical, warning, success) rather than Object.entries' insertion order,
-  // so pills don't reshuffle position as counts change from one scan to the next.
-  for (const key of ['missing', 'present-but-inactive', 'ready-to-deploy']) {
+  // Fixed severity order (critical, warning, soft/acknowledged, success) rather than
+  // Object.entries' insertion order, so pills don't reshuffle position as counts change from one
+  // scan to the next.
+  for (const key of ['missing', 'present-but-inactive', 'eslifier-swap', 'ready-to-deploy']) {
     if (!counts[key]) continue;
     const status = MM_STATUS[key];
     const active = mmStatusFilter === key;
@@ -399,6 +443,13 @@ function mmRender(data) {
   $g('mmCriticalError').classList.add('hidden');
   $g('mmNotConfigured').classList.add('hidden');
   $g('mmResults').classList.add('hidden');
+
+  // Independent of skyrimDataDir/pluginsListDir configuration below -- this reflects the ESLifier
+  // output folder specifically, so it's synced in both the configured and not-configured branches.
+  mmRecognizeEslifierEnabled = data.recognizeEslifierEnabled !== false;
+  mmEslifierOutputDirConfigured = !!data.eslifierOutputDirConfigured;
+  $g('mmRecognizeEslifierInput').checked = mmRecognizeEslifierEnabled;
+  $g('mmRecognizeEslifierEmptyHint').classList.toggle('hidden', mmEslifierOutputDirConfigured);
 
   if (!data.configured) {
     $g('mmHeaderRow').classList.add('hidden');
@@ -452,6 +503,26 @@ async function runMissingMastersScan() {
 }
 
 $g('mmRefreshBtn').addEventListener('click', () => runMissingMastersScan());
+
+// Saves immediately on toggle (its own small route, not the Settings page's Save button -- see
+// missing-masters-routes.js's /set-recognize-eslifier) and re-renders right away from the scan
+// results already on screen -- the underlying eslifierSwap detection never changes, only whether
+// this toggle honors it, so there's no need to re-scan the filesystem just to reflect it.
+$g('mmRecognizeEslifierInput').addEventListener('change', async (e) => {
+  const enabled = e.target.checked;
+  e.target.disabled = true;
+  try {
+    await mmApi('POST', '/api/missing-masters/set-recognize-eslifier', { enabled });
+    mmRecognizeEslifierEnabled = enabled;
+    mmRenderSummaryBadges();
+    mmRenderMasterList();
+  } catch (err) {
+    e.target.checked = !enabled; // revert -- the save didn't actually take
+    mmHandleError(err);
+  } finally {
+    e.target.disabled = false;
+  }
+});
 
 // Silent counterpart used only by the background poll below -- confirmed real annoyance
 // 2026-07-27: the visible version above always blanks the results and shows a loading spinner

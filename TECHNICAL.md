@@ -2675,6 +2675,71 @@ count, never auto-reset by the background poll or a manual Refresh so an active 
 added a 💡 Tip callout under the tool-hero banner reminding the user that fixing something here only
 updates staging -- Vortex's own **Deploy Mods** is still required to finish moving it into the game.
 
+### ESLifier awareness (2026-08-14) -- recognizing a deliberate ESL swap, not a false "name collision"
+
+ESLifier (github.com/MaskPlague/ESLifier, Nexus mod 145168 -- confirmed via the GitHub repo's own
+`homepage` field, not guessed) is a separate third-party tool that shrinks eligible plugins to the
+ESL format and re-deploys the results from its own dedicated staging subfolder. Confirmed via a real
+user screenshot (2026-07-29): the existing `findActiveAlternate`/"Name Collides With a Different
+Mod" critical callout (see "Detection" above) was a false positive whenever the colliding active
+file's TRUE deployed source (`vortex.deployment.json`) was the user's own ESLifier output folder --
+a deliberate swap, not a genuinely unrelated mod stepping on this master's name.
+
+**Verified against real live data before writing any detection code** (not a guessed trace):
+inspected the user's own real `vortex.deployment.json` (798,615 total file entries) and their real
+staging folder. Confirmed the `source` field for every ESLifier-produced file is the literal, raw
+ESLifier output folder name -- e.g. `"ESLifier Output"`, exactly matching that staging folder's own
+name character-for-character (`stripDownloadNameSuffix` is a no-op on it, since it doesn't match the
+modId-version-timestamp pattern any real Nexus download folder has). 341 plugin-file entries in the
+live manifest had this exact source. This was the one open question the build brief flagged
+("confirm how the manifest source lines up with the configured path") -- resolved: a straight,
+case-insensitive string compare against `stripDownloadNameSuffix(path.basename(eslifierOutputDir))`
+is correct and needs no fuzzier matching.
+
+At the time of building this, the user's real collection had zero current problem masters (the
+originally-screenshotted DBM_SkyrimSewers_Patch.esp case had since been resolved), so the full
+`scanMissingMasters` -> `activeAlternate.eslifierSwap` -> UI pipeline was verified end-to-end
+against a synthetic sandbox reproducing the same shape (a master present in its own mod's staging
+folder but undeployed, a same-staging-folder sibling deployed+active, `vortex.deployment.json`
+recording that sibling's source as the configured ESLifier folder) -- confirmed `eslifierSwap: true`
+only when `eslifierOutputDir` is configured and matches, `false`/absent-equivalent otherwise (byte-
+identical fallback to pre-existing behavior when the folder isn't configured).
+
+**Two new config fields** (`lib/app-config.js`, `config.example.json`):
+- `eslifierOutputDir` (path field, restart-required, blank is a supported/inert state, same
+  treatment as `archiveFinderOutputDir`) -- Settings > Missing Masters, with a Browse... picker and
+  an "ⓘ Learn more about ESLifier" link using the established `.mod-name-link` separate-window
+  pattern (see "External links open in a separate window, not a tab" in DESIGN.md).
+- `missingMastersRecognizeEslifier` (non-path, default `true`, read fresh per scan/request, no
+  restart) -- unlike this project's other toggles, this one lives on the Missing Masters page itself
+  as a scan option, not the Settings page, so it gets its own small immediate-save route
+  (`POST /api/missing-masters/set-recognize-eslifier`) rather than going through Settings' Save.
+
+**Detection** (`lib/missing-masters-scan.js`): `scanMissingMasters` takes a 5th `eslifierOutputDir`
+param. `findActiveAlternate` now also sets `eslifierSwap` on its returned `activeAlternate` object --
+`true` when `activeAlternate.modName` (the deployment-manifest-derived true source) case-
+insensitively matches the configured folder's own (stripped) basename. This always computes when the
+folder is configured, regardless of the toggle -- the toggle is a pure UI display decision layered
+on top (see below), not baked into the scan itself.
+
+**UI** (`web/public/missing-masters-app.js`): a new `mmIsEslifierSwap(master)` helper combines the
+scan's `eslifierSwap` flag with the live toggle state. `mmDisplayStatus` now returns a new
+`'eslifier-swap'` status ahead of the plain `master.status` fallback (behind `readyToDeploy`, same
+precedence order as the existing override). A new muted tier sits in `MM_STATUS`/`styles.css`
+(`mm-row--soft`, reusing `--neutral`/`--neutral-bg` -- the same "no severity implied" grey already
+behind `badge--neutral` elsewhere -- rather than inventing a new color), deliberately calmer than
+`mm-row--warning` per the build brief's explicit call. **This is a new tier not yet in DESIGN.md's
+severity table -- flagged for the design side to fold in** (see handoff). The "Name Collides"
+critical callout branch now forks: when `mmIsEslifierSwap()` is true it renders the calm
+`callout--info` reassurance ("You swapped this one on purpose -- nothing to fix") instead; the four
+action buttons that only make sense for a genuine unresolved problem (Create Dummy Master, Open
+Staging/Deployed Folder, Rebuild This Mod) are suppressed on an eslifier-swap row via a new
+`mmActionsSuppressed()` helper, extending the exact same suppression `readyToDeploy` already used
+(offering "Create Dummy Master" next to a "nothing to fix" callout would read as a contradiction).
+Toggling the checkbox persists immediately and re-renders the already-fetched scan results in place
+-- no re-scan needed, since the underlying `eslifierSwap` detection never changes, only whether the
+toggle honors it.
+
 ## Archive Finder (Utilities area, added 2026-07-28)
 
 A third Utilities sub-tab, folded in from a previously-standalone project
@@ -3897,6 +3962,51 @@ and after restoring). End-to-end, against the live server on a scratch port:
    staging folder yet") rather than fabricating a missing-files list for a mod that was never staged
    at all. That downloaded archive was intentionally left in place afterward (a real file for a mod
    genuinely in this collection, not test debris) rather than deleted unilaterally.
+
+### Archive version-mismatch diagnostics (2026-08-14)
+
+Director-reported bug: a "My NSFW" authored (Workshop) collection showed a generic "No archive file
+found." for a huge fraction of its mods, even though the archives were visibly sitting in the
+downloads folder. Confirmed live against real data, not theory-patched:
+
+- **"FlufyFox Animations for OStim Standalone"** — `collection.json` records
+  `fileSize=25,788,196` / `md5=aa0c8c519f9a0bdf4d06f79bfae240b5`. The real file on disk
+  (`FlufyFox Animations for OStim Standalone-163176-2-0-0-1775686571.7z`) is `25,789,989` bytes —
+  **1,793 bytes larger**, outside `archive-locator.js`'s own `SIZE_TOLERANCE_BYTES` (1024) fallback
+  window — with a completely different md5. It never became a match candidate at all
+  (`locateArchive` → `NOT_FOUND`), not a code bug: a genuinely different file version, most likely
+  downloaded after this Workshop collection's own fileId pin (`collection.json` last written
+  2026-01-04) fell behind Nexus's current file for this mod.
+- **Scale**: re-running every one of this collection's 121 mods through `locateArchive` directly
+  found **65 failing** (26 `NOT_FOUND`, 39 `HASH_MISMATCH`) against only 55 resolving cleanly —
+  confirming the director's "there are a lot of missing archives," not an isolated case. Consistent
+  with an authored collection whose pinned fileIds drifted out of sync with Nexus over several
+  months while its (frequently-updated) source mods kept shipping new versions.
+- A large share of the `HASH_MISMATCH` results are themselves a secondary, lower-severity artifact:
+  the shared `F:\Vortex Downloads\skyrimse` folder holds archives for the director's *entire*
+  Skyrim library (thousands of files across every collection, not just this one), so for genuinely
+  tiny archives (SPID patches, single-plugin ESLs — a few hundred bytes to a few KB), a ±1024-byte
+  tolerance window can span 100%+ of the file's own size and pull in dozens of totally unrelated
+  same-size-ish files, none of which have anything to do with the mod being checked. They still
+  correctly fail the md5 check (no wrong archive is ever used), just with a noisier "same-size
+  candidate" story than a real version mismatch. Not addressed here — the fix below only changes the
+  *message*, not `archive-locator.js`'s matching/tolerance logic, which stays exactly as-is per the
+  investigation's own scope.
+
+**Fix**: `classifyMod`'s `SKIP_NO_ARCHIVE` `detail` (`lib/rebuild-mod.js`'s new
+`describeArchiveMismatch()`) now surfaces the collection's own recorded expectation —
+`logicalFilename`, human-readable size (`lib/format-bytes.js`, shared with the frontend's
+`cleanup-app.js` formatter), and a short md5 prefix — instead of the old bare "No archive file
+found.", and distinguishes `NOT_FOUND` ("no archive matching this mod was found") from
+`HASH_MISMATCH` ("an archive close to the expected size was found, but it doesn't match") so the
+director can tell "genuinely missing" apart from "wrong version downloaded" at a glance. Example, the
+real FlufyFox case above: *"No archive matching this mod was found in your downloads folder. This
+collection expects 'FlufyFox Animations for OStim Standalone', 24.6 MB, md5 aa0c8c51…. If a different
+version was downloaded since this collection was last synced, that's likely why -- try Download
+Archive to get the exact version, or update the collection."* Verified against the live
+`classifyMod` path (not just the message-builder in isolation) for FlufyFox (`NOT_FOUND`) and two
+`HASH_MISMATCH` mods from the same collection. `locateArchive`'s matching algorithm itself is
+untouched — filename is still never used to pick a match, only to explain a failure after the fact.
 
 ### New routes (`web/rebuild-missing-routes.js`, mounted at `/api/rebuild-missing`)
 

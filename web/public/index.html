@@ -901,6 +901,17 @@
         </div>
         <p class="muted">Pick a dedicated folder for this -- not your live Data or SKSE folder. Somewhere inside your staging folder works great, the same way you'd set up a DynDOLOD or BodySlide output.</p>
       </div>
+
+      <h3 class="settings-section-title">ESLifier output folder</h3>
+      <div class="field-group">
+        <label class="field-label" for="settingsEslifierOutputDirInput">Point us at your ESLifier output folder here <span class="muted">(optional)</span></label>
+        <div class="path-input-row">
+          <input id="settingsEslifierOutputDirInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\ESLifier Output" autocomplete="off">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsEslifierOutputDirInput">Browse&hellip;</button>
+        </div>
+        <p class="muted">ESLifier is a separate tool that shrinks eligible plugins into the lighter ESL format and updates everything that points at them, saving the results in its own folder. Tell us where that folder is and our tools will treat those files as intentional — instead of mistaking the swap for a problem.</p>
+        <p><a href="https://www.nexusmods.com/skyrimspecialedition/mods/145168" class="mod-name-link" target="_blank" rel="noopener">&#9432; Learn more about ESLifier</a></p>
+      </div>
     </div>
     </section>
 
@@ -1677,6 +1688,18 @@
   <div class="callout callout--info">
     <div class="callout__title">💡 Tip</div>
     <p>Fixing something here only updates your staging folder — open Vortex and click <strong>Deploy Mods</strong> afterward to finish moving it into your game.</p>
+  </div>
+
+  <!-- Scan option -- ON by default, persisted immediately via its own route on toggle (not the
+       Settings page's Save button), same "no restart, applies on the next scan" convention as this
+       app's other scan-time toggles. -->
+  <div class="field-group" id="mmRecognizeEslifierGroup">
+    <label class="checkbox">
+      <input type="checkbox" id="mmRecognizeEslifierInput">
+      Recognize ESLifier output
+    </label>
+    <p class="muted">When a file traces back to your ESLifier output folder, we'll show it as a quiet heads-up instead of a missing-master alert — the swap is on purpose, so there's nothing to fix.</p>
+    <p class="muted hidden" id="mmRecognizeEslifierEmptyHint">Add your <strong>ESLifier output folder</strong> in <strong>Settings</strong> to use this.</p>
   </div>
 
   <!-- Same clickable-pill filter convention as Stats Report's "Current Issues" badges

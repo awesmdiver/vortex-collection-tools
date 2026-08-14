@@ -196,6 +196,7 @@ async function loadSettings() {
   $g('settingsDummyMastersOutputDirInput').value = cfg.dummyMastersOutputDir || '';
   $g('settingsArchiveFinderDbDirInput').value = cfg.archiveFinderDbDir || '';
   $g('settingsArchiveFinderOutputDirInput').value = cfg.archiveFinderOutputDir || '';
+  $g('settingsEslifierOutputDirInput').value = cfg.eslifierOutputDir || '';
   $g('settingsMaxBackupsInput').value = cfg.maxBackupsToKeep != null ? cfg.maxBackupsToKeep : '';
   $g('settingsMaxStateBackupsInput').value = cfg.maxStateBackupsToKeep != null ? cfg.maxStateBackupsToKeep : '';
   $g('settingsConcurrencyInput').value = cfg.concurrentExtractions || 1;
@@ -390,6 +391,7 @@ async function saveSettings() {
       dummyMastersOutputDir: $g('settingsDummyMastersOutputDirInput').value,
       archiveFinderDbDir: $g('settingsArchiveFinderDbDirInput').value,
       archiveFinderOutputDir: $g('settingsArchiveFinderOutputDirInput').value,
+      eslifierOutputDir: $g('settingsEslifierOutputDirInput').value,
       maxBackupsToKeep: $g('settingsMaxBackupsInput').value === '' ? null : Number($g('settingsMaxBackupsInput').value),
       maxStateBackupsToKeep: $g('settingsMaxStateBackupsInput').value === '' ? null : Number($g('settingsMaxStateBackupsInput').value),
       concurrentExtractions: Number($g('settingsConcurrencyInput').value) || 1,
@@ -459,6 +461,15 @@ document.querySelectorAll('.settings-browse-btn').forEach((btn) => {
     } finally {
       btn.disabled = false;
     }
+  });
+});
+
+// ---------- External links (a real separate window, not a tab -- see DESIGN.md's "External links
+// open in a separate window, not a tab") ----------
+document.querySelectorAll('.mod-name-link').forEach((a) => {
+  a.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.open(a.href, '_blank', 'noopener,width=1200,height=900');
   });
 });
 
