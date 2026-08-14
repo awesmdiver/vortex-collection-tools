@@ -1,16 +1,7 @@
 {
   "project": "vortex-collection-tools",
   "inFlight": null,
-  "items": [
-    {
-      "id": "rules-generator-workshop-picker-dedup",
-      "tag": "bug",
-      "title": "Rules Generator: dedup Workshop collections that now appear in both the old and new pickers",
-      "why": "Follow-up flagged in 3427f35's own handoff: fixing the shared Workshop-collection blindspot means a collection with real content can now appear in Rules Generator's 'old' picker (fixed) AND its separate, never-deduped 'new collection' Workshop picker at once -- confusing, not previously possible.",
-      "prompt": "Follow-up from `3427f35`'s own handoff (merge-plugins-workshop-collection-blindspot) -- read that handoff first for full context.\n\nThat fix relaxed `scanStagingCollections` so a Workshop-authored collection with real on-disk content now appears in `listInstalledCollections` -- used by Merge Plugins, Update Collection, AND Rules Generator's ORIGINAL/old-collection picker. But Rules Generator has a SEPARATE, second picker for its 'new collection' side (`rules-generator-worker.js`'s `list-workshop-collections` mode), which lists every Workshop-tracked collection Vortex knows about regardless of content, with no dedup against the first list.\n\nTHE GAP: previously, installed-with-content collections and Workshop-named folders were 100% mutually exclusive across these two pickers (impossible for the same collection to appear in both). Now that a Workshop collection with real content can appear in the FIRST list too, the exact same collection can show up as an option in BOTH the 'old' and 'new' pickers at once -- confusing in a tool whose whole point is comparing two DIFFERENT collections.\n\nSCOPE: decide and implement the right dedup -- most likely, the 'new collection' (Workshop) picker should exclude anything that already appears in the 'old collection' list (since if it has real content and is already comparable as an 'old' collection, it doesn't need to also show as a raw Workshop-tracked option). Read `rules-generator-worker.js`'s own `list-workshop-collections` implementation and whatever route/UI wires it up before assuming the fix location.\n\nVERIFY live: find or create a real Workshop-authored collection with genuine content (matches the definition from `3427f35` -- at least one mod with a real staging folder), confirm it now appears ONLY where it should (old collection picker, not duplicated into the new-collection Workshop picker), and confirm a genuinely bare/draft Workshop collection still correctly appears ONLY in the new-collection picker, not neither. Handoff with what you tested.",
-      "ready": true
-    }
-  ],
+  "items": [],
   "roadmap": [
     {
       "title": "Theming framework (Phase 2)",
@@ -90,6 +81,9 @@
     },
     {
       "title": "Merge Plugins/Update Collection/Rules Generator: fixed to see Workshop-authored collections with real content"
+    },
+    {
+      "title": "Rules Generator: dedup Workshop collections that now appear in both the old and new pickers"
     }
   ]
 }
