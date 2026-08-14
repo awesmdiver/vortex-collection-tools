@@ -103,7 +103,11 @@ function main() {
     };
 
     const app = express();
-    app.use(express.json());
+    // Default 100kb is too small for "extract everything" on a big collection -- Rebuild Missing
+    // Files' /extract sends a {source, destination} pair per missing file, and a collection with
+    // hundreds of missing files across many mods can clear 100kb easily (confirmed live: 413 on
+    // "My GTS Audio Overhaul"). 10mb comfortably covers even a very large collection's full list.
+    app.use(express.json({ limit: '10mb' }));
     app.use(express.static(path.join(__dirname, 'public')));
     app.use('/api/rebuild', createRouter(config));
     app.use('/api/sync', createSyncRouter(config));
