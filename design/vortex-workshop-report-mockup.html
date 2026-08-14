@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body>
+<title>Workshop Report — new report mockup v1 (Approved ✓ 2026-08-14)</title>
+<style>
+  :root{
+    --bg:#0d0f14; --surface:#161922; --surface-2:#1d212c; --border:#2a2f3d; --border-strong:#3a4152;
+    --text:#e6e9ef; --text-muted:#8b93a3; --accent:#5b8def; --accent-hover:#75a1f5; --accent-bg:rgba(91,141,239,0.12);
+    --success:#3ecf8e; --success-bg:rgba(62,207,142,.12); --warning:#f5b942; --warning-bg:rgba(245,185,66,.12);
+    --danger:#f0546b; --danger-bg:rgba(240,84,107,.12); --neutral:#7c8494; --neutral-bg:rgba(124,132,148,.12);
+    --radius:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;font-size:15px;line-height:1.5}
+  .wrap{max-width:min(1100px,96vw);margin:0 auto;padding:24px 24px 70px}
+  .eyebrow{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--text-muted);margin:0 0 8px}
+  .eyebrow a{color:var(--accent);text-decoration:none}
+
+  .subnav{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 26px}
+  .subnav .btn{font-size:12.5px;padding:7px 12px}
+
+  .hero{margin:0 0 22px}
+  .hero h1{font-size:20px;margin:0 0 6px}
+  .hero p{color:var(--text-muted);font-size:14px;margin:0;max-width:680px;line-height:1.6}
+
+  .btn{font-family:inherit;font-size:13.5px;font-weight:500;padding:8px 14px;border-radius:8px;border:1px solid var(--border);
+    background:var(--surface-2);color:var(--text);cursor:pointer;white-space:nowrap}
+  .btn:hover{border-color:var(--accent)}
+  .btn--primary{background:var(--accent);border-color:var(--accent);color:#0b1220;font-weight:600}
+  .btn--primary:disabled{opacity:.4;cursor:default}
+  .btn--ghost{background:transparent}
+  .btn--small{font-size:12px;padding:5px 10px}
+
+  .actionrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 18px}
+  .loadmeta{font-size:12.5px;color:var(--text-muted)}
+  .loadmeta b{color:var(--text)}
+
+  .progress-line{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-muted);margin:0 0 18px}
+  .spinner{width:14px;height:14px;border-radius:50%;border:2px solid var(--border-strong);border-top-color:var(--accent);
+    animation:spin .7s linear infinite;flex:none}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .progress-track{flex:1;max-width:260px;height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden}
+  .progress-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .2s}
+
+  .plan-table-wrap{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .plan-table{width:100%;border-collapse:collapse;font-size:13.5px}
+  .plan-table thead th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;
+    color:var(--text-muted);padding:11px 14px;background:var(--surface-2);border-bottom:1px solid var(--border)}
+  .plan-table td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+  .plan-table tbody tr:last-child td{border-bottom:none}
+  .plan-table tbody tr:nth-child(even){background:rgba(255,255,255,.022)}
+  .plan-table tbody tr:hover{background:var(--surface-2)}
+  .name{color:var(--text);font-weight:600}
+  .mono{font-family:Consolas,monospace;font-size:12.5px;color:var(--text-muted)}
+  .pill{font-size:11px;font-weight:700;padding:2px 9px;border-radius:12px;display:inline-block}
+  .pill--draft{background:var(--warning-bg);color:var(--warning)}
+  .pill--published{background:var(--success-bg);color:var(--success)}
+  .pill--notfetched{background:var(--neutral-bg);color:var(--neutral)}
+  .updated{color:var(--text)}
+  .updated .rel{color:var(--text-muted);font-size:12px;display:block;margin-top:1px}
+  .row-actions{display:flex;gap:6px;justify-content:flex-end}
+  .row-actions .btn{font-size:12px;padding:5px 10px}
+  .muted-cell{color:var(--text-muted);font-size:12.5px}
+
+  .note{margin:16px 2px 0;font-size:12.5px;color:var(--text-muted);line-height:1.7}
+</style>
+
+<div class="wrap">
+
+  <div class="eyebrow"><a href="#">Home</a> › Reports</div>
+
+  <div class="subnav">
+    <button class="btn btn--small btn--ghost">Stats Report</button>
+    <button class="btn btn--small btn--ghost">Work Through Report</button>
+    <button class="btn btn--small btn--ghost">Update Compare Report</button>
+    <button class="btn btn--small btn--ghost">Rules Generator Report</button>
+    <button class="btn btn--small btn--primary">Workshop Report</button>
+  </div>
+
+  <div class="hero">
+    <h1>🕒 See When You Last Touched Each Workshop Collection</h1>
+    <p>Nexus's own collection page shows a date that never moves for a private collection — this
+    pulls the real one, straight from each collection's revision history, so you can tell at a
+    glance which ones you've actually worked on recently.</p>
+  </div>
+
+  <div class="actionrow" id="loadedState">
+    <button class="btn btn--primary" onclick="goLoading()">🔄 Check Nexus for updates</button>
+    <span class="loadmeta">Last checked: <b>2 hours ago</b></span>
+  </div>
+
+  <div class="progress-line" id="loadingState" style="display:none">
+    <span class="spinner"></span>
+    <span id="progressText">Checking "My Jorrvaskr Overhaul" — 6 / 17</span>
+    <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:35%"></div></div>
+  </div>
+
+  <div class="plan-table-wrap">
+    <table class="plan-table">
+      <thead><tr><th>Collection</th><th>Slug / ID</th><th>Revision</th><th>Last updated on Nexus</th><th style="text-align:right">Actions</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <p class="note">
+    <strong>Last updated on Nexus</strong> comes from the collection's own revision history, not its
+    listing page — that's the one that actually moves when you save new changes, even for a private,
+    unpublished collection. <strong>Open Staging Folder</strong> jumps straight to the collection's
+    files on disk. Collections you haven't fetched into staging yet show up too, so you can spot one
+    worth pulling down before it drifts further out of date.
+  </p>
+
+</div>
+
+<script>
+  const ROWS = [
+    { name: "My Dragonborn UI for GTS", slug: "lxvyai", revision: 1, status: "draft", updated: "Aug 13, 2026, 11:23 PM", rel: "yesterday", fetched: true },
+    { name: "My GTS Audio Overhaul", slug: "p3jrq2", revision: 3, status: "draft", updated: "Aug 14, 2026, 2:40 PM", rel: "today", fetched: true },
+    { name: "My Jorrvaskr Overhaul", slug: "hn8w1x", revision: 2, status: "published", updated: "Jul 2, 2026, 8:15 PM", rel: "6 weeks ago", fetched: true },
+    { name: "Beauty Salon for GTS", slug: "9fkc0z", revision: 1, status: "draft", updated: "May 30, 2026, 9:02 AM", rel: "11 weeks ago", fetched: true },
+    { name: "Grass Mods", slug: "qz71ml", revision: 1, status: "draft", updated: "Aug 10, 2026, 4:12 PM", rel: "4 days ago", fetched: false },
+  ];
+
+  function render() {
+    document.getElementById('rows').innerHTML = ROWS.map(r => `
+      <tr>
+        <td><div class="name">${r.name}</div></td>
+        <td class="mono">${r.slug}</td>
+        <td>${r.revision} <span class="pill pill--${r.status}">${r.status === 'draft' ? 'draft' : 'published'}</span></td>
+        <td><div class="updated">${r.updated}<span class="rel">${r.rel}</span></div></td>
+        <td><div class="row-actions">
+          ${r.fetched
+            ? `<button class="btn">📂 Open Staging Folder</button>`
+            : `<span class="muted-cell">Not downloaded yet</span>`}
+          <button class="btn btn--ghost">View on Nexus</button>
+        </div></td>
+      </tr>`).join('');
+  }
+  render();
+
+  window.goLoading = () => {
+    document.getElementById('loadedState').style.display = 'none';
+    document.getElementById('loadingState').style.display = 'flex';
+    let pct = 35;
+    const iv = setInterval(() => {
+      pct += 20;
+      document.getElementById('progressFill').style.width = Math.min(pct, 100) + '%';
+      if (pct >= 100) {
+        clearInterval(iv);
+        setTimeout(() => {
+          document.getElementById('loadingState').style.display = 'none';
+          document.getElementById('loadedState').style.display = 'flex';
+        }, 300);
+      }
+    }, 500);
+  };
+</script>
+</body>
+</html>
