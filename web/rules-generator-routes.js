@@ -33,12 +33,31 @@ function createRulesGeneratorRouter(config) {
         }
     });
 
-    // New collections: Workshop-only (no collection.json), so this can only come from the live
-    // DB -- Vortex must be closed.
+    // New collections: every Workshop-tracked collection Vortex knows about, straight from its
+    // live state -- Vortex must be closed. Deduped against the "old" list above (queue:
+    // rules-generator-workshop-collection-dedup) -- scanStagingCollections (vortex-sync/lib.js) was
+    // relaxed in 3427f35 to include a Workshop-named folder once it has real on-disk content, so a
+    // Workshop collection can now legitimately appear in BOTH lists (it's both "old" and "new" at
+    // once, which makes no sense in a picker whose whole point is comparing two DIFFERENT
+    // collections). A collection that already has real content and shows up as "old" doesn't need
+    // to also show as a raw Workshop option here -- the dedup runs one way only, old wins. Reuses
+    // listInstalledCollections directly (cheap, filesystem-only, no extra Vortex dependency --
+    // Vortex is already confirmed closed above for this route regardless) rather than threading
+    // stagingDir through the isolated worker just to duplicate that same read in-process.
     router.get('/workshop-collections', async (req, res) => {
         if (vortexRunningGate(res)) return;
         try {
             const collections = await rgRunner.listWorkshopCollections(state);
+            if (staging) {
+                let alreadyListedIds;
+                try {
+                    alreadyListedIds = new Set(syncRunner.listInstalledCollections(staging).map((c) => c.modId));
+                } catch {
+                    alreadyListedIds = new Set(); // staging unreadable -- fail open, no dedup rather than a 500 here
+                }
+                res.json({ collections: collections.filter((c) => !alreadyListedIds.has(c.modKey)) });
+                return;
+            }
             res.json({ collections });
         } catch (e) {
             res.status(500).json({ error: e.message });
