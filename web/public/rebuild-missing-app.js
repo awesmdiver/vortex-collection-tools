@@ -12,6 +12,7 @@ const rmfState = {
   rows: [], // flattened scan report rows -- see rmfRenderReport
   selected: new Set(), // row index
   eventSource: null,
+  extractEventSource: null,
 };
 
 async function rmfApi(method, urlPath, body) {
@@ -390,7 +391,7 @@ function rmfBuildMissingCell(row, idx) {
 function rmfBuildActionsCell(row, idx) {
   const actions = el('div', { class: 'row-actions' });
   if (row.kind === 'missing') {
-    const extractBtn = el('button', { class: 'btn btn--small' }, 'Extract from Archive');
+    const extractBtn = el('button', { class: 'btn btn--small rmf-extract-trigger' }, 'Extract from Archive');
     extractBtn.addEventListener('click', () => rmfConfirmExtract([idx]));
     actions.appendChild(extractBtn);
     const openBtn = el('button', { class: 'btn btn--ghost btn--small' }, 'Open Staging Folder');
@@ -458,6 +459,19 @@ function rmfConfirmExtract(indices) {
 $g('rmfExtractConfirmCancelBtn').addEventListener('click', () => {
   $g('rmfExtractConfirmModal').classList.add('hidden');
 });
+
+// A big batch (a whole collection's worth of mods) can take a while -- streams per-mod progress the
+// same POST-starts-202/GET-.../events-subscribes way the scan itself already does (rmfStartScan /
+// rmfHandleScanEvent above), so a long-running extract never reads as "nothing is happening."
+function rmfSetExtractingUI(active) {
+  $g('rmfExtractLoading').classList.toggle('hidden', !active);
+  document.querySelectorAll('.rmf-extract-trigger').forEach((btn) => { btn.disabled = active; });
+  // rmfExtractSelectedBtn's real disabled state depends on selection count, not just "not
+  // extracting" -- rmfRefreshSelectionUI is the single source of truth for that, so let it settle
+  // the bulk button back to correct rather than force it enabled here.
+  if (!active) rmfRefreshSelectionUI();
+}
+
 $g('rmfExtractConfirmOkBtn').addEventListener('click', async () => {
   $g('rmfExtractConfirmModal').classList.add('hidden');
   const indices = rmfPendingExtractIndices;
@@ -465,13 +479,35 @@ $g('rmfExtractConfirmOkBtn').addEventListener('click', async () => {
     const row = rmfState.rows[i];
     return { name: row.name, targetFolderName: row.targetFolderName, archivePath: row.archivePath, files: row.missing };
   });
+  $g('rmfExtractResultsCallout').classList.add('hidden');
+  rmfSetExtractingUI(true);
+  $g('rmfExtractLoadingText').textContent = 'Restoring files…';
   try {
-    const { results } = await rmfApi('POST', '/api/rebuild-missing/extract', { items });
-    rmfApplyExtractResults(indices, results);
+    await rmfApi('POST', '/api/rebuild-missing/extract', { items });
   } catch (e) {
+    rmfSetExtractingUI(false);
     rmfHandleError(e, $g('rmfScanError'));
+    return;
   }
+  if (rmfState.extractEventSource) rmfState.extractEventSource.close();
+  const es = new EventSource('/api/rebuild-missing/extract/events');
+  rmfState.extractEventSource = es;
+  es.onmessage = (msg) => rmfHandleExtractEvent(JSON.parse(msg.data), indices);
 });
+
+function rmfHandleExtractEvent(frame, indices) {
+  if (frame.type === 'mod-extracted') {
+    $g('rmfExtractLoadingText').textContent = `${frame.index} / ${frame.total} mods restored — ${frame.name}`;
+  } else if (frame.type === 'extract-complete') {
+    rmfSetExtractingUI(false);
+    if (rmfState.extractEventSource) { rmfState.extractEventSource.close(); rmfState.extractEventSource = null; }
+    rmfApplyExtractResults(indices, frame.results);
+  } else if (frame.type === 'extract-error') {
+    rmfSetExtractingUI(false);
+    if (rmfState.extractEventSource) { rmfState.extractEventSource.close(); rmfState.extractEventSource = null; }
+    rmfHandleError(new Error(frame.message || 'The extraction failed.'), $g('rmfScanError'));
+  }
+}
 
 function rmfApplyExtractResults(indices, results) {
   let restoredFiles = 0;

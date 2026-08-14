@@ -35,6 +35,7 @@ const appConfig = require('../lib/app-config');
 const { createSseSession } = require('./sse-session');
 
 const scanSession = createSseSession();
+const extractSession = createSseSession();
 
 function createRebuildMissingRouter(config) {
     const router = express.Router();
@@ -364,8 +365,8 @@ function createRebuildMissingRouter(config) {
         })();
     });
 
-    // Extracts just the missing files for one or more mods, straight from their already-resolved
-    // archive. Re-verifies every path is STILL actually missing right before extracting (cheap
+    // Extracts the missing files for ONE mod, straight from its already-resolved archive.
+    // Re-verifies every path is STILL actually missing right before extracting (cheap
     // fs.existsSync checks) rather than trusting the client-held scan result outright -- real time
     // may have passed since the scan ran.
     //
@@ -378,6 +379,59 @@ function createRebuildMissingRouter(config) {
     // was stripped -- so this replays the same scratch-dir-then-copy pattern extract-mod.js's own
     // installResolvedFiles already uses for a real rebuild: extract every source into a scratch temp
     // dir in one 7z call, then copy each into its real destination under the staging folder.
+    async function extractOneMod(item) {
+        const { name, targetFolderName, archivePath, files } = item || {};
+        if (!targetFolderName || !archivePath || !Array.isArray(files) || files.length === 0) {
+            return { name, ok: false, error: 'Incomplete request.' };
+        }
+        if (!fs.existsSync(archivePath)) {
+            return { name, ok: false, error: 'The archive is no longer on disk -- try Download Archive, or re-scan.' };
+        }
+        const stagingModDir = path.join(staging, targetFolderName);
+        const stillMissing = files.filter((f) => !fs.existsSync(path.join(stagingModDir, f.destination)));
+        if (stillMissing.length === 0) {
+            return { name, ok: true, extracted: [], note: 'Already fixed -- nothing was actually missing anymore.' };
+        }
+        const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rmf-extract-'));
+        try {
+            await extractMany(sevenZipExe, archivePath, stillMissing.map((f) => f.source), scratchDir);
+            const reallyThere = [];
+            const stillGone = [];
+            for (const f of stillMissing) {
+                const scratchPath = path.join(scratchDir, f.source);
+                if (!fs.existsSync(scratchPath)) {
+                    stillGone.push(f.destination);
+                    continue;
+                }
+                const destFullPath = path.join(stagingModDir, f.destination);
+                fs.mkdirSync(path.dirname(destFullPath), { recursive: true });
+                fs.copyFileSync(scratchPath, destFullPath);
+                reallyThere.push(f.destination);
+            }
+            return {
+                name, ok: stillGone.length === 0, extracted: reallyThere,
+                error: stillGone.length > 0 ? `${stillGone.length} file(s) were not found inside the archive: ${stillGone.join(', ')}` : undefined,
+            };
+        } catch (e) {
+            return { name, ok: false, error: e.message };
+        } finally {
+            fs.rmSync(scratchDir, { recursive: true, force: true });
+        }
+    }
+
+    router.get('/extract/events', (req, res) => {
+        if (!extractSession.get()) return res.status(404).end();
+        const afterSeq = Number(req.headers['last-event-id'] || 0);
+        extractSession.subscribe(res, { afterSeq });
+    });
+
+    // Same POST-starts-202/GET-.../events-subscribes SSE shape as /scan above (queue:
+    // rebuild-missing-extract-progress -- a big batch, e.g. a whole collection's worth of mods, could
+    // run for a while with zero feedback otherwise; "nothing is happening" reads as broken). Streams a
+    // 'mod-extracted' event per item as it finishes, then a final 'extract-complete' carrying the same
+    // {results} shape the route used to return synchronously -- the client's own result-summary
+    // rendering (rmfApplyExtractResults) is unchanged, it just now reads `results` off the last SSE
+    // frame instead of the POST response body.
     router.post('/extract', (req, res) => {
         if (!requireConfigured(res)) return;
         if (syncLib.isVortexRunning()) {
@@ -385,52 +439,28 @@ function createRebuildMissingRouter(config) {
         }
         const items = Array.isArray(req.body?.items) ? req.body.items : [];
         if (items.length === 0) return res.status(400).json({ error: 'Nothing selected to extract.' });
+        if (extractSession.isActive()) return res.status(409).json({ error: 'An extraction is already in progress.' });
+
+        const mySession = extractSession.start({ id: `extract-${Date.now()}` });
+        res.status(202).json({});
+        const emitIfCurrent = (event) => {
+            if (extractSession.get() === mySession) extractSession.emit(event);
+        };
 
         (async () => {
-            const results = [];
-            for (const item of items) {
-                const { name, targetFolderName, archivePath, files } = item || {};
-                if (!targetFolderName || !archivePath || !Array.isArray(files) || files.length === 0) {
-                    results.push({ name, ok: false, error: 'Incomplete request.' });
-                    continue;
+            try {
+                const results = [];
+                const total = items.length;
+                for (let index = 0; index < items.length; index += 1) {
+                    const item = items[index];
+                    const result = await extractOneMod(item);
+                    results.push(result);
+                    emitIfCurrent({ type: 'mod-extracted', index: index + 1, total, name: result.name, ok: result.ok });
                 }
-                if (!fs.existsSync(archivePath)) {
-                    results.push({ name, ok: false, error: 'The archive is no longer on disk -- try Download Archive, or re-scan.' });
-                    continue;
-                }
-                const stagingModDir = path.join(staging, targetFolderName);
-                const stillMissing = files.filter((f) => !fs.existsSync(path.join(stagingModDir, f.destination)));
-                if (stillMissing.length === 0) {
-                    results.push({ name, ok: true, extracted: [], note: 'Already fixed -- nothing was actually missing anymore.' });
-                    continue;
-                }
-                const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rmf-extract-'));
-                try {
-                    await extractMany(sevenZipExe, archivePath, stillMissing.map((f) => f.source), scratchDir);
-                    const reallyThere = [];
-                    const stillGone = [];
-                    for (const f of stillMissing) {
-                        const scratchPath = path.join(scratchDir, f.source);
-                        if (!fs.existsSync(scratchPath)) {
-                            stillGone.push(f.destination);
-                            continue;
-                        }
-                        const destFullPath = path.join(stagingModDir, f.destination);
-                        fs.mkdirSync(path.dirname(destFullPath), { recursive: true });
-                        fs.copyFileSync(scratchPath, destFullPath);
-                        reallyThere.push(f.destination);
-                    }
-                    results.push({
-                        name, ok: stillGone.length === 0, extracted: reallyThere,
-                        error: stillGone.length > 0 ? `${stillGone.length} file(s) were not found inside the archive: ${stillGone.join(', ')}` : undefined,
-                    });
-                } catch (e) {
-                    results.push({ name, ok: false, error: e.message });
-                } finally {
-                    fs.rmSync(scratchDir, { recursive: true, force: true });
-                }
+                emitIfCurrent({ type: 'extract-complete', done: true, results });
+            } catch (e) {
+                emitIfCurrent({ type: 'extract-error', done: true, error: true, message: e.message });
             }
-            res.json({ results });
         })();
     });
 

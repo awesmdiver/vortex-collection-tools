@@ -745,6 +745,16 @@
     Welcome! Staging/downloads aren't configured yet, so you've landed here first -- fill in the paths below (Browse buttons pick them for you), Save, and you're set. This only happens once.
   </div>
 
+  <!-- Same first-run condition as settingsFirstRunBanner above (shown/hidden together by shell.js),
+       but its own separate callout -- a different topic (Premium expectations vs. path setup)
+       folded into one banner would blur two distinct messages. Informational, not a blocker -- a
+       free account still works for most of this app, so callout--info + the established Ⓘ "next
+       steps" icon, not a warning. -->
+  <div id="settingsFirstRunPremiumBanner" class="callout callout--info hidden">
+    <div class="callout__title">&#9432; One thing to know: this app is built with Nexus Premium in mind</div>
+    <p>Most tools work fine either way, but a few features -- like automatically downloading a missing archive -- need Nexus Premium. That's Nexus's own rule for keeping downloads ad-supported on free accounts, not something this app adds. Wherever Premium is required, you'll get a clear note plus a way to grab the file yourself instead.</p>
+  </div>
+
   <div id="settingsRestartBanner" class="callout callout--warning hidden">
     A path change is saved but not yet active -- restart the server (Settings &rarr; Save Settings again, or close and re-run <code>node web/server.js</code>) to apply it.
   </div>
@@ -1897,9 +1907,13 @@
           <button id="rmfClearBtn" class="btn btn--ghost btn--small">Clear Selection</button>
           <span id="rmfSelCount" class="muted"></span>
         </div>
-        <button id="rmfExtractSelectedBtn" class="btn btn--primary btn--small" disabled>Extract Selected</button>
+        <button id="rmfExtractSelectedBtn" class="btn btn--primary btn--small rmf-extract-trigger" disabled>Extract Selected</button>
       </div>
 
+      <!-- A big batch (a whole collection's worth of mods) can take a while to extract -- streams
+           the same per-item progress the scan itself already streams (rmfScanLoading above), so a
+           long-running batch never reads as "nothing is happening." -->
+      <div id="rmfExtractLoading" class="loading-row hidden"><span class="spinner"></span> <span id="rmfExtractLoadingText">Restoring files&hellip;</span></div>
       <div id="rmfExtractResultsCallout" class="callout callout--success hidden"></div>
 
       <div class="plan-table-wrap hidden" id="rmfTableWrap">
