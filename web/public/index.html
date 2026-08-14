@@ -1431,6 +1431,7 @@
 
   <div id="wrNotConfigured" class="empty-row hidden"></div>
   <div id="wrCriticalError" class="callout callout--critical hidden"></div>
+  <div id="wrFetchResult" class="callout callout--success hidden"></div>
   <div id="wrEmpty" class="empty-row hidden"></div>
 
   <div class="plan-table-wrap hidden" id="wrTableWrap">
@@ -2112,6 +2113,13 @@
   <div id="mergeStep0" class="settings-group">
     <h2>Choose collections</h2>
     <p class="muted">Pick one or more collections. The next step searches the plugins in their installed mods (in your staging folder).</p>
+    <!-- Same "missing = never fetched, here's where to fix that" gap Rebuild Missing Files' own
+         picker already surfaces (its notDownloaded section) -- this page has no such section of its
+         own, just a link to where that gets solved now. Informational, not a blocker. -->
+    <div class="callout callout--info">
+      <div class="callout__title">&#9432; Not seeing a Workshop collection here?</div>
+      <p>It probably hasn't been fetched from Nexus yet, so there's nothing local to pick from. Head to the <a href="/?area=reports&amp;reports=workshop">Workshop Report</a> and pull it down from there, then come back here.</p>
+    </div>
     <div class="view-actions">
       <button id="mergeCollSelectAllBtn" class="btn btn--ghost btn--small">Select All</button>
       <button id="mergeCollClearBtn" class="btn btn--ghost btn--small">Clear</button>

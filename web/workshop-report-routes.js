@@ -34,6 +34,7 @@
 // this app's "manual action, not automatic live-state read" convention used everywhere else
 // Nexus/Vortex-state gets touched.
 
+const fs = require('fs');
 const path = require('path');
 const express = require('express');
 
@@ -60,7 +61,28 @@ function createWorkshopReportRouter(config) {
     // ever check this server process has run.
     let cachedReport = null;
 
+    // A per-row "Fetch from Nexus" (queue: workshop-report-fetch-button) writes collection.json
+    // straight to disk via rebuild-missing-routes.js's own /refresh-from-nexus -- a completely
+    // separate router, with no reach into this one's cachedReport. Rather than wire up a
+    // cross-router cache-patch call, self-heal here instead: a cheap fs.existsSync per still-
+    // "not downloaded" row, on every GET (no Nexus/Vortex call, stays within this route's own
+    // "never touches Nexus or Vortex" contract). Without this, a reload right after a successful
+    // fetch would show the OLD cached "Not downloaded yet" state even though collection.json (and
+    // Merge Plugins' own ability to see this collection) already reflects the fetch -- actively
+    // wrong, not just stale.
     router.get('/rows', (req, res) => {
+        if (cachedReport && staging) {
+            for (const row of cachedReport.rows) {
+                if (row.fetched) continue;
+                if (fs.existsSync(path.join(staging, row.collectionModId, 'collection.json'))) {
+                    row.fetched = true;
+                    row.revisionNumber = null;
+                    row.revisionStatus = null;
+                    row.updatedAt = null;
+                    row.checkError = null;
+                }
+            }
+        }
         res.json(cachedReport || { rows: [], checkedAt: null });
     });
 

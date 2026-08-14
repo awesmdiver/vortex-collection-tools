@@ -127,7 +127,13 @@ function wrHandleCheckEvent(frame) {
 
 // ---------- Rows ----------
 
+// Kept around (not just passed straight through) so a per-row Fetch from Nexus can update ONE
+// row in place afterward, per the queue instruction, instead of re-running a full Check Nexus for
+// updates just to reflect one row's new state.
+let wrCurrentRows = [];
+
 function wrRenderRows(rows) {
+  wrCurrentRows = rows || [];
   const tbody = $g('wrRows');
   tbody.innerHTML = '';
   const nothingToShow = !rows || rows.length === 0;
@@ -184,6 +190,16 @@ function wrBuildActionsCell(row) {
     const openBtn = el('button', { class: 'btn btn--primary btn--small' }, '📂 Open Staging Folder');
     openBtn.addEventListener('click', () => wrOpenStagingFolder(row));
     actions.appendChild(openBtn);
+  } else if (row.slug) {
+    // Real bug this fixes (queue: workshop-report-fetch-button): a Workshop collection Vortex
+    // tracks but that's never been fetched has no local collection.json, so Merge Plugins' own
+    // picker (scanStagingCollections) can never see it -- confirmed via code read, not guessed.
+    // Reuses Rebuild Missing Files' OWN first-fetch action (POST /refresh-from-nexus, same route,
+    // same always-newest-revision resolution) rather than a new fetch implementation. No slug, no
+    // button -- nothing to fetch without a Nexus id on record.
+    const fetchBtn = el('button', { class: 'btn btn--primary btn--small' }, '⬇ Fetch from Nexus');
+    fetchBtn.addEventListener('click', () => wrFetchFromNexus(row, fetchBtn));
+    actions.appendChild(fetchBtn);
   } else {
     actions.appendChild(el('span', { class: 'muted', style: 'font-size:12.5px' }, 'Not downloaded yet'));
   }
@@ -195,6 +211,51 @@ function wrBuildActionsCell(row) {
     actions.appendChild(viewBtn);
   }
   return actions;
+}
+
+// ---------- Fetch from Nexus (per-row, "not yet downloaded" rows only) ----------
+
+async function wrFetchFromNexus(row, btn) {
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Fetching…';
+  $g('wrCriticalError').classList.add('hidden');
+  $g('wrFetchResult').classList.add('hidden');
+  try {
+    const result = await wrApi('POST', '/api/rebuild-missing/refresh-from-nexus', {
+      collectionModId: row.collectionModId, slug: row.slug,
+    });
+    // Update this ONE row in place -- no full Check Nexus for updates re-run needed, per the
+    // queue instruction. refreshCollectionFromNexus's own result has revisionNumber but NOT
+    // revisionStatus/updatedAt (those come from fetchCollectionRevisions, a separate call this
+    // route never makes) -- rather than show a half-right, possibly-wrong draft/published pill,
+    // leave revision info as "not checked yet" until the next real Check Nexus for updates. Only
+    // fetched flips, which is what actually changed and is what swaps in Open Staging Folder.
+    Object.assign(row, {
+      fetched: true, revisionNumber: null, revisionStatus: null, updatedAt: null, checkError: null,
+    });
+    wrRenderRows(wrCurrentRows);
+    // Honest, not "done" -- this only wrote collection.json (metadata), same backup-before-
+    // overwrite handling as everywhere else this route is called from. No mod files landed in
+    // staging yet. Deliberately NOT promising this makes the collection ready for Merge Plugins --
+    // confirmed live (queue: workshop-report-fetch-button) that Merge Plugins' own picker
+    // (scanStagingCollections) excludes any "vortex_collection_*"-named folder by NAME, regardless
+    // of what's inside it, so this fetch alone (or a later Rebuild Missing Files/Rebuild Collection
+    // run against the same folder) can't make it Merge-Plugins-visible either -- that's a separate,
+    // still-open gap, not something this button claims to solve.
+    const resultBox = $g('wrFetchResult');
+    resultBox.innerHTML = '';
+    resultBox.appendChild(document.createTextNode(`Fetched! We grabbed "${row.name}"'s info from Nexus — the mod files themselves aren't in your staging folder yet. Run `));
+    resultBox.appendChild(el('strong', {}, 'Rebuild Missing Files'));
+    resultBox.appendChild(document.createTextNode(' or '));
+    resultBox.appendChild(el('strong', {}, 'Rebuild Collection'));
+    resultBox.appendChild(document.createTextNode(' next to pull those in.'));
+    resultBox.classList.remove('hidden');
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = original;
+    wrHandleError(e, $g('wrCriticalError'));
+  }
 }
 
 // Reuses Rebuild Missing Files' own open-staging-folder route directly rather than a new one
