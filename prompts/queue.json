@@ -1,24 +1,7 @@
 {
   "project": "vortex-collection-tools",
   "inFlight": null,
-  "items": [
-    {
-      "id": "preview-stale-banner",
-      "tag": "polish",
-      "title": "Clear stale end-of-flow banner on Preview re-arm",
-      "why": "post-v0.5.0 polish, non-blocking",
-      "prompt": "In Update Collection: re-doing Apply Ignores via Preview doesn't clear the stale end-of-flow completion banner until Apply re-succeeds. Wire callout-clearing into the Preview re-arm so the banner clears the moment the step is re-armed. Pre-existing minor issue; not blocking.",
-      "ready": true
-    },
-    {
-      "id": "rebuild-missing-batch-refresh-toggle",
-      "tag": "feature",
-      "title": "Rebuild Missing Files: replace per-card Refresh-from-Nexus with a single Workshop-only batch toggle",
-      "why": "Director's live feedback on the shipped v2 button: doing this one card/one confirm-modal at a time doesn't fit checking several Workshop collections in one sitting, and Installed collections never needed the option at all. Mockup approved for a single toggle + one consolidated warning + always-latest-revision, no picker.",
-      "prompt": "Mockup approved: `design/vortex-rebuild-missing-files-mockup.html`, \"v3 addendum\" section (Approved 2026-08-14). Replaces the shipped per-card \"Refresh from Nexus\" button (v2, commit 4fedf7d) with a single batch toggle. This may land alongside or after `rebuild-missing-vortex-db-read` (surfacing Workshop-only collections with no local collection.json) -- check that item's own state before starting; the two touch the same picker area.\n\nWHAT CHANGES:\n1. Remove the per-card '↻ Refresh from Nexus' button from EVERY collection card, Installed and Workshop alike (`rmfRenderPickerGroup` in `web/public/rebuild-missing-app.js` — the `refreshBtn` element, its click handler, `rmfStartRefresh`, and the per-card confirm modal markup/handlers can all go — nothing else refreshes on a per-card basis anymore).\n2. Add ONE checkbox toggle under the Workshop Collections group header only (never on Installed — those came from Vortex's own install, no drift to worry about): \"Refresh selected Workshop collections from Nexus before scanning\". Persist its checked state the same lightweight way this app's other scan-time toggles do (e.g. Missing Masters' `mmRecognizeEslifierInput` — check its own persistence route/pattern and mirror it) if it makes sense to remember between visits; otherwise a plain in-page checkbox defaulting to off is fine — flag which you chose in the handoff.\n3. When the toggle is ON and the user has at least one Workshop collection selected, show ONE consolidated warning (not a modal, an inline callout like the mockup's `#v3WarningPreview`) listing every selected Workshop collection by name, using the SAME 'before fetching, read this' copy already shipped for the per-card flow (see 4fedf7d's own text) — reworded from second person about a single collection to naming the list. Reuse the callout markup/classes already established, per DESIGN.md's own 'copy an existing pattern' rule.\n4. On clicking Scan: for each SELECTED Workshop collection with the toggle on, refresh it from Nexus FIRST (always the newest saved revision — draft or published, by `updatedAt` — director confirmed explicitly there's no case for going backwards, so no revision picker at all, simpler than the v2 flow), THEN scan it as normal. Surface this inline in the same progress line the scan already streams (`rmfHandleScanEvent`'s `mod-scanned` text, e.g. `{name}: refreshing from Nexus…` before the existing `{index}/{total}` mod-progress text starts for that collection) rather than a separate step/screen.\n5. `collection.json` is still backed up before every overwrite, same as the shipped v2 behavior (byte-verified backup, restorable) — don't drop that.\n6. If a refresh fails for one collection mid-batch (network error, no revision found, etc.), don't abort the whole scan — skip that collection's refresh, scan it with whatever collection.json it already has on disk, and surface the failure clearly in the scan results (a specific per-collection note, not a silent skip) so the user knows that one might still be stale.\n\nVERIFY live: toggle on, select a mix of Installed + Workshop collections, confirm the warning lists ONLY the Workshop ones and appears once (not per-card), confirm Installed collections never get touched by a refresh, confirm the scan progress line shows the refresh step inline per Workshop collection, and confirm a real refresh-then-scan run actually pulls the newest revision (compare mod count before/after like the v2 verification did). Handoff with what you tested.\n\nOVERLAP FROM ff37c49 (shipped after this item was queued, read its own handoff for full context): a NEW per-card \"Fetch from Nexus\" action landed for un-fetched Workshop collections (Vortex-tracked, no local collection.json at all -- a \"Not yet downloaded\" section, separate from the normal Workshop Collections group). It reuses the SAME per-card confirm-modal + revision-picker mechanism this item removes. When removing the old mechanism, this first-fetch path needs to keep working -- fold it into the same always-newest-revision, no-picker flow this item builds, rather than leaving a second, inconsistent revision-picker UI still standing for just this one case. A freshly-discovered (never-fetched) row still cannot be scanned until it has been fetched at least once, so it still cannot simply join the batch toggle -- keep its own explicit one-time \"Fetch from Nexus\" action (no confirm-modal/revision-picker needed anymore, always newest revision like everywhere else), and once fetched it reappears in Workshop Collections as normal and becomes eligible for the batch toggle from then on.",
-      "ready": true
-    }
-  ],
+  "items": [],
   "roadmap": [
     {
       "title": "Theming framework (Phase 2)",
@@ -80,6 +63,12 @@
     },
     {
       "title": "Rebuild Missing Files: read Vortex's DB so Workshop collections with no local collection.json show up at all"
+    },
+    {
+      "title": "Rebuild Missing Files: replace per-card Refresh-from-Nexus with a single Workshop-only batch toggle"
+    },
+    {
+      "title": "Clear stale end-of-flow banner on Preview re-arm"
     }
   ]
 }
