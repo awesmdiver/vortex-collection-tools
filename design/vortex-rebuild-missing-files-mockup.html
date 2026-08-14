@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body>
+<title>Rebuild Missing Files — new tool mockup v1 (Approved ✓ 2026-08-05)</title>
+<style>
+  :root{
+    --bg:#0d0f14; --surface:#161922; --surface-2:#1d212c; --border:#2a2f3d; --border-strong:#3a4152;
+    --text:#e6e9ef; --text-muted:#8b93a3; --accent:#5b8def; --accent-hover:#75a1f5; --accent-bg:rgba(91,141,239,0.12);
+    --success:#3ecf8e; --success-bg:rgba(62,207,142,.12); --warning:#f5b942; --warning-bg:rgba(245,185,66,.12);
+    --danger:#f0546b; --danger-bg:rgba(240,84,107,.12); --neutral:#7c8494; --neutral-bg:rgba(124,132,148,.12);
+    --radius:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;font-size:15px;line-height:1.5}
+  .wrap{max-width:min(1100px,96vw);margin:0 auto;padding:24px 24px 70px}
+  .eyebrow{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--text-muted);margin:0 0 8px}
+  .eyebrow a{color:var(--accent);text-decoration:none}
+  h1{font-size:22px;margin:0 0 6px}
+  .lead{color:var(--text-muted);font-size:14px;margin:0 0 22px;max-width:680px;line-height:1.6}
+  .stepnote{display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--accent);background:var(--accent-bg);padding:4px 10px;border-radius:12px;margin:0 0 30px}
+
+  .btn{font-family:inherit;font-size:13.5px;font-weight:500;padding:8px 14px;border-radius:8px;border:1px solid var(--border);
+    background:var(--surface-2);color:var(--text);cursor:pointer;white-space:nowrap}
+  .btn:hover{border-color:var(--accent)}
+  .btn--primary{background:var(--accent);border-color:var(--accent);color:#0b1220;font-weight:600}
+  .btn--primary:disabled{opacity:.4;cursor:default}
+  .btn--ghost{background:transparent}
+
+  .callout{border-radius:var(--radius);padding:12px 16px;margin:0 0 20px;border:1px solid var(--accent);background:var(--accent-bg);font-size:13.5px}
+  .callout b{color:var(--accent)}
+  .callout--danger{border-color:var(--danger);background:var(--danger-bg)} .callout--danger b{color:var(--danger)}
+
+  /* ---- Screen 1: collection picker ---- */
+  .group-head{display:flex;align-items:center;gap:10px;margin:22px 0 10px}
+  .group-head h2{font-size:14px;margin:0;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em}
+  .group-head .n{font-size:12px;color:var(--text-muted)}
+  .picker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+  .coll-card{display:flex;align-items:flex-start;gap:11px;border:1px solid var(--border);border-radius:var(--radius);
+    padding:12px 14px;background:var(--surface);cursor:pointer}
+  .coll-card:hover{border-color:var(--border-strong)}
+  .coll-card.sel{border-color:var(--accent);background:var(--accent-bg)}
+  .coll-card input{width:16px;height:16px;accent-color:var(--accent);margin-top:2px;flex:none}
+  .coll-card .meta{min-width:0}
+  .coll-card .name{color:var(--text);font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .coll-card .sub{color:var(--text-muted);font-size:12px;margin-top:2px}
+
+  .selbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:22px 0 4px}
+  .selcount{font-size:13px;color:var(--text-muted)}
+  .selcount b{color:var(--accent)}
+  .spacer{flex:1}
+
+  /* ---- Screen 2: scan report ---- */
+  .summary-row{display:flex;gap:12px;flex-wrap:wrap;margin:0 0 18px}
+  .stat{flex:1;min-width:150px;border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;background:var(--surface)}
+  .stat .num{font-size:24px;font-weight:700;color:var(--text)}
+  .stat.danger .num{color:var(--danger)}
+  .stat .lbl{font-size:12px;color:var(--text-muted);margin-top:2px}
+
+  .plan-table-wrap{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .plan-table{width:100%;border-collapse:collapse;font-size:13.5px}
+  .plan-table thead th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;
+    color:var(--text-muted);padding:11px 14px;background:var(--surface-2);border-bottom:1px solid var(--border)}
+  .plan-table td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+  .plan-table tbody tr:last-child td{border-bottom:none}
+  .plan-table tbody tr:nth-child(even){background:rgba(255,255,255,.022)}
+  .plan-table tbody tr:hover{background:var(--surface-2)}
+  .plan-table tbody tr.sel{background:var(--accent-bg)}
+  .plan-table tbody tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+  .col-chk{width:34px}
+  input[type=checkbox]{width:15px;height:15px;accent-color:var(--accent)}
+  .mod{color:var(--text);font-weight:500}
+  .coll-tag{color:var(--text-muted);font-size:12px}
+  .pill{font-size:11px;font-weight:700;padding:2px 9px;border-radius:12px;display:inline-block}
+  .pill--missing{background:var(--danger-bg);color:var(--danger)}
+  .filelist{font-family:Consolas,monospace;font-size:12.5px;color:var(--text-muted);margin-top:3px}
+  .row-actions{display:flex;gap:6px;justify-content:flex-end}
+  .row-actions .btn{font-size:12px;padding:5px 10px}
+  .archive-missing{color:var(--warning);font-size:11.5px;margin-top:3px}
+
+  .note{margin:16px 2px 0;font-size:12.5px;color:var(--text-muted);line-height:1.7}
+</style>
+
+<div class="wrap">
+
+  <div class="eyebrow"><a href="#">Home</a> › Rebuild Missing Files</div>
+  <h1>Rebuild Missing Files</h1>
+  <p class="lead">Check one or more collections for files that should be in your staging folder but
+  aren't — then fix just those, without touching everything else. Faster than a full Rebuild Collection
+  when only a few mods are actually broken.</p>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 1 -->
+  <!-- ============================================================ -->
+  <div id="screen1">
+    <span class="stepnote">Step 1 of 2 — pick collections to check</span>
+
+    <div class="group-head"><h2>Installed collections</h2><span class="n">3 found</span></div>
+    <div class="picker-grid" id="nexusColls"></div>
+
+    <div class="group-head"><h2>Workshop collections</h2><span class="n">2 found — collections you're authoring, not installed</span></div>
+    <div class="picker-grid" id="workshopColls"></div>
+
+    <div class="selbar">
+      <span class="selcount" id="pickCount"><b>0</b> collections selected</span>
+      <div class="spacer"></div>
+      <button class="btn btn--primary" id="scanBtn" disabled onclick="goScan()">Scan for missing files →</button>
+    </div>
+    <p class="note">Scanning reads each collection's <code>collection.json</code> and checks whether every
+    mod's expected files actually exist in that collection's staging folder — nothing is changed yet.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 2 -->
+  <!-- ============================================================ -->
+  <div id="screen2" style="display:none">
+    <span class="stepnote">Step 2 of 2 — scan results</span>
+
+    <div class="summary-row">
+      <div class="stat"><div class="num" id="statColls">2</div><div class="lbl">Collections checked</div></div>
+      <div class="stat"><div class="num" id="statMods">7</div><div class="lbl">Mods with missing files</div></div>
+      <div class="stat danger"><div class="num" id="statFiles">23</div><div class="lbl">Missing files total</div></div>
+    </div>
+
+    <div class="callout callout--danger">
+      <b>23 files</b> are missing from staging across <b>7 mods</b>. Fixing these only updates your
+      staging folder — open Vortex and click <b>Deploy Mods</b> afterward.
+    </div>
+
+    <div class="selbar">
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="selAll()">Select all</button>
+        <button class="btn" onclick="invert()">Invert selection</button>
+        <button class="btn" onclick="clearSel()">Clear selection</button>
+      </div>
+      <span class="selcount" id="selcount"></span>
+      <div class="spacer"></div>
+      <button class="btn btn--primary">Extract selected from archive</button>
+    </div>
+
+    <div class="plan-table-wrap">
+      <table class="plan-table">
+        <thead><tr><th class="col-chk"></th><th>Mod</th><th>Collection</th><th>Missing files</th><th style="text-align:right">Actions</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+
+    <p class="note">
+      <strong>Select all · Clear selection</strong> act on every mod in the report, not just what's
+      visible. <strong>Extract from archive</strong> pulls just the missing files back out — the same
+      engine Rebuild Collection uses, scoped to only what's actually gone. If the archive itself isn't
+      on disk, <strong>Download archive</strong> replaces it in place.
+    </p>
+  </div>
+
+</div>
+
+<script>
+  const NEXUS = [
+    {name:"Daughter of Coldharbour, SDA in GTS.", sub:"20 mods · installed"},
+    {name:"Beauty Salon for GTS", sub:"95 mods · installed"},
+    {name:"Legacy of the Dragonborn", sub:"312 mods · installed"},
+  ];
+  const WORKSHOP = [
+    {name:"My WIP Overhaul", sub:"48 mods · authoring"},
+    {name:"Test Collection — do not publish", sub:"6 mods · authoring"},
+  ];
+
+  function renderPicker(list, elId, prefix) {
+    document.getElementById(elId).innerHTML = list.map((c, i) => `
+      <label class="coll-card" data-key="${prefix}${i}">
+        <input type="checkbox" onchange="onPick(this)">
+        <div class="meta"><div class="name">${c.name}</div><div class="sub">${c.sub}</div></div>
+      </label>`).join('');
+  }
+  renderPicker(NEXUS, 'nexusColls', 'n');
+  renderPicker(WORKSHOP, 'workshopColls', 'w');
+
+  const picked = new Set();
+  window.onPick = (cb) => {
+    const card = cb.closest('.coll-card');
+    card.classList.toggle('sel', cb.checked);
+    const key = card.dataset.key;
+    cb.checked ? picked.add(key) : picked.delete(key);
+    document.getElementById('pickCount').innerHTML = `<b>${picked.size}</b> collection${picked.size===1?'':'s'} selected`;
+    document.getElementById('scanBtn').disabled = picked.size === 0;
+  };
+
+  window.goScan = () => {
+    document.getElementById('screen1').style.display = 'none';
+    document.getElementById('screen2').style.display = 'block';
+  };
+
+  const ROWS = [
+    [false, "3DNPC.esp", "Legacy of the Dragonborn", ["3DNPC.bsa", "3DNPC - Textures.bsa", "meshes\\actors\\character\\npc.nif"], true],
+    [false, "WACCF.esp", "Legacy of the Dragonborn", ["WACCF - Armor and Clothing Extension.bsa"], true],
+    [false, "Immersive Sounds Compendium.esp", "Beauty Salon for GTS", ["ISCompendium.bsa", "ISCompendium - Textures.bsa", "sound\\fx\\isc_amb01.wav", "sound\\fx\\isc_amb02.wav"], true],
+    [false, "RaceMenu.esp", "Beauty Salon for GTS", ["RaceMenu.esp", "RaceMenuPlugin.dll"], false],
+    [false, "Cutting Room Floor.esp", "Legacy of the Dragonborn", ["Cutting Room Floor.esm"], true],
+    [false, "Book Covers Skyrim.esp", "Legacy of the Dragonborn", ["Book Covers Skyrim.bsa"], true],
+    [false, "Water for ENB.esm", "Beauty Salon for GTS", ["Water for ENB.esm", "textures\\water\\waterenb01.dds", "textures\\water\\waterenb02.dds"], true],
+  ];
+
+  document.getElementById('rows').innerHTML = ROWS.map(([chk, mod, coll, files, archiveOk], i) => {
+    const shown = files.slice(0, 2).join(', ') + (files.length > 2 ? `, +${files.length - 2} more` : '');
+    return `<tr data-i="${i}">
+      <td><input type="checkbox" onchange="onBox(this)"></td>
+      <td><div class="mod">${mod}</div>${archiveOk ? '' : '<div class="archive-missing">⚠️ Archive not found on disk</div>'}</td>
+      <td class="coll-tag">${coll}</td>
+      <td><span class="pill pill--missing">${files.length} missing</span><div class="filelist">${shown}</div></td>
+      <td><div class="row-actions">
+        ${archiveOk
+          ? `<button class="btn">Extract from archive</button>`
+          : `<button class="btn">Download archive</button>`}
+        <button class="btn btn--ghost">Open staging folder</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  const boxes = () => [...document.querySelectorAll('#rows input[type=checkbox]')];
+  function paint(cb) { cb.closest('tr').classList.toggle('sel', cb.checked); }
+  function refresh() {
+    const n = boxes().filter(b => b.checked).length;
+    document.getElementById('selcount').innerHTML = `<b>${n}</b> of ${ROWS.length} selected`;
+  }
+  window.onBox = cb => { paint(cb); refresh(); };
+  window.selAll = () => { boxes().forEach(b => { b.checked = true; paint(b); }); refresh(); };
+  window.clearSel = () => { boxes().forEach(b => { b.checked = false; paint(b); }); refresh(); };
+  window.invert = () => { boxes().forEach(b => { b.checked = !b.checked; paint(b); }); refresh(); };
+  refresh();
+</script>
+</body>
+</html>
