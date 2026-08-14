@@ -293,6 +293,15 @@ what the collection actually has — don't march the user through a step that ca
 Confirmed real 2026-07-29: a collection with no disabled mods left Apply Disables as a live-looking
 "Next" pointing at an empty step.
 
+**A lighter step badge for a plain 2-step tool (added 2026-08-14, Rebuild Missing Files).** The
+full numbered-pill `.stepper`/`.merge-stepper` is built for a tool with several real stages users
+navigate between. A tool that's genuinely just *pick something → see the result* (no re-entry, no
+adaptive/skippable steps) doesn't need that weight — Rebuild Missing Files' mockup (Approved
+2026-08-05) uses a plain `.stepnote` text badge instead ("Step 1 of 2 — pick collections to check"),
+an accent pill with no numbers/pips. Reuse `.stepnote` for any future tool that's a straight
+two-screen pick-then-report flow; reach for the full stepper once a tool has 3+ stages, re-entry, or
+steps that can be skipped/reordered.
+
 ## Gate "Next" on a step's required action — and show the action's done state (2026-07-28)
 
 If a step has a **required action before you can move on** (Apply Ignores' **Apply**, Apply Disables'
@@ -387,6 +396,18 @@ Select all + bulk action(s)" note under Core components.
   "Display Archive" (tree browse) use the same bar for their Extract flow, so it stays visible in
   both. Scoping selection UI to files-mode would silently break the tree mode's pre-existing Extract
   — the "mockup governs look, the app governs what it does" rule again.
+
+### Multi-select, grouped picker cards — a distinct shape from a plain select-and-act list (added 2026-08-14)
+
+`.picker-grid` / `.coll-card` (Rebuild Missing Files' Step 1, `design/vortex-rebuild-missing-files-
+mockup.html`, Approved 2026-08-05): a responsive card grid (`auto-fill, minmax(260px, 1fr)`) of
+checkbox rows, split under `.group-head` category labels (e.g. "Installed collections" /
+"Workshop collections"). This is a genuinely different shape from the Selectable-lists pattern
+above, not a reuse of `.merge-chk-row` — the difference is real: `.merge-chk-row` is a plain
+single-column list for picking (usually) one thing at a time from one flat set; `.coll-card` is a
+**multi-select, categorized** picker where the picked set persists into the next screen. Use
+`.picker-grid`/`.coll-card` whenever a tool needs "check several of these, grouped by category,
+then act on the whole set" — reach for `.merge-chk-row` for a plain flat single-pick list instead.
 
 ## Spacing — give stacked things room, consistently (2026-07-28)
 
@@ -805,7 +826,8 @@ names the current area (reads "Home" on the landing page) so the user always kno
 the app's own intro-banner pattern, not a bespoke header), then grouped card sections:
 - **Main tools** — Rebuild Collection ⚡, Update Collection 🔄, Rules Generator 🔗
 - **Reports** — Stats 📊, Work Through ✅, Update Compare 🔍, Rules Generator Report 📋
-- **Utilities** — Missing Masters 🧩, Vortex Scrub 🧽, Archive Finder 📦
+- **Utilities** — Missing Masters 🧩, Vortex Scrub 🧽, Archive Finder 📦, Rebuild Missing Files 🩹
+  *(added 2026-08-14)*
 
 Reports and Utilities show their **sub-tools expanded** as individual cards, so every destination in
 the app is one click from Home. Section labels reuse the `.settings-section-title` treatment (12px

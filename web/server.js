@@ -30,6 +30,7 @@ const { createCleanupRouter } = require('./cleanup-routes');
 const { createMissingMastersRouter } = require('./missing-masters-routes');
 const { createArchiveFinderRouter } = require('./archive-finder-routes');
 const { createMergeRouter } = require('./merge-routes');
+const { createRebuildMissingRouter } = require('./rebuild-missing-routes');
 const { loadSyncLib } = require('../lib/collection-runner');
 const appConfig = require('../lib/app-config');
 
@@ -111,6 +112,7 @@ function main() {
     app.use('/api/missing-masters', createMissingMastersRouter(config));
     app.use('/api/archive-finder', createArchiveFinderRouter(config));
     app.use('/api/merge', createMergeRouter(config));
+    app.use('/api/rebuild-missing', createRebuildMissingRouter(config));
 
     // Settings page's "Restart Now" button -- spawns a fresh, fully independent instance of this
     // same server (same args this one was launched with, forcing --no-open since a browser tab is

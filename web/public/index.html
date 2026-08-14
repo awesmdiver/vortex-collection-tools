@@ -208,6 +208,15 @@
       </button>
       <button class="home-card__star" data-pin-key="archivefinder" title="Pin to top">☆</button>
     </div>
+    <div class="home-card-wrap" data-section="homeSectionUtilities">
+      <button class="home-card" data-area="utilities" data-sub="missingfiles">
+        <div class="home-card__icon">🩹</div>
+        <div class="home-card__name">Rebuild Missing Files</div>
+        <div class="home-card__desc">Check your collections for missing staging files, then fix just the ones that need it.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="missingfiles" title="Pin to top">☆</button>
+    </div>
   </div>
   </div>
   </div>
@@ -1379,6 +1388,7 @@
     <button id="utilities-sub-missingmasters" class="btn btn--primary btn--small">Missing Masters</button>
     <button id="utilities-sub-scrub" class="btn btn--ghost btn--small">Vortex Scrub</button>
     <button id="utilities-sub-archivefinder" class="btn btn--ghost btn--small">Archive Finder</button>
+    <button id="utilities-sub-missingfiles" class="btn btn--ghost btn--small">Missing Files</button>
   </div>
 
   <div id="utilities-sub-area-scrub">
@@ -1747,6 +1757,115 @@
   </div>
   </div>
   <!-- /utilities-sub-area-missingmasters -->
+
+  <!-- Rebuild Missing Files -- checks one or more picked collections for staging files that are
+       missing (a mod's own archive listed but not actually on disk), and lets the user restore
+       just those from the archive, without a full Rebuild Collection pass. See
+       design/vortex-rebuild-missing-files-mockup.html for the approved visual reference this
+       markup was copied from. No "close Vortex first" messaging on the scan itself (read-only,
+       same reasoning as Missing Masters/Archive Finder above) -- only the Extract action needs it,
+       shown in its own confirm modal below. -->
+  <div id="utilities-sub-area-missingfiles" class="hidden">
+  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span>Utilities</div>
+  <div class="tool-hero">
+    <h2 class="tool-hero__title">🩹 Fix Just the Files That Are Actually Missing</h2>
+    <p class="tool-hero__body">Sometimes a mod's files quietly go missing from your staging folder, and rebuilding the whole collection to fix it feels like overkill. This tool checks the collections you pick and shows you exactly which files are gone&mdash;then restores just those, straight from the archive.</p>
+  </div>
+
+  <div id="rmfNotConfigured" class="empty-row hidden"></div>
+
+  <!-- ==================== Screen 1: collection picker ==================== -->
+  <div id="rmfPickerView">
+    <span class="stepnote">Step 1 of 2 — pick collections to check</span>
+
+    <div id="rmfPickerLoading" class="loading-row"><span class="spinner"></span> Loading collections&hellip;</div>
+    <div id="rmfPickerEmpty" class="empty-row hidden"></div>
+
+    <div id="rmfInstalledSection" class="hidden">
+      <div class="group-head"><h2>Installed collections</h2><span class="n" id="rmfInstalledCount"></span></div>
+      <div class="picker-grid" id="rmfInstalledGrid"></div>
+    </div>
+
+    <div id="rmfWorkshopSection" class="hidden">
+      <div class="group-head"><h2>Workshop collections</h2><span class="n" id="rmfWorkshopCount">collections you're authoring, not installed</span></div>
+      <div class="picker-grid" id="rmfWorkshopGrid"></div>
+    </div>
+
+    <div class="view-actions">
+      <span class="muted" id="rmfPickCount"><b>0</b> collections selected</span>
+      <button id="rmfScanBtn" class="btn btn--primary" disabled>Scan for Missing Files →</button>
+    </div>
+    <p class="muted">Scanning checks whether every mod's files actually exist in your staging folder — nothing changes yet.</p>
+  </div>
+
+  <!-- ==================== Screen 2: scan report ==================== -->
+  <div id="rmfReportView" class="hidden">
+    <div class="view-actions">
+      <button id="rmfBackToPickerBtn" class="btn btn--ghost btn--small">&larr; Check Different Collections</button>
+    </div>
+    <span class="stepnote">Step 2 of 2 — scan results</span>
+
+    <div id="rmfScanLoading" class="loading-row"><span class="spinner"></span> <span id="rmfScanLoadingText">Scanning&hellip;</span></div>
+    <div id="rmfScanError" class="callout callout--critical hidden"></div>
+
+    <div id="rmfResults" class="hidden">
+      <div class="merge-stat-grid">
+        <div class="merge-stat"><div class="merge-stat__n" id="rmfStatColls">0</div><div class="merge-stat__l">Collections checked</div></div>
+        <div class="merge-stat"><div class="merge-stat__n" id="rmfStatMods">0</div><div class="merge-stat__l">Mods with missing files</div></div>
+        <div class="merge-stat"><div class="merge-stat__n merge-stat__n--critical" id="rmfStatFiles">0</div><div class="merge-stat__l">Missing files total</div></div>
+      </div>
+
+      <div id="rmfSummaryCallout" class="callout callout--warning hidden"></div>
+      <div id="rmfAllClearCallout" class="callout callout--success hidden">✅ Nothing missing — every mod in the collections you checked has all its files.</div>
+
+      <div id="rmfSelectionBar" class="af-selection-bar hidden">
+        <div class="af-selection-bar__left">
+          <button id="rmfSelectAllBtn" class="btn btn--ghost btn--small">Select All</button>
+          <button id="rmfInvertBtn" class="btn btn--ghost btn--small">Invert Selection</button>
+          <button id="rmfClearBtn" class="btn btn--ghost btn--small">Clear Selection</button>
+          <span id="rmfSelCount" class="muted"></span>
+        </div>
+        <button id="rmfExtractSelectedBtn" class="btn btn--primary btn--small" disabled>Extract Selected</button>
+      </div>
+
+      <div id="rmfExtractResultsCallout" class="callout callout--success hidden"></div>
+
+      <div class="plan-table-wrap hidden" id="rmfTableWrap">
+        <table class="plan-table">
+          <thead><tr><th class="col-check"></th><th>Mod</th><th>Collection</th><th>Missing files</th><th style="text-align:right">Actions</th></tr></thead>
+          <tbody id="rmfRows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <p class="muted">
+      <strong>Select All</strong> and <strong>Clear Selection</strong> act on every mod in the report,
+      not just what's visible. <strong>Extract from Archive</strong> pulls just the missing files back
+      out of that mod's archive — the same engine Rebuild Collection uses, scoped to only what's
+      actually gone. If the archive itself isn't on disk, <strong>Download Archive</strong> fetches it
+      from Nexus first.
+    </p>
+  </div>
+  </div>
+  <!-- /utilities-sub-area-missingfiles -->
+
+  <div id="rmfExtractConfirmModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>🩹 Extract Missing Files from Archive</h2>
+      <p id="rmfExtractConfirmModalText"></p>
+      <!-- Same "own distinct visual piece" treatment as mmRebuildConfirmModal's precondition
+           callout -- this is a genuine hard blocker (the request is refused outright if Vortex is
+           open), not just a caution, matching DESIGN.md's critical-severity definition. Static
+           markup, not JS-set. -->
+      <div class="callout callout--critical">
+        <div class="callout__title">🛑 Make sure Vortex is completely closed before continuing!</div>
+      </div>
+      <div class="modal-actions">
+        <button id="rmfExtractConfirmCancelBtn" class="btn btn--ghost">Cancel</button>
+        <button id="rmfExtractConfirmOkBtn" class="btn btn--primary">Extract</button>
+      </div>
+    </div>
+  </div>
 </main>
 </section>
 
@@ -2054,5 +2173,6 @@
 <script src="missing-masters-app.js"></script>
 <script src="archive-finder-app.js"></script>
 <script src="merge-app.js"></script>
+<script src="rebuild-missing-app.js"></script>
 </body>
 </html>

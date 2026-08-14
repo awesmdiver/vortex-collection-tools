@@ -227,7 +227,7 @@ function setStarVisual(star, on) {
 const HOME_CANONICAL_ORDER = [
   'merge', 'rebuild', 'sync', 'rules-generator',
   'stats', 'workthrough', 'updatecompare', 'rulesgen',
-  'missingmasters', 'scrub', 'archivefinder',
+  'missingmasters', 'scrub', 'archivefinder', 'missingfiles',
 ];
 function pinKeyOf(wrap) {
   return wrap.querySelector('.home-card__star').dataset.pinKey;

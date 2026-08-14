@@ -371,7 +371,7 @@ $g('cleanupCrossCheckDeleteAllBtn').addEventListener('click', () => {
 // missing-masters-app.js manages its own refresh timing; this just calls its exposed hook via the
 // same "deliberate seam" pattern reports-rulesgen-app.js already uses (a plain `typeof === function`
 // check, since missing-masters-app.js loads after this file and can't be referenced directly here).
-const UTILITIES_SUB_TABS = ['missingmasters', 'scrub', 'archivefinder'];
+const UTILITIES_SUB_TABS = ['missingmasters', 'scrub', 'archivefinder', 'missingfiles'];
 function showUtilitiesSubTab(id) {
   for (const tab of UTILITIES_SUB_TABS) {
     $g(`utilities-sub-area-${tab}`).classList.toggle('hidden', tab !== id);
@@ -382,6 +382,8 @@ function showUtilitiesSubTab(id) {
   // Same "deliberate seam" pattern as missing-masters-app.js above -- loads config/stats once per
   // visit to this tab (archive-finder-app.js loads after this file).
   if (id === 'archivefinder' && typeof loadArchiveFinderPageOnce === 'function') loadArchiveFinderPageOnce();
+  // Same seam again -- rebuild-missing-app.js loads after this file.
+  if (id === 'missingfiles' && typeof loadRebuildMissingPageOnce === 'function') loadRebuildMissingPageOnce();
 
   // Keeps the URL in sync so a browser refresh returns to this exact sub-tab, not just the
   // Utilities area generically -- same fix as showReportsSubTab (stats-app.js) / showToolArea

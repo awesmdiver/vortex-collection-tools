@@ -3806,6 +3806,107 @@ Two additional bugs surfaced only by this live pass, both fixed (see the numbere
 trap where editing `lib/merge-runner.js`/`web/merge-routes.js` silently had no effect until the dev
 server was restarted (a `require()`'d file, unlike the per-request-spawned `lib/merge-worker.js`).
 
+## Rebuild Missing Files (Utilities area, added 2026-08-14)
+
+A fourth Utilities sub-tab. Checks one or more picked collections for staging files that are
+missing (a mod's own archive says a file should be there, but it isn't on disk), and lets the user
+restore just those from the archive -- without a full Rebuild Collection pass. Motivated by the
+director's own recurring workflow: noticing something's broken in-game, then having to rebuild an
+entire collection to find out only a handful of files were actually gone.
+
+**Reused directly, per the build brief**: `classifyMod` (`lib/rebuild-mod.js`) for archive
+resolution, `sevenzip.js`'s `listArchive`/`extractMany`, `web/sse-session.js` for scan progress
+(same `POST` 202 + `GET .../events` convention as every other scan/plan in this app), and
+`lib/nexus-mod-download.js`'s Premium-gated single-mod download for the "Download Archive" action.
+
+**Own picker endpoint, not a reuse of `/api/rebuild/collections`** -- deliberate deviation from the
+build brief, which suggested reusing that endpoint. Its `workshopOnlyCollections` means "tracked in
+Vortex with NO `collection.json` at all" -- exactly the case this tool can never scan (nothing to
+diff against). This tool's own "Workshop collections" group means the *opposite*: a
+`vortex_collection_<id>`-named authoring folder that DOES have a local `collection.json` (Vortex
+writes one while a Workshop collection is actively being edited/re-packaged). `lib/missing-files-
+scan.js`'s `listPickableCollections()` does its own flat filesystem pass rather than reusing
+`vortex-sync/lib.js`'s `scanStagingCollections` (which excludes every `vortex_collection_` folder
+unconditionally) -- kept local to this file rather than changing that function's long-standing
+exclusion, which other callers rely on staying exactly as-is.
+
+**No Vortex live-state (state.v2) read at all** -- `classifyMod` is always called with
+`knownVortexModId: null`. Rebuild Collection's own plan reads Vortex's live state to get this (the
+real, Vortex-tracked staging folder name, which can differ from the archive's own filename after a
+collection update that hasn't been redeployed yet); this scan skips that read entirely, trading a
+small, known gap (a mod in that exact update-not-redeployed state scans as "no staging folder"
+rather than a real diff) for a much lighter, `state.v2`-crash-risk-free scan with no "Vortex must be
+closed" precondition on the scan itself. Only the **Extract** action (writes to the staging folder)
+gates on Vortex running, matching every other staging-folder write in this app.
+
+### Bug found and fixed during verification: naive raw-archive-path diffing produces massive false positives
+
+The build brief's own suggested approach -- list the archive, check each entry's path directly
+against the staging folder -- is what shipped first, and it was WRONG. Confirmed via real-collection
+testing (a 100-mod installed collection, "GTS Legacy Lite"): the naive diff reported **39 mods /
+5,295 files "missing,"** almost all false positives. Root cause: Vortex's real installer does NOT
+extract an archive's raw internal paths verbatim into staging --
+- **FOMOD-installed mods** replay the archive's `fomod/ModuleConfig.xml` against the collection's
+  own recorded choices (`lib/choice-resolver.js`'s `resolveChoices`) to produce a `{source,
+  destination}` mapping that can rename, filter, or flatten paths entirely differently from the
+  archive's own layout. A mod like "Armory of the Dragon Cult - Half Res" archives everything under
+  `Armory of the Dragon Cult - Half res\00 Data\00Base\...`; the raw-path diff reported its entire
+  200+ file tree as missing because nothing in staging matches that literal prefix.
+- **Plain ("simple") archives** still go through Vortex's own generic mod-root-prefix stripping
+  (`lib/simple-installer.js`'s `resolveSimpleInstall`, a faithful port of Vortex's own
+  `ArchiveStructure.FindPathPrefix`) -- any archive with a wrapper folder (common: `<mod name>\Data\
+  ...` or similar) gets that prefix stripped on real install, so a raw-path diff false-flags every
+  file under it too.
+
+**Fix**: `lib/missing-files-scan.js`'s `resolveExpectedDestinations()` now replays the exact same
+resolution `extract-mod.js` uses for a real rebuild -- `findModRoot` + `resolveChoices` for a
+FOMOD-choices mod, `resolveSimpleInstall` for everything else -- and diffs the resulting
+**destination** paths against staging, not the archive's raw internal paths. This only ever peeks a
+FOMOD's own small `ModuleConfig.xml` (extracted to an OS temp dir, not the staging/downloads
+folders, cleaned up immediately) -- no extraction of the mod's real content for a scan. Re-running
+the same 100-mod collection after the fix: **8 mods / 233 files** -- the true (or at least far more
+plausible) figure. An "Open FOMOD" (no recorded choices, real wizard in the archive) or a FOMOD
+whose config uses a feature `fomod-parser.js`/`choice-resolver.js` doesn't handle yet both fall into
+the `skipped` bucket (reported, not silently dropped) rather than guessing.
+
+**Open question, not yet resolved**: even after the fix, "Armory of the Dragon Cult - Half Res"
+still reports 202 missing files, entirely the mod's `1stperson\` meshes across every dragon-priest
+variant -- confirmed genuinely absent from disk (`find -iname "1stperson*"` in that staging folder
+returns nothing). `resolveChoices` places these under a folder group ("00Base") the collection's own
+recorded choices don't explicitly select or exclude, so it's currently treated as always-installed.
+Two live possibilities, not disambiguated yet: (1) this is a REAL gap in the user's actual install
+(a genuinely useful finding this tool exists to surface), or (2) that folder group has a default/
+conditional-select semantic this scan's FOMOD replay doesn't fully match yet (e.g. an install-step
+default that differs from "always on"). Flagged rather than silently trusted either way -- worth
+revisiting if a future scan surfaces the same always-installed-group pattern elsewhere.
+
+### Verification performed (real collection, real known-missing files)
+
+Deliberately deleted `SL01AmuletsSkyrim.esp` from "Amulets of Skyrim SSE"'s real staging folder in
+the "GTS Legacy Lite" collection (backed up first, byte-identical md5 confirmed both before deleting
+and after restoring). End-to-end, against the live server on a scratch port:
+1. **Scan** found exactly that one file missing for that one mod -- no other mod's result changed.
+2. **Extract from Archive** restored it; the restored file's md5 matched the pre-delete backup
+   exactly (`ac52240d7c6b39382435215662df9147`).
+3. A follow-up scan showed the mod clean again, collection totals back to the pre-delete baseline.
+4. **Open Staging Folder** returned `ok: true` (same `explorer.exe` spawn pattern Missing Masters
+   already ships).
+5. **Download Archive** (a genuinely archive-missing, never-installed mod, "Bandolier Bags and
+   Pouches Classic SE") downloaded the real archive from Nexus into the configured downloads
+   folder, then correctly re-classified the mod as `skipped` ("not installed in this collection's
+   staging folder yet") rather than fabricating a missing-files list for a mod that was never staged
+   at all. That downloaded archive was intentionally left in place afterward (a real file for a mod
+   genuinely in this collection, not test debris) rather than deleted unilaterally.
+
+### New routes (`web/rebuild-missing-routes.js`, mounted at `/api/rebuild-missing`)
+
+`GET /collections` (the picker), `POST /scan` + `GET /scan/events` (SSE), `POST /extract` (Vortex-
+running gated; re-verifies every requested path is STILL actually missing via a cheap `fs.existsSync`
+right before extracting, rather than trusting the client-held scan result outright), `POST
+/download-archive` (Premium-gated, re-scans the one mod after a successful download), `POST
+/open-staging-folder` (path-validated inside the configured staging directory, same
+defense-in-depth as Missing Masters' identical route).
+
 ## Future work
 
 Tracked in the workspace `TODO.md` (not duplicated here — confirmed 2026-07-27, one place to check
