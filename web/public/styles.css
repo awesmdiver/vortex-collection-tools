@@ -1287,6 +1287,12 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    uses for a different (danger) case. */
 .archive-missing-note { color: var(--warning); font-size: 11.5px; margin-top: 3px; }
 .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+/* Workshop Report's own Actions column has a genuinely variable button count row to row (0, 1, or
+   2 -- "not downloaded yet" text, a lone View on Nexus when there's no fetched folder to open, or
+   both) -- right-packing (the default above) means the first button lands at a different x per row,
+   reading as misaligned. Left-align just here instead of flipping the shared default everywhere
+   else, where every row has the same button count and right-packed already lines up fine. */
+.row-actions--left { justify-content: flex-start; }
 
 @media (max-width: 640px) {
   .app-main { padding: 20px 14px 60px; }

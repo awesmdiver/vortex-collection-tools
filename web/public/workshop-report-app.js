@@ -176,9 +176,12 @@ function wrBuildUpdatedCell(row) {
 }
 
 function wrBuildActionsCell(row) {
-  const actions = el('div', { class: 'row-actions' });
+  const actions = el('div', { class: 'row-actions row-actions--left' });
   if (row.fetched) {
-    const openBtn = el('button', { class: 'btn btn--small' }, '📂 Open Staging Folder');
+    // btn--primary (blue) -- this was bare `.btn`, which has no background/color of its own and
+    // fell through to an unstyled browser-default button. Matches this app's other primary row
+    // actions (e.g. Rebuild Missing Files' own "Extract from Archive").
+    const openBtn = el('button', { class: 'btn btn--primary btn--small' }, '📂 Open Staging Folder');
     openBtn.addEventListener('click', () => wrOpenStagingFolder(row));
     actions.appendChild(openBtn);
   } else {
