@@ -790,6 +790,11 @@ $s('syncIgnoresPreviewBtn').addEventListener('click', async () => {
   // control, the deliberate path back into a live Apply.
   setApplyPending($s('syncIgnoresApplyBtn'));
   $s('syncStep1NextBtn').disabled = true;
+  // Clears the end-of-flow completion banner from a previous Apply (queue: preview-stale-banner) --
+  // Preview means whatever Apply last showed is no longer guaranteed current, same reasoning as the
+  // Apply-button re-arm just above; without this the stale banner sat visible until Apply re-succeeded.
+  $s('syncResumeNextSteps').classList.add('hidden');
+  $s('syncResumeAlmostThere').classList.add('hidden');
   if (!backup) { setSyncStatus(statusEl, 'Create a backup first, or restore an existing one.'); return; }
   setSyncStatus(statusEl, 'Checking…');
   $s('syncIgnoresApplyBtn').disabled = true;
@@ -901,6 +906,9 @@ $s('syncDisablesPreviewBtn').addEventListener('click', async () => {
   // see the matching comment on Apply Ignores' own Preview handler above.
   setApplyPending($s('syncDisablesApplyBtn'));
   $s('syncStep2NextBtn').disabled = true;
+  // Clears the end-of-flow completion banner from a previous Apply (queue: preview-stale-banner) --
+  // same reasoning as the Apply Ignores Preview handler's own clearing above.
+  $s('syncAllDoneInfo').classList.add('hidden');
   if (!backup) { setSyncStatus(statusEl, 'Create a backup first, or restore an existing one.'); return; }
   setSyncStatus(statusEl, 'Checking…');
   $s('syncDisablesApplyBtn').disabled = true;
