@@ -378,6 +378,8 @@ if (reportsSubTab) {
       if (!cfg.staging || !cfg.downloads) {
         const banner = document.getElementById('settingsFirstRunBanner');
         if (banner) banner.classList.remove('hidden');
+        const premiumBanner = document.getElementById('settingsFirstRunPremiumBanner');
+        if (premiumBanner) premiumBanner.classList.remove('hidden');
         showToolArea('settings');
       } else {
         showToolArea('home');

@@ -25,6 +25,7 @@ Home page, so you're never more than a click away from the one you need.
 | Feature | Details |
 | :--- | :--- |
 | **Requirements** | A local web page you run yourself — nothing is sent anywhere else. Release zip bundles its own Node.js and 7-Zip, nothing else to install |
+| **Nexus Account** | Free works for most tools. A few features — like automatically downloading a missing archive — need Nexus Premium, the same rule Nexus itself applies to free accounts. Everywhere that's the case, you'll get a clear note and a way to grab the file yourself instead |
 | **Performance Impact** | Rebuilds run 2-3x faster with parallel extraction (up to 8 mods at once) |
 | **Safety** | Every live database write takes a full backup automatically first; never touches your Skyrim save files |
 | **Compatibility** | Vortex-managed Skyrim SE mod collections |
