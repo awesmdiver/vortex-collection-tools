@@ -82,8 +82,8 @@ document.getElementById('vortexRunningRetryBtn').addEventListener('click', () =>
 function showVortexVersionWarning(vortexVersion) {
   const text = document.getElementById('vortexVersionWarningText');
   text.textContent = vortexVersion
-    ? `This tool has been tested against Vortex 2.3.0-beta.1, 2.3.0, 2.4.0-beta.1, 2.4.0-beta.2, and 2.4.0 -- you're running Vortex ${vortexVersion}.`
-    : 'This tool has been tested against Vortex 2.3.0-beta.1, 2.3.0, 2.4.0-beta.1, 2.4.0-beta.2, and 2.4.0 -- your installed version could not be detected.';
+    ? `This tool has been tested through Vortex 2.5.0 -- you're running Vortex ${vortexVersion}.`
+    : "This tool has been tested through Vortex 2.5.0 -- your installed version could not be detected.";
   document.getElementById('vortexVersionWarningModal').classList.remove('hidden');
 }
 document.getElementById('vortexVersionWarningCloseBtn').addEventListener('click', () => {
