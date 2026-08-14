@@ -53,10 +53,13 @@ function createRebuildMissingRouter(config) {
     }
 
     router.get('/collections', (req, res) => {
-        if (!staging) return res.json({ installed: [], workshop: [], configured: false });
+        if (!staging) return res.json({ installed: [], workshop: [], notDownloaded: [], configured: false });
         try {
             const { installed, workshop } = listPickableCollections(staging);
-            res.json({ installed, workshop, configured: true });
+            // Cached, not re-read here -- populated by the explicit POST /load-vortex-data action
+            // above (a live Vortex-state read shouldn't fire silently on every picker load). Empty
+            // until the user has clicked that at least once this session.
+            res.json({ installed, workshop, notDownloaded: notDownloadedCollections, configured: true });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
@@ -73,6 +76,15 @@ function createRebuildMissingRouter(config) {
     // never as part of the plain filesystem scan/picker load above.
     router.post('/nexus-slug', async (req, res) => {
         if (!requireConfigured(res)) return;
+        // BUG FIX (queue: rebuild-missing-vortex-db-read, director's own call): hit this live while
+        // testing the Refresh-from-Nexus button -- Vortex was open, this route's own state.v2 read
+        // failed with the generic native-DB-crash help text instead of a clear "close Vortex first"
+        // message. Deliberately deferred fixing it in that task ("fold the fix in here rather than
+        // bolt it on piecemeal") since this task ALSO adds a second, bigger Vortex-DB read below --
+        // same gate, same message shape as rebuild-routes.js's own /plan and /vortex-data/refresh.
+        if (syncLib.isVortexRunning()) {
+            return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
+        }
         const { collectionModId } = req.body || {};
         if (!collectionModId || typeof collectionModId !== 'string') {
             return res.status(400).json({ error: 'Missing collectionModId.' });
@@ -94,6 +106,53 @@ function createRebuildMissingRouter(config) {
                 });
             }
             res.json({ slug: syncState.collectionSlug, collectionName: collectionInfo.name });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Vortex-tracked Workshop collections with NO local collection.json at all (e.g. "My GTS Audio
+    // Overhaul" -- confirmed live this session: never extracted, so listPickableCollections' own
+    // pure filesystem scan can never find it -- there's nothing on disk to read). Populated by
+    // POST /load-vortex-data below, surfaced by GET /collections alongside the filesystem-only
+    // installed/workshop groups. Module-level, same "load once, cache until the next explicit
+    // refresh" shape as rebuild-routes.js's own workshopOnlyCollections.
+    //
+    // NAMING, deliberately NOT "workshopOnlyCollections" (this variable's own name is intentionally
+    // different from Rebuild Collection's field of the same underlying real-world concept): this
+    // router's own header comment already documents that "workshop" in THIS file's own vocabulary
+    // means the OPPOSITE thing (an authoring collection that DOES have a local collection.json).
+    // Naming it identically to Rebuild Collection's concept here would silently collide with that
+    // established meaning.
+    let notDownloadedCollections = [];
+
+    // Reads Vortex's live state.v2 DB directly (same primitive Rebuild Collection's own
+    // /vortex-data/refresh uses -- collection-runner.js's loadSyncStateBatch, not reimplemented) to
+    // discover Workshop-tracked collections this tool would otherwise never see. Deliberately NOT
+    // automatic on page load -- same "manual, explicit action" shape this whole router already
+    // follows (a live-state read is exactly the kind of thing that shouldn't fire silently, and
+    // Vortex must be closed for it to succeed at all). `entries: []` -- this route only cares about
+    // the discovery side (workshopOnlyCollections), not per-collection sync state (that's what
+    // /nexus-slug is for, lazily, per row) -- confirmed live/via source (state-query-worker.js's own
+    // scanAllCollections) that the discovery scan only needs `stagingDir`, not a populated entries
+    // list, so this stays a single lightweight DB pass rather than Rebuild Collection's own heavier
+    // per-collection batch.
+    router.post('/load-vortex-data', async (req, res) => {
+        if (!requireConfigured(res)) return;
+        if (syncLib.isVortexRunning()) {
+            return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
+        }
+        try {
+            const { workshopOnlyCollections: found } = await runner.loadSyncStateBatch({ state, entries: [], stagingDir: staging });
+            // Dedupe against collections that already have a local collection.json -- those already
+            // show up in the normal "workshop" group above (listPickableCollections' own filesystem
+            // scan already finds them); only a genuinely never-fetched one belongs here.
+            const { workshop: alreadyLocal } = listPickableCollections(staging);
+            const alreadyLocalIds = new Set(alreadyLocal.map((w) => w.modId));
+            notDownloadedCollections = found
+                .filter((w) => !alreadyLocalIds.has(w.modId))
+                .sort((a, b) => a.name.localeCompare(b.name));
+            res.json({ ok: true, notDownloaded: notDownloadedCollections });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
@@ -125,14 +184,16 @@ function createRebuildMissingRouter(config) {
     });
 
     // Pulls a specific revision (chosen from the /nexus-revisions list above -- draft or published,
-    // defaulting to the newest) straight from Nexus and overwrites the local collection.json -- the
-    // fix for the "archive mismatch" false-positives a stale local collection.json can cause (Rebuild
-    // Missing Files diffs against whatever collection.json says SHOULD be installed, so a stale copy
-    // makes correctly-installed mods look broken). The current file is always backed up first,
-    // alongside itself, before anything is overwritten -- extractFile's own `7z e -y` has no undo of
-    // its own. For a Workshop row specifically, the frontend shows a confirm step first: this only
-    // ever fetches a revision already saved to Nexus, which can be behind not-yet-uploaded local
-    // Workshop edits -- never assumed here to be "the latest," just "the latest saved to Nexus."
+    // defaulting to the newest) straight from Nexus, either REFRESHING an existing collection.json
+    // (the fix for the "archive mismatch" false-positives a stale one can cause -- Rebuild Missing
+    // Files diffs against whatever collection.json says SHOULD be installed, so a stale copy makes
+    // correctly-installed mods look broken) or FETCHING one for the first time, for a Workshop-only
+    // row that's never been extracted at all (queue: rebuild-missing-vortex-db-read -- the same
+    // route now serves both, since the only real difference is "is there something to back up
+    // first," not a different operation). For a Workshop row specifically, the frontend shows a
+    // confirm step first: this only ever fetches a revision already saved to Nexus, which can be
+    // behind not-yet-uploaded local Workshop edits -- never assumed here to be "the latest," just
+    // "the latest saved to Nexus."
     router.post('/refresh-from-nexus', async (req, res) => {
         if (!requireConfigured(res)) return;
         const { collectionModId, slug, revisionNumber } = req.body || {};
@@ -149,37 +210,47 @@ function createRebuildMissingRouter(config) {
         const revNum = revisionNumber ? parseInt(revisionNumber, 10) : undefined;
         const destDir = path.join(staging, collectionModId);
         const collectionJsonPath = path.join(destDir, 'collection.json');
-        if (!fs.existsSync(collectionJsonPath)) {
-            return res.status(400).json({ error: `No collection.json found for "${collectionModId}".` });
-        }
+        const isFirstFetch = !fs.existsSync(collectionJsonPath);
 
         let previousModCount = null;
-        try {
-            const previous = JSON.parse(fs.readFileSync(collectionJsonPath, 'utf8'));
-            previousModCount = Array.isArray(previous.mods) ? previous.mods.length : null;
-        } catch { /* best-effort -- missing before/after count doesn't block the refresh itself */ }
+        let backupPath = null;
+        if (!isFirstFetch) {
+            try {
+                const previous = JSON.parse(fs.readFileSync(collectionJsonPath, 'utf8'));
+                previousModCount = Array.isArray(previous.mods) ? previous.mods.length : null;
+            } catch { /* best-effort -- missing before/after count doesn't block the refresh itself */ }
 
-        // Same timestamp convention as this app's other backups (e.g. vortex-sync/lib.js's
-        // backupLiveState) -- ISO timestamp with ':'/'.' replaced so it's a valid Windows filename.
-        // Kept right next to the file it backs up (not a separate backups folder) so it's the
-        // easiest possible thing to find and restore by hand if a refresh turns out unwanted.
-        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const backupPath = path.join(destDir, `collection.json.backup-${stamp}`);
-        try {
-            fs.copyFileSync(collectionJsonPath, backupPath);
-        } catch (e) {
-            return res.status(500).json({ error: `Could not back up the current collection.json before refreshing -- refusing to overwrite it without one: ${e.message}` });
+            // Same timestamp convention as this app's other backups (e.g. vortex-sync/lib.js's
+            // backupLiveState) -- ISO timestamp with ':'/'.' replaced so it's a valid Windows
+            // filename. Kept right next to the file it backs up (not a separate backups folder) so
+            // it's the easiest possible thing to find and restore by hand if a refresh turns out
+            // unwanted. Nothing to back up on a first fetch -- there's no prior file yet.
+            const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+            backupPath = path.join(destDir, `collection.json.backup-${stamp}`);
+            try {
+                fs.copyFileSync(collectionJsonPath, backupPath);
+            } catch (e) {
+                return res.status(500).json({ error: `Could not back up the current collection.json before refreshing -- refusing to overwrite it without one: ${e.message}` });
+            }
         }
 
         try {
             const result = await nexusCollectionDownload.fetchAndExtractCollectionJson({
                 slug, revisionNumber: revNum, destDir, sevenZipExe,
             });
-            res.json({ ok: true, backupPath, previousModCount, ...result });
+            // A first fetch means this collectionModId is no longer "not downloaded" -- drop it from
+            // that cached list so the picker doesn't keep offering it there once a real
+            // collection.json exists (it'll show up in the normal "workshop" group on the next
+            // /collections call, via listPickableCollections' own filesystem scan).
+            if (isFirstFetch) {
+                notDownloadedCollections = notDownloadedCollections.filter((w) => w.modId !== collectionModId);
+            }
+            res.json({ ok: true, isFirstFetch, backupPath, previousModCount, ...result });
         } catch (e) {
-            // The backup above is real and untouched -- extractFile only overwrites collection.json
-            // once 7z itself succeeds, so a failure here (network, bad slug, no matching revision)
-            // never leaves the original file in a half-written state.
+            // The backup above (if any) is real and untouched -- extractFile only overwrites
+            // collection.json once 7z itself succeeds, so a failure here (network, bad slug, no
+            // matching revision) never leaves an existing file in a half-written state, and never
+            // creates a stray one for a first fetch either.
             res.status(500).json({ ok: false, error: e.message, backupPath });
         }
     });

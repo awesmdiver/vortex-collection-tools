@@ -66,6 +66,10 @@ async function rmfLoadCollections() {
     }
     rmfRenderPickerGroup('rmfInstalledSection', 'rmfInstalledGrid', 'rmfInstalledCount', data.installed, 'n', `${data.installed.length} found`);
     rmfRenderPickerGroup('rmfWorkshopSection', 'rmfWorkshopGrid', 'rmfWorkshopCount', data.workshop, 'w', "collections you're authoring, not installed");
+    // Cached server-side, only populated once the director has clicked "Check Workshop for
+    // un-fetched collections" at least once this session (queue: rebuild-missing-vortex-db-read) --
+    // empty until then, same as before this feature existed.
+    rmfRenderUnfetchedGroup(data.notDownloaded || []);
     $g('rmfPickerEmpty').classList.toggle('hidden', data.installed.length + data.workshop.length > 0);
     if (data.installed.length + data.workshop.length === 0) {
       $g('rmfPickerEmpty').textContent = 'No collections found in your staging folder yet.';
@@ -75,6 +79,27 @@ async function rmfLoadCollections() {
     rmfHandleError(e, $g('rmfNotConfigured'));
   }
 }
+
+$g('rmfLoadVortexDataBtn').addEventListener('click', async () => {
+  const btn = $g('rmfLoadVortexDataBtn');
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+  $g('rmfVortexDataError').classList.add('hidden');
+  $g('rmfVortexDataStatus').textContent = '';
+  try {
+    const result = await rmfApi('POST', '/api/rebuild-missing/load-vortex-data', {});
+    $g('rmfVortexDataStatus').textContent = result.notDownloaded.length === 0
+      ? 'No un-fetched Workshop collections found.'
+      : `Found ${result.notDownloaded.length} un-fetched Workshop collection${result.notDownloaded.length === 1 ? '' : 's'}.`;
+    rmfRenderUnfetchedGroup(result.notDownloaded);
+  } catch (e) {
+    rmfHandleError(e, $g('rmfVortexDataError'));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+});
 
 function rmfRenderPickerGroup(sectionId, gridId, countId, items, prefix, countText) {
   $g(sectionId).classList.toggle('hidden', items.length === 0);
@@ -113,6 +138,45 @@ function rmfRenderPickerGroup(sectionId, gridId, countId, items, prefix, countTe
       else rmfState.picked.delete(item.modId);
       rmfUpdatePickCount();
     });
+    grid.appendChild(card);
+  }
+}
+
+// A "not yet downloaded" row (queue: rebuild-missing-vortex-db-read) -- a Workshop collection
+// Vortex tracks but that has no local collection.json at all, so there's nothing to scan against.
+// Deliberately a SEPARATE renderer from rmfRenderPickerGroup above, not a third mode bolted onto
+// it: no checkbox (nothing to pick yet), no mod count (unknown until fetched), and a different
+// action (Fetch, not Refresh) -- different enough that sharing one function risked a tangle of
+// conditionals rather than two small, readable ones.
+function rmfRenderUnfetchedGroup(items) {
+  const section = $g('rmfUnfetchedSection');
+  section.classList.toggle('hidden', items.length === 0);
+  if (items.length === 0) return;
+  $g('rmfUnfetchedCount').textContent = `${items.length} found`;
+  const grid = $g('rmfUnfetchedGrid');
+  grid.innerHTML = '';
+  for (const item of items) {
+    // Defensive, not hypothetical: scanAllCollections (state-query-worker.js) only sets
+    // collectionSlug when Vortex itself has attributes###collectionSlug on record -- a collection
+    // created/tracked purely locally, never linked to Nexus at all, genuinely can come back null.
+    // Better to say so plainly here than let Fetch fail with an unexplained "missing slug" error.
+    const hasSlug = !!item.collectionSlug;
+    const note = el('div', { class: 'sub' }, hasSlug ? 'Not downloaded yet' : 'No Nexus id on record for this collection');
+    const fetchBtn = el('button', { type: 'button', class: 'btn btn--primary btn--small rmf-refresh-btn' }, '⬇ Fetch from Nexus');
+    // Set as a property, not via el()'s attrs (which uses setAttribute -- a `disabled` ATTRIBUTE is
+    // present/disabled the moment it's set to ANY value, even the string "undefined", so a
+    // conditional el({disabled: hasSlug ? undefined : true}) would silently always disable it).
+    fetchBtn.disabled = !hasSlug;
+    fetchBtn.addEventListener('click', () => rmfStartFirstFetch(item, fetchBtn));
+    // A plain <div>, not a <label>+checkbox like a normal .coll-card -- there's nothing to check
+    // yet, so no click-toggles-checkbox behavior to guard against either.
+    const card = el('div', { class: 'coll-card coll-card--unfetched' }, [
+      el('div', { class: 'meta' }, [
+        el('div', { class: 'name' }, item.name),
+        note,
+        fetchBtn,
+      ]),
+    ]);
     grid.appendChild(card);
   }
 }
@@ -458,13 +522,32 @@ async function rmfStartRefresh(item, btn) {
   }
   btn.disabled = false;
   btn.textContent = original;
-  rmfPendingRefresh = { item, slug: slugInfo.slug };
+  rmfPendingRefresh = { item, slug: slugInfo.slug, collectionModId: item.modId, isFirstFetch: false };
   $g('rmfRefreshConfirmModalText').textContent =
     `This replaces the local collection.json for "${item.name}" with the revision you pick below. ` +
     `The current file is backed up first, right next to it, so you can always undo this.`;
   $g('rmfRefreshWorkshopCaveat').classList.toggle('hidden', !item.isWorkshop);
   $g('rmfRefreshConfirmModal').classList.remove('hidden');
   await rmfLoadRefreshRevisions(slugInfo.slug);
+}
+
+// A "not yet downloaded" row's own Fetch action (queue: rebuild-missing-vortex-db-read) -- unlike
+// rmfStartRefresh above, the Nexus slug is already known directly from the Vortex-DB scan
+// (scanAllCollections reads attributes###collectionSlug itself), so this skips the /nexus-slug
+// lookup entirely and goes straight to the revision picker. Reuses the SAME confirm modal --
+// `isFirstFetch: true` on the pending state below is what the modal text and the Workshop caveat
+// (always shown here -- every "not yet downloaded" row is inherently Workshop-only, unlike
+// rmfStartRefresh's per-item `item.isWorkshop` check) branch on.
+async function rmfStartFirstFetch(item, btn) {
+  rmfPendingRefresh = { item, slug: item.collectionSlug, collectionModId: item.folder, isFirstFetch: true };
+  $g('rmfRefreshError').classList.add('hidden');
+  $g('rmfRefreshResult').classList.add('hidden');
+  $g('rmfRefreshConfirmModalText').textContent =
+    `This fetches "${item.name}" from Nexus and creates its local collection.json — it's never been ` +
+    `downloaded here before, so there's nothing to back up.`;
+  $g('rmfRefreshWorkshopCaveat').classList.remove('hidden');
+  $g('rmfRefreshConfirmModal').classList.remove('hidden');
+  await rmfLoadRefreshRevisions(item.collectionSlug);
 }
 
 // Real gap found live while testing this feature (queue: rebuild-missing-refresh-collection-json):
@@ -507,12 +590,23 @@ $g('rmfRefreshConfirmOkBtn').addEventListener('click', async () => {
   const pending = rmfPendingRefresh;
   rmfPendingRefresh = null;
   if (!pending) return;
-  const { item, slug } = pending;
+  const { item, slug, collectionModId, isFirstFetch } = pending;
   const revisionNumber = $g('rmfRefreshRevSelect').value || undefined;
   $g('rmfRefreshResult').classList.add('hidden');
   try {
-    const result = await rmfApi('POST', '/api/rebuild-missing/refresh-from-nexus', { collectionModId: item.modId, slug, revisionNumber });
-    rmfApplyRefreshResult(item, result);
+    const result = await rmfApi('POST', '/api/rebuild-missing/refresh-from-nexus', { collectionModId, slug, revisionNumber });
+    if (isFirstFetch) {
+      $g('rmfRefreshResult').textContent =
+        `Fetched "${item.name}" from Nexus (revision ${result.revisionNumber}) — ${result.modCount} mod${result.modCount === 1 ? '' : 's'}. ` +
+        `It now shows up under "Workshop collections" below, ready to scan.`;
+      $g('rmfRefreshResult').classList.remove('hidden');
+      // The server already dropped this from "not yet downloaded" (a real collection.json exists
+      // now); a full reload picks that up plus the new "Workshop collections" card via the plain
+      // filesystem scan, same one every other row already goes through.
+      await rmfLoadCollections();
+    } else {
+      rmfApplyRefreshResult(item, result);
+    }
   } catch (e) {
     rmfHandleError(e, $g('rmfRefreshError'));
   }

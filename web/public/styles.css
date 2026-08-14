@@ -1276,6 +1276,11 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 /* Sits inside the card's own <label> -- its click handler calls preventDefault/stopPropagation so
    clicking it doesn't also toggle the card's checkbox (see rebuild-missing-app.js). */
 .rmf-refresh-btn { margin-top: 8px; }
+/* A "not yet downloaded" row (queue: rebuild-missing-vortex-db-read) -- a plain <div>, not a
+   <label>+checkbox like a normal scannable .coll-card, since there's nothing to check yet (see
+   rebuild-missing-app.js's own rmfRenderUnfetchedGroup). cursor:default overrides the base
+   .coll-card's own cursor:pointer -- only the Fetch button inside is actually clickable. */
+.coll-card--unfetched { cursor: default; border-style: dashed; }
 
 /* A mod row whose archive isn't on disk -- warning-colored (not danger; the row itself isn't a
    failure, it's a "here's what to do next" note), matching the small-note treatment .mismatch-note

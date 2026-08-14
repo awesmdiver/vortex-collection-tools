@@ -1806,6 +1806,19 @@
     <div id="rmfRefreshError" class="callout callout--critical hidden"></div>
     <div id="rmfRefreshResult" class="callout callout--success hidden"></div>
 
+    <!-- Vortex-DB discovery (queue: rebuild-missing-vortex-db-read) -- a Workshop collection with NO
+         local collection.json at all (never extracted, e.g. "My GTS Audio Overhaul") can't be found
+         by the plain filesystem scan below at all -- this reads Vortex's own live state.v2 directly,
+         same primitive Rebuild Collection's own "Load Vortex Data" already uses. Deliberately a
+         separate, explicit action -- not automatic on page load -- same "manual action, not a
+         silent live-state read" shape this whole tool already follows, and Vortex must be closed for
+         it to succeed at all. -->
+    <div class="view-actions">
+      <button id="rmfLoadVortexDataBtn" class="btn btn--ghost btn--small">🔍 Check Workshop for un-fetched collections</button>
+      <span class="muted" id="rmfVortexDataStatus"></span>
+    </div>
+    <div id="rmfVortexDataError" class="callout callout--critical hidden"></div>
+
     <div id="rmfInstalledSection" class="hidden">
       <div class="group-head"><h2>Installed collections</h2><span class="n" id="rmfInstalledCount"></span></div>
       <div class="picker-grid" id="rmfInstalledGrid"></div>
@@ -1814,6 +1827,19 @@
     <div id="rmfWorkshopSection" class="hidden">
       <div class="group-head"><h2>Workshop collections</h2><span class="n" id="rmfWorkshopCount">collections you're authoring, not installed</span></div>
       <div class="picker-grid" id="rmfWorkshopGrid"></div>
+    </div>
+
+    <!-- Real gap found live this session: "My GTS Audio Overhaul" (Vortex-tracked, never extracted)
+         has no local collection.json, so nothing here is scannable yet -- fetch first, then it
+         re-appears above in "Workshop collections," checkbox and all, exactly like any other row.
+         Deliberately its own separate action, not a combined "fetch then scan" step -- matches the
+         pattern this same file's own header comment already establishes for Rebuild Collection's
+         Workshop-only flow (fetch happens on its own, only afterward does a collection join the
+         normal scannable list) -- judgment call, flagged in this task's own handoff. -->
+    <div id="rmfUnfetchedSection" class="hidden">
+      <div class="group-head"><h2>Not yet downloaded</h2><span class="n" id="rmfUnfetchedCount"></span></div>
+      <p class="muted" style="margin:4px 0 10px">Tracked in Vortex's Workshop, but never fetched here — nothing to scan against yet. Fetch one to add it to "Workshop collections" above.</p>
+      <div class="picker-grid" id="rmfUnfetchedGrid"></div>
     </div>
 
     <div class="view-actions">
