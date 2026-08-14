@@ -73,6 +73,17 @@ modals, badges, and status-pills all share the exact same mapping (full rational
 | Warning | amber (`--warning`) | ⚠️ | Needs attention, but isn't blocking. |
 | Critical | red (`--danger`) | 🛑 | A real failure, or a step that cannot proceed. |
 
+A fifth, non-severity **acknowledged** tier sits visually below Warning: muted grey (`--neutral`/
+`--neutral-bg`), icon ⚪ (white circle — same dot shape as the four severities above, per the
+established "shape signals family, color signals severity" convention, just uncolored since this
+isn't actually a severity). Use it when something LOOKS like a problem at first glance but a
+separate, real signal has already confirmed it's expected/intentional and needs no action — e.g.
+Missing Masters' `mm-row--soft` tier, which downgrades a plugin's own master-file "name collision"
+the moment the deployment manifest confirms it was ESLifier's own intentional swap, not a real
+missing-master crash risk. Suppress any "here's how to fix it" action buttons on an acknowledged
+row (same suppression mechanism `readyToDeploy` already uses elsewhere) — showing them next to a
+callout that says "nothing to fix" reads as a contradiction.
+
 **Icons updated 2026-07-27, twice the same day**: first, every `&#9888;`/bare `⚠` was swapped for
 the colorful emoji ⚠️ (U+26A0 + variation-selector-16) instead of the flat black-and-white HTML
 entity glyph — reads more eye-catching, matching this app's broader move toward emoji-led headings

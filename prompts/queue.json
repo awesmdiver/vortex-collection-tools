@@ -3,22 +3,6 @@
   "inFlight": null,
   "items": [
     {
-      "id": "rebuild-missing-extract-source-destination-mixup",
-      "tag": "bug",
-      "title": "Rebuild Missing Files' Extract action fails for any file nested under a stripped prefix",
-      "why": "Extracting a missing file that's inside a real subfolder (like 'Patches\\') fails because the tool searches the archive for the STAGING destination path instead of the archive's real internal path — confirmed root cause, the fix mirrors how Rebuild Collection's own extraction already handles this correctly.",
-      "prompt": "Real, CONFIRMED bug — fully traced through the actual code, no live debugging needed, just a fix. Director's live repro: extracting a missing file for 'Volkihar Soundscape Overhaul' failed with 'VSO_ELFX Shadows Enhancer Patch.esp: 1 file(s) were not found inside the archive' — but the file genuinely IS in the archive, at `Patches\\VSO_ELFX Shadows Enhancer Patch.esp` (confirmed via 7-Zip, screenshot). The archive's own stop-pattern prefix detection (lib/simple-installer.js) found this mod's FIRST real-content file (an .esp) sitting inside a `Patches\\` subfolder, and correctly-per-its-own-logic treated `Patches` as the mod-root wrapper to strip for ALL files under it — so the computed DESTINATION for this file is the bare filename `VSO_ELFX Shadows Enhancer Patch.esp`, while its real archive-internal SOURCE path stays `Patches\\VSO_ELFX Shadows Enhancer Patch.esp`.\n\nROOT CAUSE: `lib/missing-files-scan.js`'s `resolveExpectedDestinations` computes both `source` and `destination` per file internally (`resolveSimpleInstall`/`resolveChoices` both return `{source, destination}` pairs) but then DISCARDS `source` entirely: `return { destinations: files.map((f) => f.destination) };`. Everything downstream — `scanOneMod`'s `missing` array, the frontend's extract-request payload (`rebuild-missing-app.js` line 331: `files: row.missing`), and `web/rebuild-missing-routes.js`'s `/extract` handler calling `extractMany(sevenZipExe, archivePath, stillMissing, stagingModDir)` — only ever has the DESTINATION path, never the real archive-internal SOURCE path. `extractMany` needs the archive's REAL internal path to find the member at all (confirmed: this is exactly why it failed for a file nested under a stripped prefix) — and even when it succeeds (source === destination, no prefix was stripped for that file), `extractMany` preserves the archive's OWN internal folder structure verbatim into destDir, which is only correct when there's nothing to strip.\n\nTHE ESTABLISHED, ALREADY-WORKING PATTERN TO REUSE — don't reinvent this, `lib/extract-mod.js` (the real Rebuild Collection extraction path, ~line 62-80) already solves exactly this: extract ALL resolved files' `source` paths in one `extractMany` call into a SCRATCH directory (preserving archive-relative structure there, which is fine since it's a throwaway temp location), then individually `fs.copyFileSync` each `scratchDir/<source>` to `modOutputDir/<destination>` (creating destination subdirectories as needed via `fs.mkdirSync(path.dirname(destFullPath), { recursive: true })`). Copy, not move — extract-mod.js's own comment explains why (a FOMOD could map one source to two destinations).\n\nFIX:\n1. `resolveExpectedDestinations` (missing-files-scan.js): return `{ destinations: files }` (the full `{source, destination}` pairs), not just `.map(f => f.destination)`. Update `scanOneMod`'s own missing-file diff to still check existence by `destination` (`fs.existsSync(path.join(action.stagingModDir, dest.destination))`) but keep BOTH fields in what it returns as `missing`.\n2. `web/public/rebuild-missing-app.js` (~line 331): send the full `{source, destination}` pairs as `files`, not just the destination strings.\n3. `web/rebuild-missing-routes.js`'s `/extract` handler: replicate extract-mod.js's own scratch-dir-then-copy pattern — extract every `source` path in one `extractMany` call into a scratch temp dir, then copy each into `stagingModDir/<destination>`, mkdir'ing parent dirs as needed. Clean up the scratch dir afterward (finally block, matching this codebase's own established temp-dir-cleanup convention — see `resolveExpectedDestinations`'s own `fs.mkdtempSync`/`fs.rmSync` FOMOD-config-peek pattern for the exact idiom already used elsewhere in this same file).\n4. Re-verify the 'still missing' existence check right before extracting (routes.js already does this defensively) still uses `destination`, unchanged.\n\nVERIFY: re-run the exact failing case (Volkihar Soundscape Overhaul, Extract from Archive on the missing VSO_ELFX Shadows Enhancer Patch.esp) and confirm it now extracts successfully to `<stagingModDir>\\Patches\\VSO_ELFX Shadows Enhancer Patch.esp`. Also test a mod with NO prefix stripping at all (source === destination for every file) to confirm that path still works unchanged. Handoff with what you tested.",
-      "ready": true
-    },
-    {
-      "id": "eslifier-awareness",
-      "tag": "feature",
-      "title": "ESLifier awareness — Settings path + Missing Masters downgrade",
-      "why": "kills the false-positive 'missing master' when ESLifier deliberately swapped a file",
-      "prompt": "Read vortex-tools/vortex-collection-tools/design/BUILD-PROMPT-eslifier-filter.md and build it. CRITICAL: verify the detection against a real ESLifier output folder + a live Missing Masters scan FIRST (disabled-count lesson) — don't ship a guessed trace. v1 = Settings ESLifier output-folder path + Nexus helper link, and the Missing Masters ON-by-default toggle that downgrades ESLifier-traced files from critical to warning (surfaced, not hidden). Update config.example.json for both new fields. Handoff with what the real ESLifier→Vortex deploy actually looked like and which scan signal the false positive fired on.",
-      "ready": true
-    },
-    {
       "id": "preview-stale-banner",
       "tag": "polish",
       "title": "Clear stale end-of-flow banner on Preview re-arm",
@@ -44,6 +28,14 @@
     }
   ],
   "shipped": [
+    {
+      "title": "ESLifier awareness — Settings path + Missing Masters downgrade",
+      "doc": null
+    },
+    {
+      "title": "Rebuild Missing Files' Extract action fails for any file nested under a stripped prefix",
+      "doc": null
+    },
     {
       "title": "Rebuild Missing Files: honest 'wrong version downloaded' vs 'genuinely missing' archive message",
       "doc": null
