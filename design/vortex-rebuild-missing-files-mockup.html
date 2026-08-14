@@ -2,7 +2,7 @@
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body>
-<title>Rebuild Missing Files — new tool mockup v1 (Approved ✓ 2026-08-05) + v2 addendum (Approved ✓ 2026-08-14)</title>
+<title>Rebuild Missing Files — new tool mockup v1 (Approved ✓ 2026-08-05) + v2 addendum (Superseded — per-card buttons removed) + v3 addendum (Approved ✓ 2026-08-14)</title>
 <style>
   :root{
     --bg:#0d0f14; --surface:#161922; --surface-2:#1d212c; --border:#2a2f3d; --border-strong:#3a4152;
@@ -113,16 +113,16 @@
   </div>
 
   <!-- ============================================================ -->
-  <!-- v2 ADDENDUM (Approved ✓ 2026-08-14) -- "Refresh from Nexus" per-card action.               -->
-  <!-- Real bug driving this: a STALE local collection.json (never re-synced with what's actually  -->
-  <!-- published on Nexus) makes correctly-installed mods show as false "archive mismatch" results -->
-  <!-- further down this same tool -- the scan diffs against whatever collection.json SAYS should  -->
-  <!-- be there. This button pulls a fresh copy. Placement: directly on the Step 1 picker card,     -->
-  <!-- same tier as the existing checkbox/name/sub -- no new screen needed. A ghost/small button so -->
-  <!-- it doesn't compete visually with the checkbox as the card's primary action.                 -->
+  <!-- v2 ADDENDUM (SUPERSEDED by v3, below) -- shipped as a per-card button on every collection,   -->
+  <!-- Installed and Workshop alike. Director's live feedback: only Workshop collections need a     -->
+  <!-- refresh (Installed ones came from Vortex's own install, no drift to worry about), and doing   -->
+  <!-- it one card/one confirm-modal at a time doesn't fit "refresh several as I check them" -- see   -->
+  <!-- the v3 addendum for the replacement: one toggle on the Workshop group, one warning for the    -->
+  <!-- whole batch, refreshed inline as each collection is scanned. Left here for the record, not    -->
+  <!-- the current design.                                                                           -->
   <!-- ============================================================ -->
-  <div style="margin-top:40px">
-    <span class="stepnote" style="background:var(--success-bg);color:var(--success)">v2 addendum — per-card "Refresh from Nexus"</span>
+  <div style="margin-top:40px;opacity:.5">
+    <span class="stepnote" style="background:var(--neutral-bg);color:var(--neutral)">v2 addendum — SUPERSEDED — per-card "Refresh from Nexus"</span>
     <div class="group-head"><h2>Installed collections (with the new action)</h2></div>
     <div class="picker-grid" style="max-width:280px">
       <label class="coll-card" style="cursor:default">
@@ -167,6 +167,59 @@
         <button class="btn btn--primary">Refresh</button>
       </div>
     </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- v3 ADDENDUM (Pending review 2026-08-14) -- replaces the per-card button with a single toggle -->
+  <!-- on the Workshop group only (Installed collections never get a refresh option -- they came     -->
+  <!-- from Vortex's own install, nothing to drift). When on, every selected Workshop collection is  -->
+  <!-- refreshed from Nexus automatically as the scan reaches it -- one warning for the whole batch, -->
+  <!-- shown once before the scan starts, not once per collection.                                   -->
+  <!--                                                                                                -->
+  <!-- JUDGMENT CALL, flagging rather than deciding silently: the shipped v2 flow let you pick a      -->
+  <!-- specific revision (draft or published) per collection, since Nexus's "latest published"       -->
+  <!-- alone turned out to be empty for most real Workshop collections (all still draft/unlisted --   -->
+  <!-- see the v2 handoff). A per-collection revision picker doesn't fit a batch toggle -- asking for -->
+  <!-- N picks defeats the point of "just handle it as each collection comes up." This mockup always  -->
+  <!-- takes each collection's own newest revision (draft or published, by updatedAt) with no picker. -->
+  <!-- If a specific past revision is ever needed again, that's a step backward from this simpler     -->
+  <!-- flow -- flagging in case that matters before this gets built.                                  -->
+  <!-- ============================================================ -->
+  <div style="margin-top:40px">
+    <span class="stepnote">v3 addendum — batch "Refresh from Nexus" toggle, Workshop only</span>
+
+    <div class="group-head"><h2>Workshop collections</h2><span class="n">2 found — collections you're authoring, not installed</span></div>
+    <div class="picker-grid" id="v3WorkshopColls"></div>
+
+    <label class="checkbox" style="display:flex;align-items:center;gap:9px;margin:14px 2px 0;font-size:13.5px;color:var(--text);cursor:pointer">
+      <input type="checkbox" id="v3RefreshToggle" style="width:16px;height:16px;accent-color:var(--accent)" onchange="v3OnToggle(this)">
+      Refresh selected Workshop collections from Nexus before scanning
+    </label>
+    <p class="note" style="max-width:560px;margin-top:6px">Pulls each selected collection's newest saved
+    version from Nexus (draft or published) right before it's scanned — no extra clicks per collection.
+    <code>collection.json</code> is always backed up first. Installed collections aren't affected; they
+    don't have this drift to worry about.</p>
+
+    <div id="v3WarningPreview" class="callout" style="border-color:var(--warning);background:var(--warning-bg);max-width:560px;margin-top:14px;display:none">
+      <b style="color:var(--warning)">⚠️ Before you scan, read this</b>
+      <p style="margin:8px 0 0">This pulls the newest version <strong>you've saved to Nexus</strong> for
+      each selected Workshop collection — it won't include any local changes you haven't uploaded yet.
+      If you've made edits in Workshop since your last save, they'll be overwritten for:</p>
+      <ul style="margin:8px 0 0;padding-left:20px" id="v3WarningList"></ul>
+      <p style="margin:10px 0 0"><strong>Recommended:</strong> save/upload your latest Workshop changes
+      to Nexus first, then scan. If you skip that, you'll need to manually reconcile anything unsaved
+      yourself afterward.</p>
+    </div>
+
+    <div class="selbar" style="max-width:560px">
+      <span class="selcount" id="v3PickCount"><b>0</b> collections selected</span>
+      <div class="spacer"></div>
+      <button class="btn btn--primary" id="v3ScanBtn" disabled>Scan for missing files →</button>
+    </div>
+    <p class="note" style="max-width:560px">The warning above appears only when the toggle is on and at
+    least one Workshop collection is selected — it names every affected collection once, instead of a
+    separate confirm for each. Clicking <strong>Scan</strong> refreshes each one in turn (shown inline in
+    the same progress line the scan already uses), then scans as normal.</p>
   </div>
 
   <!-- ============================================================ -->
@@ -275,6 +328,32 @@
       </div></td>
     </tr>`;
   }).join('');
+
+  // ---- v3 addendum demo wiring ----
+  document.getElementById('v3WorkshopColls').innerHTML = WORKSHOP.map((c, i) => `
+    <label class="coll-card" data-key="v3w${i}">
+      <input type="checkbox" onchange="v3OnPick(this)">
+      <div class="meta"><div class="name">${c.name}</div><div class="sub">${c.sub}</div></div>
+    </label>`).join('');
+
+  const v3Picked = new Set();
+  window.v3OnPick = (cb) => {
+    const card = cb.closest('.coll-card');
+    card.classList.toggle('sel', cb.checked);
+    const key = card.dataset.key;
+    cb.checked ? v3Picked.add(key) : v3Picked.delete(key);
+    document.getElementById('v3PickCount').innerHTML = `<b>${v3Picked.size}</b> collection${v3Picked.size===1?'':'s'} selected`;
+    document.getElementById('v3ScanBtn').disabled = v3Picked.size === 0;
+    v3UpdateWarning();
+  };
+  window.v3OnToggle = () => v3UpdateWarning();
+  function v3UpdateWarning() {
+    const on = document.getElementById('v3RefreshToggle').checked;
+    const names = [...v3Picked].map(k => WORKSHOP[Number(k.slice(3))].name);
+    const show = on && names.length > 0;
+    document.getElementById('v3WarningPreview').style.display = show ? 'block' : 'none';
+    document.getElementById('v3WarningList').innerHTML = names.map(n => `<li>${n}</li>`).join('');
+  }
 
   const boxes = () => [...document.querySelectorAll('#rows input[type=checkbox]')];
   function paint(cb) { cb.closest('tr').classList.toggle('sel', cb.checked); }
