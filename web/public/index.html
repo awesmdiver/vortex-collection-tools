@@ -2113,12 +2113,15 @@
   <div id="mergeStep0" class="settings-group">
     <h2>Choose collections</h2>
     <p class="muted">Pick one or more collections. The next step searches the plugins in their installed mods (in your staging folder).</p>
-    <!-- Same "missing = never fetched, here's where to fix that" gap Rebuild Missing Files' own
-         picker already surfaces (its notDownloaded section) -- this page has no such section of its
-         own, just a link to where that gets solved now. Informational, not a blocker. -->
+    <!-- CORRECTED 2026-08-14: originally pointed people at fetching a collection from Workshop
+         Report as the fix. Live-verified false (commit ed97e13) -- this page's own picker
+         (scanStagingCollections) excludes every Workshop-collection folder by name outright, before
+         it even checks for collection.json, so fetching doesn't change anything here. Real fix is
+         tracked separately (queue: merge-plugins-workshop-collection-blindspot); this note says so
+         honestly instead of sending someone on a fetch that won't help. -->
     <div class="callout callout--info">
-      <div class="callout__title">&#9432; Not seeing a Workshop collection here?</div>
-      <p>It probably hasn't been fetched from Nexus yet, so there's nothing local to pick from. Head to the <a href="/?area=reports&amp;reports=workshop">Workshop Report</a> and pull it down from there, then come back here.</p>
+      <div class="callout__title">&#9432; Not seeing a Workshop-authored collection here?</div>
+      <p>That's a known gap, not something you're doing wrong — this page can't recognize a Workshop-authored collection yet, even one you've already fetched from the <a href="/?area=reports&amp;reports=workshop">Workshop Report</a>. We're working on it.</p>
     </div>
     <div class="view-actions">
       <button id="mergeCollSelectAllBtn" class="btn btn--ghost btn--small">Select All</button>
