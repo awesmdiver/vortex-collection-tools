@@ -215,10 +215,10 @@ function createRebuildMissingRouter(config) {
     async function resolveNewestRevisionNumber(slug) {
         const apiKey = nexusCollectionDownload.resolveApiKey();
         const { revisions } = await nexusCollectionDownload.fetchCollectionRevisions(apiKey, slug);
-        if (!revisions || revisions.length === 0) {
+        const newest = nexusCollectionDownload.resolveNewestRevision(revisions);
+        if (!newest) {
             throw new Error(`No revisions found on Nexus for slug="${slug}".`);
         }
-        const newest = revisions.reduce((a, b) => (new Date(b.updatedAt) > new Date(a.updatedAt) ? b : a));
         return newest.revisionNumber;
     }
 

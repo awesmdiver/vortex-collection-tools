@@ -259,8 +259,8 @@ function loadStatsPageOnce() {
 // Reports area now has three inner sub-tabs -- still few enough that a small flat toggle is
 // simpler than shell.js's TOOL_AREAS-style array. Stats Report is the default on first entry,
 // matching this area's exact behavior before the Work Through Report/Update Compare Report splits.
-const REPORTS_SUB_TABS = ['stats', 'workthrough', 'updatecompare', 'rulesgen'];
-const REPORTS_SUB_TAB_LABELS = { stats: 'Reports > Stats Report', workthrough: 'Reports > Work Through Report', updatecompare: 'Reports > Update Compare Report', rulesgen: 'Reports > Rules Generator Report' };
+const REPORTS_SUB_TABS = ['stats', 'workthrough', 'updatecompare', 'rulesgen', 'workshop'];
+const REPORTS_SUB_TAB_LABELS = { stats: 'Reports > Stats Report', workthrough: 'Reports > Work Through Report', updatecompare: 'Reports > Update Compare Report', rulesgen: 'Reports > Rules Generator Report', workshop: 'Reports > Workshop Report' };
 function showReportsSubTab(id) {
   if (typeof setPageLabel === 'function') setPageLabel(REPORTS_SUB_TAB_LABELS[id] || 'Reports');
   for (const tab of REPORTS_SUB_TABS) {
@@ -271,6 +271,7 @@ function showReportsSubTab(id) {
   if (id === 'stats') loadStatsPageOnce();
   else if (id === 'workthrough' && typeof loadWorkThroughPageOnce === 'function') loadWorkThroughPageOnce();
   else if (id === 'rulesgen' && typeof loadRulesGenReportPageOnce === 'function') loadRulesGenReportPageOnce();
+  else if (id === 'workshop' && typeof loadWorkshopReportPageOnce === 'function') loadWorkshopReportPageOnce();
 
   // Keeps the URL in sync so a browser refresh returns to this exact sub-tab, not just the Reports
   // area generically -- same "clicking a nav tab never touched the URL before" gap fixed for

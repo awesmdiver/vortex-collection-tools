@@ -1263,6 +1263,7 @@
     <button id="reports-sub-workthrough" class="btn btn--ghost btn--small">Work Through Report</button>
     <button id="reports-sub-updatecompare" class="btn btn--ghost btn--small">Update Compare Report</button>
     <button id="reports-sub-rulesgen" class="btn btn--ghost btn--small">Rules Generator Report</button>
+    <button id="reports-sub-workshop" class="btn btn--ghost btn--small">Workshop Report</button>
   </div>
 
   <div id="reports-sub-area-stats">
@@ -1394,6 +1395,49 @@
       <ul id="rgReportLeftoverList" class="sync-result-list"></ul>
     </div>
   </div>
+  </div>
+
+  <!-- Workshop Report -- shows the REAL "last touched" timestamp for each Workshop-authored
+       collection, straight from Nexus's own revision history (Collection.updatedAt is frozen at
+       creation for a private/unlisted collection; CollectionRevision.updatedAt is the one that
+       actually moves -- see workshop-report-routes.js's own header for the full writeup). -->
+  <div id="reports-sub-area-workshop" class="hidden">
+  <!-- No redundant heading here -- the sub-nav button right above already names this report. This
+       intro banner pitches the value instead (see DESIGN.md's "Tool intro banner" section). -->
+  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span>Reports</div>
+  <div class="tool-hero">
+    <h2 class="tool-hero__title">🕒 See When You Last Touched Each Workshop Collection</h2>
+    <p class="tool-hero__body">Nexus's own collection page shows a date that never moves for a private collection&mdash;this pulls the real one, straight from each collection's revision history, so you can tell at a glance which ones you've actually worked on recently.</p>
+  </div>
+
+  <div class="view-actions">
+    <button id="wrCheckBtn" class="btn btn--primary btn--small">🔄 Check Nexus for updates</button>
+    <span class="muted" id="wrLastChecked"></span>
+  </div>
+
+  <div id="wrProgressWrap" class="hidden">
+    <div class="progress-bar-wrap"><div id="wrProgressBar" class="progress-bar"></div></div>
+    <p class="muted" id="wrProgressText"></p>
+  </div>
+
+  <div id="wrNotConfigured" class="empty-row hidden"></div>
+  <div id="wrCriticalError" class="callout callout--critical hidden"></div>
+  <div id="wrEmpty" class="empty-row hidden"></div>
+
+  <div class="plan-table-wrap hidden" id="wrTableWrap">
+    <table class="plan-table">
+      <thead><tr><th>Collection</th><th>Slug / ID</th><th>Revision</th><th>Last updated on Nexus</th><th style="text-align:right">Actions</th></tr></thead>
+      <tbody id="wrRows"></tbody>
+    </table>
+  </div>
+
+  <p class="muted" style="margin-top:16px">
+    <strong>Last updated on Nexus</strong> comes from the collection's own revision history, not its
+    listing page &mdash; that's the one that actually moves when you save new changes, even for a
+    private, unpublished collection. <strong>Open Staging Folder</strong> jumps straight to the
+    collection's files on disk. Collections you haven't fetched into staging yet show up too, so you
+    can spot one worth pulling down before it drifts further out of date.
+  </p>
   </div>
 
 </main>
@@ -1709,7 +1753,12 @@
       Recognize ESLifier output
     </label>
     <p class="muted">When a file traces back to your ESLifier output folder, we'll show it as a quiet heads-up instead of a missing-master alert — the swap is on purpose, so there's nothing to fix.</p>
-    <p class="muted hidden" id="mmRecognizeEslifierEmptyHint">Add your <strong>ESLifier output folder</strong> in <strong>Settings</strong> to use this.</p>
+    <!-- Same shape as syncBackupRootMissingBanner's own "not configured yet, here's the direct
+         link" pattern -- a callout, not a bare muted line, so it visually ties to the checkbox it's
+         actually about instead of reading like a stray sentence floating in the page. -->
+    <div class="callout callout--warning hidden" id="mmRecognizeEslifierEmptyHint">
+      No ESLifier output folder is set yet — <a href="/?area=settings">open Settings</a> to add one before this can recognize anything.
+    </div>
   </div>
 
   <!-- Same clickable-pill filter convention as Stats Report's "Current Issues" badges
@@ -2261,5 +2310,6 @@
 <script src="archive-finder-app.js"></script>
 <script src="merge-app.js"></script>
 <script src="rebuild-missing-app.js"></script>
+<script src="workshop-report-app.js"></script>
 </body>
 </html>

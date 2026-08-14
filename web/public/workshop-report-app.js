@@ -1,0 +1,206 @@
+'use strict';
+// Workshop Report (Reports sub-tab) -- see web/workshop-report-routes.js's own header for the full
+// data-source/pacing writeup. This file only renders what that router returns/streams; el()/
+// nexusCollectionUrl() come from app.js (loaded earlier), same "shared tiny helpers, self-contained
+// per file" convention as this project's other *-app.js files.
+
+function $g(id) { return document.getElementById(id); }
+
+async function wrApi(method, urlPath, body) {
+  const res = await fetch(urlPath, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.message || data.error || `Request failed (${res.status})`);
+    err.status = res.status;
+    err.body = data;
+    throw err;
+  }
+  return data;
+}
+
+function wrHandleError(e, box) {
+  if (e.status === 409 && e.body?.error === 'vortex-running') {
+    window.showVortexRunningModal(() => {});
+    return;
+  }
+  if (window.isServerUnreachableError && window.isServerUnreachableError(e)) {
+    window.showServerUnreachableError();
+    return;
+  }
+  box.textContent = e.message;
+  box.classList.remove('hidden');
+}
+
+// Small bucketed "X ago" formatter -- no existing shared helper in this app to reuse (checked
+// before writing this). Used both for "Last checked: X ago" and each row's own "Last updated" cell.
+function wrRelativeTime(iso) {
+  if (!iso) return '';
+  const diffSec = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diffSec < 60) return 'just now';
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} minute${diffMin === 1 ? '' : 's'} ago`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `${diffHr} hour${diffHr === 1 ? '' : 's'} ago`;
+  const diffDay = Math.round(diffHr / 24);
+  if (diffDay === 1) return 'yesterday';
+  if (diffDay < 7) return `${diffDay} days ago`;
+  const diffWeek = Math.round(diffDay / 7);
+  if (diffWeek < 8) return `${diffWeek} week${diffWeek === 1 ? '' : 's'} ago`;
+  const diffMonth = Math.round(diffDay / 30);
+  if (diffMonth < 12) return `${diffMonth} month${diffMonth === 1 ? '' : 's'} ago`;
+  const diffYear = Math.round(diffDay / 365);
+  return `${diffYear} year${diffYear === 1 ? '' : 's'} ago`;
+}
+
+// ---------- Load (cached only -- never touches Nexus/Vortex on its own) ----------
+
+let wrPageLoaded = false;
+async function loadWorkshopReportPageOnce() {
+  if (wrPageLoaded) return;
+  wrPageLoaded = true;
+  try {
+    const data = await wrApi('GET', '/api/workshop-report/rows');
+    wrRenderLastChecked(data.checkedAt);
+    if (data.rows && data.rows.length > 0) wrRenderRows(data.rows);
+  } catch (e) {
+    wrHandleError(e, $g('wrCriticalError'));
+  }
+}
+
+function wrRenderLastChecked(checkedAt) {
+  $g('wrLastChecked').textContent = checkedAt ? `Last checked: ${wrRelativeTime(checkedAt)}` : 'Never checked yet';
+}
+
+// ---------- Check Nexus for updates ----------
+
+let wrEventSource = null;
+
+$g('wrCheckBtn').addEventListener('click', async () => {
+  $g('wrCheckBtn').disabled = true;
+  $g('wrCriticalError').classList.add('hidden');
+  const wrap = $g('wrProgressWrap');
+  wrap.classList.remove('hidden');
+  $g('wrProgressBar').style.width = '0%';
+  $g('wrProgressText').textContent = 'Starting…';
+
+  try {
+    await wrApi('POST', '/api/workshop-report/check');
+  } catch (e) {
+    // A 409 from "a check is already running" (e.g. another tab) is safe to just attach below --
+    // a genuine 'vortex-running' 409 is a real failure, not something to silently attach past.
+    if (e.status !== 409 || e.body?.error === 'vortex-running') {
+      $g('wrCheckBtn').disabled = false;
+      wrap.classList.add('hidden');
+      wrHandleError(e, $g('wrCriticalError'));
+      return;
+    }
+  }
+
+  if (wrEventSource) wrEventSource.close();
+  const es = new EventSource('/api/workshop-report/check/events');
+  wrEventSource = es;
+  es.onmessage = (msg) => wrHandleCheckEvent(JSON.parse(msg.data));
+});
+
+function wrHandleCheckEvent(frame) {
+  if (frame.type === 'collection-checking') {
+    const pct = frame.total ? Math.round((frame.index / frame.total) * 100) : 100;
+    $g('wrProgressBar').style.width = pct + '%';
+    $g('wrProgressText').textContent = `Checking "${frame.name}" — ${frame.index} / ${frame.total}`;
+  } else if (frame.type === 'check-complete') {
+    $g('wrProgressWrap').classList.add('hidden');
+    $g('wrCheckBtn').disabled = false;
+    if (wrEventSource) { wrEventSource.close(); wrEventSource = null; }
+    wrRenderLastChecked(frame.checkedAt);
+    wrRenderRows(frame.rows);
+  } else if (frame.type === 'check-error') {
+    $g('wrProgressWrap').classList.add('hidden');
+    $g('wrCheckBtn').disabled = false;
+    if (wrEventSource) { wrEventSource.close(); wrEventSource = null; }
+    wrHandleError(new Error(frame.message || 'The check failed.'), $g('wrCriticalError'));
+  }
+}
+
+// ---------- Rows ----------
+
+function wrRenderRows(rows) {
+  const tbody = $g('wrRows');
+  tbody.innerHTML = '';
+  const nothingToShow = !rows || rows.length === 0;
+  $g('wrEmpty').classList.toggle('hidden', !nothingToShow);
+  if (nothingToShow) {
+    $g('wrEmpty').textContent = 'No Workshop collections found yet. Click "Check Nexus for updates" (Vortex must be closed) to look.';
+  }
+  $g('wrTableWrap').classList.toggle('hidden', nothingToShow);
+  if (nothingToShow) return;
+
+  for (const row of rows) {
+    const tr = el('tr', {});
+    tr.appendChild(el('td', {}, row.name));
+    tr.appendChild(el('td', {}, row.slug ? el('code', {}, row.slug) : el('span', { class: 'muted' }, '—')));
+    tr.appendChild(el('td', {}, wrBuildRevisionCell(row)));
+    tr.appendChild(el('td', {}, wrBuildUpdatedCell(row)));
+    tr.appendChild(el('td', {}, wrBuildActionsCell(row)));
+    tbody.appendChild(tr);
+  }
+}
+
+function wrBuildRevisionCell(row) {
+  if (row.revisionNumber == null) {
+    const reason = row.checkError === 'no-slug' ? 'No Nexus id on record'
+      : row.checkError === 'no-revisions' ? 'No revisions found'
+      : row.checkError ? "Couldn't check"
+      : 'Not checked yet';
+    return el('span', { class: 'status-pill status-pill--neutral' }, reason);
+  }
+  const published = row.revisionStatus === 'published';
+  return el('span', {}, [
+    document.createTextNode(`${row.revisionNumber} `),
+    el('span', { class: `status-pill ${published ? 'status-pill--success' : 'status-pill--warning'}` }, published ? 'published' : 'draft'),
+  ]);
+}
+
+function wrBuildUpdatedCell(row) {
+  if (!row.updatedAt) return el('span', { class: 'muted' }, '—');
+  const abs = new Date(row.updatedAt).toLocaleString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
+  return el('div', {}, [
+    el('div', {}, abs),
+    el('div', { class: 'muted', style: 'font-size:12px;margin-top:1px' }, wrRelativeTime(row.updatedAt)),
+  ]);
+}
+
+function wrBuildActionsCell(row) {
+  const actions = el('div', { class: 'row-actions' });
+  if (row.fetched) {
+    const openBtn = el('button', { class: 'btn btn--small' }, '📂 Open Staging Folder');
+    openBtn.addEventListener('click', () => wrOpenStagingFolder(row));
+    actions.appendChild(openBtn);
+  } else {
+    actions.appendChild(el('span', { class: 'muted', style: 'font-size:12.5px' }, 'Not downloaded yet'));
+  }
+  if (row.slug) {
+    const viewBtn = el('button', { class: 'btn btn--ghost btn--small' }, 'View on Nexus');
+    viewBtn.addEventListener('click', () => {
+      window.open(nexusCollectionUrl(row.slug, row.revisionNumber || undefined), '_blank');
+    });
+    actions.appendChild(viewBtn);
+  }
+  return actions;
+}
+
+// Reuses Rebuild Missing Files' own open-staging-folder route directly rather than a new one
+// (queue instruction) -- collectionModId doubles as the staging folder name, same convention
+// listPickableCollections/rmfOpenStagingFolder already rely on.
+async function wrOpenStagingFolder(row) {
+  try {
+    await wrApi('POST', '/api/rebuild-missing/open-staging-folder', { targetFolderName: row.collectionModId });
+  } catch (e) {
+    wrHandleError(e, $g('wrCriticalError'));
+  }
+}

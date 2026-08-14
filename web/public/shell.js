@@ -324,7 +324,7 @@ for (const key of pinnedTools) applyPinState(key, true);
 // 'work-through' (hyphenated, readable in a URL) becomes 'workthrough' (no separator, matching this
 // project's own div-id/element-id convention throughout); 'updatecompare' already matches as-is.
 // Anything else (including no param at all) falls back to 'stats', the default sub-tab.
-const REPORTS_SUB_TAB_URL_MAP = { 'work-through': 'workthrough', updatecompare: 'updatecompare' };
+const REPORTS_SUB_TAB_URL_MAP = { 'work-through': 'workthrough', updatecompare: 'updatecompare', workshop: 'workshop' };
 
 // Lets any OTHER page (the standalone log-view page's own header nav, in particular) link straight
 // into a specific area/sub-tab via ?area=rebuild|sync|settings|reports or
