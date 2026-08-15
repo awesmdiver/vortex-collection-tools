@@ -3,14 +3,6 @@
   "inFlight": null,
   "items": [
     {
-      "id": "mod-exceptions-stale-report-and-nexus-link",
-      "tag": "bug",
-      "title": "Mod Exceptions report shows a stale list after navigating back, and needs a View on Nexus link",
-      "why": "Director confirmed live: adding a mod from Rebuild Missing Files, then going to the Mod Exceptions report, shows the OLD list until a full page reload -- the report only fetches once per page session. Also wants a direct link to the mod's Nexus page per row.",
-      "prompt": "TWO REAL ISSUES on the Mod Exceptions report, director's own live testing (2026-08-15).\n\n1. STALE LIST AFTER NAVIGATING BACK: added \"1DustAdeptArmorSE\" via Rebuild Missing Files' own 'Add to Exception List' row button, then went to Reports > Mod Exceptions -- the new entry did NOT show under 'Currently excepted' (an unrelated stray 'Added \"1DustAdeptArmorSE\".' message was visible near the Add form instead -- investigate what's actually producing that text live, don't assume its source). A full page reload (not just re-navigating the sub-tab) then showed the entry correctly.\n   ROOT CAUSE, confirmed via code read: `web/public/mod-exceptions-report-app.js`'s `loadModExceptionsReportPageOnce()` only ever fetches once per page load (`if (mePageLoaded) return;`) -- if this Reports sub-tab was already visited earlier in the same browser session (loading whatever the list looked like at that moment), navigating back to it later never re-fetches, so it silently shows stale data instead of the real current list. A full page reload is the only thing that resets `mePageLoaded` to `false`.\n   FIX: the report needs to actually reflect the current list every time it's opened, not just the first time in a page session. Simplest correct fix: drop the once-only guard and re-fetch (`meLoad()`) every time this sub-tab becomes visible -- check how sibling reports handle this (e.g. does Workshop Report re-fetch on every visit, or does it have its own deliberate caching reason that's different here). If a real caching reason exists elsewhere in this codebase for the once-only pattern, don't just delete it blind -- confirm this report doesn't have the same reason before changing it.\n   Also investigate the stray 'Added \"1DustAdeptArmorSE\".' text live -- is it genuinely a leftover DOM state from an earlier real add-form use in the same session, or something else? Don't guess; check what actually produces that text and why it was visible in this scenario.\n\n2. ADD A LINK TO VIEW THE MOD ON NEXUS (director's own request): each row already stores an optional Nexus mod id. Add a 'View on Nexus' link/button per row (only shown when `modId` is present, same conditional pattern Workshop Report already uses for its own View on Nexus action) -- the real URL format is `https://www.nexusmods.com/skyrimspecialedition/mods/<modId>` (reuse this project's own existing Nexus-URL-building helper if one already exists for mod pages specifically, rather than hardcoding the URL string fresh -- check `web/public/app.js`/`nexusCollectionUrl`-style helpers first for a mod-page equivalent; if none exists, this is a small enough URL to build inline, but check first).\n\nVERIFY LIVE: reproduce the exact stale-list repro (add from Rebuild Missing Files, navigate to the report WITHOUT a full reload, confirm the entry now shows immediately) and confirm the Nexus link renders correctly and opens the real mod page for an entry that has a modId, and correctly doesn't show one for an entry that doesn't. Handoff with what you tested.",
-      "ready": true
-    },
-    {
       "id": "rmf-vortex-running-retry-broken",
       "tag": "bug",
       "title": "Rebuild Missing Files: 'Try Again' on the Vortex-running modal does nothing",
@@ -127,6 +119,9 @@
     },
     {
       "title": "Add a mod exception list -- skip hand-pick-only mods in Rebuild Collection and Rebuild Missing Files"
+    },
+    {
+      "title": "Mod Exceptions report shows a stale list after navigating back, and needs a View on Nexus link"
     }
   ]
 }
