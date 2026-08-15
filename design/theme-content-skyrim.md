@@ -10,6 +10,13 @@ Gemini round that *independently* landed on the same top picks; its full option 
 that pass) — give them a final `plain-language-writer` polish at build time. Every tool keeps its
 **constant functional label** — *name for flavor, label for function*.
 
+**Updated 2026-08-15** for three tools shipped since the original four-brain pass — `missing-files`,
+`report-workshop`, `report-exceptions`. `missing-files` reuses **The Vault-Keeper**, already locked
+and Gemini-illustrated for the v0.6.0 release banner — not a fresh draft. The other two
+(**The Artisan's Log**, **The Sanctuary**) are first-pass names only, same naming principle applied
+(a Skyrim term whose in-world meaning maps to the tool's real function) but **not yet run through
+the same four-brain confirmation** the original 13 got — treat as draft until that happens.
+
 App title (themed): **The Arcaneum** · accent: TBD at build (Skyrim gold/parchment; `palette` empty in v1.0).
 
 | Stable ID | Functional label (constant) | Skyrim name | Emoji | Tagline (draft) |
@@ -22,11 +29,14 @@ App title (themed): **The Arcaneum** · accent: TBD at build (Skyrim gold/parchm
 | `missing-masters` | Missing Masters | **The Augur** | 🔮 | Reveals a missing master before you launch — no more sudden crash to desktop. |
 | `scrub` | Vortex Scrub | **The Cleansing** | 🔥 | Cleanse the orphaned downloads and abandoned staging folders Vortex left behind, and reclaim the disk space. |
 | `archive-finder` | Archive Finder | **Clairvoyance** | 👁️ | Sees straight through any archive to the exact file you need — without unpacking a single byte. |
+| `missing-files` | Rebuild Missing Files | **The Vault-Keeper** | 🗝️ | Only what's missing, restored — no need to empty the whole vault to replace one relic. |
 | `reports` | Reports | **The Chronicle** | 📜 | The chronicle of every rebuild, update, and change. |
 | ↳ `report-stats` | Stats | **The Ledger** | 📊 | Every rebuild's numbers, tallied over time. |
 | ↳ `report-workthrough` | Work Through | **The Quest Log** | ✅ | Every problem mod left to knock out, in one checklist. |
 | ↳ `report-compare` | Update Compare | **Scroll of Retrospection** | 🔍 | Holds your previous setup beside the new one — exactly what was kept, added, or removed. |
 | ↳ `report-rules` | Rules Generator Report | **The Scribe's Ledger** | 📋 | Which rules copied over cleanly, and which still need a look. |
+| ↳ `report-workshop` | Workshop Report | **The Artisan's Log** | 📓 | The real date you last set hand to an unfinished work — not Nexus's frozen one. |
+| ↳ `report-exceptions` | Mod Exceptions | **The Sanctuary** | 🕊️ | Marks the mods you handle yourself — left untouched, wherever they turn up. |
 | `settings` | Settings | **The Standing Stones** | 🗿 | Choose your paths and preferences once; every tool draws on them. |
 
 ## Why these names (Skyrim lore → tool function)
@@ -63,6 +73,16 @@ meaning maps to what the tool actually does.** That's why they land as right rat
 - **The Standing Stones** — in Skyrim you pick a Standing Stone's blessing *once* and it shapes your
   whole playthrough. Settings: set your paths and preferences once; every tool draws on them.
   *(set once, affects everything)*
+- **The Vault-Keeper** — a Nordic vault's keeper retrieves exactly the one missing relic, not the
+  whole hoard. Rebuild Missing Files restores only what's actually gone, no full rebuild needed.
+  *(only the missing piece)* — already locked and illustrated (v0.6.0 release banner,
+  `design/gemini-release-banner-prompts.md`); carried over here as-is, not re-drafted.
+- **The Artisan's Log** — a workshop's own real record of when work was last done, not a stale
+  public notice. Workshop Report surfaces the genuine last-touched date from a collection's own
+  revision history, not Nexus's frozen listing date. *(the real date, not the posted one)*
+- **The Sanctuary** — a place explicitly set apart, left undisturbed. Mod Exceptions marks mods
+  that need a human hand, not an automated fix — protected from auto-rebuild wherever they show up.
+  *(set apart, left alone)*
 
 ## Notes
 - **Emoji:** `merge` is **🔨** here (The Forge) but **🧬** in the Plain theme (Merge Plugins) — the
