@@ -322,9 +322,13 @@ for (const key of pinnedTools) applyPinState(key, true);
 
 // Maps the URL's own ?reports= spelling to stats-app.js's internal sub-tab id (REPORTS_SUB_TABS) --
 // 'work-through' (hyphenated, readable in a URL) becomes 'workthrough' (no separator, matching this
-// project's own div-id/element-id convention throughout); 'updatecompare' already matches as-is.
-// Anything else (including no param at all) falls back to 'stats', the default sub-tab.
-const REPORTS_SUB_TAB_URL_MAP = { 'work-through': 'workthrough', updatecompare: 'updatecompare', workshop: 'workshop' };
+// project's own div-id/element-id convention throughout); every other id already matches its
+// internal id as-is, so it's listed here identity-mapped rather than omitted -- omitting an id
+// silently falls through to the 'stats' default below, which is exactly the bug found live
+// 2026-08-15 (queue: rebuild-missing-hand-pick-exceptions verification): 'rulesgen' was ALSO
+// missing from this map already, pre-existing and unrelated to that feature, caught incidentally
+// while confirming a direct-URL-reload lands on the right sub-tab for the new 'exceptions' entry.
+const REPORTS_SUB_TAB_URL_MAP = { 'work-through': 'workthrough', updatecompare: 'updatecompare', workshop: 'workshop', rulesgen: 'rulesgen', exceptions: 'exceptions' };
 
 // Lets any OTHER page (the standalone log-view page's own header nav, in particular) link straight
 // into a specific area/sub-tab via ?area=rebuild|sync|settings|reports or

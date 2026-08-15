@@ -31,14 +31,22 @@ function meHandleError(e, box) {
 
 let meRows = [];
 
-let mePageLoaded = false;
-async function loadModExceptionsReportPageOnce() {
-  if (mePageLoaded) return;
-  mePageLoaded = true;
-  await meLoad();
-}
-
-async function meLoad() {
+// Deliberately NO load-once gate (queue: rebuild-missing-hand-pick-exceptions, director-confirmed
+// live 2026-08-15) -- unlike Workshop Report (loadWorkshopReportPageOnce), whose data only ever
+// changes through THAT SAME page's own UI actions and stays in sync via in-place row updates, this
+// list can be mutated from a completely different page (Rebuild Missing Files' own per-row "Add to
+// Exception List" button, web/public/rebuild-missing-app.js) that has no shared in-memory state with
+// this file. A once-only fetch showed stale data on every visit after the first, until a full page
+// reload. Matches the SAME "no load-once gate, refresh every time the tab is shown" precedent
+// cleanup-app.js already established for Missing Masters (its own comment: "it needs to scan every
+// time the tab is shown... not just once ever").
+async function refreshModExceptionsReport() {
+  // Clears any stale status text from a PREVIOUS visit's Add click -- confirmed this was the real
+  // source of the director's own "unrelated stray 'Added ...' message" report: meAddStatus was only
+  // ever cleared at the START of a fresh Add click, never on tab entry, so old confirmation text sat
+  // there indefinitely and read as if something had just happened on THIS visit when it hadn't.
+  $g('meAddStatus').textContent = '';
+  $g('meCriticalError').classList.add('hidden');
   try {
     const data = await meApi('GET', '/api/mod-exceptions');
     if (!data.configured) {
@@ -52,6 +60,17 @@ async function meLoad() {
   } catch (e) {
     meHandleError(e, $g('meCriticalError'));
   }
+}
+
+// Same skyrimspecialedition-domain, plain-mod-page-only convention already confirmed for this
+// project's other Nexus mod-page link (web/rebuild-routes.js's own nexusModUrl, the standalone Log
+// View report) -- this toolkit is SSE-only, and the mod's own description page is what's wanted,
+// not a ?tab=files deep link. No shared CLIENT-side helper existed for this (only
+// nexusCollectionUrl, a different URL shape, and that server-side one in a different file/context),
+// so this is the same one-line URL built inline here, not a new cross-file abstraction for a single
+// string.
+function nexusModUrl(modId) {
+  return `https://www.nexusmods.com/skyrimspecialedition/mods/${modId}`;
 }
 
 function meRenderRows() {
@@ -68,9 +87,18 @@ function meRenderRows() {
     tr.appendChild(el('td', {}, mod.name));
     tr.appendChild(el('td', {}, mod.modId != null ? String(mod.modId) : el('span', { class: 'muted' }, '—')));
     tr.appendChild(el('td', { class: 'muted' }, mod.addedAt ? new Date(mod.addedAt).toLocaleDateString() : '—'));
+    const actions = el('td', { class: 'row-actions' });
+    // Same conditional-on-modId pattern Workshop Report's own View on Nexus action already uses --
+    // an off-site mod (no modId recorded) gets no link at all, nothing to point it at.
+    if (mod.modId != null) {
+      const viewBtn = el('button', { class: 'btn btn--ghost btn--small' }, 'View on Nexus');
+      viewBtn.addEventListener('click', () => window.open(nexusModUrl(mod.modId), '_blank'));
+      actions.appendChild(viewBtn);
+    }
     const removeBtn = el('button', { class: 'btn btn--ghost btn--small' }, 'Remove');
     removeBtn.addEventListener('click', () => meRemove(mod, removeBtn));
-    tr.appendChild(el('td', {}, removeBtn));
+    actions.appendChild(removeBtn);
+    tr.appendChild(actions);
     tbody.appendChild(tr);
   }
 }

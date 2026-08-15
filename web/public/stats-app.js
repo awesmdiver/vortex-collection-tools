@@ -272,7 +272,7 @@ function showReportsSubTab(id) {
   else if (id === 'workthrough' && typeof loadWorkThroughPageOnce === 'function') loadWorkThroughPageOnce();
   else if (id === 'rulesgen' && typeof loadRulesGenReportPageOnce === 'function') loadRulesGenReportPageOnce();
   else if (id === 'workshop' && typeof loadWorkshopReportPageOnce === 'function') loadWorkshopReportPageOnce();
-  else if (id === 'exceptions' && typeof loadModExceptionsReportPageOnce === 'function') loadModExceptionsReportPageOnce();
+  else if (id === 'exceptions' && typeof refreshModExceptionsReport === 'function') refreshModExceptionsReport();
 
   // Keeps the URL in sync so a browser refresh returns to this exact sub-tab, not just the Reports
   // area generically -- same "clicking a nav tab never touched the URL before" gap fixed for
