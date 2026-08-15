@@ -155,15 +155,40 @@ function rmfRenderPickerGroup(sectionId, gridId, countId, items, prefix, countTe
     rmfState.collectionsById.set(item.modId, item);
     const checkbox = el('input', { type: 'checkbox' });
     checkbox.checked = rmfState.picked.has(item.modId);
-    // "Last dealt with" (queue: rebuild-missing-last-fixed) -- same single inline-dash-suffix
-    // convention Rebuild Collection's own picker already uses for its "Last extracted" (app.js),
-    // not Workshop Report's own two-line absolute+relative format -- that fits a wide table column,
-    // this is a narrow card with room for exactly one compact sub-line, so appending to the
-    // existing "N mods" text keeps the established one-line rhythm instead of growing every card
-    // taller. Only present once this router has actually fixed something here (extract/download) --
-    // absent (not a blank/zero date) for a collection never touched, per the task's own instruction.
-    const lastFixedText = item.lastFixed ? ` — Last dealt with: ${new Date(item.lastFixed).toLocaleString()}` : '';
-    const subLine = el('div', { class: 'sub' }, `${item.modCount} mod${item.modCount === 1 ? '' : 's'}${lastFixedText}`);
+    // "Last checked" / "Last extracted" (queue: rebuild-missing-last-checked; "Last extracted" is
+    // the director's own rename of the original "Last dealt with" label, matching Rebuild
+    // Collection's own picker label for the same underlying concept -- see app.js) -- same single
+    // inline-dash-suffix convention that other picker already uses, not Workshop Report's own
+    // two-line absolute+relative format -- that fits a wide table column, this is a narrow card with
+    // room for exactly one compact sub-line (it wraps naturally via .sub's own CSS if it gets long,
+    // no explicit second <div>). Either or both are absent (not a blank/zero date) for a collection
+    // this router has never scanned/fixed, per the original task's own instruction.
+    //
+    // Two distinct facts -- checked = most recent scan completion regardless of outcome, extracted =
+    // most recent REAL fix (extract OR download-archive; the label says "extracted" but
+    // lastFixedState.markFixed also fires from a bare archive download with nothing actually
+    // extracted -- a known small inaccuracy, not something this rename fixes) -- but a fix always
+    // happens right after the scan that found it, in the same visit (this router never re-scans
+    // after a fix), so when the two timestamps land close together they're describing the same visit
+    // and showing both would just be near-duplicate noise. Collapsed to "Last extracted" alone in
+    // that case (it's the more specific fact, and implies a check happened too); shown as two
+    // separate facts once they've drifted apart, which happens naturally as later clean scans keep
+    // pushing "Last checked" forward without a matching fix. CLOSE_THRESHOLD_MS is a judgment call
+    // (flagged in the handoff): 5 minutes, generous enough to cover a slow batch extraction between
+    // the scan finishing and the fix landing.
+    const CLOSE_THRESHOLD_MS = 5 * 60 * 1000;
+    const checkedMs = item.lastChecked ? new Date(item.lastChecked).getTime() : null;
+    const fixedMs = item.lastFixed ? new Date(item.lastFixed).getTime() : null;
+    let statusText = '';
+    if (checkedMs && fixedMs && Math.abs(fixedMs - checkedMs) <= CLOSE_THRESHOLD_MS) {
+      statusText = ` — Last extracted: ${new Date(item.lastFixed).toLocaleString()}`;
+    } else {
+      const parts = [];
+      if (checkedMs) parts.push(`Last checked: ${new Date(item.lastChecked).toLocaleString()}`);
+      if (fixedMs) parts.push(`Last extracted: ${new Date(item.lastFixed).toLocaleString()}`);
+      if (parts.length) statusText = ` — ${parts.join(' — ')}`;
+    }
+    const subLine = el('div', { class: 'sub' }, `${item.modCount} mod${item.modCount === 1 ? '' : 's'}${statusText}`);
     // The per-card "↻ Refresh from Nexus" button (v2, commit 4fedf7d) is gone -- replaced by the
     // batch toggle under the Workshop group (queue: rebuild-missing-batch-refresh-toggle, approved
     // v3 mockup addendum). Nothing here refreshes on a per-card basis anymore, Installed or Workshop.

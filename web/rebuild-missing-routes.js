@@ -86,6 +86,7 @@ function createRebuildMissingRouter(config) {
             // reason). null for a collection this router has never actually fixed anything in.
             for (const item of [...installed, ...workshop]) {
                 item.lastFixed = lastFixedState.getLastFixed(item.modId);
+                item.lastChecked = lastFixedState.getLastChecked(item.modId);
             }
             // Cached, not re-read here -- populated by the explicit POST /load-vortex-data action
             // above (a live Vortex-state read shouldn't fire silently on every picker load). Empty
@@ -387,6 +388,12 @@ function createRebuildMissingRouter(config) {
                     stagingDir: staging, downloadsDir: downloads, sevenZipExe, ignoredMatchers,
                     onProgress: (p) => emitIfCurrent({ type: 'mod-scanned', ...p }),
                 });
+                // "Last checked" (queue: rebuild-missing-last-checked) -- unlike markFixed, this
+                // fires for every collection that reached scan completion here, unconditionally,
+                // regardless of whether it turned up anything missing. Matches lastFixedState's own
+                // layering rule (see its header): the lib stays state-store-free, only the route
+                // (which already owns lastFixedState) touches it.
+                for (const c of collectionResults) lastFixedState.markChecked(c.collectionModId);
                 const statColls = collectionResults.filter((c) => !c.error).length;
                 const statMods = collectionResults.reduce((n, c) => n + (c.modsWithMissing?.length || 0), 0);
                 const statFiles = collectionResults.reduce((n, c) => n + (c.modsWithMissing || []).reduce((m, mod) => m + mod.missing.length, 0), 0);
