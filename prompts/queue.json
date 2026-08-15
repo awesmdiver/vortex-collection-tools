@@ -21,8 +21,13 @@
   ],
   "roadmap": [
     {
+      "title": "Theming framework (Phase 1)",
+      "note": "The actual data-driven refactor (themes/plain.json + stable-ID runtime loader, per DESIGN.md's own \"Brand theming framework\" section) was only ever designed, never built -- was missing from the roadmap entirely. Build first, validate it changes nothing visible, before Phase 2.",
+      "doc": "DESIGN.md"
+    },
+    {
       "title": "Theming framework (Phase 2)",
-      "note": "Plain theme first; first game theme drafted",
+      "note": "First game theme (Skyrim, content drafted + kept current) -- depends on Phase 1 landing and being validated first.",
       "doc": "design/theme-content-skyrim.md"
     },
     {
