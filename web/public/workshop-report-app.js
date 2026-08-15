@@ -132,11 +132,43 @@ function wrHandleCheckEvent(frame) {
 // updates just to reflect one row's new state.
 let wrCurrentRows = [];
 
+// null (no sort applied -- the report's own default row order) until the header's first click,
+// then toggles between the two states forever -- no 3rd "back to default" click, per the task's
+// own explicit instruction (the director asked for exactly two directions, not a reset). Never
+// reset by a data reload (loadWorkshopReportPageOnce/check-complete/wrFetchFromNexus's in-place
+// update) -- deliberate: the whole point of sorting is spotting the most out-of-date collections
+// at a glance, and a fresh "Check Nexus for updates" run is exactly when that view is most useful,
+// not the moment to silently drop it. Same "plain variable the data-loading paths never touch"
+// approach already used for Rebuild Missing Files' own rmfKindFilter.
+let wrSortDirection = null;
+
+// Rows with no updatedAt (never checked, or no slug on record) always sort to the very end,
+// regardless of direction -- there's no meaningful "how out of date" answer for them, and
+// interleaving them by some default date value would be actively misleading in a report whose
+// whole point is spotting real staleness.
+function wrSortedRows(rows, direction) {
+  if (!direction) return rows;
+  const withDate = rows.filter((r) => r.updatedAt);
+  const withoutDate = rows.filter((r) => !r.updatedAt);
+  withDate.sort((a, b) => {
+    const diff = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+    return direction === 'newest' ? -diff : diff;
+  });
+  return [...withDate, ...withoutDate];
+}
+
+$g('wrUpdatedHeader').addEventListener('click', () => {
+  wrSortDirection = wrSortDirection === 'newest' ? 'oldest' : 'newest';
+  wrRenderRows(wrCurrentRows);
+});
+
 function wrRenderRows(rows) {
   wrCurrentRows = rows || [];
+  $g('wrSortArrow').textContent = wrSortDirection ? (wrSortDirection === 'newest' ? '▼' : '▲') : '';
+
   const tbody = $g('wrRows');
   tbody.innerHTML = '';
-  const nothingToShow = !rows || rows.length === 0;
+  const nothingToShow = wrCurrentRows.length === 0;
   $g('wrEmpty').classList.toggle('hidden', !nothingToShow);
   if (nothingToShow) {
     $g('wrEmpty').textContent = 'No Workshop collections found yet. Click "Check Nexus for updates" (Vortex must be closed) to look.';
@@ -144,7 +176,7 @@ function wrRenderRows(rows) {
   $g('wrTableWrap').classList.toggle('hidden', nothingToShow);
   if (nothingToShow) return;
 
-  for (const row of rows) {
+  for (const row of wrSortedRows(wrCurrentRows, wrSortDirection)) {
     const tr = el('tr', {});
     tr.appendChild(el('td', {}, row.name));
     tr.appendChild(el('td', {}, row.slug ? el('code', {}, row.slug) : el('span', { class: 'muted' }, '—')));

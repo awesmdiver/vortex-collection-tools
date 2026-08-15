@@ -1436,7 +1436,12 @@
 
   <div class="plan-table-wrap hidden" id="wrTableWrap">
     <table class="plan-table">
-      <thead><tr><th>Collection</th><th>Slug / ID</th><th>Revision</th><th>Last updated on Nexus</th><th>Actions</th></tr></thead>
+      <!-- "Last updated on Nexus" is the one sortable column (queue: workshop-report-sortable-updated)
+           -- no other report table in this app has a sortable header today, so this is a new pattern,
+           kept deliberately simple: click to toggle newest/oldest, no 3rd reset-to-default click (see
+           workshop-report-app.js's own wrSortDirection comment). wrSortArrow is empty until a sort is
+           actually active. -->
+      <thead><tr><th>Collection</th><th>Slug / ID</th><th>Revision</th><th id="wrUpdatedHeader" class="sortable">Last updated on Nexus <span id="wrSortArrow" class="sort-arrow"></span></th><th>Actions</th></tr></thead>
       <tbody id="wrRows"></tbody>
     </table>
   </div>

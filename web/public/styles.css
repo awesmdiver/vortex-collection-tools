@@ -865,6 +865,14 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    shortened to a fixed short string BEFORE reaching the DOM, so nowrap never has an extreme value
    to blow the column out on -- click a truncated name to see the full one. */
 .plan-table td:first-child, .plan-table th:first-child { white-space: nowrap; }
+/* Sortable column header (Workshop Report's own "Last updated on Nexus" -- the first sortable
+   header in this app, queue: workshop-report-sortable-updated). Muted -> brighter on hover, same
+   "interactive element brightens" signal this app already uses for other clickable-but-not-a-link
+   elements; the arrow itself (accent-colored, only rendered while a sort is active) is what marks
+   this as the current sort key. */
+.plan-table th.sortable { cursor: pointer; user-select: none; }
+.plan-table th.sortable:hover { color: var(--text); }
+.plan-table th.sortable .sort-arrow { color: var(--accent); margin-left: 2px; }
 .mod-name--truncated { cursor: pointer; border-bottom: 1px dotted var(--text-muted); }
 .mod-name--truncated:hover { color: var(--accent); border-bottom-color: var(--accent); }
 .plan-table tbody tr:last-child td { border-bottom: none; }
