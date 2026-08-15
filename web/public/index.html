@@ -184,6 +184,15 @@
       </button>
       <button class="home-card__star" data-pin-key="workshopreport" title="Pin to top">☆</button>
     </div>
+    <div class="home-card-wrap" data-section="homeSectionReports">
+      <button class="home-card" data-area="reports" data-sub="exceptions">
+        <div class="home-card__icon">🙅</div>
+        <div class="home-card__name">Mod Exceptions</div>
+        <div class="home-card__desc">See and manage the mods Rebuild Collection and Rebuild Missing Files should never auto-fix.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="modexceptions" title="Pin to top">☆</button>
+    </div>
   </div>
   </div>
 
@@ -849,6 +858,16 @@
         <button id="settingsDeleteBackupsBtn" class="btn btn--ghost btn--small">Delete all backups</button>
         <span id="settingsDeleteBackupsStatus" class="muted"></span>
       </div>
+
+      <h3 class="settings-section-title">Mod Exceptions</h3>
+      <p class="muted">Where the "never auto-fix this mod" list is stored -- shared with Rebuild Missing Files. Manage the list itself under Reports &gt; Mod Exceptions.</p>
+      <div class="field-group">
+        <label class="field-label" for="settingsModExceptionListDirInput">Folder to store the exception list in <span class="field-required">(required)</span></label>
+        <div class="path-input-row">
+          <input id="settingsModExceptionListDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\mod-exceptions" autocomplete="off">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsModExceptionListDirInput">Browse&hellip;</button>
+        </div>
+      </div>
     </div>
     </section>
 
@@ -1273,6 +1292,7 @@
     <button id="reports-sub-updatecompare" class="btn btn--ghost btn--small">Update Compare Report</button>
     <button id="reports-sub-rulesgen" class="btn btn--ghost btn--small">Rules Generator Report</button>
     <button id="reports-sub-workshop" class="btn btn--ghost btn--small">Workshop Report</button>
+    <button id="reports-sub-exceptions" class="btn btn--ghost btn--small">Mod Exceptions</button>
   </div>
 
   <div id="reports-sub-area-stats">
@@ -1453,6 +1473,40 @@
     collection's files on disk. Collections you haven't fetched into staging yet show up too, so you
     can spot one worth pulling down before it drifts further out of date.
   </p>
+  </div>
+
+  <!-- Mod Exceptions -- mods to never auto-fix/rebuild, e.g. a hand-pick-only FOMOD where the
+       archive contains far more than the user deliberately chose to install (see
+       lib/mod-exception-store.js's own header for the full "1DustAdeptArmorSE" real case). Shared
+       between Rebuild Collection and Rebuild Missing Files -- this is the one place to view/add/
+       remove the whole list; each tool's own report just shows an "Excepted" row + a per-row
+       "Add to Exception List" quick action, same as Vortex Scrub's own exclude-list shape. -->
+  <div id="reports-sub-area-exceptions" class="hidden">
+  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span>Reports</div>
+  <div class="tool-hero">
+    <h2 class="tool-hero__title">🙅 Mods to Never Auto-Fix</h2>
+    <p class="tool-hero__body">Some mods are hand-pick-only installers where you deliberately chose a subset of what the archive contains. Auto-extracting or auto-rebuilding the full archive for one of these doesn't restore what's "missing" -- it installs content you never chose, which can cause missing masters or crashes. Add a mod here once, and both Rebuild Collection and Rebuild Missing Files will leave it alone from then on, wherever it shows up.</p>
+  </div>
+
+  <div id="meNotConfigured" class="empty-row hidden"></div>
+  <div id="meCriticalError" class="callout callout--critical hidden"></div>
+
+  <h3 class="settings-section-title">Add a mod manually</h3>
+  <div class="collection-picker">
+    <input id="meAddNameInput" class="input input--wide" type="text" placeholder="Mod name (must match exactly, e.g. as shown on a scan report row)">
+    <input id="meAddModIdInput" class="input input--small" type="number" min="0" step="1" placeholder="Nexus mod id (optional)">
+    <button id="meAddBtn" class="btn btn--primary btn--small">Add</button>
+  </div>
+  <p class="muted" id="meAddStatus"></p>
+
+  <h3 class="settings-section-title">Currently excepted</h3>
+  <div id="meEmpty" class="empty-row hidden">No mods excepted yet -- add one above, or click "Add to Exception List" on a Rebuild Missing Files scan row.</div>
+  <div class="plan-table-wrap hidden" id="meTableWrap">
+    <table class="plan-table">
+      <thead><tr><th>Mod name</th><th>Nexus mod id</th><th>Added</th><th>Actions</th></tr></thead>
+      <tbody id="meRows"></tbody>
+    </table>
+  </div>
   </div>
 
 </main>
@@ -2339,5 +2393,6 @@
 <script src="merge-app.js"></script>
 <script src="rebuild-missing-app.js"></script>
 <script src="workshop-report-app.js"></script>
+<script src="mod-exceptions-report-app.js"></script>
 </body>
 </html>

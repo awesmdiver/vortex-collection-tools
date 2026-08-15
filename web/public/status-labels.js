@@ -18,6 +18,7 @@ const STATUS_TEXT = {
   SKIP_NO_ARCHIVE: 'No archive',
   SKIP_OPTIONAL_NOT_INSTALLED: 'Optional, not installed',
   SKIP_OPEN_FOMOD: 'Open FOMOD',
+  SKIP_EXCEPTED: 'Excepted (never auto-fixed)',
   FAILED_MISMATCH_NOT_TOUCHED: 'Mismatch (not touched)',
   FAILED_EXTRACTION_NOT_TOUCHED: 'Extraction failed (not touched)',
   FAILED_EXTRACTION_NO_PRIOR_DATA: 'Extraction failed (still missing)',

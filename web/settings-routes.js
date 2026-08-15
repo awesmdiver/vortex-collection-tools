@@ -46,7 +46,7 @@ function listBackupRunDirs(backupRoot) {
     return entries.filter((e) => e.isDirectory() && BACKUP_RUN_DIR_PATTERN.test(e.name)).map((e) => e.name);
 }
 
-const PATH_FIELDS = ['staging', 'downloads', 'backupRoot', 'syncBackupRoot', 'state', 'logsDir', 'cleanupExcludeListDir', 'skyrimDataDir', 'pluginsListDir', 'dummyMastersOutputDir', 'archiveFinderDbDir', 'archiveFinderOutputDir', 'eslifierOutputDir'];
+const PATH_FIELDS = ['staging', 'downloads', 'backupRoot', 'syncBackupRoot', 'state', 'logsDir', 'cleanupExcludeListDir', 'skyrimDataDir', 'pluginsListDir', 'dummyMastersOutputDir', 'archiveFinderDbDir', 'archiveFinderOutputDir', 'eslifierOutputDir', 'modExceptionListDir'];
 // No sensible blank/default state for these eight -- Rebuild Collection can't scan a collection
 // without staging/downloads, Update Collection can't save a backup without somewhere real (not
 // "wherever this project happens to think is a good place") to put it, and Clean Up's exclude list,
@@ -60,7 +60,7 @@ const PATH_FIELDS = ['staging', 'downloads', 'backupRoot', 'syncBackupRoot', 'st
 // destination per extraction instead -- and eslifierOutputDir is simply inert (no ESLifier
 // downgrade applied) until the user actually sets it, same "blank is a normal, supported state" as
 // archiveFinderOutputDir.
-const REQUIRED_PATH_FIELDS = ['staging', 'downloads', 'syncBackupRoot', 'cleanupExcludeListDir', 'skyrimDataDir', 'pluginsListDir', 'dummyMastersOutputDir', 'archiveFinderDbDir'];
+const REQUIRED_PATH_FIELDS = ['staging', 'downloads', 'syncBackupRoot', 'cleanupExcludeListDir', 'skyrimDataDir', 'pluginsListDir', 'dummyMastersOutputDir', 'archiveFinderDbDir', 'modExceptionListDir'];
 // Server bind settings -- like the paths above, these are only read once at process startup
 // (web/server.js), so changing any of them needs the same restart-required treatment.
 const SERVER_FIELDS = ['serverPort', 'serverHost', 'autoOpenBrowser'];

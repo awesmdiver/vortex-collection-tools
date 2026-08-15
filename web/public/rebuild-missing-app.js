@@ -349,6 +349,12 @@ function rmfRenderReport(collectionResults, stats, refreshFailures) {
     for (const mod of c.modsIgnored || []) {
       rmfState.rows.push({ kind: 'ignored', collectionModId: c.collectionModId, collectionName: c.name, ...mod });
     }
+    // A mod on the Mod Exceptions list (queue: rebuild-missing-hand-pick-exceptions) -- server
+    // never even scanned it (see missing-files-scan.js's own SKIP_EXCEPTED early-out). Same
+    // acknowledged tier as modsIgnored above, distinct reason text.
+    for (const mod of c.modsExcepted || []) {
+      rmfState.rows.push({ kind: 'excepted', collectionModId: c.collectionModId, collectionName: c.name, ...mod });
+    }
   }
 
   $g('rmfResults').classList.remove('hidden');
@@ -385,6 +391,10 @@ const RMF_KIND_INFO = {
   // Acknowledged tier (DESIGN.md's own fifth, non-severity tier -- grey, informational, not a
   // problem) -- same badgeClass token pair Missing Masters' own mm-row--soft already uses.
   ignored: { label: 'Ignored', badgeClass: 'badge--neutral' },
+  // Mod Exceptions list (queue: rebuild-missing-hand-pick-exceptions) -- same acknowledged tier as
+  // ignored, but a distinct label since the reason is different (a deliberate, standing opt-out
+  // this director set, not something Vortex itself reports).
+  excepted: { label: 'Excepted', badgeClass: 'badge--neutral' },
 };
 
 // null shows everything -- same toggle-on-click behavior as mmStatusFilter (click the active pill
@@ -399,7 +409,7 @@ function rmfRenderSummaryBadges() {
   for (const row of rmfState.rows) counts[row.kind] = (counts[row.kind] || 0) + 1;
   // Fixed order (missing first -- the category fixable right here) rather than object insertion
   // order, so pills don't reshuffle position as counts change between renders.
-  for (const key of ['missing', 'archive-missing', 'ignored']) {
+  for (const key of ['missing', 'archive-missing', 'ignored', 'excepted']) {
     if (!counts[key]) continue;
     const info = RMF_KIND_INFO[key];
     const active = rmfKindFilter === key;
@@ -449,7 +459,7 @@ function rmfRenderRows() {
     // background/left-edge treatment as the "selected" state below but with --neutral instead of
     // --accent (see .row--ignored in styles.css). A mod Ignored in Vortex looks like a problem at
     // a glance otherwise; this downgrades it the same way Missing Masters' own mm-row--soft does.
-    if (row.kind === 'ignored') tr.classList.add('row--ignored');
+    if (row.kind === 'ignored' || row.kind === 'excepted') tr.classList.add('row--ignored');
     tr.classList.toggle('selected', rmfState.selected.has(idx));
 
     const checkbox = el('input', { type: 'checkbox' });
@@ -468,6 +478,8 @@ function rmfRenderRows() {
       modCell.appendChild(el('div', { class: 'archive-missing-note' }, `⚠️ ${row.reason}`));
     } else if (row.kind === 'ignored') {
       modCell.appendChild(el('div', { class: 'ignored-note' }, `⚪ ${row.reason}`));
+    } else if (row.kind === 'excepted') {
+      modCell.appendChild(el('div', { class: 'ignored-note' }, '⚪ On the Mod Exceptions list -- never auto-fixed here.'));
     }
     tr.appendChild(modCell);
 
@@ -489,6 +501,9 @@ function rmfBuildMissingCell(row, idx) {
   }
   if (row.kind === 'ignored') {
     return el('span', { class: 'muted' }, 'Not checked — ignored in Vortex.');
+  }
+  if (row.kind === 'excepted') {
+    return el('span', { class: 'muted' }, 'Not checked — on the Mod Exceptions list.');
   }
   const wrap = el('div', { class: 'detail-cell' }, [
     el('span', { class: 'status-pill status-pill--critical' }, `${row.missing.length} missing`),
@@ -516,7 +531,8 @@ function rmfBuildActionsCell(row, idx) {
     const openBtn = el('button', { class: 'btn btn--ghost btn--small' }, 'Open Staging Folder');
     openBtn.addEventListener('click', () => rmfOpenStagingFolder(row));
     actions.appendChild(openBtn);
-  } else if (row.kind === 'ignored') {
+    actions.appendChild(rmfBuildExceptionBtn(row));
+  } else if (row.kind === 'ignored' || row.kind === 'excepted') {
     // Acknowledged tier -- nothing to fix here, so no action buttons at all (DESIGN.md's own rule:
     // showing a "here's how to fix it" button next to a row that says "nothing to fix" reads as a
     // contradiction). Left empty rather than a placeholder note -- the mod-name cell's own
@@ -525,10 +541,52 @@ function rmfBuildActionsCell(row, idx) {
     const dlBtn = el('button', { class: 'btn btn--small' }, 'Download Archive');
     dlBtn.addEventListener('click', () => rmfDownloadArchive(row, idx, dlBtn));
     actions.appendChild(dlBtn);
+    actions.appendChild(rmfBuildExceptionBtn(row));
   } else {
     actions.appendChild(el('span', { class: 'muted', style: 'font-size:12px' }, 'Not on Nexus — download manually'));
+    actions.appendChild(rmfBuildExceptionBtn(row));
   }
   return actions;
+}
+
+// "Add to Exception List" (queue: rebuild-missing-hand-pick-exceptions) -- offered on every
+// 'missing'/'archive-missing' row (real case this exists for: a hand-pick-only FOMOD, e.g.
+// "1DustAdeptArmorSE", where auto-extracting/auto-rebuilding the full archive would install
+// content the user never chose). A ghost btn, not primary -- this is an opt-out action, not the
+// row's main "fix it" action (Extract from Archive/Download Archive keep that spot).
+function rmfBuildExceptionBtn(row) {
+  const btn = el('button', { class: 'btn btn--ghost btn--small' }, 'Add to Exception List');
+  btn.addEventListener('click', () => rmfAddException(row, btn));
+  return btn;
+}
+
+async function rmfAddException(row, btn) {
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Adding…';
+  try {
+    await rmfApi('POST', '/api/mod-exceptions/add', { name: row.name, modId: row.modId ?? null });
+    // Re-classify this ONE row as excepted in place, same "no need for a full re-scan" treatment
+    // as rmfApplyExtractResults/rmfDownloadArchive already give their own row updates.
+    const idx = rmfState.rows.indexOf(row);
+    if (idx !== -1) {
+      // Same stat-refresh treatment as rmfApplyExtractResults' own -- only a 'missing' row ever
+      // counted toward rmfStatFiles/rmfStatMods (an 'archive-missing' row never did), so only
+      // decrement when that's what this row was.
+      if (row.kind === 'missing') {
+        const statFiles = Math.max(0, Number($g('rmfStatFiles').textContent) - row.missing.length);
+        $g('rmfStatFiles').textContent = statFiles;
+      }
+      rmfState.rows[idx] = { kind: 'excepted', collectionModId: row.collectionModId, collectionName: row.collectionName, name: row.name, modId: row.modId ?? null, fileId: row.fileId ?? null, reason: 'On the Mod Exceptions list -- never auto-fixed here. Remove it from the list (Reports > Mod Exceptions) if you want this tool to manage it again.' };
+      rmfState.selected.delete(idx);
+      rmfRenderRows();
+      $g('rmfStatMods').textContent = rmfState.rows.filter((r) => r.kind === 'missing').length;
+    }
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = original;
+    rmfHandleError(e, $g('rmfScanError'));
+  }
 }
 
 // Expand/collapse "+N more" -- same toggle behavior as the log-view page's own .file-list-toggle

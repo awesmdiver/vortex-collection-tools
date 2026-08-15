@@ -796,7 +796,7 @@ function renderPlan(plan) {
   // Ignored/optional-not-installed mods carry no action at all -- put them last so the mods that
   // actually matter (will rebuild, need research, etc.) are visible without scrolling past a wall
   // of non-actionable rows.
-  const NON_ACTIONABLE = new Set(['SKIP_IGNORED', 'SKIP_OPTIONAL_NOT_INSTALLED']);
+  const NON_ACTIONABLE = new Set(['SKIP_IGNORED', 'SKIP_OPTIONAL_NOT_INSTALLED', 'SKIP_EXCEPTED']);
   // Alphabetical within each group -- a large collection's classification order left the user
   // ctrl-F'ing to find one specific mod by name. Sorted per-group (not the whole table flattened)
   // so the existing "actionable first, ignored last" curation above is preserved.

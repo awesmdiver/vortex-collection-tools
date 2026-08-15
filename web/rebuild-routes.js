@@ -16,6 +16,7 @@ const nexusDownload = require('../lib/nexus-collection-download');
 const nexusModDownload = require('../lib/nexus-mod-download');
 const { statusLabel } = require('./public/status-labels');
 const appConfig = require('../lib/app-config');
+const modExceptionStore = require('../lib/mod-exception-store');
 const { pickOpenFileAsync } = require('../lib/vortex-sync/win-dialog');
 const runState = require('./run-state');
 const { createSseSession } = require('./sse-session');
@@ -327,12 +328,18 @@ function createRouter(config) {
             }));
         }
         const resumed = resumeLogPath ? runner.loadResumeLog(resumeLogPath) : new Map();
-        const { downloadMissingArchives, forceExtractOffSiteMismatches } = appConfig.loadConfig();
+        const { downloadMissingArchives, forceExtractOffSiteMismatches, modExceptionListDir } = appConfig.loadConfig();
+        // Loaded fresh per plan computation (cheap, a small local JSON file), not cached across
+        // calls -- same "read fresh, not stale-cached" convention as every other config-driven
+        // toggle read via loadConfig() in this router. See lib/mod-exception-store.js's own header
+        // for why this is checked here (classifyMod, via buildPlan) rather than bolted on after.
+        const exceptionMatcher = modExceptionStore.makeExceptionMatcher(modExceptionListDir);
         const { modEntries, rebuildQueue } = await runner.buildPlan({
             collectionModId, removedMods, keptMods, knownVortexModIds, resumed, otherVersionsByModId, sharedWithCollectionsByKey,
             downloadsDir: downloads, stagingDir: staging, sevenZipExe, logsDir, onModClassified,
             downloadMissingArchivesEnabled: downloadMissingArchives,
             forceExtractOffSiteMismatchesEnabled: forceExtractOffSiteMismatches,
+            exceptionMatcher,
         });
         return { collectionInfo, ignored, keptMods, knownVortexModIds, modEntries, rebuildQueue, otherVersionsByModId, sharedWithCollectionsByKey };
     }

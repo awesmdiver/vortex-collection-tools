@@ -28,6 +28,7 @@ const { listPickableCollections, scanCollections, scanOneMod } = require('../lib
 const { loadCollection } = require('../lib/collection-parser');
 const { findSevenZip, extractMany } = require('../lib/sevenzip');
 const { existsPlainOrGhosted } = require('../lib/ghost-files');
+const modExceptionStore = require('../lib/mod-exception-store');
 const nexusModDownload = require('../lib/nexus-mod-download');
 const nexusCollectionDownload = require('../lib/nexus-collection-download');
 const runner = require('../lib/collection-runner');
@@ -384,9 +385,15 @@ function createRebuildMissingRouter(config) {
                         ignoredMatchers.set(collectionModId, () => null);
                     }
                 }
+                // Mod Exceptions list (queue: rebuild-missing-hand-pick-exceptions) -- a plain local
+                // file read (unlike ignoredMatchers above), loaded once per scan, same convention as
+                // lib/mod-exception-store.js's own header comment on why this is checked here rather
+                // than bolted on after scanOneMod's real classification.
+                const { modExceptionListDir } = appConfig.loadConfig();
+                const exceptionMatcher = modExceptionStore.makeExceptionMatcher(modExceptionListDir);
 
                 const collectionResults = await scanCollections(collectionModIds, {
-                    stagingDir: staging, downloadsDir: downloads, sevenZipExe, ignoredMatchers,
+                    stagingDir: staging, downloadsDir: downloads, sevenZipExe, ignoredMatchers, exceptionMatcher,
                     onProgress: (p) => emitIfCurrent({ type: 'mod-scanned', ...p }),
                 });
                 // "Last checked" (queue: rebuild-missing-last-checked) -- unlike markFixed, this

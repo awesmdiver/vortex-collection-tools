@@ -23,6 +23,7 @@ const REQUIRED_FIELDS = [
   { key: 'pluginsListDir', inputId: 'settingsPluginsListDirInput', label: 'Plugins.txt location (Missing Masters)' },
   { key: 'dummyMastersOutputDir', inputId: 'settingsDummyMastersOutputDirInput', label: 'Dummy Masters output folder (Missing Masters)' },
   { key: 'archiveFinderDbDir', inputId: 'settingsArchiveFinderDbDirInput', label: 'Archive Finder database folder' },
+  { key: 'modExceptionListDir', inputId: 'settingsModExceptionListDirInput', label: 'Mod Exceptions list location' },
 ];
 
 async function settingsApi(method, path, body) {
@@ -197,6 +198,7 @@ async function loadSettings() {
   $g('settingsArchiveFinderDbDirInput').value = cfg.archiveFinderDbDir || '';
   $g('settingsArchiveFinderOutputDirInput').value = cfg.archiveFinderOutputDir || '';
   $g('settingsEslifierOutputDirInput').value = cfg.eslifierOutputDir || '';
+  $g('settingsModExceptionListDirInput').value = cfg.modExceptionListDir || '';
   $g('settingsMaxBackupsInput').value = cfg.maxBackupsToKeep != null ? cfg.maxBackupsToKeep : '';
   $g('settingsMaxStateBackupsInput').value = cfg.maxStateBackupsToKeep != null ? cfg.maxStateBackupsToKeep : '';
   $g('settingsConcurrencyInput').value = cfg.concurrentExtractions || 1;
@@ -392,6 +394,7 @@ async function saveSettings() {
       archiveFinderDbDir: $g('settingsArchiveFinderDbDirInput').value,
       archiveFinderOutputDir: $g('settingsArchiveFinderOutputDirInput').value,
       eslifierOutputDir: $g('settingsEslifierOutputDirInput').value,
+      modExceptionListDir: $g('settingsModExceptionListDirInput').value,
       maxBackupsToKeep: $g('settingsMaxBackupsInput').value === '' ? null : Number($g('settingsMaxBackupsInput').value),
       maxStateBackupsToKeep: $g('settingsMaxStateBackupsInput').value === '' ? null : Number($g('settingsMaxStateBackupsInput').value),
       concurrentExtractions: Number($g('settingsConcurrencyInput').value) || 1,
