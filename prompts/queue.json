@@ -1,7 +1,16 @@
 {
   "project": "vortex-collection-tools",
   "inFlight": null,
-  "items": [],
+  "items": [
+    {
+      "id": "headless-auto-mode-verification-disposable",
+      "tag": "test",
+      "title": "DISPOSABLE: verify headless Auto mode completes a real file write (claude-workflow-board fix check)",
+      "why": "Confirms board-auto-mode-headless-unattended-regression's fix actually works against a real project via a real headless Run, not just the board's own internal test items. Remove from queue immediately after running, whether it passes or fails.",
+      "prompt": "THROWAWAY VERIFICATION TASK -- not a real feature. This exists to prove claude-workflow-board's headless-Auto-mode fix (board-auto-mode-headless-unattended-regression) actually works end-to-end against a real project, not just the board's own internal test items.\n\nDo exactly this:\n1. Write a file at `prompts/.headless-auto-test-marker.txt` containing the current date and the text \"headless Auto mode completed a real file write without hanging on a permission prompt\".\n2. Confirm the file was actually written (read it back).\n3. Delete the file again (this is disposable, not meant to persist).\n4. Report done.\n\nThe whole point is the WRITE step itself -- that's a real permission-gated action. If this run completes end-to-end without getting stuck waiting on a confirmation, the headless fix is proven live, not just reasoned about.",
+      "ready": true
+    }
+  ],
   "roadmap": [
     {
       "title": "Theming framework (Phase 2)",
