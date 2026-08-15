@@ -24,10 +24,14 @@ terminal-flow-archive/
 # backup-ratio-dismiss-state.json tracks which collections have been dismissed from Update
 # Collection's backup ratio warning (see lib/backup-ratio-dismiss-state.js) — also personal,
 # local-preference data.
+# rebuild-missing-last-fixed-state.json tracks each collection's own "last dealt with" timestamp
+# for Rebuild Missing Files' picker (see lib/rebuild-missing-last-fixed-state.js) — also personal,
+# local-progress data.
 config.json
 work-through-state.json
 offsite-import-map.json
 backup-ratio-dismiss-state.json
+rebuild-missing-last-fixed-state.json
 lib/vortex-sync/backups/
 lib/vortex-sync/state-backups/
 

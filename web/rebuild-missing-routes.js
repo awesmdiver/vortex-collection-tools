@@ -33,6 +33,7 @@ const runner = require('../lib/collection-runner');
 const syncRunner = require('../lib/sync-runner');
 const syncLib = require('../lib/vortex-sync/lib');
 const appConfig = require('../lib/app-config');
+const lastFixedState = require('../lib/rebuild-missing-last-fixed-state');
 const { createSseSession } = require('./sse-session');
 
 const scanSession = createSseSession();
@@ -79,6 +80,13 @@ function createRebuildMissingRouter(config) {
         if (!staging) return res.json({ installed: [], workshop: [], notDownloaded: [], refreshWorkshopBeforeScan, configured: false });
         try {
             const { installed, workshop } = listPickableCollections(staging);
+            // "Last dealt with" (queue: rebuild-missing-last-fixed) -- a cheap local JSON read, not
+            // a Vortex live-state read, so attaching it here on every picker load is fine (unlike
+            // notDownloadedCollections just below, which stays explicit-action-only for exactly that
+            // reason). null for a collection this router has never actually fixed anything in.
+            for (const item of [...installed, ...workshop]) {
+                item.lastFixed = lastFixedState.getLastFixed(item.modId);
+            }
             // Cached, not re-read here -- populated by the explicit POST /load-vortex-data action
             // above (a live Vortex-state read shouldn't fire silently on every picker load). Empty
             // until the user has clicked that at least once this session.
@@ -477,13 +485,23 @@ function createRebuildMissingRouter(config) {
         (async () => {
             try {
                 const results = [];
+                // "Last dealt with" (queue: rebuild-missing-last-fixed) -- collected as a Set so a
+                // batch spanning several collections marks each one at most once, and ONLY once a
+                // REAL file was extracted for it (result.extracted.length > 0) -- an "already fixed,
+                // nothing left to extract" success (extracted: []) doesn't count, matching the
+                // judgment call in rebuild-missing-last-fixed-state.js's own header.
+                const fixedCollectionIds = new Set();
                 const total = items.length;
                 for (let index = 0; index < items.length; index += 1) {
                     const item = items[index];
                     const result = await extractOneMod(item);
                     results.push(result);
+                    if (result.ok && result.extracted?.length > 0 && item.collectionModId) {
+                        fixedCollectionIds.add(item.collectionModId);
+                    }
                     emitIfCurrent({ type: 'mod-extracted', index: index + 1, total, name: result.name, ok: result.ok });
                 }
+                for (const collectionModId of fixedCollectionIds) lastFixedState.markFixed(collectionModId);
                 emitIfCurrent({ type: 'extract-complete', done: true, results });
             } catch (e) {
                 emitIfCurrent({ type: 'extract-error', done: true, error: true, message: e.message });
@@ -523,6 +541,12 @@ function createRebuildMissingRouter(config) {
         } catch (e) {
             return res.status(500).json({ error: e.message });
         }
+
+        // "Last dealt with" (queue: rebuild-missing-last-fixed) -- the download itself already
+        // succeeded by this point (an earlier throw would have returned 500 above), so this counts
+        // as a real fix regardless of what the re-scan below finds (the archive is genuinely new on
+        // disk now, even if its contents still don't fully resolve every missing file).
+        lastFixedState.markFixed(collectionModId);
 
         const result = await scanOneMod(mod, { downloadsDir: downloads, stagingDir: staging, sevenZipExe });
         res.json({ result });

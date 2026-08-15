@@ -155,7 +155,15 @@ function rmfRenderPickerGroup(sectionId, gridId, countId, items, prefix, countTe
     rmfState.collectionsById.set(item.modId, item);
     const checkbox = el('input', { type: 'checkbox' });
     checkbox.checked = rmfState.picked.has(item.modId);
-    const subLine = el('div', { class: 'sub' }, `${item.modCount} mod${item.modCount === 1 ? '' : 's'}`);
+    // "Last dealt with" (queue: rebuild-missing-last-fixed) -- same single inline-dash-suffix
+    // convention Rebuild Collection's own picker already uses for its "Last extracted" (app.js),
+    // not Workshop Report's own two-line absolute+relative format -- that fits a wide table column,
+    // this is a narrow card with room for exactly one compact sub-line, so appending to the
+    // existing "N mods" text keeps the established one-line rhythm instead of growing every card
+    // taller. Only present once this router has actually fixed something here (extract/download) --
+    // absent (not a blank/zero date) for a collection never touched, per the task's own instruction.
+    const lastFixedText = item.lastFixed ? ` — Last dealt with: ${new Date(item.lastFixed).toLocaleString()}` : '';
+    const subLine = el('div', { class: 'sub' }, `${item.modCount} mod${item.modCount === 1 ? '' : 's'}${lastFixedText}`);
     // The per-card "↻ Refresh from Nexus" button (v2, commit 4fedf7d) is gone -- replaced by the
     // batch toggle under the Workshop group (queue: rebuild-missing-batch-refresh-toggle, approved
     // v3 mockup addendum). Nothing here refreshes on a per-card basis anymore, Installed or Workshop.
@@ -568,7 +576,9 @@ $g('rmfExtractConfirmOkBtn').addEventListener('click', async () => {
   const indices = rmfPendingExtractIndices;
   const items = indices.map((i) => {
     const row = rmfState.rows[i];
-    return { name: row.name, targetFolderName: row.targetFolderName, archivePath: row.archivePath, files: row.missing };
+    // collectionModId (queue: rebuild-missing-last-fixed) -- lets the server mark the right
+    // collection(s) "dealt with" once at least one file in this batch is actually extracted.
+    return { name: row.name, targetFolderName: row.targetFolderName, archivePath: row.archivePath, files: row.missing, collectionModId: row.collectionModId };
   });
   $g('rmfExtractResultsCallout').classList.add('hidden');
   rmfSetExtractingUI(true);
