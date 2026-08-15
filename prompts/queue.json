@@ -1,16 +1,7 @@
 {
   "project": "vortex-collection-tools",
   "inFlight": null,
-  "items": [
-    {
-      "id": "rebuild-missing-last-checked",
-      "tag": "feature",
-      "title": "Rebuild Missing Files: add a \"Last checked\" timestamp alongside the existing \"Last dealt with\"",
-      "why": "Director wants to know when a collection was last SCANNED, even if nothing was found missing -- \"Last dealt with\" only updates on a real fix, so a collection that's always clean never shows any recency info at all today.",
-      "prompt": "Director's ask: add a second, separate timestamp alongside the existing \"Last dealt with\" (queue: rebuild-missing-last-fixed, shipped) -- \"Last checked\", recorded every time a scan completes for a collection, REGARDLESS of whether anything was found missing. \"Last dealt with\" only updates on a real fix (Extract/Download Archive); \"Last checked\" answers a different question -- \"when did I last confirm this collection was clean (or at least looked at it)\", even on a scan that found zero problems.\n\nREUSE, DON'T REINVENT: extend the exact same lightweight store already built for this -- `lib/rebuild-missing-last-fixed-state.js` (gitignored JSON file, collectionModId -> ISO timestamp map, same simple load/save pattern as `lib/backup-ratio-dismiss-state.js`). Add a sibling `lastChecked` map next to the existing `lastFixed` one in the same file/same JSON structure (not a second file) -- `markChecked(collectionModId)` / `getLastChecked(collectionModId)`, mirroring `markFixed`/`getLastFixed` exactly. Same collectionModId-keying rationale already documented in that file's own header (resets are correct behavior when a collection's staging folder changes identity, not a bug).\n\nSCOPE:\n1. `lib/rebuild-missing-last-fixed-state.js`: add `markChecked`/`getLastChecked` alongside the existing pair, extending `DEFAULT_STATE`/`loadState`/`saveState` to cover both maps.\n2. `web/rebuild-missing-routes.js`: call `markChecked(collectionModId)` once per collection at scan completion -- unconditionally, unlike `markFixed` which only fires on a real fix. Find the real per-collection completion point in `lib/missing-files-scan.js`'s `scanCollections` (~line 211-254, the per-collectionModId loop) and call this from the route handler that already owns `lastFixedState` (matching the existing layering -- the lib itself doesn't import the state store, the route does), not from inside the lib.\n3. Also include `lastChecked` in the same `GET /collections` response that already returns `lastFixed` (`item.lastFixed = lastFixedState.getLastFixed(item.modId)`, ~line 88) -- add the equivalent `item.lastChecked = lastFixedState.getLastChecked(item.modId)` right alongside it.\n4. `web/public/rebuild-missing-app.js`: display both on the picker card's sub-line, matching the existing `— Last dealt with: {date}` convention (~line 165-166). Two real timestamps on one card needs a sensible display decision -- if both exist and are close/identical (a fix always implies a check happened), don't show redundant near-duplicate text; if only one exists (checked but nothing to fix, or vice versa -- though a fix without ever completing a scan shouldn't be possible given the scan-then-fix flow), show just that one. Use your own judgment on the exact layout (same line vs. a second line) and flag it in the handoff rather than guessing silently, since this is a real small UX call.\n\nVERIFY LIVE: run a real scan against a collection that comes back completely clean (zero missing files) -- confirm `lastChecked` updates even though `lastFixed` doesn't. Run a real scan + a real fix on a different collection -- confirm both timestamps update appropriately. Reload the page and confirm both persist (not just an in-memory optimistic update). Handoff with what you tested and your own display-layout call.",
-      "ready": true
-    }
-  ],
+  "items": [],
   "roadmap": [
     {
       "title": "Theming framework (Phase 2)",
@@ -105,6 +96,9 @@
     },
     {
       "title": "Workshop Report: sortable \"Last updated on Nexus\" column (newest↔oldest)"
+    },
+    {
+      "title": "Rebuild Missing Files: \"Last checked\" timestamp (and \"Last dealt with\" renamed to \"Last extracted\")"
     }
   ]
 }
