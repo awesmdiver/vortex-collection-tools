@@ -285,6 +285,7 @@ function rmfHandleScanEvent(frame) {
 function rmfRenderReport(collectionResults, stats, refreshFailures) {
   rmfState.rows = [];
   rmfState.selected = new Set();
+  rmfKindFilter = null; // a fresh scan starts clean -- same reset as rmfState.selected above
   const failedCollections = collectionResults.filter((c) => c.error);
   if (failedCollections.length > 0) {
     $g('rmfScanError').textContent = `Couldn't check ${failedCollections.length} collection(s): ` +
@@ -331,10 +332,76 @@ function rmfRenderReport(collectionResults, stats, refreshFailures) {
   rmfRenderRows();
 }
 
+// ---------- Filter badges (Select All/Clear Selection's own row-kind filter) ----------
+// Same clickable filter-badge convention as Missing Masters' own mmSummaryBadges/mmStatusFilter
+// and Stats Report's statsIssuesBadges -- copied, not reinvented (queue: rebuild-missing-filter-badges).
+// Labels match this table's own already-established row copy (rmfBuildMissingCell's "Can't check
+// without the archive.", the archive-missing-note's "⚠️ {reason}") rather than inventing new
+// wording -- "Archive Issue" covers both an archive-missing reason it can be ("no archive found" OR
+// "found one but it doesn't match"), which "Archive Missing" alone would misdescribe for the
+// mismatch case.
+const RMF_KIND_INFO = {
+  missing: { label: 'Missing', badgeClass: 'badge--critical' },
+  'archive-missing': { label: 'Archive Issue', badgeClass: 'badge--warning' },
+};
+
+// null shows everything -- same toggle-on-click behavior as mmStatusFilter (click the active pill
+// again, or "Show all", to clear).
+let rmfKindFilter = null;
+
+function rmfRenderSummaryBadges() {
+  const badgesEl = $g('rmfSummaryBadges');
+  badgesEl.innerHTML = '';
+  if (rmfState.rows.length === 0) return; // nothing to filter when the list itself is empty
+  const counts = {};
+  for (const row of rmfState.rows) counts[row.kind] = (counts[row.kind] || 0) + 1;
+  // Fixed order (missing first -- the category fixable right here) rather than object insertion
+  // order, so pills don't reshuffle position as counts change between renders.
+  for (const key of ['missing', 'archive-missing']) {
+    if (!counts[key]) continue;
+    const info = RMF_KIND_INFO[key];
+    const active = rmfKindFilter === key;
+    const badge = el('span', {
+      class: `badge ${info.badgeClass} badge--clickable${active ? ' badge--filter-active' : ''}`,
+      'data-kind': key,
+    }, [el('span', { class: 'badge__count' }, String(counts[key])), ' ' + info.label]);
+    badge.addEventListener('click', () => {
+      rmfKindFilter = active ? null : key;
+      rmfRenderRows();
+    });
+    badgesEl.appendChild(badge);
+  }
+  const showAll = el('span', { class: `badge badge--show-all${rmfKindFilter === null ? ' badge--filter-active' : ''}` }, 'Show all');
+  showAll.addEventListener('click', () => {
+    rmfKindFilter = null;
+    rmfRenderRows();
+  });
+  badgesEl.appendChild(showAll);
+}
+
 function rmfRenderRows() {
+  // Judgment call (flagged, not silently copied from Missing Masters): if the active filter's own
+  // category count just dropped to 0 (everything in it got fixed via Extract/Download Archive),
+  // reset to "Show all" here rather than leaving the user staring at an empty table with a filter
+  // that no longer means anything. Missing Masters' own mmRenderMasterList doesn't do this -- it
+  // just shows an empty-state message and leaves the stale filter active, which reads as "did my
+  // fix not work?" rather than "you fixed all of these." Recomputed every render (not just once)
+  // so counts always reflect the live row set, per this task's own scope item 5.
+  if (rmfKindFilter && !rmfState.rows.some((r) => r.kind === rmfKindFilter)) {
+    rmfKindFilter = null;
+  }
+  rmfRenderSummaryBadges();
+
   const tbody = $g('rmfRows');
   tbody.innerHTML = '';
-  rmfState.rows.forEach((row, idx) => {
+  // Filtered by original index, not the filtered array's own local index -- rmfState.selected and
+  // every action handler below key off the row's real position in rmfState.rows, unaffected by
+  // which rows are currently visible (a hidden row keeps its selection state, same as Archive
+  // Finder's own "Show selected only" toggle already does).
+  const entries = rmfState.rows
+    .map((row, idx) => ({ row, idx }))
+    .filter(({ row }) => !rmfKindFilter || row.kind === rmfKindFilter);
+  entries.forEach(({ row, idx }) => {
     const tr = el('tr', { 'data-idx': String(idx) });
     tr.classList.toggle('selected', rmfState.selected.has(idx));
 
