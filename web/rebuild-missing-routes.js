@@ -27,6 +27,7 @@ const express = require('express');
 const { listPickableCollections, scanCollections, scanOneMod } = require('../lib/missing-files-scan');
 const { loadCollection } = require('../lib/collection-parser');
 const { findSevenZip, extractMany } = require('../lib/sevenzip');
+const { existsPlainOrGhosted } = require('../lib/ghost-files');
 const nexusModDownload = require('../lib/nexus-mod-download');
 const nexusCollectionDownload = require('../lib/nexus-collection-download');
 const runner = require('../lib/collection-runner');
@@ -430,7 +431,11 @@ function createRebuildMissingRouter(config) {
             return { name, ok: false, error: 'The archive is no longer on disk -- try Download Archive, or re-scan.' };
         }
         const stagingModDir = path.join(staging, targetFolderName);
-        const stillMissing = files.filter((f) => !fs.existsSync(path.join(stagingModDir, f.destination)));
+        // A ".ghost"-suffixed sibling means Vortex already has this file, just deliberately disabled
+        // (see ghost-files.js) -- must be excluded here specifically, not just at scan time: without
+        // this, re-extracting it would restore the plain, ACTIVE file right alongside the still-
+        // present ghost, silently un-disabling the user's own Vortex choice.
+        const stillMissing = files.filter((f) => !existsPlainOrGhosted(stagingModDir, f.destination));
         if (stillMissing.length === 0) {
             return { name, ok: true, extracted: [], note: 'Already fixed -- nothing was actually missing anymore.' };
         }
