@@ -54,6 +54,10 @@ Home page, so you're never more than a click away from the one you need.
   a few files quietly went missing from staging — not your whole collection. Rebuild Missing Files
   checks one or more collections, shows you exactly what's gone mod by mod, and restores just those
   files straight from the archive.
+* **See when you actually last touched a Workshop collection:** Nexus shows a fixed date for a
+  private collection that never changes, even as you keep working on it. Workshop Report pulls the
+  real timestamp from the collection's own revision history instead, so you can sort newest to
+  oldest and spot exactly which ones are overdue for an update.
 * **Keeps your Ignored/Disabled choices:** Updating a collection in Vortex normally forgets which
   mods you'd marked Ignored or Disabled, leaving you to dig through a list of 1,900+ mods to turn
   off the same 35 again. This tool snapshots those choices before the update and restores them
