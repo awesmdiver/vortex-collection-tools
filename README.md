@@ -58,6 +58,11 @@ Home page, so you're never more than a click away from the one you need.
   private collection that never changes, even as you keep working on it. Workshop Report pulls the
   real timestamp from the collection's own revision history instead, so you can sort newest to
   oldest and spot exactly which ones are overdue for an update.
+* **Skip mods that need a human, not a rebuild:** Some mods are hand-pick-only installers where you
+  deliberately chose just a few of the files inside — auto-restoring "everything" would install
+  content you never wanted, risking missing masters or crashes. Add a mod to the Mod Exceptions
+  list once, and both Rebuild Collection and Rebuild Missing Files leave it alone from then on,
+  wherever it shows up.
 * **Keeps your Ignored/Disabled choices:** Updating a collection in Vortex normally forgets which
   mods you'd marked Ignored or Disabled, leaving you to dig through a list of 1,900+ mods to turn
   off the same 35 again. This tool snapshots those choices before the update and restores them
