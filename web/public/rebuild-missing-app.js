@@ -310,6 +310,12 @@ function rmfRenderReport(collectionResults, stats, refreshFailures) {
     for (const mod of c.modsArchiveMissing || []) {
       rmfState.rows.push({ kind: 'archive-missing', collectionModId: c.collectionModId, collectionName: c.name, ...mod });
     }
+    // A mod Ignored in Vortex (queue: rebuild-missing-ignored-mods) -- server already reclassified
+    // it out of modsWithMissing/modsArchiveMissing, so stats.modsWithMissing/filesMissing below
+    // never counted it either. Acknowledged tier, not a problem to fix.
+    for (const mod of c.modsIgnored || []) {
+      rmfState.rows.push({ kind: 'ignored', collectionModId: c.collectionModId, collectionName: c.name, ...mod });
+    }
   }
 
   $g('rmfResults').classList.remove('hidden');
@@ -343,6 +349,9 @@ function rmfRenderReport(collectionResults, stats, refreshFailures) {
 const RMF_KIND_INFO = {
   missing: { label: 'Missing', badgeClass: 'badge--critical' },
   'archive-missing': { label: 'Archive Issue', badgeClass: 'badge--warning' },
+  // Acknowledged tier (DESIGN.md's own fifth, non-severity tier -- grey, informational, not a
+  // problem) -- same badgeClass token pair Missing Masters' own mm-row--soft already uses.
+  ignored: { label: 'Ignored', badgeClass: 'badge--neutral' },
 };
 
 // null shows everything -- same toggle-on-click behavior as mmStatusFilter (click the active pill
@@ -357,7 +366,7 @@ function rmfRenderSummaryBadges() {
   for (const row of rmfState.rows) counts[row.kind] = (counts[row.kind] || 0) + 1;
   // Fixed order (missing first -- the category fixable right here) rather than object insertion
   // order, so pills don't reshuffle position as counts change between renders.
-  for (const key of ['missing', 'archive-missing']) {
+  for (const key of ['missing', 'archive-missing', 'ignored']) {
     if (!counts[key]) continue;
     const info = RMF_KIND_INFO[key];
     const active = rmfKindFilter === key;
@@ -403,6 +412,11 @@ function rmfRenderRows() {
     .filter(({ row }) => !rmfKindFilter || row.kind === rmfKindFilter);
   entries.forEach(({ row, idx }) => {
     const tr = el('tr', { 'data-idx': String(idx) });
+    // Acknowledged tier (DESIGN.md's own fifth, non-severity tier) -- muted grey row, same
+    // background/left-edge treatment as the "selected" state below but with --neutral instead of
+    // --accent (see .row--ignored in styles.css). A mod Ignored in Vortex looks like a problem at
+    // a glance otherwise; this downgrades it the same way Missing Masters' own mm-row--soft does.
+    if (row.kind === 'ignored') tr.classList.add('row--ignored');
     tr.classList.toggle('selected', rmfState.selected.has(idx));
 
     const checkbox = el('input', { type: 'checkbox' });
@@ -419,6 +433,8 @@ function rmfRenderRows() {
     const modCell = el('td', {}, [el('div', { class: 'mod' }, row.name)]);
     if (row.kind === 'archive-missing') {
       modCell.appendChild(el('div', { class: 'archive-missing-note' }, `⚠️ ${row.reason}`));
+    } else if (row.kind === 'ignored') {
+      modCell.appendChild(el('div', { class: 'ignored-note' }, `⚪ ${row.reason}`));
     }
     tr.appendChild(modCell);
 
@@ -437,6 +453,9 @@ const RMF_FILE_LIST_TRUNCATE_AT = 6;
 function rmfBuildMissingCell(row, idx) {
   if (row.kind === 'archive-missing') {
     return el('span', { class: 'muted' }, "Can't check without the archive.");
+  }
+  if (row.kind === 'ignored') {
+    return el('span', { class: 'muted' }, 'Not checked — ignored in Vortex.');
   }
   const wrap = el('div', { class: 'detail-cell' }, [
     el('span', { class: 'status-pill status-pill--critical' }, `${row.missing.length} missing`),
@@ -464,6 +483,11 @@ function rmfBuildActionsCell(row, idx) {
     const openBtn = el('button', { class: 'btn btn--ghost btn--small' }, 'Open Staging Folder');
     openBtn.addEventListener('click', () => rmfOpenStagingFolder(row));
     actions.appendChild(openBtn);
+  } else if (row.kind === 'ignored') {
+    // Acknowledged tier -- nothing to fix here, so no action buttons at all (DESIGN.md's own rule:
+    // showing a "here's how to fix it" button next to a row that says "nothing to fix" reads as a
+    // contradiction). Left empty rather than a placeholder note -- the mod-name cell's own
+    // "⚪ {reason}" note already says why.
   } else if (row.modId != null) {
     const dlBtn = el('button', { class: 'btn btn--small' }, 'Download Archive');
     dlBtn.addEventListener('click', () => rmfDownloadArchive(row, idx, dlBtn));

@@ -30,6 +30,7 @@ const { findSevenZip, extractMany } = require('../lib/sevenzip');
 const nexusModDownload = require('../lib/nexus-mod-download');
 const nexusCollectionDownload = require('../lib/nexus-collection-download');
 const runner = require('../lib/collection-runner');
+const syncRunner = require('../lib/sync-runner');
 const syncLib = require('../lib/vortex-sync/lib');
 const appConfig = require('../lib/app-config');
 const { createSseSession } = require('./sse-session');
@@ -312,13 +313,18 @@ function createRebuildMissingRouter(config) {
     // on isVortexRunning() up front, synchronously, before the SSE session even starts -- every
     // refresh needs a real state.v2 read to resolve its own slug, so this fails fast with the normal
     // 409 shape instead of starting a scan session that's doomed to fail partway through.
+    // Ignored-mod awareness (queue: rebuild-missing-ignored-mods) is why this now ALWAYS needs
+    // Vortex closed, not just when refreshFirst is non-empty -- listIgnoredMods is a genuinely new
+    // live Vortex-state read for this scan (previously it was pure filesystem, see
+    // missing-files-scan.js's own header comment), gated the exact same way every other live-state
+    // read in this router already is.
     router.post('/scan', (req, res) => {
         if (!requireConfigured(res)) return;
         const collectionModIds = Array.isArray(req.body?.collectionModIds) ? req.body.collectionModIds : [];
         const refreshFirst = Array.isArray(req.body?.refreshFirst) ? req.body.refreshFirst : [];
         if (collectionModIds.length === 0) return res.status(400).json({ error: 'Pick at least one collection to check.' });
         if (scanSession.isActive()) return res.status(409).json({ error: 'A scan is already in progress.' });
-        if (refreshFirst.length > 0 && syncLib.isVortexRunning()) {
+        if (syncLib.isVortexRunning()) {
             return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
         }
 
@@ -348,8 +354,29 @@ function createRebuildMissingRouter(config) {
                     }
                 }
 
+                // One listIgnoredMods call per collection (lib/sync-runner.js -- the exact primitive
+                // Update Collection's own Apply Ignores flow already uses), turned into a plain
+                // identity-matching function via vortex-sync/lib.js's own makeIdentityMatcher --
+                // that's the SAME cross-shape matcher this codebase already uses everywhere an
+                // Ignored/Disabled ref needs to be matched against a collection.json mod's own
+                // source, not new logic. Fails open per-collection (empty ignored list, not an
+                // aborted scan) -- a lookup failure here should never wrongly SUPPRESS the ignored
+                // check by crashing the whole run, and should never silently mislabel a real problem
+                // as ignored either; failing open just means this one collection's ignored mods (if
+                // any) show up as normal missing/archive-issue rows instead, same as before this
+                // feature existed.
+                const ignoredMatchers = new Map();
+                for (const collectionModId of collectionModIds) {
+                    try {
+                        const ignored = await syncRunner.listIgnoredMods({ stateDir: state, modId: collectionModId });
+                        ignoredMatchers.set(collectionModId, syncLib.makeIdentityMatcher(ignored));
+                    } catch {
+                        ignoredMatchers.set(collectionModId, () => null);
+                    }
+                }
+
                 const collectionResults = await scanCollections(collectionModIds, {
-                    stagingDir: staging, downloadsDir: downloads, sevenZipExe,
+                    stagingDir: staging, downloadsDir: downloads, sevenZipExe, ignoredMatchers,
                     onProgress: (p) => emitIfCurrent({ type: 'mod-scanned', ...p }),
                 });
                 const statColls = collectionResults.filter((c) => !c.error).length;
