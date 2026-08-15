@@ -1,16 +1,7 @@
 {
   "project": "vortex-collection-tools",
   "inFlight": null,
-  "items": [
-    {
-      "id": "workshop-report-sort-by-updated",
-      "tag": "feature",
-      "title": "Workshop Report: sortable \"Last updated on Nexus\" column (newest↔oldest)",
-      "why": "Director wants to quickly spot which Workshop collections are most out of date by sorting on the real Nexus timestamp this report already shows, instead of scanning the whole list by eye.",
-      "prompt": "Director's ask: make Workshop Report's \"Last updated on Nexus\" column header (`web/public/index.html`'s `#wrTableWrap` table) clickable to sort -- newest-to-oldest and oldest-to-newest -- so it's fast to spot which collections are furthest out of date.\n\nNO EXISTING PATTERN TO COPY: checked -- no other report/table in this app has a sortable column header today, this is a genuinely new UI pattern. Keep it simple and self-evident rather than over-building: a clickable `<th>`, a small arrow/caret indicating current direction, click to toggle between newest-first and oldest-first (2 states -- the director asked for exactly these two, not a 3rd 'unsorted' state, so a simple toggle is enough, no need for a reset-to-default click).\n\nSCOPE:\n1. Make the \"Last updated on Nexus\" `<th>` clickable (cursor:pointer, hover state matching this app's other clickable elements) with a small direction indicator (▲/▼ or similar) next to the label, shown once a sort is active.\n2. Client-side sort of `wrCurrentRows` by `row.updatedAt` (already on each row) -- no new server round-trip needed, this is a pure client-side re-render of data already loaded. A row with no `updatedAt` at all (not checked yet / no slug) should sort to the end regardless of direction, not interleaved by some default date value.\n3. Default (before the header's ever clicked): whatever order the report already renders in today (don't change the current default) -- sorting only kicks in once the user clicks the header.\n4. Re-render via the existing `wrRenderRows` (or whatever it's now called after the filter-badges-equivalent work, if any exists here) rather than a separate render path.\n\nVERIFY live against a real mixed list (several different real timestamps, plus at least one row with no timestamp) -- click once, confirm newest-first with no-timestamp rows at the end; click again, confirm oldest-first with no-timestamp rows still at the end (not jumping to the front); confirm a fresh \"Check Nexus for updates\" run doesn't lose the active sort unexpectedly (state your own call on whether it should persist through a re-check or reset -- either is defensible, just say which and why). Handoff with what you tested.",
-      "ready": true
-    }
-  ],
+  "items": [],
   "roadmap": [
     {
       "title": "Theming framework (Phase 2)",
@@ -102,6 +93,9 @@
     },
     {
       "title": "Rebuild Missing Files: show \"Last dealt with\" per collection, like Rebuild Collection's Last extracted"
+    },
+    {
+      "title": "Workshop Report: sortable \"Last updated on Nexus\" column (newest↔oldest)"
     }
   ]
 }
