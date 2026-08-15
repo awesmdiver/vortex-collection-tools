@@ -31,9 +31,17 @@ async function rmfApi(method, urlPath, body) {
   return data;
 }
 
-function rmfHandleError(e, box) {
+// retryFn (queue: rebuild-missing-vortex-retry-noop): the function to re-run when the user clicks
+// the "Vortex is running" modal's own Try Again button (shell.js's showVortexRunningModal calls
+// whatever it's given). Every call site below now passes the real action that hit the gate --
+// confirmed real 2026-08-15: this was hardcoded to `() => {}` for ALL 11 call sites in this file,
+// so Try Again silently did nothing everywhere, not just the scan-start case the director hit.
+// Same class of bug already fixed once in merge-app.js (2026-07-28, see its own mergeHandleError
+// comment) -- falls back to a no-op only if a caller genuinely has nothing to retry (none do here;
+// every site below has a real action available).
+function rmfHandleError(e, box, retryFn) {
   if (e.status === 409 && e.body?.error === 'vortex-running') {
-    window.showVortexRunningModal(() => {});
+    window.showVortexRunningModal(retryFn || (() => {}));
     return;
   }
   if (window.isServerUnreachableError && window.isServerUnreachableError(e)) {
@@ -82,7 +90,7 @@ async function rmfLoadCollections() {
     }
   } catch (e) {
     $g('rmfPickerLoading').classList.add('hidden');
-    rmfHandleError(e, $g('rmfNotConfigured'));
+    rmfHandleError(e, $g('rmfNotConfigured'), rmfLoadCollections);
   }
 }
 
@@ -122,7 +130,9 @@ function rmfUpdateRefreshWarning() {
   }
 }
 
-$g('rmfLoadVortexDataBtn').addEventListener('click', async () => {
+// Named (not an inline listener) so a Vortex-running retry can re-call the exact same logic --
+// same reasoning as rmfDoExtract further below.
+async function rmfLoadVortexData() {
   const btn = $g('rmfLoadVortexDataBtn');
   const original = btn.textContent;
   btn.disabled = true;
@@ -136,12 +146,13 @@ $g('rmfLoadVortexDataBtn').addEventListener('click', async () => {
       : `Found ${result.notDownloaded.length} un-fetched Workshop collection${result.notDownloaded.length === 1 ? '' : 's'}.`;
     rmfRenderUnfetchedGroup(result.notDownloaded);
   } catch (e) {
-    rmfHandleError(e, $g('rmfVortexDataError'));
+    rmfHandleError(e, $g('rmfVortexDataError'), rmfLoadVortexData);
   } finally {
     btn.disabled = false;
     btn.textContent = original;
   }
-});
+}
+$g('rmfLoadVortexDataBtn').addEventListener('click', rmfLoadVortexData);
 
 function rmfRenderPickerGroup(sectionId, gridId, countId, items, prefix, countText) {
   $g(sectionId).classList.toggle('hidden', items.length === 0);
@@ -288,7 +299,7 @@ async function rmfStartScan() {
     // state.v2 read, which is a real failure, not something to silently attach past.
     if (e.status !== 409 || e.body?.error === 'vortex-running') {
       $g('rmfScanLoading').classList.add('hidden');
-      rmfHandleError(e, $g('rmfScanError'));
+      rmfHandleError(e, $g('rmfScanError'), rmfStartScan);
       return;
     }
   }
@@ -311,7 +322,7 @@ function rmfHandleScanEvent(frame) {
   } else if (frame.type === 'scan-error') {
     $g('rmfScanLoading').classList.add('hidden');
     if (rmfState.eventSource) { rmfState.eventSource.close(); rmfState.eventSource = null; }
-    rmfHandleError(new Error(frame.message || 'The scan failed.'), $g('rmfScanError'));
+    rmfHandleError(new Error(frame.message || 'The scan failed.'), $g('rmfScanError'), rmfStartScan);
   }
 }
 
@@ -585,7 +596,7 @@ async function rmfAddException(row, btn) {
   } catch (e) {
     btn.disabled = false;
     btn.textContent = original;
-    rmfHandleError(e, $g('rmfScanError'));
+    rmfHandleError(e, $g('rmfScanError'), () => rmfAddException(row, btn));
   }
 }
 
@@ -654,9 +665,11 @@ function rmfSetExtractingUI(active) {
   if (!active) rmfRefreshSelectionUI();
 }
 
-$g('rmfExtractConfirmOkBtn').addEventListener('click', async () => {
-  $g('rmfExtractConfirmModal').classList.add('hidden');
-  const indices = rmfPendingExtractIndices;
+// Named (not just an inline listener body) so a Vortex-running retry -- from either the initial
+// POST failing or the SSE stream itself later reporting extract-error -- can re-run the exact same
+// extraction for the same `indices`, rather than leaving Try Again a no-op (queue: rebuild-missing-
+// vortex-retry-noop).
+async function rmfDoExtract(indices) {
   const items = indices.map((i) => {
     const row = rmfState.rows[i];
     // collectionModId (queue: rebuild-missing-last-fixed) -- lets the server mark the right
@@ -670,13 +683,18 @@ $g('rmfExtractConfirmOkBtn').addEventListener('click', async () => {
     await rmfApi('POST', '/api/rebuild-missing/extract', { items });
   } catch (e) {
     rmfSetExtractingUI(false);
-    rmfHandleError(e, $g('rmfScanError'));
+    rmfHandleError(e, $g('rmfScanError'), () => rmfDoExtract(indices));
     return;
   }
   if (rmfState.extractEventSource) rmfState.extractEventSource.close();
   const es = new EventSource('/api/rebuild-missing/extract/events');
   rmfState.extractEventSource = es;
   es.onmessage = (msg) => rmfHandleExtractEvent(JSON.parse(msg.data), indices);
+}
+
+$g('rmfExtractConfirmOkBtn').addEventListener('click', () => {
+  $g('rmfExtractConfirmModal').classList.add('hidden');
+  rmfDoExtract(rmfPendingExtractIndices);
 });
 
 function rmfHandleExtractEvent(frame, indices) {
@@ -689,7 +707,7 @@ function rmfHandleExtractEvent(frame, indices) {
   } else if (frame.type === 'extract-error') {
     rmfSetExtractingUI(false);
     if (rmfState.extractEventSource) { rmfState.extractEventSource.close(); rmfState.extractEventSource = null; }
-    rmfHandleError(new Error(frame.message || 'The extraction failed.'), $g('rmfScanError'));
+    rmfHandleError(new Error(frame.message || 'The extraction failed.'), $g('rmfScanError'), () => rmfDoExtract(indices));
   }
 }
 
@@ -759,7 +777,7 @@ async function rmfDownloadArchive(row, idx, btn) {
   } catch (e) {
     btn.disabled = false;
     btn.textContent = original;
-    rmfHandleError(e, $g('rmfScanError'));
+    rmfHandleError(e, $g('rmfScanError'), () => rmfDownloadArchive(row, idx, btn));
   }
 }
 
@@ -769,7 +787,7 @@ async function rmfOpenStagingFolder(row) {
   try {
     await rmfApi('POST', '/api/rebuild-missing/open-staging-folder', { targetFolderName: row.targetFolderName });
   } catch (e) {
-    rmfHandleError(e, $g('rmfScanError'));
+    rmfHandleError(e, $g('rmfScanError'), () => rmfOpenStagingFolder(row));
   }
 }
 
@@ -802,6 +820,6 @@ async function rmfStartFirstFetch(item, btn) {
   } catch (e) {
     btn.disabled = false;
     btn.textContent = original;
-    rmfHandleError(e, $g('rmfRefreshError'));
+    rmfHandleError(e, $g('rmfRefreshError'), () => rmfStartFirstFetch(item, btn));
   }
 }
