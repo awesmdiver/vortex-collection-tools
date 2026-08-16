@@ -1,15 +1,16 @@
-# Gemini prompts — Home section banner images (Skyrim theme)
+# Gemini prompts — Home banner images (Skyrim theme)
 
-Home groups its cards into three sections (Main tools / Reports / Utilities). Director's ask
-(2026-08-15, reviewing Phase 2 theming): a themed banner image separating each section, same
-Gemini-illustrated approach as the release banners (`design/gemini-release-banner-prompts.md`) — not
-a plain CSS divider.
+Home groups its cards into three sections (Main tools / Reports / Utilities), sitting below its own
+welcome banner (The Arcaneum). Director's ask (2026-08-15, reviewing Phase 2 theming): a themed
+banner image at the top of Home, plus one separating each section below it — same Gemini-illustrated
+approach as the release banners (`design/gemini-release-banner-prompts.md`), not a plain CSS divider.
 
-**These are a shallow wide STRIP, not a full-bleed hero** like the release banners. Home's card grid
-is capped ~1280px centered — propose **2560×440** (roughly the same wide-banner language, much
-shorter), so it reads as a divider between card groups, not a dominating header. Same carved-sign
-Nordic-fantasy style as the release banners for visual family consistency, just a lower, thinner
-composition since it has to sit between rows of cards without shoving them down the page.
+**Two different sizes, on purpose.** The Arcaneum banner is Home's own front door — it gets the
+**same full-bleed hero treatment as a release banner** (2816×1536), the most prominent image in the
+app. The three section dividers below it are a **shallow wide strip** (2560×440) — Home's card grid
+is capped ~1280px centered, and a second full hero per section would shove the actual tool cards
+halfway down the page. Same carved-sign Nordic-fantasy style throughout for visual family
+consistency; only the composition height changes.
 
 **Section names — two of three still need a real four-brain pass.** Only "Reports" was ever
 drafted/reasoned (`design/theme-content-skyrim.md`'s "why these names" section). "Main tools" and
@@ -28,11 +29,22 @@ run with them:**
   itself but always on hand. *(what you carry with you)*
 
 When a banner comes back: same flow as the release banners — save full-res as
-`assets/section-banner-<slug>-original.png`, run
-`node scripts/compress-image.js assets/section-banner-<slug>-original.png` (emits the compressed
-`assets/section-banner-<slug>.png`, ~1280px wide). Wiring these into the actual Home page (a new
-`sections` map in `themes/skyrim.json`, a banner element between each `.home-section`'s heading and
-its card grid) is a follow-up once real images exist — not part of this prompt-spec pass.
+`assets/home-banner-<slug>-original.png`, run
+`node scripts/compress-image.js assets/home-banner-<slug>-original.png` (emits the compressed
+`assets/home-banner-<slug>.png`). Wiring these into the actual Home page (an image slot above Home's
+own tool-hero for The Arcaneum, plus a new `sections` map in `themes/skyrim.json` for the three
+dividers) is a follow-up once real images exist — not part of this prompt-spec pass.
+
+## The Arcaneum (Home, top-of-page hero)
+
+Already-locked name (`theme-content-skyrim.md`) — the College of Winterhold's own great library,
+where every tome (tool) is shelved and waiting.
+
+Tagline: **"Every tool in the collection, shelved and waiting."**
+
+```
+A dark, moody Skyrim-style Nordic fantasy scene, photorealistic and cinematic, wide banner composition (2816x1536). The great arcane library of a mage's college -- towering shelves of ancient tomes curve away into shadow on either side, connected by iron-railed balconies and narrow ladders; at the center, a wide reading table sits beneath a shaft of soft light from a high stained-glass window, a handful of open books and scrolls laid out as if just set down, each glowing faintly with its own small magical light -- one with a warm forge-orange glow, one a cool ward-blue, one trailing golden script. Dust motes drift through the light; the rest of the vast room recedes into warm candlelit shadow. At the top, a large carved weathered wooden sign hangs by iron chains from the balcony above, with ornate Nordic knotwork carving, reading in bold engraved fantasy-serif lettering: "THE ARCANEUM" and beneath it in smaller engraved text: "Every tool in the collection, shelved and waiting." Rich detail, atmospheric depth, dramatic rim lighting.
+```
 
 ## The Rites (Main tools)
 
@@ -59,6 +71,7 @@ A dark, moody Skyrim-style Nordic fantasy scene, photorealistic and cinematic, w
 ```
 
 ## Status
-- **Pending:** all three — prompts ready, no banners generated yet. "The Rites"/"The Satchel" also
+- **Pending:** all four — prompts ready, no banners generated yet. "The Rites"/"The Satchel" also
   need their names confirmed (not yet run through a four-brain pass) before any banner referencing
-  them gets treated as locked.
+  them gets treated as locked. The Arcaneum's own name is already locked, only the banner image
+  itself is new.
