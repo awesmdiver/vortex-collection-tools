@@ -5,13 +5,18 @@
   "roadmap": [
     {
       "title": "Theming: Skyrim-flavored \"Get Started\" book",
-      "note": "The remaining third of \"visual flourishes\" (font picker + background gradient shipped 2026-08-15, see shipped list). Mocked up (design/vortex-visual-flourishes-mockup.html, approved live -- aged-parchment page, lore in the theme's own display font, \"what it actually does\" in plain voice). Not built. Two real writing passes needed first: lore paragraphs go through Gemini as a third brain (same four-brain process the original 13 tool names got); \"what it actually does\" boxes need writing across all ~16 tools (no Gemini needed, plain-language-writer voice). Where the page lives/is reached from is still open too.",
-      "doc": "design/vortex-visual-flourishes-mockup.html"
+      "note": "Mocked up (design/vortex-visual-flourishes-mockup.html, approved live). Content is done: lore for all 16 tools went through a real Gemini pass (design/get-started-book-content-draft-v1-Gemini.md), 2 names got relocked along the way (The Anvil's Mark, The Shadowmarked -- caught a naming collision with 2 other tools already called \"___ Ledger\"). Art is specced: 5 of 16 tools already have a reusable banner, 11 need one -- paste-ready prompts in design/gemini-book-tool-banner-prompts.md, none generated yet. Still not built: the actual page/route, and where it's reached from is still an open question.",
+      "doc": "design/get-started-book-content-draft-v1-Gemini.md"
     },
     {
       "title": "Theming: a real color picker + background color picker",
-      "note": "Director, same session (2026-08-15): on top of a full game theme (accent + brand strings), let the user pick their own accent color and background color directly, not just choose between Plain/Skyrim. Captured only -- not scoped or built. Real design questions before this can be speced: how it interacts with Appearance's existing light/dark accent split (plain.json currently needs a matched accentLight/accentHoverLight/accentBgLight trio per DESIGN.md's Phase 2 notes -- a free-form picker would need the same derivation, or the user picks per-mode); whether a custom color becomes its own saved \"theme\" or a per-user override layered on top of whichever brand theme is active; and where it lives in Settings (probably beside the new Style picker in General). Needs a mock-up before any build (standing order for big UI changes).",
-      "doc": "DESIGN.md"
+      "note": "Mocked up (design/vortex-color-picker-mockup.html) -- accent + background-tint pickers with a live preview, 3 open design questions flagged in the mockup itself (override vs. new saved theme; one color vs. a light/dark pair; what \"Reset\" resets to). Not built, pending sign-off on those 3 questions.",
+      "doc": "design/vortex-color-picker-mockup.html"
+    },
+    {
+      "title": "Minor: deep-link URL with a ?reports= sub-tab param can show the English page-title fallback briefly",
+      "note": "Found live 2026-08-15 verifying the Anvil's Mark/Shadowmarked rename, not caused by it -- a pre-existing Phase 2 timing gap. Loading e.g. ?theme=skyrim&area=reports&reports=workshop directly can call showReportsSubTab before theme.js's async fetch resolves, so the tab title/#headerMeta locks in the English fallback until the user navigates again. Low priority, cosmetic, self-corrects on any real navigation.",
+      "doc": null
     },
     {
       "title": "Harmonization (Phase 3a): multi-select filter badges -- built 2026-08-15, pending live spot-check",
