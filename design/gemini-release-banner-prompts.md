@@ -77,5 +77,6 @@ A dramatic Skyrim-style Nordic fantasy scene, photorealistic and cinematic, wide
   archived as `-v1` (+ `-v1-original`).
 - **Pending:** v0.6.0 The Vault-Keeper (Rebuild Missing Files) — prompt above ready, banner not yet
   generated.
-- **Pending:** v1.0.0 dragon-slain milestone banner — prompt above ready, banner not yet generated.
+- **Done 2026-08-15:** v1.0.0 dragon-slain milestone banner — generated, compressed, and live at
+  `assets/release-v1.0.0-banner.png`.
 - v0.2.0 / v0.1.0: left as-is (per user).
