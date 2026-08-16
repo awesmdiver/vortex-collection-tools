@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body>
+<title>Theming: real color picker + background tint (Pending review 2026-08-15)</title>
+<style>
+  :root{
+    --bg:#0d0f14; --surface:#161922; --surface-2:#1d212c; --border:#2a2f3d; --border-strong:#3a4152;
+    --text:#e6e9ef; --text-muted:#8b93a3; --accent:#9b72d1; --accent-hover:#b494dd; --accent-bg:rgba(155,114,209,0.14);
+    --success:#3ecf8e; --warning:#f5b942; --danger:#f0546b; --neutral:#7c8494;
+    --radius:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;font-size:15px;line-height:1.5}
+  .wrap{max-width:980px;margin:0 auto;padding:32px 24px 90px}
+  h1.page-title{font-size:22px;margin:0 0 6px}
+  .lead{color:var(--text-muted);font-size:14px;margin:0 0 30px;max-width:720px;line-height:1.65}
+  .section{margin:0 0 44px}
+  .section-title{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--accent);
+    font-weight:700;margin:0 0 6px}
+  .section-sub{color:var(--text-muted);font-size:13.5px;margin:0 0 18px;max-width:680px;line-height:1.65}
+  .note{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);
+    padding:12px 16px;font-size:13px;color:var(--text-muted);margin:14px 0 0;line-height:1.6}
+  .note b{color:var(--text)}
+  .field-label{font-size:12.5px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px}
+  .select,.input{font-family:inherit;font-size:13.5px;padding:7px 10px;border-radius:8px;
+    border:1px solid var(--border);background:var(--surface-2);color:var(--text)}
+  .btn{font-family:inherit;font-size:13.5px;font-weight:500;padding:7px 13px;border-radius:8px;
+    border:1px solid var(--border);background:var(--surface-2);color:var(--text);cursor:pointer}
+  .btn:hover{border-color:var(--accent)}
+  .btn--ghost{background:transparent}
+
+  /* ---- Settings mockup panel ---- */
+  .settings-mock{border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);padding:24px 26px}
+  .settings-mock h3{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin:22px 0 10px}
+  .settings-mock h3:first-child{margin-top:0}
+  .field-group{margin-bottom:16px}
+  .color-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .swatch-input{-webkit-appearance:none;appearance:none;width:38px;height:38px;border-radius:8px;
+    border:1px solid var(--border);background:none;cursor:pointer;padding:0}
+  .swatch-input::-webkit-color-swatch-wrapper{padding:3px}
+  .swatch-input::-webkit-color-swatch{border-radius:5px;border:none}
+  .hex-val{font-family:Consolas,monospace;font-size:12.5px;color:var(--text-muted);min-width:70px}
+  .reset-link{background:none;border:none;color:var(--accent);font-size:12.5px;cursor:pointer;
+    text-decoration:underline;padding:0;margin-left:auto}
+  .indent-row{margin-left:50px;margin-top:8px}
+
+  /* ---- Live preview ---- */
+  .preview{border:1px solid var(--border-strong);border-radius:var(--radius);overflow:hidden}
+  .preview__home{position:relative;padding:28px 26px;min-height:220px}
+  .preview__home::before{content:'';position:absolute;inset:0;pointer-events:none}
+  .preview__content{position:relative;z-index:1}
+  .preview__title{font-size:20px;font-weight:700;margin:0 0 6px;color:var(--text)}
+  .preview__lead{color:var(--text-muted);font-size:13px;margin:0 0 20px}
+  .mini-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+  .mini-card{border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--surface);position:relative}
+  .mini-card.sel{border-color:var(--pv-accent);background:var(--pv-accent-bg)}
+  .mini-card .n{font-weight:600;font-size:13.5px;margin-bottom:3px;color:var(--text)}
+  .mini-card .d{font-size:11.5px;color:var(--text-muted)}
+  .mini-btn{display:inline-block;margin-top:22px;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;
+    background:var(--pv-accent);color:#0b1220;border:none;cursor:default}
+  .mini-link{color:var(--pv-accent);font-size:12.5px;text-decoration:underline;margin-left:14px}
+</style>
+
+<div class="wrap">
+  <h1 class="page-title">Real color picker — accent + background tint</h1>
+  <p class="lead">The other half of "options are always the best" — instead of only choosing between
+  Plain and Skyrim's own fixed colors, pick your own. Two independent pickers: <b>accent</b> (buttons,
+  links, selected state — same color that got swapped from gold to purple earlier today) and
+  <b>background tint</b> (the faint Home gradient wash, also purple by default right now since it
+  derives from accent). Sign-off needed on the open questions below before this gets built for real.</p>
+
+  <!-- ============================================================ -->
+  <div class="section">
+    <div class="section-title">Settings mockup</div>
+    <p class="section-sub">Lives right below Font in Settings &gt; General &gt; Style — same
+    conditional-visibility idea, but scoped differently: Font only makes sense for a theme that HAS
+    fonts (Skyrim); color customization is useful regardless of Style, including Standard, so it's
+    always available once you're past the Style picker itself.</p>
+
+    <div class="settings-mock">
+      <h3>Style</h3>
+      <div class="field-group">
+        <label class="field-label">App style</label>
+        <select class="select"><option>Skyrim</option><option>Standard (no theme)</option></select>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Font</label>
+        <select class="select"><option>Cinzel (default)</option></select>
+      </div>
+
+      <h3>Color</h3>
+      <div class="field-group">
+        <label class="field-label">Accent color</label>
+        <div class="color-row">
+          <input type="color" class="swatch-input" id="accentPicker" value="#9b72d1">
+          <span class="hex-val" id="accentHex">#9b72d1</span>
+          <button class="reset-link" id="accentReset">Reset to Skyrim's own purple</button>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Background tint</label>
+        <div class="color-row">
+          <input type="color" class="swatch-input" id="bgPicker" value="#9b72d1">
+          <span class="hex-val" id="bgHex">#9b72d1</span>
+          <button class="reset-link" id="bgReset">Reset to match accent</button>
+        </div>
+        <p class="muted" style="font-size:12px;color:var(--text-muted);margin:8px 0 0">Only affects the
+        faint Home-page wash — never body text or card backgrounds, those stay exactly as readable as
+        they are today regardless of this color.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <div class="section">
+    <div class="section-title">Live preview — try both pickers above</div>
+    <p class="section-sub">Same Home mini-mockup as the visual-flourishes pass, wired to the two color
+    inputs above so you can see the real effect immediately, not just imagine it from a hex code.</p>
+    <div class="preview" id="previewFrame" style="--pv-accent:#9b72d1;--pv-accent-bg:rgba(155,114,209,.14)">
+      <div class="preview__home" id="previewHome">
+        <div class="preview__content">
+          <div class="preview__title">The Arcaneum</div>
+          <div class="preview__lead">Every tool in the collection, shelved and waiting.</div>
+          <div class="mini-grid">
+            <div class="mini-card sel"><div class="n">The Forge</div><div class="d">Merge Plugins</div></div>
+            <div class="mini-card"><div class="n">Restoration</div><div class="d">Rebuild Collection</div></div>
+            <div class="mini-card"><div class="n">The Ward</div><div class="d">Update Collection</div></div>
+          </div>
+          <div class="mini-btn">Scan for Missing Files →</div>
+          <span class="mini-link">which ones?</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <div class="section">
+    <div class="section-title">Open questions — need your call before I build this</div>
+    <div class="note">
+      <b>1. Does a custom color replace the theme's own, or sit alongside it?</b><br>
+      Proposed default: a <b>personal override layered on top of whichever Style is active</b> — not a
+      new saved "theme" of its own. Pick Skyrim, then customize its purple to whatever you want; switch
+      to Standard, your custom color stays saved for Skyrim and Standard gets its own (or none, if you
+      never touched it there). Simpler than a 3rd concept ("your own custom theme") competing with
+      Style/Font for what "theme" even means. Say the word if you'd rather it work differently.
+    </div>
+    <div class="note">
+      <b>2. Light/dark Appearance mode — one color for both, or two?</b><br>
+      Proposed default: <b>one color for both modes</b>, same as Skyrim's own purple today (Plain is
+      the one exception, with real separate light/dark hex values baked in from before theming existed
+      at all). Asking for two picks (one per Appearance mode) is more correct but doubles the UI for a
+      case most people won't need. Flag if you want the fuller two-color version instead.
+    </div>
+    <div class="note">
+      <b>3. Where does "Reset" reset TO?</b><br>
+      Proposed: back to whatever the currently-selected Style's own default is (Skyrim's purple,
+      Standard's blue) — not to some third neutral default. Shown above as "Reset to Skyrim's own
+      purple," which would read "Reset to Standard's own blue" if Style were set to Standard instead.
+    </div>
+  </div>
+</div>
+
+<script>
+  function hexOf(el){ return el.value; }
+  function applyColors(){
+    const accent = hexOf(document.getElementById('accentPicker'));
+    const bg = hexOf(document.getElementById('bgPicker'));
+    document.getElementById('accentHex').textContent = accent;
+    document.getElementById('bgHex').textContent = bg;
+    const r = parseInt(accent.slice(1,3),16), g = parseInt(accent.slice(3,5),16), b = parseInt(accent.slice(5,7),16);
+    document.getElementById('previewFrame').style.setProperty('--pv-accent', accent);
+    document.getElementById('previewFrame').style.setProperty('--pv-accent-bg', `rgba(${r},${g},${b},.14)`);
+    const br = parseInt(bg.slice(1,3),16), bgc = parseInt(bg.slice(3,5),16), bb = parseInt(bg.slice(5,7),16);
+    document.getElementById('previewHome').style.backgroundImage =
+      `radial-gradient(ellipse at 15% 0%, rgba(${br},${bgc},${bb},.16), transparent 45%), radial-gradient(ellipse at 85% 60%, rgba(${br},${bgc},${bb},.10), transparent 50%)`;
+  }
+  document.getElementById('accentPicker').addEventListener('input', applyColors);
+  document.getElementById('bgPicker').addEventListener('input', applyColors);
+  document.getElementById('accentReset').addEventListener('click', () => {
+    document.getElementById('accentPicker').value = '#9b72d1'; applyColors();
+  });
+  document.getElementById('bgReset').addEventListener('click', () => {
+    document.getElementById('bgPicker').value = hexOf(document.getElementById('accentPicker')); applyColors();
+  });
+  applyColors();
+</script>
+</body>
+</html>
