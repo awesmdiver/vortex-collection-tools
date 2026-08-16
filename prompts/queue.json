@@ -4,16 +4,6 @@
   "items": [],
   "roadmap": [
     {
-      "title": "Theming framework (Phase 1) -- built 2026-08-15, pending final sign-off",
-      "note": "The data-driven refactor (themes/plain.json + runtime loader) is built and verified live in both light/dark mode. Held out of \"shipped\" until the director does a final look alongside Phase 2 (they were built and reviewed together).",
-      "doc": "DESIGN.md"
-    },
-    {
-      "title": "Theming framework (Phase 2) -- built 2026-08-15, pending director's re-look",
-      "note": "First game theme (Skyrim) built: themes/skyrim.json, previewable live at ?theme=skyrim. Director's first look (\"overall I like it\") flagged breadcrumbs/nav still showing old names and asked for richer tool descriptions -- both fixed (breadcrumbs/Settings-rail/tab-title now themed; heroBody expanded with lore + function). Waiting on his own look at the fixes before marking shipped.",
-      "doc": "design/theme-content-skyrim.md"
-    },
-    {
       "title": "Theming: visual flourishes (background art, themed fonts, a Skyrim-flavored Get Started guide)",
       "note": "Director, thinking out loud while reviewing Phase 2 (2026-08-15): maybe a background image per theme, themed fonts for tool names, and a Skyrim-themed \"Get Started\" book reusing the release banner art to explain what each tool really does in more depth. Captured only -- not scoped or built. Needs its own mock-up before any build work (standing order for big UI/visual changes), and probably its own round of Gemini asset generation for backgrounds/book art.",
       "doc": null
@@ -127,6 +117,10 @@
     },
     {
       "title": "Rules Generator: stop surfacing phantom \"(unknown)\" rules that don't exist in Vortex's own current data"
+    },
+    {
+      "title": "Theming framework Phase 1 + Phase 2 -- data-driven brand refactor, first real theme (Skyrim), real picker",
+      "doc": "DESIGN.md"
     }
   ]
 }
