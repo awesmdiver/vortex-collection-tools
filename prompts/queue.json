@@ -9,6 +9,11 @@
       "doc": null
     },
     {
+      "title": "Theming: a real color picker + background color picker",
+      "note": "Director, same session (2026-08-15): on top of a full game theme (accent + brand strings), let the user pick their own accent color and background color directly, not just choose between Plain/Skyrim. Captured only -- not scoped or built. Real design questions before this can be speced: how it interacts with Appearance's existing light/dark accent split (plain.json currently needs a matched accentLight/accentHoverLight/accentBgLight trio per DESIGN.md's Phase 2 notes -- a free-form picker would need the same derivation, or the user picks per-mode); whether a custom color becomes its own saved \"theme\" or a per-user override layered on top of whichever brand theme is active; and where it lives in Settings (probably beside the new Style picker in General). Needs a mock-up before any build (standing order for big UI changes).",
+      "doc": "DESIGN.md"
+    },
+    {
       "title": "Harmonization (Phase 3)",
       "note": "back-port The Forge patterns + multi-select filter sweep",
       "doc": "DESIGN.md"
