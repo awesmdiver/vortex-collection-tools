@@ -14,8 +14,13 @@
       "doc": "DESIGN.md"
     },
     {
-      "title": "Harmonization (Phase 3)",
-      "note": "back-port The Forge patterns + multi-select filter sweep",
+      "title": "Harmonization (Phase 3a): multi-select filter badges -- built 2026-08-15, pending live spot-check",
+      "note": "Every clickable filter badge app-wide (Missing Masters, Rebuild Missing Files, Rules Generator + its Report, Stats, Work Through, Merge Plugins, Rebuild Collection's Plan + log-view pages) converted from single-select-isolate to real multi-select (workspace UX-PRINCIPLES.md rule 7). Verified via synthetic data in Merge/Rules Generator/Rebuild Missing Files (no real problem data in the environment at build time) -- worth a live spot-check once real problem mods/masters exist to click through for real.",
+      "doc": "DESIGN.md"
+    },
+    {
+      "title": "Harmonization (Phase 3b): back-port The Forge's cart-bar pattern",
+      "note": "The Forge (Merge Plugins) has a persistent sticky \"cart bar\" while picking multiple items (count + View chosen). Nothing else in the app has this -- Rebuild Missing Files' own multi-select collection picker just shows plain \"X collections selected\" text. Sequenced deliberately AFTER the filter-badge sweep (director's own call, 2026-08-15). Needs a mock-up/sign-off first (standing order for big UI changes) -- this is a real new visible UI pattern, not a mechanical fix like the filter sweep was.",
       "doc": "DESIGN.md"
     },
     {
