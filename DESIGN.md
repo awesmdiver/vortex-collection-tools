@@ -698,8 +698,40 @@ string and the accent color now come from `web/public/themes/plain.json`, applie
 from `window.activeTheme.appName` (set by `theme.js` once its fetch resolves) instead of a hardcoded
 literal. Verified live: the rendered app is byte-for-byte identical to before the refactor — same
 strings, same emoji, same `#5b8def` accent — with only `data-tool-id`/`data-brand-slot` attributes
-added to the markup. Phase 2 (game themes, the picker UI, full palettes) is still fully deferred; see
-below.
+added to the markup.
+
+**Phase 2 — first real theme, shipped 2026-08-15.** `web/public/themes/skyrim.json` (content from
+`design/theme-content-skyrim.md`) is built and live-verified, previewable via `?theme=<id>` (a
+temporary URL override for review — not the real picker, still deferred; see below). Two real gaps
+surfaced building it, both fixed as part of Phase 2 rather than carried forward:
+- **Breadcrumbs and nav labels weren't actually reachable by Phase 1's wiring.** The tool-eyebrow
+  breadcrumb, the Settings left-rail buttons + pane headers, and the browser-tab/`#headerMeta` label
+  (`AREA_LABELS`/`VIEW_LABELS`/`REPORTS_SUB_TAB_LABELS` in `shell.js`/`app.js`/`stats-app.js`) all sit
+  as *siblings* of `.tool-hero`, not descendants — Phase 1's container-scoped `data-tool-id` lookup
+  never reached them, so a themed app still showed English tool names everywhere except the two
+  places Phase 1 actually tested (Home cards, tool-hero). Fixed by adding `data-tool-id` to each
+  view's own outer `<section>`/`<main>` (not just `.tool-hero`) and a `window.themedToolName(id,
+  fallback)` helper (`theme.js`) for the three JS-driven label maps.
+- **`--accent` was silently breaking light mode.** `styles.css` already had a light/dark-aware accent
+  (a different blue per mode, via `@media (prefers-color-scheme)` + `[data-theme]`) — Phase 1's
+  single inline `--accent` override won over both branches unconditionally, pinning light mode to the
+  dark-mode hex. Confirmed live before the fix: `#5b8def` in light mode instead of the correct
+  `#3568c9` — Phase 1's own "byte-for-byte identical" claim was only ever checked in dark mode. Fixed
+  by having `theme.js` inject a real `<style>` block mirroring `styles.css`'s own two-branch
+  structure; schema gained optional `accentLight`/`accentHoverLight`/`accentBgLight` (Plain sets all
+  three, matching its exact pre-Phase-1 hex per mode; Skyrim doesn't yet — see Known gaps below).
+
+**Known gaps, not yet closed:**
+- **"Reports"/"Utilities" section-group labels have no themed name.** Only individual *tools* have a
+  stable ID + theme entry; the Home page's group headers and the matching breadcrumb/tab-title
+  segment for every report/utility sub-tool still read the plain English group name even under
+  Skyrim. `report-*`'s own drafted "The Chronicle" (see `design/theme-content-skyrim.md`) has nowhere
+  to live yet — would need a new `sections` map in the theme schema. "Utilities" has no drafted name
+  at all.
+- **Skyrim's accent has no light-mode variant** (unlike Plain) — same gold in both Appearance modes,
+  a reasonable first-pass simplification, not a fidelity requirement the way Plain's is.
+- **No real picker UI yet** — `?theme=<id>` is a developer/review-only override, not a user-facing
+  control. Still deferred, see below.
 
 There are now **two orthogonal theming layers**, and they must stay independent:
 

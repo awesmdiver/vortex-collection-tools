@@ -247,8 +247,8 @@
 <main id="app" class="app-main">
 
   <!-- View: collection picker -->
-  <section id="view-picker" class="view">
-    <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span>Rebuild Collection</div>
+  <section id="view-picker" class="view" data-tool-id="rebuild">
+    <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><span data-brand-slot="name">Rebuild Collection</span></div>
     <div class="tool-hero" data-tool-id="rebuild">
       <h2 class="tool-hero__title" data-brand-slot="heroTitle">⚡ Rebuild Collections in Minutes, Not Hours</h2>
       <p class="tool-hero__body" data-brand-slot="heroBody">Skip Vortex's slow archive-install process entirely! This tool re-extracts an already-installed collection's mods directly into your staging folder&mdash;same result, dramatically faster. Review exactly what would change before anything happens, then let it run while you do something else.</p>
@@ -320,8 +320,8 @@
   </section>
 
   <!-- View: browse logs -->
-  <section id="view-logs" class="view hidden">
-    <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><a class="tool-eyebrow__area" href="#" data-action="back-to-picker">Rebuild Collection</a></div>
+  <section id="view-logs" class="view hidden" data-tool-id="rebuild">
+    <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><a class="tool-eyebrow__area" href="#" data-action="back-to-picker" data-brand-slot="name">Rebuild Collection</a></div>
     <div class="view-header">
       <h1 id="logsCollectionName">Browse Logs</h1>
       <p class="muted">Every past run for this collection, most recent first.</p>
@@ -334,8 +334,8 @@
   </section>
 
   <!-- View: plan -->
-  <section id="view-plan" class="view hidden">
-    <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><a class="tool-eyebrow__area" href="#" data-action="back-to-picker">Rebuild Collection</a></div>
+  <section id="view-plan" class="view hidden" data-tool-id="rebuild">
+    <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><a class="tool-eyebrow__area" href="#" data-action="back-to-picker" data-brand-slot="name">Rebuild Collection</a></div>
     <div class="view-header">
       <h1 id="planTitle">Plan</h1>
     </div>
@@ -433,8 +433,8 @@
   </div>
 
   <!-- View: live progress -->
-  <section id="view-progress" class="view hidden">
-    <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><a class="tool-eyebrow__area" href="#" data-action="back-to-picker">Rebuild Collection</a></div>
+  <section id="view-progress" class="view hidden" data-tool-id="rebuild">
+    <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><a class="tool-eyebrow__area" href="#" data-action="back-to-picker" data-brand-slot="name">Rebuild Collection</a></div>
     <div class="view-header">
       <h1 id="progressTitle">Rebuilding&hellip;</h1>
       <div class="progress-header-row">
@@ -460,8 +460,8 @@
   </section>
 
   <!-- View: summary -->
-  <section id="view-summary" class="view hidden">
-    <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><a class="tool-eyebrow__area" href="#" data-action="back-to-picker">Rebuild Collection</a></div>
+  <section id="view-summary" class="view hidden" data-tool-id="rebuild">
+    <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><a class="tool-eyebrow__area" href="#" data-action="back-to-picker" data-brand-slot="name">Rebuild Collection</a></div>
     <div class="view-header">
       <h1>Done</h1>
     </div>
@@ -495,10 +495,10 @@
 
 <section id="area-sync" class="tool-area hidden">
 
-<main class="app-main">
+<main class="app-main" data-tool-id="sync">
   <!-- No "<h1>Update Collection</h1>" here -- the top nav tab already names the tool. This intro
        banner pitches the value instead (see DESIGN.md's "Tool intro banner" section). -->
-  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span>Update Collection</div>
+  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><span data-brand-slot="name">Update Collection</span></div>
   <div class="tool-hero" data-tool-id="sync">
     <h2 class="tool-hero__title" data-brand-slot="heroTitle">🔄 Update Without Redoing Your Mod Cleanup</h2>
     <p class="tool-hero__body" data-brand-slot="heroBody">Updating a collection in Vortex often resets your carefully-set <strong>Ignored</strong> and <strong>Disabled</strong> mods back to their defaults. This tool remembers exactly how you had things set and restores it after the update, so that cleanup work never has to happen twice. Work through the steps below in order &mdash; you'll hop over to Vortex between some of them, and your place here is saved while you do.</p>
@@ -780,24 +780,24 @@
   <div class="settings-layout">
     <nav class="settings-rail" id="settingsRail">
       <div id="settingsRailPinnedGroup"></div>
-      <div class="settings-rail__row">
-        <button class="settings-rail__item" data-cat="rebuild"><span class="settings-rail__icon">⚡</span>Rebuild Collection</button>
+      <div class="settings-rail__row" data-tool-id="rebuild">
+        <button class="settings-rail__item" data-cat="rebuild"><span class="settings-rail__icon" data-brand-slot="emoji">⚡</span><span data-brand-slot="name">Rebuild Collection</span></button>
         <button class="settings-rail__pin" data-pin-key="rebuild" title="Pin to top">☆</button>
       </div>
-      <div class="settings-rail__row">
-        <button class="settings-rail__item" data-cat="update"><span class="settings-rail__icon">🔄</span>Update Collection</button>
+      <div class="settings-rail__row" data-tool-id="sync">
+        <button class="settings-rail__item" data-cat="update"><span class="settings-rail__icon" data-brand-slot="emoji">🔄</span><span data-brand-slot="name">Update Collection</span></button>
         <button class="settings-rail__pin" data-pin-key="update" title="Pin to top">☆</button>
       </div>
-      <div class="settings-rail__row">
-        <button class="settings-rail__item" data-cat="missing"><span class="settings-rail__icon">🧩</span>Missing Masters</button>
+      <div class="settings-rail__row" data-tool-id="missing-masters">
+        <button class="settings-rail__item" data-cat="missing"><span class="settings-rail__icon" data-brand-slot="emoji">🧩</span><span data-brand-slot="name">Missing Masters</span></button>
         <button class="settings-rail__pin" data-pin-key="missing" title="Pin to top">☆</button>
       </div>
-      <div class="settings-rail__row">
-        <button class="settings-rail__item" data-cat="scrub"><span class="settings-rail__icon">🧽</span>Vortex Scrub</button>
+      <div class="settings-rail__row" data-tool-id="scrub">
+        <button class="settings-rail__item" data-cat="scrub"><span class="settings-rail__icon" data-brand-slot="emoji">🧽</span><span data-brand-slot="name">Vortex Scrub</span></button>
         <button class="settings-rail__pin" data-pin-key="scrub" title="Pin to top">☆</button>
       </div>
-      <div class="settings-rail__row">
-        <button class="settings-rail__item" data-cat="archive"><span class="settings-rail__icon">📦</span>Archive Finder</button>
+      <div class="settings-rail__row" data-tool-id="archive-finder">
+        <button class="settings-rail__item" data-cat="archive"><span class="settings-rail__icon" data-brand-slot="emoji">📦</span><span data-brand-slot="name">Archive Finder</span></button>
         <button class="settings-rail__pin" data-pin-key="archive" title="Pin to top">☆</button>
       </div>
       <div class="settings-rail__row">
@@ -813,10 +813,10 @@
     <div id="settingsPanes">
 
     <!-- Rebuild Collection -->
-    <section class="settings-pane" id="pane-rebuild">
+    <section class="settings-pane" id="pane-rebuild" data-tool-id="rebuild">
     <div class="settings-group">
       <div class="settings-group__header">
-        <h2>Rebuild Collection</h2>
+        <h2 data-brand-slot="name">Rebuild Collection</h2>
         <p class="muted">Rebuild a collection fast by extracting its mods straight into your staging folder.</p>
       </div>
 
@@ -872,10 +872,10 @@
     </section>
 
     <!-- Update Collection -->
-    <section class="settings-pane" id="pane-update">
+    <section class="settings-pane" id="pane-update" data-tool-id="sync">
     <div class="settings-group">
       <div class="settings-group__header">
-        <h2>Update Collection</h2>
+        <h2 data-brand-slot="name">Update Collection</h2>
         <p class="muted">Keeps your Ignored and Disabled mods set the way you had them after an update.</p>
       </div>
 
@@ -904,10 +904,10 @@
     </section>
 
     <!-- Missing Masters (Utilities area) -->
-    <section class="settings-pane" id="pane-missing">
+    <section class="settings-pane" id="pane-missing" data-tool-id="missing-masters">
     <div class="settings-group">
       <div class="settings-group__header">
-        <h2>Missing Masters</h2>
+        <h2 data-brand-slot="name">Missing Masters</h2>
         <p class="muted">Point Missing Masters at your Skyrim files here. It only reads these folders to track down missing masters -- it never changes anything in them.</p>
       </div>
 
@@ -954,10 +954,10 @@
     </section>
 
     <!-- Vortex Scrub (Utilities area) -->
-    <section class="settings-pane" id="pane-scrub">
+    <section class="settings-pane" id="pane-scrub" data-tool-id="scrub">
     <div class="settings-group">
       <div class="settings-group__header">
-        <h2>Vortex Scrub</h2>
+        <h2 data-brand-slot="name">Vortex Scrub</h2>
         <p class="muted">Mark folders and archives as safe to keep, and they'll stop showing up as "Action Needed" in Vortex Scrub.</p>
       </div>
 
@@ -1013,10 +1013,10 @@
     <!-- Archive Finder (folded in from the standalone "Archive File Finder" project 2026-07-28 --
          see TECHNICAL.md). Reuses the "Vortex downloads folder" (Paths & Backups) as its own scan
          folder -- no separate "scan folder" setting here, deliberately. -->
-    <section class="settings-pane" id="pane-archive">
+    <section class="settings-pane" id="pane-archive" data-tool-id="archive-finder">
     <div class="settings-group">
       <div class="settings-group__header">
-        <h2>Archive Finder</h2>
+        <h2 data-brand-slot="name">Archive Finder</h2>
         <p class="muted">Searches inside the mod archives in your Vortex downloads folder (set under Paths &amp; Backups) -- nothing extra to point it at here.</p>
       </div>
 
@@ -2079,10 +2079,10 @@
 </section>
 
 <section id="area-rules-generator" class="tool-area hidden">
-<main class="app-main">
+<main class="app-main" data-tool-id="rules-generator">
   <!-- No "<h1>Rules Generator</h1>" here -- the top nav tab already names the tool. This intro
        banner pitches the value instead (see DESIGN.md's "Tool intro banner" section). -->
-  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span>Rules Generator</div>
+  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><span data-brand-slot="name">Rules Generator</span></div>
   <div class="tool-hero" data-tool-id="rules-generator">
     <h2 class="tool-hero__title" data-brand-slot="heroTitle">🔗 Skip Re-Resolving Conflicts You Already Fixed</h2>
     <p class="tool-hero__body" data-brand-slot="heroBody">Updated to a new collection? Chances are you already spent time getting load-order rules just right in the old one. This tool matches mods between both collections and copies those rules straight across, so you're not stuck resolving the exact same conflicts twice. Review every match below before applying anything to Vortex.</p>
@@ -2162,8 +2162,8 @@
 </section>
 
 <section id="area-merge" class="tool-area hidden">
-<main class="app-main">
-  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span>Merge Plugins</div>
+<main class="app-main" data-tool-id="merge">
+  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><span data-brand-slot="name">Merge Plugins</span></div>
   <div class="tool-hero" data-tool-id="merge">
     <h2 class="tool-hero__title" data-brand-slot="heroTitle">🧬 Merge Many Plugins Into One</h2>
     <p class="tool-hero__body" data-brand-slot="heroBody">Skyrim's plugin slots fill up fast. Pick plugins from one or more collections and this tool bundles them into a single file&mdash;freeing up slots without touching xEdit. Review exactly what's going in first, and it'll flag the result as ESL automatically when it fits.</p>

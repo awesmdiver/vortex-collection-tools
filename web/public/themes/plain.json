@@ -3,6 +3,11 @@
   "label": "Plain",
   "appName": "Vortex Collection Tools",
   "accent": "#5b8def",
+  "accentHover": "#75a1f5",
+  "accentBg": "rgba(91, 141, 239, 0.12)",
+  "accentLight": "#3568c9",
+  "accentHoverLight": "#4a7bd6",
+  "accentBgLight": "rgba(53, 104, 201, 0.12)",
   "palette": {},
   "tools": {
     "home": {

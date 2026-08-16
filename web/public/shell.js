@@ -118,6 +118,9 @@ fetch('/api/settings')
   })
   .catch(() => {});
 
+// "reports"/"utilities" are section GROUPS, not a real stable tool id (no themes/*.json entry for
+// them), so they stay a plain literal here even under a themed brand -- see DESIGN.md, group-level
+// naming is a known gap, not yet part of the schema.
 const AREA_LABELS = { home: 'Home', rebuild: 'Rebuild Collection', sync: 'Update Collection', settings: 'Settings', reports: 'Reports', 'rules-generator': 'Rules Generator', utilities: 'Utilities', merge: 'Merge Plugins' };
 
 function showToolArea(id) {
@@ -129,7 +132,11 @@ function showToolArea(id) {
     const navBtn = document.getElementById(`nav-${a}`);
     if (navBtn) navBtn.classList.toggle('nav-tab--active', a === id);
   }
-  setPageLabel(AREA_LABELS[id] || '');
+  // themedToolName (theme.js) swaps in the active theme's name for a real stable tool id --
+  // AREA_LABELS' own value is the English fallback for "no theme loaded yet" or a group id like
+  // "reports"/"utilities" that has no per-tool entry.
+  const fallback = AREA_LABELS[id] || '';
+  setPageLabel(window.themedToolName ? window.themedToolName(id, fallback) : fallback);
   // Every area shares the same page-level scroll (no per-area scroll container -- see styles.css),
   // so switching areas otherwise leaves you at whatever scrollY the PREVIOUS area was at instead of
   // landing at the top of the new one. Confirmed live 2026-07-27: clicking the Settings nav icon

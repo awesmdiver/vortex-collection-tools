@@ -1,0 +1,137 @@
+{
+  "id": "skyrim",
+  "label": "Skyrim",
+  "appName": "The Arcaneum",
+  "accent": "#c9a227",
+  "palette": {},
+  "tools": {
+    "home": {
+      "name": "The Arcaneum",
+      "emoji": "📖",
+      "function": "Home",
+      "heroTitle": "The Arcaneum",
+      "heroBody": "The College of Winterhold's own library, every tome shelved and waiting. Pick a tool to get started&mdash;everything here works on collections you've already installed in Vortex: mend them faster, ward your Ignored and Disabled mods through an update, transcribe conflict rules, and see how it all went.",
+      "cardDesc": "Every tool in the collection, shelved and waiting."
+    },
+    "merge": {
+      "name": "The Forge",
+      "emoji": "🔨",
+      "function": "Merge Plugins",
+      "heroTitle": "The Forge",
+      "heroBody": "Every forge fuses raw ore into a single, stronger blade. Pick plugins from one or more collections and The Forge bundles them into one file&mdash;freeing up load-order slots without ever touching xEdit yourself. Review exactly what's going in before you strike, and it'll flag the result as ESL automatically when it fits.",
+      "cardDesc": "Forge many plugins into one&mdash;reclaim load-order slots and stay clear of the 254-plugin limit."
+    },
+    "rebuild": {
+      "name": "Restoration",
+      "emoji": "✨",
+      "function": "Rebuild Collection",
+      "heroTitle": "Restoration",
+      "heroBody": "Restoration magic mends the broken back to full health in moments, not seasons. This tool re-extracts an already-installed collection's mods directly into your staging folder&mdash;same result as Vortex's own install, dramatically faster. Review exactly what would change before you cast it, then let the spell run while you do something else.",
+      "cardDesc": "Mends broken and corrupted files in seconds&mdash;skip the slow journey of a full reinstall."
+    },
+    "sync": {
+      "name": "The Ward",
+      "emoji": "🛡️",
+      "function": "Update Collection",
+      "heroTitle": "The Ward",
+      "heroBody": "A Ward holds against whatever comes through it, so nothing you've already chosen gets undone. Updating a collection in Vortex often resets your carefully-set <strong>Ignored</strong> and <strong>Disabled</strong> mods back to their defaults&mdash;this tool remembers exactly how you had things set and restores it once the update lands, so that cleanup work never has to happen twice. Work through the steps below in order; you'll hop over to Vortex between some of them, and your place here is saved while you do.",
+      "cardDesc": "Shields your Ignored and Disabled choices so an update can't wipe out your setup."
+    },
+    "rules-generator": {
+      "name": "The Scribe",
+      "emoji": "✒️",
+      "function": "Rules Generator",
+      "heroTitle": "The Scribe",
+      "heroBody": "A Scribe copies a text faithfully, word for word, so nothing is lost in the retelling. Updated to a new collection? Chances are you already spent time getting load-order rules just right in the old one&mdash;this tool matches mods between both collections and transcribes those rules straight across, so you're never stuck resolving the exact same conflicts twice. Review every match below before it's committed to Vortex's own record.",
+      "cardDesc": "Transcribes your proven load-order rules into the updated collection, so you never resolve the same conflicts twice."
+    },
+    "report-stats": {
+      "name": "The Ledger",
+      "emoji": "📊",
+      "function": "Stats",
+      "heroTitle": "The Ledger",
+      "heroBody": "A Ledger keeps a running tally, so nothing about the accounts is left to memory. Track how every collection you've rebuilt has performed over time, and instantly spot which mods still need attention right now&mdash;no more digging through individual run logs one at a time to piece together the full picture.",
+      "cardDesc": "Every rebuild's numbers, tallied over time."
+    },
+    "report-workthrough": {
+      "name": "The Quest Log",
+      "emoji": "✅",
+      "function": "Work Through",
+      "heroTitle": "The Quest Log",
+      "heroBody": "Every open quest, gathered in one place instead of scattered across a dozen journal entries. This report gathers every problem mod across every collection into one checklist&mdash;fix resolvable mismatches and missing archives right here, and check off anything else as you handle it in Vortex yourself. Your progress sticks around until a fresh rerun clears the log.",
+      "cardDesc": "Every problem mod left to knock out, in one checklist."
+    },
+    "report-updatecompare": {
+      "name": "Scroll of Retrospection",
+      "emoji": "🔍",
+      "function": "Update Compare",
+      "heroTitle": "Scroll of Retrospection",
+      "heroBody": "An Elder Scroll is said to hold past, present, and future all at once. After The Ward finishes its work, this scroll unrolls a clear before-and-after of your mods&mdash;what stayed, what got added, and what got removed&mdash;so you're never left guessing what an update actually did.",
+      "cardDesc": "Holds your previous setup beside the new one&mdash;exactly what was kept, added, or removed."
+    },
+    "report-rulesgen": {
+      "name": "The Scribe's Ledger",
+      "emoji": "📋",
+      "function": "Rules Generator Report",
+      "heroTitle": "The Scribe's Ledger",
+      "heroBody": "Even a Scribe keeps their own record of what's been copied and what's still waiting. See at a glance which mods already have their conflict rules transcribed correctly, and which ones still need a decision or a second look in Vortex&mdash;all without re-running the matching process itself.",
+      "cardDesc": "Which rules copied over cleanly, and which still need a look."
+    },
+    "report-workshop": {
+      "name": "The Artisan's Log",
+      "emoji": "📓",
+      "function": "Workshop Report",
+      "heroTitle": "The Artisan's Log",
+      "heroBody": "An artisan's own workshop log tells the truth about when the bench was last touched&mdash;a shopfront sign never does. Nexus's own collection page shows a date that never moves for a private collection; this pulls the real one, straight from each collection's revision history, so you can tell at a glance which ones you've actually worked on recently.",
+      "cardDesc": "The real date you last set hand to an unfinished work&mdash;not Nexus's frozen one."
+    },
+    "report-exceptions": {
+      "name": "The Sanctuary",
+      "emoji": "🕊️",
+      "function": "Mod Exceptions",
+      "heroTitle": "The Sanctuary",
+      "heroBody": "A Sanctuary is set apart on purpose, left undisturbed by design, not by oversight. Some mods are hand-pick-only installers where you deliberately chose a subset of what the archive contains&mdash;auto-extracting or auto-mending the full archive for one of these doesn't restore what's \"missing,\" it installs content you never chose, which can cause missing masters or crashes. Add a mod here once, and both Restoration and The Vault-Keeper will leave it alone from then on, wherever it shows up.",
+      "cardDesc": "Marks the mods you handle yourself&mdash;left untouched, wherever they turn up."
+    },
+    "missing-masters": {
+      "name": "The Augur",
+      "emoji": "🔮",
+      "function": "Missing Masters",
+      "heroTitle": "The Augur",
+      "heroBody": "An Augur foresees the danger before it arrives, not after. Pinpoint missing master files and instantly see every mod relying on them, all in one clear view&mdash;so instead of a sudden crash to desktop, you see the problem coming and can jump straight into Vortex to fix it with confidence.",
+      "cardDesc": "Reveals a missing master before you launch&mdash;no more sudden crash to desktop."
+    },
+    "scrub": {
+      "name": "The Cleansing",
+      "emoji": "🔥",
+      "function": "Vortex Scrub",
+      "heroTitle": "The Cleansing",
+      "heroBody": "A Cleansing purges what's been left to rot, so nothing lingers past its purpose. Easily spot staging folders and archives that Vortex has quietly stopped tracking&mdash;no digging through anything by hand. This shows you exactly what's safe to remove, so you can reclaim disk space with confidence.",
+      "cardDesc": "Cleanse the orphaned downloads and abandoned staging folders Vortex left behind, and reclaim the disk space."
+    },
+    "archive-finder": {
+      "name": "Clairvoyance",
+      "emoji": "👁️",
+      "function": "Archive Finder",
+      "heroTitle": "Clairvoyance",
+      "heroBody": "Clairvoyance lights the path to what's hidden, without ever having to open the door yourself. Stop extracting archives just to see what's inside&mdash;this indexes every zipped mod archive's contents up front, no unpacking needed, so you can instantly search across all of them by file or mod name and pull out exactly the patch you need.",
+      "cardDesc": "Sees straight through any archive to the exact file you need&mdash;without unpacking a single byte."
+    },
+    "missing-files": {
+      "name": "The Vault-Keeper",
+      "emoji": "🗝️",
+      "function": "Rebuild Missing Files",
+      "heroTitle": "The Vault-Keeper",
+      "heroBody": "A vault-keeper fetches the one relic you're missing, not the whole hoard. Sometimes a mod's files quietly go missing from your staging folder, and mending the whole collection to fix it feels like overkill&mdash;this checks the collections you pick and shows you exactly which files are gone, then restores just those, straight from the archive.",
+      "cardDesc": "Only what's missing, restored&mdash;no need to empty the whole vault to replace one relic."
+    },
+    "settings": {
+      "name": "The Standing Stones",
+      "emoji": "🗿",
+      "function": "Settings",
+      "heroTitle": "The Standing Stones",
+      "heroBody": "Choose a Standing Stone once, and its blessing shapes your entire journey from then on. Set your Vortex paths and preferences here just once, and every other tool in The Arcaneum picks them up automatically&mdash;so you can spend your time on the actual work, not re-entering the same folders over and over.",
+      "cardDesc": "Choose your paths and preferences once; every tool draws on them."
+    }
+  }
+}

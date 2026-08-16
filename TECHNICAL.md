@@ -4017,7 +4017,7 @@ right before extracting, rather than trusting the client-held scan result outrig
 /open-staging-folder` (path-validated inside the configured staging directory, same
 defense-in-depth as Missing Masters' identical route).
 
-## Brand theming — Phase 1 runtime (added 2026-08-15)
+## Brand theming — Phase 1/2 runtime (Phase 1 added 2026-08-15, Phase 2 same day)
 
 DESIGN.md's "Brand theming framework" section has the full spec/rationale; this is the runtime
 mechanism only. Golden rule: every tool's name/emoji/hero copy/Home-card copy and the app's one
@@ -4047,6 +4047,45 @@ nothing about routing, `data-area`/`data-sub`, or which API a button calls is to
   console errors, live-browser DOM text diffed against the pre-refactor extraction and matched exactly
   (including the `<strong>` tags and `&mdash;` entities in Update Collection's hero body) — see the
   handoff for the full run.
+
+### Phase 2 additions/fixes (2026-08-15)
+
+- **`?theme=<id>` URL override** (checked before `localStorage`, doesn't persist): lets a theme be
+  previewed via a plain link instead of devtools. Not a real picker — still deferred.
+- **Accent is now a real injected `<style>` block, not one inline `--accent` set.** `styles.css`
+  already keys `--accent`/`--accent-hover`/`--accent-bg` off Appearance (a different blue per
+  light/dark mode, via `@media (prefers-color-scheme)` + `[data-theme]`); a flat
+  `document.documentElement.style.setProperty` wins over both branches unconditionally, which was
+  silently pinning light mode to the dark-mode hex (confirmed live: `#5b8def` instead of `#3568c9`
+  before the fix). `theme.js`'s `applyAccentStylesheet` now builds a `<style id="theme-accent-
+  overrides">` mirroring `styles.css`'s own two-branch selector structure (`:root` +
+  `@media(prefers-color-scheme:light):not([data-theme="dark"])` + `:root[data-theme="light"]`), so it
+  also keeps working automatically if Appearance is toggled afterward — real CSS cascade, no
+  toggle-listener needed. `deriveAccentShades(hex)` computes `--accent-hover` (lighten 28% toward
+  white) and `--accent-bg` (12% alpha) from a single accent value when a theme doesn't supply its own
+  — Plain always does (`accentHover`/`accentBg`/`accentLight`/`accentHoverLight`/`accentBgLight` in
+  `plain.json`, matching its exact pre-Phase-1 hex per mode, so it stays truly byte-identical); Skyrim
+  doesn't yet, so its derived hover/bg are a reasonable approximation, not a fidelity claim.
+- **`window.themedToolName(id, fallback)`** (`theme.js`): the page-label maps in `shell.js`
+  (`AREA_LABELS`), `app.js` (`VIEW_SUFFIXES`, Rebuild Collection's 5 sub-views), and `stats-app.js`
+  (`REPORTS_SUB_TAB_LABELS`) drive the browser-tab title and the visible `#headerMeta` text —
+  entirely separate from the `data-tool-id`/`data-brand-slot` DOM markup `applyTheme` walks, since
+  none of these three maps render into the DOM at all. Each call site now looks up the active theme's
+  name for its real stable tool ID, falling back to today's English literal if the theme hasn't
+  loaded yet or the id has no per-tool entry (`"reports"`/`"utilities"` are section groups, not a
+  real stable id — see DESIGN.md's Known gaps).
+- **Breadcrumbs/Settings-rail needed their own `data-tool-id` wiring**, separate from Phase 1's.
+  `.tool-eyebrow`'s area-segment, the Settings left-rail buttons, and each Settings pane's `<h2>` all
+  sit as *siblings* of `.tool-hero` (or have no `.tool-hero` at all — `view-logs`/`view-plan`/
+  `view-progress`/`view-summary` in Rebuild Collection's own sub-flow), so Phase 1's container-scoped
+  lookup never reached them. Fixed by adding `data-tool-id` directly to each view's own outer
+  `<section>`/`<main>`/`.settings-rail__row` and `data-brand-slot="name"`/`"emoji"` to the specific
+  text/icon node inside.
+- **Verified live** (real server, real browser, both `?theme=plain` and `?theme=skyrim`, both
+  Appearance modes): breadcrumbs, Settings rail + pane headers, tab title, and `#headerMeta` all
+  correctly themed; Plain confirmed unchanged in both light and dark mode (regression check on the
+  accent fix); no `... Report Report` duplication in the Reports sub-tab label (caught before
+  shipping — `report-rulesgen`/`report-workshop`'s own theme `name` already ends in "Report").
 
 ## Future work
 

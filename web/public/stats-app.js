@@ -260,9 +260,29 @@ function loadStatsPageOnce() {
 // simpler than shell.js's TOOL_AREAS-style array. Stats Report is the default on first entry,
 // matching this area's exact behavior before the Work Through Report/Update Compare Report splits.
 const REPORTS_SUB_TABS = ['stats', 'workthrough', 'updatecompare', 'rulesgen', 'workshop', 'exceptions'];
-const REPORTS_SUB_TAB_LABELS = { stats: 'Reports > Stats Report', workthrough: 'Reports > Work Through Report', updatecompare: 'Reports > Update Compare Report', rulesgen: 'Reports > Rules Generator Report', workshop: 'Reports > Workshop Report', exceptions: 'Reports > Mod Exceptions' };
+// English fallback (today's exact original literal, no theme loaded yet) + the real stable tool id
+// each sub-tab maps to, so themedToolName (theme.js) can swap in the active theme's own name for
+// the report itself -- "Reports" (the group) has no themed name of its own, see AREA_LABELS' own
+// note in shell.js. NOT a fixed "{name} + ' Report'" template: report-rulesgen/report-workshop's
+// own `name` in themes/*.json already ends in "...Report" (their real Home-card name), so
+// concatenating a suffix here would double it up ("Rules Generator Report Report") -- each
+// fallback below is the complete original label already, matching what themedToolName will return.
+const REPORTS_SUB_TAB_LABELS = {
+  stats: { fallback: 'Stats Report', toolId: 'report-stats' },
+  workthrough: { fallback: 'Work Through Report', toolId: 'report-workthrough' },
+  updatecompare: { fallback: 'Update Compare Report', toolId: 'report-updatecompare' },
+  rulesgen: { fallback: 'Rules Generator Report', toolId: 'report-rulesgen' },
+  workshop: { fallback: 'Workshop Report', toolId: 'report-workshop' },
+  exceptions: { fallback: 'Mod Exceptions', toolId: 'report-exceptions' },
+};
 function showReportsSubTab(id) {
-  if (typeof setPageLabel === 'function') setPageLabel(REPORTS_SUB_TAB_LABELS[id] || 'Reports');
+  const entry = REPORTS_SUB_TAB_LABELS[id];
+  let label = 'Reports';
+  if (entry) {
+    const name = window.themedToolName ? window.themedToolName(entry.toolId, entry.fallback) : entry.fallback;
+    label = `Reports > ${name}`;
+  }
+  if (typeof setPageLabel === 'function') setPageLabel(label);
   for (const tab of REPORTS_SUB_TABS) {
     $g(`reports-sub-area-${tab}`).classList.toggle('hidden', tab !== id);
     $g(`reports-sub-${tab}`).classList.toggle('btn--primary', tab === id);

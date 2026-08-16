@@ -86,17 +86,21 @@ function detailCellContent(e) {
   }
   return e.detail || '';
 }
-const VIEW_LABELS = {
-  picker: 'Rebuild Collection > Choose a Collection',
-  logs: 'Rebuild Collection > Browse Logs',
-  plan: 'Rebuild Collection > Plan',
-  progress: 'Rebuild Collection > Rebuilding',
-  summary: 'Rebuild Collection > Summary',
+// The "Rebuild Collection" half of each label is the tool's own name -- themedToolName (theme.js)
+// swaps in the active theme's name for it, same as every other page-label map in this app.
+const VIEW_SUFFIXES = {
+  picker: 'Choose a Collection',
+  logs: 'Browse Logs',
+  plan: 'Plan',
+  progress: 'Rebuilding',
+  summary: 'Summary',
 };
 function showView(name) {
   for (const v of document.querySelectorAll('.view')) v.classList.add('hidden');
   $(`view-${name}`).classList.remove('hidden');
-  if (typeof setPageLabel === 'function') setPageLabel(VIEW_LABELS[name] || 'Rebuild Collection');
+  const toolName = window.themedToolName ? window.themedToolName('rebuild', 'Rebuild Collection') : 'Rebuild Collection';
+  const suffix = VIEW_SUFFIXES[name];
+  if (typeof setPageLabel === 'function') setPageLabel(suffix ? `${toolName} > ${suffix}` : toolName);
 }
 
 // Replaces the native alert() for error messages -- confirmed live this was hard to read for a
