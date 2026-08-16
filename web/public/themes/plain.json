@@ -106,9 +106,9 @@
       "cardDesc": "Pinpoint missing master files and every mod that depends on them."
     },
     "scrub": {
-      "name": "Vortex Scrub",
+      "name": "Mod Scrub",
       "emoji": "🧽",
-      "function": "Vortex Scrub",
+      "function": "Mod Scrub",
       "heroTitle": "Scrub Away Clutter in Seconds",
       "heroBody": "Easily spot staging folders and archives that Vortex has quietly stopped tracking&mdash;no digging through anything by hand! Designed to take the guesswork out of cleanup, this tool shows you exactly what's safe to remove so you can reclaim disk space with confidence.",
       "cardDesc": "Spot staging folders and archives Vortex stopped tracking, and reclaim the space."

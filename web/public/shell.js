@@ -173,6 +173,16 @@ function showUnsavedChangesModal() {
   });
 }
 
+// Persists "this install has opened the book at least once" (any of its 4 entry points: the header
+// icon, Settings' first-run banner button, or Home's own banner image/title) so Settings' "New here?"
+// callout never shows again after that -- it's a one-time nudge, not a permanent fixture (confirmed
+// 2026-08-15: showing "New here?" to someone who's already been there reads as broken, not helpful).
+function markBookOpened() {
+  localStorage.setItem('vct-book-opened', '1');
+  const banner = document.getElementById('settingsFirstRunBookBanner');
+  if (banner) banner.classList.add('hidden');
+}
+
 // The single entry point for every LIVE (already-loaded-page) navigation -- home cards, the
 // header logo/title, and the Settings gear button all funnel through this, replacing the old
 // per-nav-tab loop that used to wire all six areas (only Settings still has a real nav-* element
@@ -189,6 +199,7 @@ async function navigateToArea(id, subTab) {
     }
   }
   showToolArea(id);
+  if (id === 'book') markBookOpened();
   if (id === 'sync' && window.loadSyncProfiles) window.loadSyncProfiles();
   if (id === 'reports' && subTab && window.showReportsSubTab) window.showReportsSubTab(subTab);
   if (id === 'utilities' && subTab && window.showUtilitiesSubTab) window.showUtilitiesSubTab(subTab);
@@ -407,7 +418,7 @@ if (reportsSubTab) {
     // own Back link, and sync-app.js's boot() already awaits loadSyncProfiles() itself in that exact
     // case, so calling it again here would just be a redundant, wasteful second fetch.
     if (jumpArea === 'sync' && !params.get('profileId')) window.loadSyncProfiles?.();
-    // Restores the Utilities sub-tab (Missing Masters/Vortex Scrub) the same way the ?reports=
+    // Restores the Utilities sub-tab (Missing Masters/Mod Scrub) the same way the ?reports=
     // branch above restores a Reports sub-tab -- showUtilitiesSubTab is defined in cleanup-app.js,
     // which also loads before this callback ever fires, same deferred-to-DOMContentLoaded technique.
     if (jumpArea === 'utilities') {
@@ -419,7 +430,7 @@ if (reportsSubTab) {
     if (jumpArea === 'rules-generator') window.rgLoadPickers?.();
     // ?area=book&chapter=<toolId> jumps straight to one chapter instead of the table of contents --
     // book-app.js's own bookLoadOnce() reads params.get('chapter') itself once its data is ready.
-    if (jumpArea === 'book') window.bookLoadOnce?.();
+    if (jumpArea === 'book') { markBookOpened(); window.bookLoadOnce?.(); }
   });
 } else {
   // First-run check: land on Settings automatically when staging/downloads aren't configured yet,
@@ -435,7 +446,7 @@ if (reportsSubTab) {
         const premiumBanner = document.getElementById('settingsFirstRunPremiumBanner');
         if (premiumBanner) premiumBanner.classList.remove('hidden');
         const bookBanner = document.getElementById('settingsFirstRunBookBanner');
-        if (bookBanner) bookBanner.classList.remove('hidden');
+        if (bookBanner && !localStorage.getItem('vct-book-opened')) bookBanner.classList.remove('hidden');
         showToolArea('settings');
       } else {
         showToolArea('home');

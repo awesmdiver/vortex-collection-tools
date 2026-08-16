@@ -373,9 +373,9 @@ $g('cleanupCrossCheckDeleteAllBtn').addEventListener('click', () => {
   deleteCrossCheckMatches(cleanupCrossCheckMatches.map((m) => m.name));
 });
 
-// Utilities area sub-tabs (Missing Masters / Vortex Scrub) -- mirrors stats-app.js's own
+// Utilities area sub-tabs (Missing Masters / Mod Scrub) -- mirrors stats-app.js's own
 // showReportsSubTab exactly (same array-of-ids toggle pattern). Missing Masters listed/defaulted
-// first -- confirmed 2026-07-27 it's used far more often than Vortex Scrub. "Missing Masters" itself
+// first -- confirmed 2026-07-27 it's used far more often than Mod Scrub. "Missing Masters" itself
 // has no load-once gate here (unlike Reports' loadStatsPageOnce/loadWorkThroughPageOnce) -- it needs
 // to scan every time the tab is shown (and on focus/visibility change), not just once ever, so
 // missing-masters-app.js manages its own refresh timing; this just calls its exposed hook via the

@@ -88,7 +88,7 @@ GitHub release. Keep these sections in order:
    (prefix `**New: …**`), then improvements, then fixes. End with **"Confirmed working with Vortex
    <version>."** Describe each change by what it does *for the user*, not the implementation.
 7. `### What we'd love feedback on` — while the app is in testing, targeted questions, ideally one
-   per new feature ("does Vortex Scrub leave your real mods alone?").
+   per new feature ("does Mod Scrub leave your real mods alone?").
 8. **Closing** — "Open an issue with what you were doing, what you expected, and what actually
    happened (screenshots help a lot)." + a short thanks.
 

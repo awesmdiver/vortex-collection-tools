@@ -221,7 +221,7 @@
     <div class="home-card-wrap" data-section="homeSectionUtilities">
       <button class="home-card" data-area="utilities" data-sub="scrub" data-tool-id="scrub">
         <div class="home-card__icon" data-brand-slot="emoji">🧽</div>
-        <div class="home-card__name" data-brand-slot="name">Vortex Scrub</div>
+        <div class="home-card__name" data-brand-slot="name">Mod Scrub</div>
         <div class="home-card__desc" data-brand-slot="cardDesc">Spot staging folders and archives Vortex stopped tracking, and reclaim the space.</div>
         <div class="home-card__open">Open <span>→</span></div>
       </button>
@@ -788,11 +788,14 @@
 
   <!-- Same first-run condition as the two banners above (shown/hidden together by shell.js), plus a
        Skyrim-only CSS gate (styles.css) -- the book it points at doesn't exist under Plain, so
-       Plain never renders this even if first-run fires. Its own callout so the eye-catching book
-       icon can be a real button inside it, not just prose mentioning one. Deliberately doesn't name
-       the theme's appName ("The Arcaneum") -- theme.js's own data-brand-slot="appName" fill is a
-       single document.querySelector (first match only, already claimed by the header title), so a
-       second slot here would just sit unfilled. -->
+       Plain never renders this even if first-run fires. ALSO gated on localStorage's
+       vct-book-opened (shell.js's markBookOpened(), fired from any of the book's 4 entry points) --
+       a "New here?" nudge that still shows after the book's already been opened would read as
+       broken, not helpful, so it's shown at most once per install, never again after that. Its own
+       callout so the eye-catching book icon can be a real button inside it, not just prose
+       mentioning one. Deliberately doesn't name the theme's appName ("The Arcaneum") -- theme.js's
+       own data-brand-slot="appName" fill is a single document.querySelector (first match only,
+       already claimed by the header title), so a second slot here would just sit unfilled. -->
   <div id="settingsFirstRunBookBanner" class="callout callout--info hidden">
     <div class="callout__title">&#128214; New here? Meet every tool first</div>
     <p>Before you dive in, click the book icon in the top-right corner for a quick, story-flavored tour of what every tool actually does.</p>
@@ -819,7 +822,7 @@
         <button class="settings-rail__pin" data-pin-key="missing" title="Pin to top">☆</button>
       </div>
       <div class="settings-rail__row" data-tool-id="scrub">
-        <button class="settings-rail__item" data-cat="scrub"><span class="settings-rail__icon" data-brand-slot="emoji">🧽</span><span data-brand-slot="name">Vortex Scrub</span></button>
+        <button class="settings-rail__item" data-cat="scrub"><span class="settings-rail__icon" data-brand-slot="emoji">🧽</span><span data-brand-slot="name">Mod Scrub</span></button>
         <button class="settings-rail__pin" data-pin-key="scrub" title="Pin to top">☆</button>
       </div>
       <div class="settings-rail__row" data-tool-id="archive-finder">
@@ -979,12 +982,12 @@
     </div>
     </section>
 
-    <!-- Vortex Scrub (Utilities area) -->
+    <!-- Mod Scrub (Utilities area) -->
     <section class="settings-pane" id="pane-scrub" data-tool-id="scrub">
     <div class="settings-group">
       <div class="settings-group__header">
-        <h2 data-brand-slot="name">Vortex Scrub</h2>
-        <p class="muted">Mark folders and archives as safe to keep, and they'll stop showing up as "Action Needed" in <span data-brand-slot="name">Vortex Scrub</span>.</p>
+        <h2 data-brand-slot="name">Mod Scrub</h2>
+        <p class="muted">Mark folders and archives as safe to keep, and they'll stop showing up as "Action Needed" in <span data-brand-slot="name">Mod Scrub</span>.</p>
       </div>
 
       <h3 class="settings-section-title">Exclude list location</h3>
@@ -1557,7 +1560,7 @@
        lib/mod-exception-store.js's own header for the full "1DustAdeptArmorSE" real case). Shared
        between Rebuild Collection and Rebuild Missing Files -- this is the one place to view/add/
        remove the whole list; each tool's own report just shows an "Excepted" row + a per-row
-       "Add to Exception List" quick action, same as Vortex Scrub's own exclude-list shape. -->
+       "Add to Exception List" quick action, same as Mod Scrub's own exclude-list shape. -->
   <div id="reports-sub-area-exceptions" class="hidden">
   <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span>Reports</div>
   <div class="tool-hero" data-tool-id="report-exceptions">
@@ -1597,13 +1600,13 @@
 
   <div class="view-actions">
     <button id="utilities-sub-missingmasters" class="btn btn--primary btn--small" data-tool-id="missing-masters"><span data-brand-slot="name">Missing Masters</span></button>
-    <button id="utilities-sub-scrub" class="btn btn--ghost btn--small" data-tool-id="scrub"><span data-brand-slot="name">Vortex Scrub</span></button>
+    <button id="utilities-sub-scrub" class="btn btn--ghost btn--small" data-tool-id="scrub"><span data-brand-slot="name">Mod Scrub</span></button>
     <button id="utilities-sub-archivefinder" class="btn btn--ghost btn--small" data-tool-id="archive-finder"><span data-brand-slot="name">Archive Finder</span></button>
     <button id="utilities-sub-missingfiles" class="btn btn--ghost btn--small" data-tool-id="missing-files"><span data-brand-slot="name">Missing Files</span></button>
   </div>
 
   <div id="utilities-sub-area-scrub">
-  <!-- No "<h2>Vortex Scrub</h2>" here -- the sub-nav button right above already names the tool.
+  <!-- No "<h2>Mod Scrub</h2>" here -- the sub-nav button right above already names the tool.
        This intro banner pitches the value instead (see DESIGN.md's "Tool intro banner" section). -->
   <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span>Utilities</div>
   <div class="tool-hero" data-tool-id="scrub">

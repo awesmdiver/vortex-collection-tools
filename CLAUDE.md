@@ -6,7 +6,7 @@ Guidance for Claude Code when working in this repository.
 
 Vortex Collection Tools — a locally-run toolkit for managing Vortex-installed Skyrim SE mod
 collections (Rebuild Collection, Update Collection, Rules Generator, Reports, and a Utilities area:
-Vortex Scrub, Missing Masters, Archive Finder). See [`README.md`](README.md) for the user-facing
+Mod Scrub, Missing Masters, Archive Finder). See [`README.md`](README.md) for the user-facing
 overview and [`TECHNICAL.md`](TECHNICAL.md) for the full technical reference.
 
 ## Keep README.md's Key Features list in sync — flag it in the handoff
@@ -22,7 +22,7 @@ verb-first lead-in + colon, then 1-2 plain-language sentences (pain point, then 
 about it), via the `plain-language-writer` skill. The one-line tagline blockquote at the very top
 stays deliberately terse (flagship features only) — don't dilute it.
 
-This drifted once already (2026-07-28): Vortex Scrub, Missing Masters, and Archive Finder all shipped
+This drifted once already (2026-07-28): Mod Scrub, Missing Masters, and Archive Finder all shipped
 without a README update and sat stale for a full extra session. Routing it through the handoff is what
 prevents a repeat — terminal flags, design writes.
 

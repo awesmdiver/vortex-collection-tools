@@ -82,7 +82,7 @@ Home page, so you're never more than a click away from the one you need.
 * **Shows you exactly what changed:** Every step previews what it's about to do before it touches
   anything real, and the Compare Report gives you a clear, color-coded summary of what was kept,
   disabled, added, or removed by the collection author.
-* **Cleans up mod-manager clutter safely:** Vortex Scrub finds staging folders and downloaded
+* **Cleans up mod-manager clutter safely:** Mod Scrub finds staging folders and downloaded
   archives Vortex no longer has any connection to — leftovers from a mod you uninstalled, or an old
   duplicate download — and lets you review and remove them, with a permanent exclude list for
   anything you want to keep around on purpose.
@@ -124,13 +124,13 @@ just clicking that window's **X** button — all three shut it down the same cle
 
 > [!WARNING]
 > Vortex needs to be fully closed for anything that reads or writes its live database: starting an
-> actual rebuild or update, Rules Generator's **Apply to Vortex** step, Vortex Scrub's scan, and
+> actual rebuild or update, Rules Generator's **Apply to Vortex** step, Mod Scrub's scan, and
 > Missing Masters' **Rebuild This Mod**. If Vortex is still open when you try one of these, the app
 > tells you right there and won't let you continue until you close it — you don't need to remember
 > this list yourself.
 >
 > Everything else works fine with Vortex open: browsing Reports, Missing Masters' scan, editing
-> Vortex Scrub's exclude list, and all of Archive Finder.
+> Mod Scrub's exclude list, and all of Archive Finder.
 
 > [!NOTE]
 > After you rebuild a collection, Vortex will likely show an **"External Changes"** prompt the next

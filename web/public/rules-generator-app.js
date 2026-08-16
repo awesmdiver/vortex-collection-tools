@@ -637,7 +637,7 @@ async function rgConfirmApply() {
 // shared "Vortex is running" modal has only ONE retry slot: whichever page's own vortex-gated call
 // happened to register last silently stole every OTHER page's own Try Again click, retrying the
 // wrong thing with no visible error. Called fresh every time this area is actually visited (no
-// once-guard), same "re-check every visit" precedent as Missing Masters/Vortex Scrub/Update
+// once-guard), same "re-check every visit" precedent as Missing Masters/Mod Scrub/Update
 // Collection's own profile dropdown -- rgLoadPickers is already safe to call more than once (see
 // its own header comment on resetting both selects first).
 window.rgLoadPickers = rgLoadPickers;

@@ -608,7 +608,7 @@ it itself), and a fallback on the profile `<select>`'s own click if it's still e
 a pattern this project already had right**: Rebuild Collection's own Vortex-state check only ever
 runs when the user explicitly clicks **Load Vortex Data** (`refreshVortexData()` in `app.js`), never
 on that page's initial landing -- its own `loadCollections()` eager call is safe specifically
-because `/api/rebuild/collections` is gate-free (pure filesystem scan). Vortex Scrub
+because `/api/rebuild/collections` is gate-free (pure filesystem scan). Mod Scrub
 (`cleanup-app.js`) and Missing Masters (`missing-masters-app.js`) both already follow this same
 correct shape too (zero eager calls at script-parse time, checks fire from tab-show/button-click
 only). **Any future area added to this app must follow the same rule**: a Vortex-state-gated route
@@ -1802,17 +1802,19 @@ all 21 real mod names as neutral chips in a wrapping grid, caret rotated; clicki
 do" summary badge correctly isolated the section (Ready to copy/Needs your input hidden) while the
 chip disclosure stayed expanded from the prior interaction.
 
-## Vortex Scrub (Utilities area)
+## Mod Scrub (Utilities area)
 
 Finds staging folders and downloaded archives Vortex has no real relationship with anymore --
-inevitable after heavy testing/reinstalling (`Utilities > Vortex Scrub`, `lib/cleanup-scan.js` +
+inevitable after heavy testing/reinstalling (`Utilities > Mod Scrub`, `lib/cleanup-scan.js` +
 `web/cleanup-routes.js` + `web/public/cleanup-app.js`). Originally built under Reports and named
 "Clean Up report" (this section keeps that old name in a few internal identifiers below,
 e.g. `lib/cleanup-scan.js`, `#cleanupResultsList` -- renaming those has no user-facing effect and
 wasn't done); moved to its own top-level **Utilities** nav area and renamed **Vortex Scrub**
 2026-07-27, per this project's own pre-existing "New Utilities section" idea (see the old **Future
 work** entry, now in the workspace `TODO.md`) -- it *does things* (delete/exclude), unlike
-everything actually left under Reports, which is read-only.
+everything actually left under Reports, which is read-only. Renamed again to **Mod Scrub**
+2026-08-15 -- "scrub" is really about the mods themselves (deleting ones Vortex no longer tracks),
+not Vortex as a whole.
 
 **Triggered by a real, live example** (2026-07-27): the user found mods in Vortex's own list showing
 their raw modId-version-timestamp as the display name (e.g.
@@ -1916,7 +1918,7 @@ of every future scan entirely -- it won't even reach the `needsReview` bucket ag
   extensioned file from the exceptions list.
 - **Settings UI** (`web/public/settings-app.js`): each side (staging/archives) is an expandable
   `<details>` disclosure showing a live count in its `<summary>`, with the SAME checkbox +
-  Remove-Selected/Remove-All convention as Vortex Scrub's own exception lists (confirmed
+  Remove-Selected/Remove-All convention as Mod Scrub's own exception lists (confirmed
   2026-07-27: a lone "Remove" button per row wasn't wanted -- consistency with its own
   pattern was). `POST /api/cleanup/ignored/remove` accepts a `names` array for bulk removal (kept
   singular `name` too, unused by any current caller). Reuses `POST /api/cleanup/exclude` for the
@@ -2023,7 +2025,7 @@ crafted name (e.g. `../../something`) can never escape to an arbitrary filesyste
 
 ## Missing Masters (Utilities area, added 2026-07-27)
 
-A second Utilities sub-tab (alongside Vortex Scrub) that finds active plugins whose declared
+A second Utilities sub-tab (alongside Mod Scrub) that finds active plugins whose declared
 masters aren't actually available to the game right now -- the classic Skyrim "missing master"
 crash. Modeled on the user's real Wrye Bash workflow (they run it purely for this one feature
 alongside Vortex): live, always-current visibility with no manual rescan, plus a "Create Dummy
@@ -2163,7 +2165,7 @@ plugins in ~157ms, found 17 plugins with a problem master -- an EXACT match to V
 Warning-flag filter count shown in the user's own screenshot ("showing 17/3909 items"). Multiple
 results correctly point at `GTS Patches - OWL.esp` as `present-but-inactive`, matching the specific
 real example the user showed (that mod's own Vortex status independently confirmed as "uninstalled"
-earlier this same session, in the Vortex Scrub work above).
+earlier this same session, in the Mod Scrub work above).
 
 **No Vortex-running gate needed for this feature at all** -- a genuine simplification vs. the rest
 of this app. Detection only ever reads `Plugins.txt`/the Data folder directly (immutable existing
@@ -2211,7 +2213,7 @@ button now share one persistent flex row (`.mm-header-row`, space-between) that 
 the not-configured state, same as everything else on this page. Missing Masters is also now listed
 and defaulted FIRST in the Utilities sub-nav (`UTILITIES_SUB_TABS = ['missingmasters', 'scrub']`,
 `nav-utilities`'s own click handler defaults to `'missingmasters'` instead of `'scrub'`) -- confirmed
-it's used far more often than Vortex Scrub.
+it's used far more often than Mod Scrub.
 
 ### Mod-name column (added 2026-07-27)
 
@@ -2278,9 +2280,9 @@ the shared middle-segment match to `(?:-[^-]+)*` (any non-hyphen content, not ju
 deliberately fixed ONCE in a new shared `lib/download-naming.js` (also housing
 `MANUAL_DOWNLOAD_NAME_PATTERN`/`isPossibleManualDownload`, plus a new `stripDownloadNameSuffix`
 helper `missing-masters-scan.js` uses for its own display-name cleanup) rather than as two separate
-copies, since both `cleanup-scan.js` (Vortex Scrub's exceptions/needsReview safety split) and
+copies, since both `cleanup-scan.js` (Mod Scrub's exceptions/needsReview safety split) and
 `missing-masters-scan.js` (this cosmetic mod-name column) benefit from the same, more accurate rule.
-Checked the loosening against Vortex Scrub's own safety use FIRST, before sharing it: a hand-named
+Checked the loosening against Mod Scrub's own safety use FIRST, before sharing it: a hand-named
 tool-output folder (`DynDOLOD Output`, `BodySlide Output`, etc.) never ends in a
 `-<number>-...-<10-digit-timestamp>` shape at all, so this only recognizes more genuine downloads
 correctly -- it doesn't newly risk misreading a hand-named folder as a safe-to-bulk-delete
@@ -2306,7 +2308,7 @@ the user can likely fix with a manual file swap, rather than needing a dummy mas
 
 **UI styling, same day** -- rendered as a `.callout--warning` nested inside the master's own row
 (`web/public/missing-masters-app.js`), matching the exact "Manual Action Needed: ..." convention
-Vortex Scrub's own "Action Needed: Unrecognized Folders/Archives Found" callout already established
+Mod Scrub's own "Action Needed: Unrecognized Folders/Archives Found" callout already established
 -- explicit request to keep every informational warning like this consistent app-wide, not a one-off
 note style. Title: "Manual Action Needed: Uninstalled Mod Component Found". Body names the
 `activeAlternate` file specifically (bold): *"`<activeAlternate>`" is part of this mod, but isn't
@@ -2379,7 +2381,7 @@ Counted three distinct real shapes across the live 4560-folder listing:
   repetition doesn't fail the whole match.
 - Space-separated with an ISO timestamp + random token (e.g. `GTS - Specific Patches 97490 113
   2026-07-17T15-17Z VMSnJrLRM` -> `GTS - Specific Patches`): 139 matches. Previously only
-  `MANUAL_DOWNLOAD_NAME_PATTERN` detected this shape's trailing date+token portion (for Vortex Scrub's
+  `MANUAL_DOWNLOAD_NAME_PATTERN` detected this shape's trailing date+token portion (for Mod Scrub's
   "possible manual download" flag) but nothing stripped the modId/version prefix before it for display.
   New `SPACE_SEPARATED_DOWNLOAD_NAME_PATTERN` handles the full strip. Tight enough (mandatory numeric
   modId + mandatory ISO-shaped timestamp + mandatory trailing alnum token, all space-delimited) that
@@ -2394,7 +2396,7 @@ Counted three distinct real shapes across the live 4560-folder listing:
   Vortex metadata; two `ggmods-<modId>-foundation-face...` folders where the trailing words might be
   the actual mod name). That ambiguity is an acceptable trade for Missing Masters' purely cosmetic
   display (worst case: an occasional name trimmed a bit more aggressively than ideal) but not for
-  Vortex Scrub's safety classification (`isRecognizedDownloadName` feeds the "confident, safe for bulk
+  Mod Scrub's safety classification (`isRecognizedDownloadName` feeds the "confident, safe for bulk
   delete" exceptions bucket) -- kept those two use cases on genuinely different confidence tiers rather
   than reusing one check for both.
 
@@ -2421,7 +2423,7 @@ Masters' single-mod auto-download (`Rebuild This Mod`) saved `Snazzy Morthal AIO
 1751281253.7z`'s archive as plain `F:\Vortex Downloads\skyrimse\Snazzy Morthal AIO.7z` -- no
 modId/version/timestamp suffix at all -- while manually downloading the exact same mod from
 nexusmods.com produces the fully-suffixed name. Since every consumer of `lib/download-naming.js`
-(`stripDownloadNameSuffix`, `isRecognizedDownloadName`, Vortex Scrub's exceptions/needsReview split,
+(`stripDownloadNameSuffix`, `isRecognizedDownloadName`, Mod Scrub's exceptions/needsReview split,
 Missing Masters' own staging-folder matching) depends on that suffix shape being present, any archive
 this app downloads itself was silently invisible/misclassified to all of them.
 
@@ -2491,7 +2493,7 @@ downloader (`downloadMissingArchivesForPlan`) and Missing Masters' single-mod pa
 
 **Follow-up idea raised, not yet built**: since a single-mod rebuild only ever runs against a
 completely empty staging folder (nothing to preserve, nothing Vortex-managed to conflict with), the
-user noted this opens a natural Vortex Scrub feature: detect fully-empty staging directories (the
+user noted this opens a natural Mod Scrub feature: detect fully-empty staging directories (the
 same signal Missing Masters' own `hollowInstalls` already computes) and offer to delete them outright,
 as its own dedicated flow. Not scoped or built yet -- flagged here for a future session.
 
@@ -2502,7 +2504,7 @@ Only offered in the UI for `missing` (genuinely absent) masters -- re-validated 
 never trusting a possibly-stale client-side result, same "re-validate against real state" pattern
 as `cleanup-scan.js`'s `crossCheck`). Builds a minimal valid plugin from scratch: `TES4` + `HEDR` (12
 bytes: version 1.7 float + 0 records + `nextObjectID` 0x800, Creation Kit's own default for a fresh
-plugin) + `CNAM` (author `"Vortex Scrub Dummy Master"`, a recognizable marker mirroring Wrye Bash's
+plugin) + `CNAM` (author `"Mod Scrub Dummy Master"`, a recognizable marker mirroring Wrye Bash's
 own `"BASHED DUMMY"` convention). Zero `MAST` entries -- the dummy has no masters of its own. Flags
 guessed purely from the missing file's own extension (`.esm` -> `0x1`, `.esl` -> `0x201`, `.esp` ->
 `0x0`) -- the real file is by definition missing, so there's no actual value to read, only guess by
@@ -2859,7 +2861,7 @@ components already established elsewhere rather than inventing new ones:
   and results vary in shape (table vs. list vs. tree) too much to force into either "setup" card.
 - **Width cap, scoped to this one sub-tab**: `#utilities-sub-area-archivefinder { max-width:
   min(1080px, 96vw) }` -- the shared Utilities `<main class="app-main">` is used by Missing
-  Masters/Vortex Scrub too, so (same reasoning as Settings' own `#settingsPanes` cap) this can't
+  Masters/Mod Scrub too, so (same reasoning as Settings' own `#settingsPanes` cap) this can't
   live on `.app-main` itself. Confirmed live: Archive Finder measures exactly 1080px; switching to
   Missing Masters in the same session confirms it's unaffected, still the shared wide width.
 - **Tightened inter-card spacing**: `#afIndexCard, #afSearchCard { margin: 0 0 16px }` overrides
@@ -3145,7 +3147,7 @@ itself rather than needing its own guard.
 **Split**: the old single "General" `.settings-group` became two rail categories -- **General**
 (theme, server + the security warning + auto-open, Nexus API key, download-missing-archives,
 version warning) and **Paths & Backups** (Vortex staging/downloads/database paths, database
-backups, logs). Rebuild Collection / Update Collection / Missing Masters / Vortex Scrub / Archive
+backups, logs). Rebuild Collection / Update Collection / Missing Masters / Mod Scrub / Archive
 Finder each already had their own `.settings-group` -- those just moved into their own
 `<section class="settings-pane" id="pane-<cat>">` unchanged. Rail order is the DESIGN.md-specified
 static list (`SETTINGS_CATEGORY_ORDER` in `settings-app.js`): `rebuild, update, missing, scrub,
@@ -3184,7 +3186,7 @@ JS untouched) and `#settingsSaveBtn`. Restart/Stop Server moved to a right-align
 tool-hero banner and the panes (2026-07-28, per the user -- infrequent, kept clear of the rail).
 
 **Copy refresh**: applied the mockup's own already-approved rewrites verbatim where they existed
-(Rebuild Collection/Update Collection/Vortex Scrub/Missing Masters/Archive Finder blurbs -- see the
+(Rebuild Collection/Update Collection/Mod Scrub/Missing Masters/Archive Finder blurbs -- see the
 plain-language-writer skill's "Settings-section blurbs" confirmed examples) and a light
 plain-language tightening pass on the rest. **Three deliberate departures from the mockup's own
 (demo-simplified) copy, judgment calls made in favor of keeping real information over matching the
@@ -3194,7 +3196,7 @@ mockup verbatim**:
    the mockup omits both for brevity, but the first is a real security disclosure and the second is
    genuinely useful for first-time setup; neither seemed safe to silently drop during what's meant
    to be a reorg, not a content cut.
-2. Kept the Vortex Scrub exclude-list's real interactive management UI (the `<details>` disclosure
+2. Kept the Mod Scrub exclude-list's real interactive management UI (the `<details>` disclosure
    with a checkbox list + Select all + Remove Selected/Remove All per staging-folder/archive
    exclusion) -- the mockup shows only a static "(19)"/"(0)" count with an Add row and no visible
    list at all, which would be an actual feature removal (no more viewing/removing existing
@@ -3257,7 +3259,7 @@ wiring.
   loose collection of text/password inputs as a login form and popping its own "No items to show /
   + New login" overlay. Added `autocomplete="off"` to every plain text/path input in Settings (15
   fields -- Rebuild Collection's backup root, Update Collection's backup folder, Missing Masters'
-  three folders, Vortex Scrub's exclude-list folder + the two ad-hoc add-name inputs, Archive
+  three folders, Mod Scrub's exclude-list folder + the two ad-hoc add-name inputs, Archive
   Finder's two folders, the three Vortex-paths fields, the logs folder, and the server host field;
   deliberately NOT the `type="number"` fields, which aren't a password-manager target). The Nexus
   API key field -- the one field a password manager plausibly mistakes for an actual credential --
@@ -3295,7 +3297,7 @@ Home replaced the nav).
 class="tool-eyebrow__sep">›</span><area name></div>`, placed directly above each of the 10
 `.tool-hero` blocks that need one -- Rebuild Collection, Update Collection, Rules Generator (one
 each), plus all 4 Reports sub-tabs (Stats/Work Through/Update Compare/Rules Generator Report, each
-reading just `Home › Reports`) and all 3 Utilities sub-tabs (Missing Masters/Vortex Scrub/Archive
+reading just `Home › Reports`) and all 3 Utilities sub-tabs (Missing Masters/Mod Scrub/Archive
 Finder, each reading just `Home › Utilities`) -- the existing sub-nav pills on those two areas
 already name the specific report/utility, so the eyebrow only needs to name the shared area.
 
@@ -3390,7 +3392,7 @@ Collection (all 4 `.sync-phase` cards), Settings (two-pane layout), Rules Genera
 Reports' Stats page (all 4 bare section headers -- confirmed both the first-after-tool-hero gap and
 the between-sections gaps read identically now, vs. previously 20px/28px), Missing Masters, Vortex
 Scrub, and Archive Finder (both cards) all checked for even, consistent breathing room with no flush
-stacking. Also spot-checked in light theme (Vortex Scrub) -- no regression, since `--stack-gap` isn't
+stacking. Also spot-checked in light theme (Mod Scrub) -- no regression, since `--stack-gap` isn't
 a themed value.
 
 ## Breadcrumb eyebrow on every view, not just tool-hero landings (2026-07-28)
@@ -4297,7 +4299,7 @@ DESIGN.md's own note has the design rationale/the 3 resolved open questions; thi
 Tracked in the workspace `TODO.md` (not duplicated here — confirmed 2026-07-27, one place to check
 instead of two) under `vortex-tools/vortex-collection-tools`, split into "ready to work on" and
 "still just ideas" groups. The "New Utilities section" idea that used to live in this section is
-done -- see **Vortex Scrub (Utilities area)** above.
+done -- see **Mod Scrub (Utilities area)** above.
 
 ## Project structure
 
@@ -4372,7 +4374,7 @@ Vortex-Collection-Tools/
 │   ├── rules-generator.js, rules-generator-runner.js, rules-generator-worker.js — Rules Generator's core
 │   │   logic, isolated-worker orchestration, and worker entry point
 │   ├── pause-controller.js                                — Rebuild Collection pause/resume state machine
-│   ├── cleanup-scan.js, cleanup-exclude-store.js            — Vortex Scrub's scan/cross-check/delete logic
+│   ├── cleanup-scan.js, cleanup-exclude-store.js            — Mod Scrub's scan/cross-check/delete logic
 │   │                                                          and its exclude-list data file reader/writer
 │   ├── download-naming.js                                   — shared Vortex download/staging-folder naming-
 │   │                                                          convention regexes, used by cleanup-scan.js AND

@@ -21,7 +21,7 @@ const REQUIRED_FIELDS = [
   { key: 'staging', inputId: 'settingsStagingInput', label: () => 'Vortex staging folder' },
   { key: 'downloads', inputId: 'settingsDownloadsInput', label: () => 'Vortex downloads folder' },
   { key: 'syncBackupRoot', inputId: 'settingsSyncBackupRootInput', label: () => `Backups folder (${themedName('sync', 'Update Collection')})` },
-  { key: 'cleanupExcludeListDir', inputId: 'settingsCleanupExcludeListDirInput', label: () => `Exclude list location (${themedName('scrub', 'Vortex Scrub')})` },
+  { key: 'cleanupExcludeListDir', inputId: 'settingsCleanupExcludeListDirInput', label: () => `Exclude list location (${themedName('scrub', 'Mod Scrub')})` },
   { key: 'skyrimDataDir', inputId: 'settingsSkyrimDataDirInput', label: () => `Skyrim Data folder (${themedName('missing-masters', 'Missing Masters')})` },
   { key: 'pluginsListDir', inputId: 'settingsPluginsListDirInput', label: () => `Plugins.txt location (${themedName('missing-masters', 'Missing Masters')})` },
   { key: 'dummyMastersOutputDir', inputId: 'settingsDummyMastersOutputDirInput', label: () => `Dummy Masters output folder (${themedName('missing-masters', 'Missing Masters')})` },
@@ -813,10 +813,10 @@ $g('settingsStateRevealPreRestoreBtn').addEventListener('click', () => {
   if (p) settingsApi('POST', '/api/rebuild/reveal', { targetPath: p }).catch(() => {});
 });
 
-// ---------- Vortex Scrub exclude list ----------
+// ---------- Mod Scrub exclude list ----------
 // Lets the user maintain (view/remove/manually add) the "known-safe, don't ask again" list that
-// Vortex Scrub's (Utilities area) needsReview "Exclude" actions write to
-// (lib/cleanup-exclude-store.js). Same checkbox + bulk-action convention as Vortex Scrub's own
+// Mod Scrub's (Utilities area) needsReview "Exclude" actions write to
+// (lib/cleanup-exclude-store.js). Same checkbox + bulk-action convention as Mod Scrub's own
 // exception lists, for consistency (confirmed 2026-07-27: a lone Remove button per row wasn't
 // wanted -- checkboxes + Remove Selected/Remove All instead), inside a <details> disclosure so a
 // long-since-grown list doesn't dominate the Settings page by default. Immediate actions, same as

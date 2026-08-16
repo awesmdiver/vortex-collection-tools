@@ -1043,7 +1043,7 @@ window.loadSyncProfiles = loadSyncProfiles;
 
 // Re-checks Vortex-gated profile data specifically when the user actually visits Update Collection
 // -- every time, whether arriving via a Home card or already here -- matching the same
-// "re-check on every visit" behavior Missing Masters/Vortex Scrub already use for their own
+// "re-check on every visit" behavior Missing Masters/Mod Scrub already use for their own
 // Vortex-dependent scans. Home replaced the old nav-sync tab this used to hang off of;
 // shell.js's navigateToArea('sync') now calls window.loadSyncProfiles directly instead.
 

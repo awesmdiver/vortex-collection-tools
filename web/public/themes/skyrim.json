@@ -115,7 +115,7 @@
     "scrub": {
       "name": "The Cleansing",
       "emoji": "🔥",
-      "function": "Vortex Scrub",
+      "function": "Mod Scrub",
       "heroTitle": "The Cleansing",
       "heroBody": "A Cleansing purges what's been left to rot, so nothing lingers past its purpose. Easily spot staging folders and archives that Vortex has quietly stopped tracking&mdash;no digging through anything by hand. This shows you exactly what's safe to remove, so you can reclaim disk space with confidence.",
       "cardDesc": "Cleanse the orphaned downloads and abandoned staging folders Vortex left behind, and reclaim the disk space."

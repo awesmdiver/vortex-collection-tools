@@ -166,7 +166,7 @@ non-redundant view-specific text right below the old heading:
   the user is on), not a redundant tool-name heading, so it stays; its OWN description paragraph
   underneath (which had become redundant with the new banner) was trimmed instead.
 
-Second example, Vortex Scrub (2026-07-27) — a case where the workflow is entirely self-contained
+Second example, Mod Scrub (2026-07-27) — a case where the workflow is entirely self-contained
 (scan, review, and delete all happen on this same page, no handoff to another app like Missing
 Masters has), so the "acknowledge the workflow" beat leans on *how easy* the in-app path is instead
 of naming a destination elsewhere:
@@ -357,7 +357,7 @@ Vortex to find out.
 ## Selectable lists — the standard select-and-act pattern (2026-07-28)
 
 **One selection pattern for every list the user checks items in and then acts on** — Archive
-Finder's results, Vortex Scrub / Clean Up (needs-review, main, cross-check), the Settings exclude
+Finder's results, Mod Scrub / Clean Up (needs-review, main, cross-check), the Settings exclude
 lists, and any future one. Build it as **one reusable helper/component** so every list stays in
 sync, not copy-pasted per page. Two tiers: the **core** affordances apply to *every* such list; the
 **paginated-table extras** apply only when the list is long enough to page. Reference mockup:
@@ -939,7 +939,7 @@ supersedes the stale one this section originally shipped with (2026-07-28) — `
 | `report-workshop` | 🕒 | Workshop Report | See When You Last Touched Each Workshop Collection |
 | `report-exceptions` | 🙅 | Mod Exceptions | Mods to Never Auto-Fix |
 | `missing-masters` | 🧩 | Missing Masters | Triage Missing Masters in Seconds |
-| `scrub` | 🧽 | Vortex Scrub | Scrub Away Clutter in Seconds |
+| `scrub` | 🧽 | Mod Scrub | Scrub Away Clutter in Seconds |
 | `archive-finder` | 📦 | Archive Finder | Find Any File Inside Any Archive |
 | `missing-files` | 🩹 | Rebuild Missing Files | Fix Just the Files That Are Actually Missing |
 | `settings` | ⚙️ | Settings | Set It Up Once, Use It Everywhere |
@@ -994,7 +994,7 @@ names the current area (reads "Home" on the landing page) so the user always kno
 the app's own intro-banner pattern, not a bespoke header), then grouped card sections:
 - **Main tools** — Rebuild Collection ⚡, Update Collection 🔄, Rules Generator 🔗
 - **Reports** — Stats 📊, Work Through ✅, Update Compare 🔍, Rules Generator Report 📋
-- **Utilities** — Missing Masters 🧩, Vortex Scrub 🧽, Archive Finder 📦, Rebuild Missing Files 🩹
+- **Utilities** — Missing Masters 🧩, Mod Scrub 🧽, Archive Finder 📦, Rebuild Missing Files 🩹
   *(added 2026-08-14)*
 
 Reports and Utilities show their **sub-tools expanded** as individual cards, so every destination in
@@ -1078,7 +1078,7 @@ monitor (2026-07-28).
 1. ⚡ Rebuild Collection
 2. 🔄 Update Collection
 3. 🧩 Missing Masters
-4. 🧽 Vortex Scrub
+4. 🧽 Mod Scrub
 5. 📦 Archive Finder
 6. 📁 Paths & Backups — Vortex staging / downloads / database paths, database backups, logs
 7. ⚙️ General — theme, server (port/host + the security-warning callout), Nexus API key,
@@ -1118,7 +1118,7 @@ the show/hide toggle, last-open memory) is engineer-facing — put it in `TECHNI
 structure, and voice — they deliberately simplify real content for brevity. When a mockup trims
 real content or functionality, **keep the real thing**: this is a reorganization, not a feature or
 disclosure trim. Confirmed 2026-07-28 (three good calls during the Settings build): kept the Nexus
-key's plaintext-storage security disclosure and its "get your key" link; kept Vortex Scrub's
+key's plaintext-storage security disclosure and its "get your key" link; kept Mod Scrub's
 interactive exclude-list management (the mockup showed only a count); and kept the accurate
 "changes need a restart" note under Server. Rule of thumb: the mockup governs *how it looks and
 reads*; the existing app governs *what it does and must disclose*.
