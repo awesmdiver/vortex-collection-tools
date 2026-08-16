@@ -36,13 +36,16 @@ function rgHideCriticalError() {
   $rg('rgCriticalError').innerHTML = '';
 }
 
-function rgHandleError(e) {
+// retryFn (queue: vortex-retry-noop-sweep): the real action to re-run when Try Again is clicked on
+// the shared "Vortex is running" modal -- same fix already applied to rebuild-missing-app.js's own
+// rmfHandleError (b3eb0c7). Every call site below now passes the action that actually hit the gate.
+function rgHandleError(e, retryFn) {
   if (window.isServerUnreachableError && window.isServerUnreachableError(e)) {
-    window.showServerUnreachableError(() => {});
+    window.showServerUnreachableError(retryFn || (() => {}));
     return;
   }
   if (e.status === 409 && e.body?.error === 'vortex-running') {
-    window.showVortexRunningModal(() => {});
+    window.showVortexRunningModal(retryFn || (() => {}));
     return;
   }
   rgShowCriticalError(e.message);
@@ -59,12 +62,28 @@ const RG_SECTION_IDS = { ready: 'rgReadySection', review: 'rgReviewSection', nol
 
 async function rgLoadPickers() {
   try {
+    // Reset both selects back to just their placeholder option first -- rgLoadPickers is now a
+    // real Vortex-running RETRY target (see below), not just a one-shot page-load call, so a second
+    // run must not append a duplicate set of options onto whatever the first run already added.
+    $rg('rgOldCollectionSelect').innerHTML = '<option value="">-- Original collection --</option>';
+    $rg('rgNewCollectionSelect').innerHTML = '<option value="">-- New collection --</option>';
+    $rg('rgEmpty').classList.add('hidden');
+
+    let vortexBlockedNew = false;
     const [oldRes, workshopRes] = await Promise.all([
       rgApi('GET', '/api/rules-generator/collections'),
       rgApi('GET', '/api/rules-generator/workshop-collections').catch((e) => {
-        // Vortex running is expected/common here -- don't block loading the (Vortex-closed-
-        // independent) original-collection list just because this half needs Vortex closed.
-        if (e.status === 409) return { collections: [] };
+        // Vortex running only blocks the (live-state-derived) new-collection half -- the
+        // Vortex-closed-independent old-collection list still loads fine in parallel. Surfaced via
+        // the real shared modal now (queue: vortex-modal-consistency-sweep, director-confirmed live
+        // 2026-08-15: the plain muted inline line this used to fall back to read as a quiet,
+        // easy-to-miss exception to how every other "Vortex must be closed" moment in this app
+        // looks), with a working retry -- not swallowed into a silent, unlabeled empty list.
+        if (e.status === 409 && e.body?.error === 'vortex-running') {
+          vortexBlockedNew = true;
+          window.showVortexRunningModal(rgLoadPickers);
+          return { collections: [] };
+        }
         throw e;
       }),
     ]);
@@ -87,12 +106,16 @@ async function rgLoadPickers() {
       opt.textContent = c.name;
       newSelect.appendChild(opt);
     });
-    if (workshopRes.collections.length === 0) {
-      $rg('rgEmpty').textContent = 'Close Vortex to load the list of new collections.';
+    // Genuinely zero new (Workshop) collections -- Vortex WAS closed, there just aren't any right
+    // now. Distinct from the vortex-running case above, which is the modal's job to say, not this
+    // line's -- showing this same text there would now be misleadingly claiming Vortex is still the
+    // blocker even after the modal already covered it.
+    if (workshopRes.collections.length === 0 && !vortexBlockedNew) {
+      $rg('rgEmpty').textContent = 'No new (Workshop) collections found yet.';
       $rg('rgEmpty').classList.remove('hidden');
     }
   } catch (e) {
-    rgHandleError(e);
+    rgHandleError(e, rgLoadPickers);
   }
 }
 
@@ -534,7 +557,7 @@ async function rgAnalyze() {
     });
     rgRender(result);
   } catch (e) {
-    rgHandleError(e);
+    rgHandleError(e, rgAnalyze);
   } finally {
     $rg('rgLoading').classList.add('hidden');
     rgUpdateAnalyzeButton();
@@ -576,7 +599,7 @@ async function rgOpenApplyConfirm() {
       `This writes ${preview.totalRulesWritten} rule(s) across ${preview.totalModsChanged} mod(s) directly to Vortex's database. A full backup is taken first.`;
     $rg('rgApplyConfirmModal').classList.remove('hidden');
   } catch (e) {
-    rgHandleError(e);
+    rgHandleError(e, rgOpenApplyConfirm);
   } finally {
     btn.disabled = false;
   }
@@ -599,12 +622,25 @@ async function rgConfirmApply() {
     Object.keys(rgAnomalyOverrides).forEach((k) => delete rgAnomalyOverrides[k]);
     await rgAnalyze();
   } catch (e) {
-    rgHandleError(e);
+    rgHandleError(e, rgConfirmApply);
   }
 }
 
+// Exposed for shell.js's navigateToArea/jumpArea handling -- same "deliberate seam, function
+// defined by a later-loaded script" technique sync-app.js's own window.loadSyncProfiles already
+// uses for the identical reason (see that file's own boot() comment, 2026-07-27): rgLoadPickers
+// touches Vortex's live state (workshop-collections needs Vortex closed), so it must NEVER run
+// unconditionally on page load regardless of which area is actually visible -- confirmed real
+// 2026-08-15 (queue: rules-generator-eager-load-collision) that it was doing exactly that, and the
+// shared "Vortex is running" modal has only ONE retry slot: whichever page's own vortex-gated call
+// happened to register last silently stole every OTHER page's own Try Again click, retrying the
+// wrong thing with no visible error. Called fresh every time this area is actually visited (no
+// once-guard), same "re-check every visit" precedent as Missing Masters/Vortex Scrub/Update
+// Collection's own profile dropdown -- rgLoadPickers is already safe to call more than once (see
+// its own header comment on resetting both selects first).
+window.rgLoadPickers = rgLoadPickers;
+
 document.addEventListener('DOMContentLoaded', () => {
-  rgLoadPickers();
   $rg('rgOldCollectionSelect').addEventListener('change', rgUpdateAnalyzeButton);
   $rg('rgNewCollectionSelect').addEventListener('change', rgUpdateAnalyzeButton);
   $rg('rgAnalyzeBtn').addEventListener('click', rgAnalyze);

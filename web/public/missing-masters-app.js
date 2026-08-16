@@ -43,13 +43,18 @@ async function mmApi(method, path, body) {
   return data;
 }
 
-function mmHandleError(e) {
+// retryFn (queue: vortex-retry-noop-sweep): same fix as rebuild-missing-app.js's own rmfHandleError
+// (b3eb0c7) -- Try Again used to always call a hardcoded no-op here too.
+function mmHandleError(e, retryFn) {
   $g('mmLoading').classList.add('hidden');
   // Same convention as cleanup-app.js's cleanupHandleError -- Vortex running is a normal
-  // precondition (only the new /rebuild-mod action ever hits this), not an error, so it always
-  // gets the shared warning-styled popup instead of the plain critical-error box.
+  // precondition (only the /rebuild-mod action actually gates on it today -- confirmed via
+  // missing-masters-routes.js, none of this file's other actions call vortexRunningGate -- but
+  // every call site below still passes a real retry regardless, for correctness if that ever
+  // changes), not an error, so it always gets the shared warning-styled popup instead of the plain
+  // critical-error box.
   if (e.status === 409 && e.body?.error === 'vortex-running') {
-    window.showVortexRunningModal(() => {});
+    window.showVortexRunningModal(retryFn || (() => {}));
     return;
   }
   const box = $g('mmCriticalError');
@@ -201,7 +206,9 @@ function mmRenderMasterRow(master) {
       try {
         await mmApi('POST', '/api/missing-masters/open-staging-folder', { folderPath: master.stagingFolderPath });
       } catch (e) {
-        mmHandleError(e);
+        // Re-clicking this same button re-runs this exact handler -- it's never left disabled, so
+        // there's nothing extra to reset first.
+        mmHandleError(e, () => openBtn.click());
       }
     });
     actions.push(openBtn);
@@ -215,7 +222,7 @@ function mmRenderMasterRow(master) {
       try {
         await mmApi('POST', '/api/missing-masters/open-deployed-folder', { folderPath: master.deployedMisplaced.containingFolder });
       } catch (e) {
-        mmHandleError(e);
+        mmHandleError(e, () => openDeployedBtn.click());
       }
     });
     actions.push(openDeployedBtn);
@@ -498,7 +505,7 @@ async function runMissingMastersScan() {
     mmLastResponseJSON = JSON.stringify(data);
     mmRender(data);
   } catch (e) {
-    mmHandleError(e);
+    mmHandleError(e, runMissingMastersScan);
   }
 }
 
@@ -518,7 +525,9 @@ $g('mmRecognizeEslifierInput').addEventListener('change', async (e) => {
     mmRenderMasterList();
   } catch (err) {
     e.target.checked = !enabled; // revert -- the save didn't actually take
-    mmHandleError(err);
+    // Re-clicking the (just-reverted-to-!enabled) checkbox flips it back to `enabled` and re-fires
+    // this same change handler with the originally-intended value -- not a fresh, disconnected retry.
+    mmHandleError(err, () => e.target.click());
   } finally {
     e.target.disabled = false;
   }
@@ -562,16 +571,20 @@ function mmShowCreateDummyConfirm(name) {
 $g('mmCreateDummyConfirmCancelBtn').addEventListener('click', () => {
   $g('mmCreateDummyConfirmModal').classList.add('hidden');
 });
-$g('mmCreateDummyConfirmOkBtn').addEventListener('click', async () => {
+// Named (not just an inline listener body) so a Vortex-running retry can re-run the exact same
+// action -- reads mmPendingDummyName itself (set by mmShowCreateDummyConfirm and never cleared
+// after use), same reasoning as mmDoRebuild below reading mmPendingRebuild.
+async function mmDoCreateDummyMaster() {
   $g('mmCreateDummyConfirmModal').classList.add('hidden');
   const name = mmPendingDummyName;
   try {
     await mmApi('POST', '/api/missing-masters/create-dummy-master', { name });
     await runMissingMastersScan();
   } catch (e) {
-    mmHandleError(e);
+    mmHandleError(e, mmDoCreateDummyMaster);
   }
-});
+}
+$g('mmCreateDummyConfirmOkBtn').addEventListener('click', mmDoCreateDummyMaster);
 
 // ---------- Rebuild This Mod (single-mod repair, shares Rebuild Collection's own engine) ----------
 
@@ -667,7 +680,11 @@ function mmShowRebuildFailureOnRow(btn, title, message) {
   existingCallout.insertAdjacentElement('beforebegin', callout);
   return true;
 }
-$g('mmRebuildConfirmOkBtn').addEventListener('click', async () => {
+// Named (not just an inline listener body) so a Vortex-running retry can re-run the exact same
+// rebuild -- this is the one action in this file that actually gates on Vortex today (confirmed via
+// missing-masters-routes.js's own vortexRunningGate), so this is the real-world repro case. Reads
+// mmPendingRebuild/mmPendingRebuildBtn, both set by mmShowRebuildConfirm and never cleared after use.
+async function mmDoRebuild() {
   $g('mmRebuildConfirmModal').classList.add('hidden');
   const hollowInstall = mmPendingRebuild;
   if (mmPendingRebuildBtn) {
@@ -700,9 +717,10 @@ $g('mmRebuildConfirmOkBtn').addEventListener('click', async () => {
     await runMissingMastersScan();
   } catch (e) {
     mmResetRebuildBtn();
-    mmHandleError(e);
+    mmHandleError(e, mmDoRebuild);
   }
-});
+}
+$g('mmRebuildConfirmOkBtn').addEventListener('click', mmDoRebuild);
 
 // ---------- Background auto-refresh polling ----------
 // Originally paired with a focus/visibilitychange-triggered refresh mirroring Wrye Bash's own

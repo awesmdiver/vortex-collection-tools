@@ -35,14 +35,17 @@ async function rgReportApi(method, path, body) {
   return data;
 }
 
-function rgReportHandleError(e) {
+// retryFn (queue: vortex-retry-noop-sweep): same fix as rules-generator-app.js's own rgHandleError
+// -- Try Again used to always call a hardcoded no-op, silently doing nothing for every failure on
+// this page, not just this one report's own generate step.
+function rgReportHandleError(e, retryFn) {
   $g('rgReportLoading').classList.add('hidden');
   // Vortex-running always goes through the shared modal (window.showVortexRunningModal), same
   // convention as rules-generator-app.js's own rgHandleError -- confirmed 2026-07-27 this needs to
   // be consistent everywhere: it's a normal precondition, not an error, so it always gets the same
   // warning-styled shared popup rather than sometimes rendering inline as a critical/red callout.
   if (e.status === 409 && e.body?.error === 'vortex-running') {
-    window.showVortexRunningModal(() => {});
+    window.showVortexRunningModal(retryFn || (() => {}));
     return;
   }
   const box = $g('rgReportCriticalError');
@@ -58,13 +61,36 @@ let rgReportPickersLoaded = false;
 async function loadRulesGenReportPageOnce() {
   if (rgReportPickersLoaded) return;
   rgReportPickersLoaded = true;
+  await rgReportLoadPickers();
+}
+
+// Split out from loadRulesGenReportPageOnce (queue: vortex-retry-noop-sweep) so a Vortex-running
+// retry can call the real fetch logic directly -- passing the ONCE-guarded wrapper itself as a
+// retryFn would silently no-op on the SECOND call (rgReportPickersLoaded is already true by then),
+// making Try Again just as broken as the bug this pass fixes, only one level removed.
+async function rgReportLoadPickers() {
   try {
+    // Reset both selects to just their placeholder first -- this can now run more than once (a
+    // Vortex-running retry), so it must not append a duplicate set of options each time.
+    $g('rgReportOldSelect').innerHTML = '<option value="">-- Original collection --</option>';
+    $g('rgReportNewSelect').innerHTML = '<option value="">-- New collection --</option>';
+    $g('rgReportEmpty').classList.add('hidden');
+
+    let vortexBlockedNew = false;
     const [oldRes, workshopRes] = await Promise.all([
       rgReportApi('GET', '/api/rules-generator/collections'),
       rgReportApi('GET', '/api/rules-generator/workshop-collections').catch((e) => {
-        // Vortex running is expected/common here -- don't block loading the (Vortex-closed-
-        // independent) original-collection list just because this half needs Vortex closed.
-        if (e.status === 409) return { collections: [] };
+        // Vortex running only blocks the (live-state-derived) new-collection half -- the
+        // Vortex-closed-independent old-collection list still loads fine in parallel. Surfaced via
+        // the real shared modal now (queue: vortex-modal-consistency-sweep, director-confirmed live
+        // 2026-08-15: this used to fall back to a plain muted inline line here, which read as a
+        // quiet, easy-to-miss exception to how every other "Vortex must be closed" moment in this
+        // app looks), with a working retry -- not swallowed into a silent, unlabeled empty list.
+        if (e.status === 409 && e.body?.error === 'vortex-running') {
+          vortexBlockedNew = true;
+          window.showVortexRunningModal(rgReportLoadPickers);
+          return { collections: [] };
+        }
         throw e;
       }),
     ]);
@@ -87,12 +113,14 @@ async function loadRulesGenReportPageOnce() {
       opt.textContent = c.name;
       newSelect.appendChild(opt);
     });
-    if (workshopRes.collections.length === 0) {
-      $g('rgReportEmpty').textContent = 'Close Vortex to load the list of new collections.';
+    // Genuinely zero new (Workshop) collections -- Vortex WAS closed, there just aren't any right
+    // now. Distinct from the vortex-running case above, which is the modal's job to say now.
+    if (workshopRes.collections.length === 0 && !vortexBlockedNew) {
+      $g('rgReportEmpty').textContent = 'No new (Workshop) collections found yet.';
       $g('rgReportEmpty').classList.remove('hidden');
     }
   } catch (e) {
-    rgReportHandleError(e);
+    rgReportHandleError(e, rgReportLoadPickers);
   }
 }
 
@@ -183,7 +211,7 @@ async function rgReportGenerate() {
 
     $g('rgReportResults').classList.remove('hidden');
   } catch (e) {
-    rgReportHandleError(e);
+    rgReportHandleError(e, rgReportGenerate);
   }
 }
 

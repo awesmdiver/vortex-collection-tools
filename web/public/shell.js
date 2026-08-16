@@ -176,6 +176,11 @@ async function navigateToArea(id, subTab) {
   if (id === 'sync' && window.loadSyncProfiles) window.loadSyncProfiles();
   if (id === 'reports' && subTab && window.showReportsSubTab) window.showReportsSubTab(subTab);
   if (id === 'utilities' && subTab && window.showUtilitiesSubTab) window.showUtilitiesSubTab(subTab);
+  // Same "load Vortex-gated data only when this area is actually visited" fix as the 'sync' case
+  // above (queue: rules-generator-eager-load-collision) -- rules-generator-app.js used to call this
+  // unconditionally on every page load regardless of the active area, which could pop the shared
+  // Vortex-running modal on a totally unrelated page and silently steal any OTHER page's own retry.
+  if (id === 'rules-generator' && window.rgLoadPickers) window.rgLoadPickers();
 }
 window.navigateToArea = navigateToArea;
 
@@ -370,6 +375,9 @@ if (reportsSubTab) {
       const utilitiesSubTab = params.get('utilities');
       if (utilitiesSubTab) window.showUtilitiesSubTab?.(utilitiesSubTab);
     }
+    // Same reasoning as the 'sync' case above -- a direct "?area=rules-generator" link/refresh needs
+    // this too, not just the live-navigation path through navigateToArea.
+    if (jumpArea === 'rules-generator') window.rgLoadPickers?.();
   });
 } else {
   // First-run check: land on Settings automatically when staging/downloads aren't configured yet,

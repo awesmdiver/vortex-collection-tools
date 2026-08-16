@@ -49,12 +49,14 @@ async function cleanupApi(method, path, body) {
   return data;
 }
 
-function cleanupHandleError(e) {
+// retryFn (queue: vortex-retry-noop-sweep): same fix as rebuild-missing-app.js's own rmfHandleError
+// (b3eb0c7) -- Try Again used to always call a hardcoded no-op here too.
+function cleanupHandleError(e, retryFn) {
   $g('cleanupLoading').classList.add('hidden');
   // Same convention as reports-rulesgen-app.js's rgReportHandleError -- Vortex running is a normal
   // precondition, not an error, so it always gets the shared warning-styled popup.
   if (e.status === 409 && e.body?.error === 'vortex-running') {
-    window.showVortexRunningModal(() => {});
+    window.showVortexRunningModal(retryFn || (() => {}));
     return;
   }
   const box = $g('cleanupCriticalError');
@@ -189,7 +191,7 @@ async function runScan(kind) {
     const data = await cleanupApi('GET', kind === 'archives' ? '/api/cleanup/scan-archives' : '/api/cleanup/scan-staging');
     renderResults(kind, data);
   } catch (e) {
-    cleanupHandleError(e);
+    cleanupHandleError(e, () => runScan(kind));
   }
 }
 
@@ -254,7 +256,11 @@ $g('cleanupNeedsReviewExcludeAllBtn').addEventListener('click', () => showCleanu
 $g('cleanupReviewConfirmCancelBtn').addEventListener('click', () => {
   $g('cleanupReviewConfirmModal').classList.add('hidden');
 });
-$g('cleanupReviewConfirmOkBtn').addEventListener('click', async () => {
+// Named (not just an inline listener body) so a Vortex-running retry can re-run the exact same
+// delete/exclude action -- reads cleanupLastKind/cleanupReviewPendingNames/cleanupReviewPendingAction,
+// all module state set before this ever runs and never cleared after, same reasoning as
+// missing-masters-app.js's mmDoRebuild.
+async function doCleanupReviewConfirm() {
   $g('cleanupReviewConfirmModal').classList.add('hidden');
   const kind = cleanupLastKind;
   const names = cleanupReviewPendingNames;
@@ -268,9 +274,10 @@ $g('cleanupReviewConfirmOkBtn').addEventListener('click', async () => {
       await runScan(kind); // excluded names disappear from needsReview on the next scan
     }
   } catch (e) {
-    cleanupHandleError(e);
+    cleanupHandleError(e, doCleanupReviewConfirm);
   }
-});
+}
+$g('cleanupReviewConfirmOkBtn').addEventListener('click', doCleanupReviewConfirm);
 
 // ---------- Delete Selected / Delete All (primary scan results) ----------
 
@@ -293,7 +300,9 @@ $g('cleanupDeleteAllBtn').addEventListener('click', () => {
 $g('cleanupDeleteConfirmCancelBtn').addEventListener('click', () => {
   $g('cleanupDeleteConfirmModal').classList.add('hidden');
 });
-$g('cleanupDeleteConfirmOkBtn').addEventListener('click', async () => {
+// Named (not just an inline listener body) so a Vortex-running retry can re-run the exact same
+// delete -- reads cleanupLastKind/cleanupPendingDeleteNames, module state set before this ever runs.
+async function doCleanupDeleteConfirm() {
   $g('cleanupDeleteConfirmModal').classList.add('hidden');
   const kind = cleanupLastKind;
   const names = cleanupPendingDeleteNames;
@@ -302,9 +311,10 @@ $g('cleanupDeleteConfirmOkBtn').addEventListener('click', async () => {
     await runScan(kind); // refresh the list -- deleted rows disappear, any failures would still show
     await runCrossCheckFollowUp(kind, names);
   } catch (e) {
-    cleanupHandleError(e);
+    cleanupHandleError(e, doCleanupDeleteConfirm);
   }
-});
+}
+$g('cleanupDeleteConfirmOkBtn').addEventListener('click', doCleanupDeleteConfirm);
 
 // ---------- Cross-check follow-up ----------
 
@@ -348,7 +358,7 @@ async function deleteCrossCheckMatches(names) {
   try {
     await cleanupApi('POST', '/api/cleanup/delete', { kind: cleanupCrossCheckKind, names });
   } catch (e) {
-    cleanupHandleError(e);
+    cleanupHandleError(e, () => deleteCrossCheckMatches(names));
   } finally {
     $g('cleanupCrossCheckModal').classList.add('hidden');
     // If the report currently on screen is the side we just cross-deleted from, refresh it too.

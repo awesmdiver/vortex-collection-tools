@@ -22,9 +22,12 @@ async function wrApi(method, urlPath, body) {
   return data;
 }
 
-function wrHandleError(e, box) {
+// retryFn (queue: vortex-retry-noop-sweep): found via the same grep as the other 4 files in this
+// pass (not originally in scope, but the identical bug, so fixed alongside them) -- same fix as
+// rebuild-missing-app.js's own rmfHandleError (b3eb0c7).
+function wrHandleError(e, box, retryFn) {
   if (e.status === 409 && e.body?.error === 'vortex-running') {
-    window.showVortexRunningModal(() => {});
+    window.showVortexRunningModal(retryFn || (() => {}));
     return;
   }
   if (window.isServerUnreachableError && window.isServerUnreachableError(e)) {
@@ -62,12 +65,19 @@ let wrPageLoaded = false;
 async function loadWorkshopReportPageOnce() {
   if (wrPageLoaded) return;
   wrPageLoaded = true;
+  await wrLoadRows();
+}
+
+// Split out from loadWorkshopReportPageOnce (queue: vortex-retry-noop-sweep) so a Vortex-running
+// retry can re-run the real fetch -- passing the once-guarded wrapper itself would silently no-op
+// on a second call, since wrPageLoaded is already true by then.
+async function wrLoadRows() {
   try {
     const data = await wrApi('GET', '/api/workshop-report/rows');
     wrRenderLastChecked(data.checkedAt);
     if (data.rows && data.rows.length > 0) wrRenderRows(data.rows);
   } catch (e) {
-    wrHandleError(e, $g('wrCriticalError'));
+    wrHandleError(e, $g('wrCriticalError'), wrLoadRows);
   }
 }
 
@@ -79,7 +89,8 @@ function wrRenderLastChecked(checkedAt) {
 
 let wrEventSource = null;
 
-$g('wrCheckBtn').addEventListener('click', async () => {
+// Named (not just an inline listener body) so a Vortex-running retry can re-run this exact check.
+async function wrStartCheck() {
   $g('wrCheckBtn').disabled = true;
   $g('wrCriticalError').classList.add('hidden');
   const wrap = $g('wrProgressWrap');
@@ -95,7 +106,7 @@ $g('wrCheckBtn').addEventListener('click', async () => {
     if (e.status !== 409 || e.body?.error === 'vortex-running') {
       $g('wrCheckBtn').disabled = false;
       wrap.classList.add('hidden');
-      wrHandleError(e, $g('wrCriticalError'));
+      wrHandleError(e, $g('wrCriticalError'), wrStartCheck);
       return;
     }
   }
@@ -104,7 +115,8 @@ $g('wrCheckBtn').addEventListener('click', async () => {
   const es = new EventSource('/api/workshop-report/check/events');
   wrEventSource = es;
   es.onmessage = (msg) => wrHandleCheckEvent(JSON.parse(msg.data));
-});
+}
+$g('wrCheckBtn').addEventListener('click', wrStartCheck);
 
 function wrHandleCheckEvent(frame) {
   if (frame.type === 'collection-checking') {
@@ -121,7 +133,7 @@ function wrHandleCheckEvent(frame) {
     $g('wrProgressWrap').classList.add('hidden');
     $g('wrCheckBtn').disabled = false;
     if (wrEventSource) { wrEventSource.close(); wrEventSource = null; }
-    wrHandleError(new Error(frame.message || 'The check failed.'), $g('wrCriticalError'));
+    wrHandleError(new Error(frame.message || 'The check failed.'), $g('wrCriticalError'), wrStartCheck);
   }
 }
 
@@ -286,7 +298,7 @@ async function wrFetchFromNexus(row, btn) {
   } catch (e) {
     btn.disabled = false;
     btn.textContent = original;
-    wrHandleError(e, $g('wrCriticalError'));
+    wrHandleError(e, $g('wrCriticalError'), () => wrFetchFromNexus(row, btn));
   }
 }
 
@@ -297,6 +309,6 @@ async function wrOpenStagingFolder(row) {
   try {
     await wrApi('POST', '/api/rebuild-missing/open-staging-folder', { targetFolderName: row.collectionModId });
   } catch (e) {
-    wrHandleError(e, $g('wrCriticalError'));
+    wrHandleError(e, $g('wrCriticalError'), () => wrOpenStagingFolder(row));
   }
 }
