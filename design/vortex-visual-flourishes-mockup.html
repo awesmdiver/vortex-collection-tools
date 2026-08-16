@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body>
+<title>Theming: visual flourishes — background art, themed fonts, Get Started book (Pending review 2026-08-15)</title>
+<!-- Font candidates loaded from Google Fonts for THIS PREVIEW ONLY -- the real app never calls out
+     to a CDN (it's a locally-run tool, no reason to add a live network dependency for a font). Once
+     a candidate is picked, the real build self-hosts that one font's files under
+     web/public/theme-assets/skyrim/fonts/, same "bundled, not fetched" pattern as everything else
+     under theme-assets/. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Cinzel+Decorative:wght@700&family=Uncial+Antiqua&family=MedievalSharp&family=Marcellus&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0d0f14; --surface:#161922; --surface-2:#1d212c; --border:#2a2f3d; --border-strong:#3a4152;
+    --text:#e6e9ef; --text-muted:#8b93a3; --accent:#9b72d1; --accent-hover:#b494dd; --accent-bg:rgba(155,114,209,0.14);
+    --success:#3ecf8e; --warning:#f5b942; --danger:#f0546b; --neutral:#7c8494;
+    --radius:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;font-size:15px;line-height:1.5}
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 24px 90px}
+  h1.page-title{font-size:22px;margin:0 0 6px}
+  .lead{color:var(--text-muted);font-size:14px;margin:0 0 34px;max-width:760px;line-height:1.65}
+  .section{margin:0 0 56px}
+  .section-title{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--accent);
+    font-weight:700;margin:0 0 6px}
+  .section-sub{color:var(--text-muted);font-size:13.5px;margin:0 0 20px;max-width:680px;line-height:1.65}
+  .note{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);
+    padding:12px 16px;font-size:13px;color:var(--text-muted);margin:16px 0 0;line-height:1.6}
+  .note b{color:var(--text)}
+
+  /* ---- Font candidates ---- */
+  .font-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+  .font-card{border:1px solid var(--border);border-radius:var(--radius);padding:20px;background:var(--surface)}
+  .font-card.picked{border-color:var(--accent);background:var(--accent-bg)}
+  .font-card__label{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:14px;
+    display:flex;justify-content:space-between;align-items:center}
+  .font-card__pick{font-size:10.5px;background:var(--accent);color:#fff;padding:2px 8px;border-radius:10px;font-weight:700;letter-spacing:.03em}
+  .font-sample-lg{font-size:30px;margin:0 0 8px;line-height:1.2}
+  .font-sample-sm{font-size:17px;color:var(--text-muted);margin:0}
+  .f-cinzel{font-family:'Cinzel',serif}
+  .f-cinzeld{font-family:'Cinzel Decorative',serif}
+  .f-uncial{font-family:'Uncial Antiqua',serif}
+  .f-medieval{font-family:'MedievalSharp',serif}
+  .f-marcellus{font-family:'Marcellus',serif}
+
+  /* ---- Background art concept ---- */
+  .bg-demo{position:relative;border:1px solid var(--border-strong);border-radius:var(--radius);overflow:hidden;
+    background:var(--bg);padding:36px 28px;min-height:280px}
+  .bg-demo::before{content:'';position:absolute;inset:0;opacity:.10;pointer-events:none;
+    background-image:
+      radial-gradient(ellipse at 15% 20%, rgba(155,114,209,.5), transparent 45%),
+      radial-gradient(ellipse at 85% 75%, rgba(155,114,209,.35), transparent 50%),
+      repeating-linear-gradient(115deg, rgba(255,255,255,.03) 0px, rgba(255,255,255,.03) 1px, transparent 1px, transparent 90px);
+    background-size:cover,cover,auto}
+  .bg-demo__content{position:relative;z-index:1}
+  .bg-demo .home-title{font-family:'Cinzel',serif;font-weight:700;font-size:26px;margin:0 0 8px;
+    background:linear-gradient(180deg,#e6e9ef,#b8a0dd);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .bg-demo .home-lead{color:var(--text-muted);font-size:13.5px;max-width:520px;margin:0 0 24px}
+  .mini-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .mini-card{border:1px solid var(--border);border-radius:8px;padding:12px;background:rgba(22,25,34,.7);backdrop-filter:blur(2px)}
+  .mini-card .n{font-family:'Cinzel',serif;font-weight:600;font-size:13.5px;margin-bottom:3px}
+  .mini-card .d{font-size:11.5px;color:var(--text-muted)}
+
+  /* ---- Get Started book concept ---- */
+  .book-page{border:1px solid var(--border-strong);border-radius:var(--radius);overflow:hidden;background:var(--surface)}
+  .book-page__banner{width:100%;display:block;aspect-ratio:2816/1536;object-fit:cover;background:linear-gradient(160deg,#1a1520,#2b1f38)}
+  .book-page__body{padding:28px 32px}
+  .book-page__eyebrow{font-family:'Cinzel',serif;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin:0 0 6px}
+  .book-page__title{font-family:'Cinzel',serif;font-weight:700;font-size:28px;margin:0 0 4px}
+  .book-page__func{font-size:13px;color:var(--text-muted);margin:0 0 20px;font-style:italic}
+  .book-page__lore{font-size:14.5px;line-height:1.75;margin:0 0 16px;color:var(--text)}
+  .book-page__lore b{color:var(--accent)}
+  .book-page__whatitdoes{background:var(--surface-2);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;
+    padding:14px 18px;font-size:13.5px;line-height:1.7;margin:0 0 20px}
+  .book-page__whatitdoes b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-bottom:6px}
+  .book-nav{display:flex;justify-content:space-between;align-items:center;padding:14px 32px;border-top:1px solid var(--border);
+    background:var(--surface-2);font-size:12.5px;color:var(--text-muted)}
+  .book-nav a{color:var(--accent);text-decoration:none;font-weight:600}
+  .book-toc{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:18px}
+  .book-toc a{display:block;padding:9px 12px;border:1px solid var(--border);border-radius:8px;color:var(--text);
+    text-decoration:none;font-size:13px;background:var(--surface)}
+  .book-toc a:hover{border-color:var(--accent)}
+  .book-toc .emoji{margin-right:6px}
+</style>
+
+<div class="wrap">
+  <h1 class="page-title">Visual flourishes — background art, themed fonts, Get Started book</h1>
+  <p class="lead">Three pieces from the same "thinking out loud" list (2026-08-15), mocked up together so you
+  can react to them as one visual direction rather than three separate asks. Nothing here is built —
+  this is the sign-off step before any of it is.</p>
+
+  <!-- ============================================================ -->
+  <div class="section">
+    <div class="section-title">1 · Themed display font</div>
+    <p class="section-sub">Right now every tool name renders in the app's own plain system font, same
+    weight as everything else — "The Arcaneum" reads exactly like "Settings." A themed display font just
+    for tool names/headings (never body text — that stays the readable system font) would give Skyrim
+    mode its own real visual identity, not just a color swap. Five real, license-free candidates below,
+    same sample text so they're easy to compare side by side. Loaded from Google Fonts for this preview
+    only — the real build self-hosts whichever one you pick.</p>
+
+    <div class="font-grid">
+      <div class="font-card picked">
+        <div class="font-card__label">Cinzel <span class="font-card__pick">MY PICK</span></div>
+        <div class="font-sample-lg f-cinzel">The Arcaneum</div>
+        <div class="font-sample-sm f-cinzel">Restoration · The Forge · The Ward</div>
+      </div>
+      <div class="font-card">
+        <div class="font-card__label">Cinzel Decorative</div>
+        <div class="font-sample-lg f-cinzeld">The Arcaneum</div>
+        <div class="font-sample-sm f-cinzeld">Restoration · The Forge · The Ward</div>
+      </div>
+      <div class="font-card">
+        <div class="font-card__label">Uncial Antiqua</div>
+        <div class="font-sample-lg f-uncial">The Arcaneum</div>
+        <div class="font-sample-sm f-uncial">Restoration · The Forge · The Ward</div>
+      </div>
+      <div class="font-card">
+        <div class="font-card__label">MedievalSharp</div>
+        <div class="font-sample-lg f-medieval">The Arcaneum</div>
+        <div class="font-sample-sm f-medieval">Restoration · The Forge · The Ward</div>
+      </div>
+      <div class="font-card">
+        <div class="font-card__label">Marcellus</div>
+        <div class="font-sample-lg f-marcellus">The Arcaneum</div>
+        <div class="font-sample-sm f-marcellus">Restoration · The Forge · The Ward</div>
+      </div>
+    </div>
+    <div class="note"><b>My pick, flagged not final:</b> Cinzel — reads clearly at small sizes (Home
+    cards, breadcrumbs) unlike Uncial Antiqua/MedievalSharp, which get hard to read below ~20px, and
+    it's the same face already used loosely in a lot of Skyrim fan/mod-community material, so it feels
+    "right" rather than generic-fantasy. Cinzel Decorative is striking but too heavy for repeated small
+    UI text (fine for a one-off banner, not a tool name shown 10+ times a page). Marcellus is elegant but
+    reads more "ancient Rome" than "Nordic," a little off-theme. Say the word if you want a different
+    pick or want to see a 6th option.</div>
+  </div>
+
+  <!-- ============================================================ -->
+  <div class="section">
+    <div class="section-title">2 · Background art</div>
+    <p class="section-sub">A subtle themed texture behind Home's own background — not a busy illustration
+    competing with the cards, just enough atmosphere that Skyrim mode feels like its own space. Very low
+    opacity (this demo is ~10%) so every card/text stays exactly as readable as it is today; this is
+    CSS-only (gradients + a faint diagonal line texture), no image file needed, so it doesn't add another
+    Gemini-generation round the way the banners did.</p>
+
+    <div class="bg-demo">
+      <div class="bg-demo__content">
+        <div class="home-title">The Arcaneum</div>
+        <div class="home-lead">Every tool in the collection, shelved and waiting.</div>
+        <div class="mini-grid">
+          <div class="mini-card"><div class="n">The Forge</div><div class="d">Merge Plugins</div></div>
+          <div class="mini-card"><div class="n">Restoration</div><div class="d">Rebuild Collection</div></div>
+          <div class="mini-card"><div class="n">The Ward</div><div class="d">Update Collection</div></div>
+          <div class="mini-card"><div class="n">The Scribe</div><div class="d">Rules Generator</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="note"><b>Judgment call, flagged:</b> this is a purely CSS gradient/texture treatment, not
+    real illustrated art — deliberately, since it needs to sit BEHIND readable content everywhere on
+    Home, not just look good in one banner-sized crop. If you'd rather have an actual Gemini-generated
+    background image (parchment/stone texture, subtle Nordic knotwork border, etc.) instead of a CSS
+    gradient, that's buildable too — just says which direction before I build either one for real.</div>
+  </div>
+
+  <!-- ============================================================ -->
+  <div class="section">
+    <div class="section-title">3 · Skyrim-themed "Get Started" book</div>
+    <p class="section-sub">A themed help/onboarding page, reusing the release banner art (the real ones
+    already made — this mockup's own banner placeholder below stands in for e.g. The Forge's actual
+    release banner) with real lore + a genuinely useful "what this tool actually does" explanation per
+    tool, browsable like a table of contents. One sample page below (The Forge), plus what the table of
+    contents for the whole book would look like.</p>
+
+    <div class="book-page">
+      <img class="book-page__banner" src="../assets/release-v0.5.0-banner.png" onerror="this.style.display='none'" alt="">
+      <div class="book-page__body">
+        <div class="book-page__eyebrow">Chapter · The Forge</div>
+        <div class="book-page__title">The Forge</div>
+        <p class="book-page__func">Functional name: Merge Plugins</p>
+        <p class="book-page__lore">Where raw materials are <b>fused into one</b> — a forge doesn't create
+        from nothing, it takes what already exists and combines it into something stronger. That's the
+        whole idea behind this tool: your plugins already exist, already work, already have their own
+        records. The Forge doesn't rewrite any of that — it just fuses several of them into a single
+        file, so they take up one load-order slot instead of many.</p>
+        <div class="book-page__whatitdoes">
+          <b>What it actually does</b>
+          Pick plugins from one or more collections, review exactly what's going into the merge (which
+          records, whether anything needs a master, whether it overrides another mod's own changes),
+          then merge them into a single new .esp. If the result stays under Skyrim's 4,096-record light-
+          plugin limit and doesn't touch any cell/worldspace records, it gets flagged as an ESL
+          automatically — zero load-order cost. Nothing about your original plugins changes; the merge is
+          a new file, backed by the xelib engine Wrye Bash/xEdit both use under the hood.
+        </div>
+      </div>
+      <div class="book-nav">
+        <a href="#">← The Ward</a>
+        <span>3 of 17</span>
+        <a href="#">The Scribe →</a>
+      </div>
+    </div>
+
+    <p class="section-sub" style="margin-top:28px">Table of contents (every tool gets one page, same
+    shape as above):</p>
+    <div class="book-toc">
+      <a href="#"><span class="emoji">📖</span>The Arcaneum</a>
+      <a href="#"><span class="emoji">🔨</span>The Forge</a>
+      <a href="#"><span class="emoji">✨</span>Restoration</a>
+      <a href="#"><span class="emoji">🛡️</span>The Ward</a>
+      <a href="#"><span class="emoji">✒️</span>The Scribe</a>
+      <a href="#"><span class="emoji">🔮</span>The Augur</a>
+      <a href="#"><span class="emoji">🔥</span>The Cleansing</a>
+      <a href="#"><span class="emoji">👁️</span>Clairvoyance</a>
+      <a href="#"><span class="emoji">🗝️</span>The Vault-Keeper</a>
+      <a href="#"><span class="emoji">🗿</span>The Standing Stones</a>
+    </div>
+    <div class="note"><b>Real content work, not just layout:</b> the lore paragraphs already exist for
+    every tool (design/theme-content-skyrim.md's own "why these names" section) — the NEW writing needed
+    is each tool's own "what it actually does" box, at this level of real functional detail (more than
+    the one-line cardDesc, less than full TECHNICAL.md). That's a real writing pass across ~16 tools,
+    worth confirming you want before I start it. Where does this page live/how is it reached? Simplest:
+    a new Home-page link ("📖 Get Started" or similar) next to Settings, Skyrim-theme-only (Plain has no
+    book, nothing to show).</div>
+  </div>
+
+</div>
+</body>
+</html>
