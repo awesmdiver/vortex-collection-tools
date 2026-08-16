@@ -750,15 +750,19 @@
 
 <section id="area-settings" class="tool-area hidden">
 <main class="app-main">
-  <div class="settings-header-row">
-    <div class="tool-hero" data-tool-id="settings">
-      <h2 class="tool-hero__title" data-brand-slot="heroTitle">⚙️ Set It Up Once, Use It Everywhere</h2>
-      <p class="tool-hero__body" data-brand-slot="heroBody">Set your Vortex paths and preferences here just once, and every tool picks them up automatically! Designed to keep all your setup in one place, this saves you from entering the same folders and options over and over&mdash;so you can spend your time on the actual work, not the configuration.</p>
-    </div>
-    <div class="settings-header-actions">
-      <button id="settingsRestartServerBtn" class="btn btn--ghost btn--small">Restart Server</button>
-      <button id="settingsStopServerBtn" class="btn btn--ghost btn--small">Stop Server</button>
-    </div>
+  <!-- Restart/Stop Server moved above the tool-hero title (director's own call, 2026-08-15) --
+       previously sat beside the full title+body block via .settings-header-row's own flex layout,
+       which could read as centered against the body text rather than the title, and wrapped to its
+       own line under a narrow window. A dedicated row above the title keeps it consistently top-
+       right regardless of width, and reads as a small utility strip rather than a peer action next
+       to the page's own intro copy. -->
+  <div class="settings-header-actions">
+    <button id="settingsRestartServerBtn" class="btn btn--ghost">Restart Server</button>
+    <button id="settingsStopServerBtn" class="btn btn--ghost">Stop Server</button>
+  </div>
+  <div class="tool-hero" data-tool-id="settings">
+    <h2 class="tool-hero__title" data-brand-slot="heroTitle">⚙️ Set It Up Once, Use It Everywhere</h2>
+    <p class="tool-hero__body" data-brand-slot="heroBody">Set your Vortex paths and preferences here just once, and every tool picks them up automatically! Designed to keep all your setup in one place, this saves you from entering the same folders and options over and over&mdash;so you can spend your time on the actual work, not the configuration.</p>
   </div>
   <p id="settingsServerActionStatus" class="muted hidden"></p>
 

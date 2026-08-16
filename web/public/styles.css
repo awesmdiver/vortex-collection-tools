@@ -266,10 +266,6 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    friendly what/why sentence or two. See DESIGN.md's "Tool intro banner" section -- first shipped on
    Missing Masters 2026-07-27, meant to be reused by every tool page's own intro over time. */
 .tool-hero { margin-bottom: var(--stack-gap); }
-/* Inside Settings' own header row the tool-hero sits beside the Restart/Stop Server buttons, not
-   stacked above other page content -- the row's own gap already provides spacing, so the usual
-   bottom margin would just double it up. */
-.settings-header-row .tool-hero { margin-bottom: 0; }
 .tool-hero__title { font-size: 22px; margin: 0 0 8px; }
 .tool-hero__body { margin: 0; color: var(--text); font-size: 14px; line-height: 1.6; }
 /* Themed hero banner image (theme.js's data-brand-slot="bannerImage") -- Plain has none, so this
@@ -389,23 +385,15 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .home-card__star:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 .home-card__star.on { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 
-/* Settings page header -- keeps the intro line and the server action buttons on one row, same
-   space-between/flex-wrap idea as .progress-header-row, so a narrow window wraps the buttons
-   below the text instead of clipping/overlapping them. align-items: flex-start (not center) since
-   2026-07-28's tool-hero replaced the old single-line subtitle with a two-line title+body block --
-   centering that taller block against the button row reads oddly. */
-.settings-header-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-.settings-header-row p { margin: 4px 0; }
-/* margin-left: auto keeps these pinned to the right edge of whichever flex line they're on --
-   holds on the tool-hero's own line when there's room, and (confirmed 2026-07-28) still holds when
-   they wrap to their own line under a narrow window, instead of falling back to the left edge. */
-.settings-header-actions { display: flex; gap: 8px; flex-shrink: 0; margin-left: auto; }
+/* Settings page header -- Restart/Stop Server sit in their own small row ABOVE the tool-hero title
+   now (director's own call, 2026-08-15; was previously laid out beside the full title+body block
+   via a shared flex row, .settings-header-row, which read as level with the body text rather than
+   the title and could wrap awkwardly under a narrow window -- see git history for that version).
+   Right-aligned, tucked up against the top of the page as a small utility strip, deliberately
+   smaller than a normal .btn--small (13px/5px 12px) -- these are maintenance actions, not something
+   that should visually compete with the page's own primary content. */
+.settings-header-actions { display: flex; gap: 6px; justify-content: flex-end; margin: 0 0 4px; }
+.settings-header-actions .btn { font-size: 12px; padding: 4px 10px; }
 
 .btn--back { margin-bottom: 10px; }
 
