@@ -15,7 +15,7 @@
     },
     {
       "title": "Harmonization (Phase 3a): multi-select filter badges -- built 2026-08-15, pending live spot-check",
-      "note": "Every clickable filter badge app-wide (Missing Masters, Rebuild Missing Files, Rules Generator + its Report, Stats, Work Through, Merge Plugins, Rebuild Collection's Plan + log-view pages) converted from single-select-isolate to real multi-select (workspace UX-PRINCIPLES.md rule 7). Verified via synthetic data in Merge/Rules Generator/Rebuild Missing Files (no real problem data in the environment at build time) -- worth a live spot-check once real problem mods/masters exist to click through for real.",
+      "note": "Every clickable filter badge app-wide (Missing Masters, Rebuild Missing Files, Rules Generator + its Report, Stats, Work Through, Merge Plugins, Rebuild Collection's Plan + log-view pages) converted from single-select-isolate to real multi-select (workspace UX-PRINCIPLES.md rule 7). Verified via synthetic data (no real problem data in the environment at build time) -- director confirmed Phase 3b (the cart bar) live 2026-08-15 but hasn't yet clicked through this half with real problem mods/masters. Worth a spot-check next time some exist.",
       "doc": "DESIGN.md"
     },
     {
@@ -126,6 +126,10 @@
     {
       "title": "Theming framework Phase 1 + Phase 2 -- data-driven brand refactor, first real theme (Skyrim), real picker",
       "doc": "DESIGN.md"
+    },
+    {
+      "title": "Harmonization Phase 3b: sticky cart bar back-ported from The Forge to Rebuild Missing Files",
+      "doc": "design/vortex-rebuild-missing-files-mockup.html"
     }
   ]
 }
