@@ -2,7 +2,7 @@
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body>
-<title>Rebuild Missing Files — new tool mockup v1 (Approved ✓ 2026-08-05) + v2 addendum (Superseded — per-card buttons removed) + v3 addendum (Approved ✓ 2026-08-14)</title>
+<title>Rebuild Missing Files — new tool mockup v1 (Approved ✓ 2026-08-05) + v2 addendum (Superseded — per-card buttons removed) + v3 addendum (Approved ✓ 2026-08-14) + v4 addendum (Pending review 2026-08-15)</title>
 <style>
   :root{
     --bg:#0d0f14; --surface:#161922; --surface-2:#1d212c; --border:#2a2f3d; --border-strong:#3a4152;
@@ -81,6 +81,40 @@
   .archive-missing{color:var(--warning);font-size:11.5px;margin-top:3px}
 
   .note{margin:16px 2px 0;font-size:12.5px;color:var(--text-muted);line-height:1.7}
+
+  /* ---- v4 addendum: sticky cart bar (Harmonization Phase 3b) ---- */
+  /* Fake sticky app header, just so the demo below can show the cart bar sticking right underneath
+     it, the same way it would sit below the real app's own sticky .app-header (top:0, z-index:50). */
+  .fake-app-header{position:sticky;top:0;z-index:50;background:var(--surface);border-bottom:1px solid var(--border);
+    padding:14px 20px;font-weight:700;font-size:14px;display:flex;align-items:center;gap:10px}
+  .fake-app-header .gear{opacity:.6}
+  .v4-demo-frame{border:1px solid var(--border-strong);border-radius:var(--radius);overflow:hidden;max-height:520px;overflow-y:auto;position:relative}
+  .v4-demo-inner{padding:0 20px 20px}
+  /* The bar itself -- same accent-tinted-card language as .merge-cart-bar (icon + bold count +
+     spacer + button), but STICKY, not inline. Merge's own version never needed this: its cart
+     persists across many separate searches on a page that's mostly one results table, so the bar
+     sitting once at the top of Step 2 is enough. This tool's own picker is a single long scroll of
+     many collection cards across 3 grouped sections -- the plain-text selection count at the very
+     bottom (today's real behavior) is easy to lose track of while scrolling past a big list, which
+     is the actual gap this backport closes. */
+  /* top:49px, not 0 -- sits right below .fake-app-header (also sticky, top:0) instead of stacking on
+     top of it; matches how it'd sit below the real app's own sticky .app-header. z-index lower than
+     the header's 50 so the header always wins if they ever visually overlap during the scroll
+     transition. */
+  .v4-cartbar{position:sticky;top:49px;z-index:10;display:flex;align-items:center;gap:10px;
+    background:var(--accent-bg);border:1px solid var(--accent);border-radius:var(--radius);
+    padding:12px 16px;margin:16px 0;font-size:14px;flex-wrap:wrap;
+    box-shadow:0 4px 12px rgba(0,0,0,.25)}
+  .v4-cartbar strong{color:var(--accent)}
+  .v4-cartbar .spacer{flex:1}
+  .v4-tag{display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--border);
+    border-radius:20px;padding:3px 6px 3px 12px;font-size:12.5px;margin:3px 4px 3px 0}
+  .v4-tag button{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;
+    width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
+  .v4-tag button:hover{background:var(--danger-bg);color:var(--danger)}
+  .v4-taglist{display:none;flex-basis:100%;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+  .v4-taglist.open{display:block}
+  .v4-toggle-tags{background:none;border:none;color:var(--accent);font-size:12.5px;cursor:pointer;text-decoration:underline;padding:0}
 </style>
 
 <div class="wrap">
@@ -220,6 +254,58 @@
     least one Workshop collection is selected — it names every affected collection once, instead of a
     separate confirm for each. Clicking <strong>Scan</strong> refreshes each one in turn (shown inline in
     the same progress line the scan already uses), then scans as normal.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- v4 ADDENDUM (Pending review 2026-08-15) -- Harmonization Phase 3b: back-port The Forge's     -->
+  <!-- persistent "cart bar" pattern to this tool's own Step 1 picker. Director's ask, scoped to a  -->
+  <!-- mock-up-first pass per the standing "big UI change" rule.                                    -->
+  <!--                                                                                               -->
+  <!-- WHY here, and why different from Merge's own cart bar: Merge's version sits once, inline, at -->
+  <!-- the top of Step 2's results table -- correct there because the cart persists across MANY     -->
+  <!-- separate searches over time, and "View chosen" opens a separate OS window to review the      -->
+  <!-- full list. This tool's own picker is simpler (every candidate is already visible on one       -->
+  <!-- page, in 3 grouped sections) but that page can get LONG -- a big Vortex library easily means  -->
+  <!-- dozens of installed + Workshop collection cards. Today's real selection count                -->
+  <!-- (id="rmfPickCount") sits as plain muted text at the very BOTTOM of that scroll, so once        -->
+  <!-- you've picked a few collections and kept scrolling, there's no visible reminder of what's     -->
+  <!-- selected until you scroll all the way back down. Making it STICKY (right below the app's own  -->
+  <!-- sticky header) is the actual value-add here, not just reusing the accent-tinted box styling.  -->
+  <!--                                                                                                -->
+  <!-- No "View chosen" button needed (unlike Merge) -- nothing is hidden off-page to go look at,    -->
+  <!-- so the bar's own action IS the real next step (Scan), directly in the bar. An optional        -->
+  <!-- expandable chip list is included below (click "which ones?") for the case where someone       -->
+  <!-- picked collections from different sections and wants a quick reminder without scrolling --    -->
+  <!-- genuinely optional, flag if it feels like scope creep for a first pass.                       -->
+  <!-- ============================================================ -->
+  <div style="margin-top:40px">
+    <span class="stepnote">v4 addendum — sticky cart bar (scroll the frame below to see it stick)</span>
+    <p class="note" style="margin-top:0 0 14px;max-width:640px">This frame simulates the real page's own
+    scroll, with a sticky app header pinned at its top (same as the real app) and a long list of
+    collection cards below, so you can scroll and see the bar behave exactly as it would live.</p>
+
+    <div class="v4-demo-frame" id="v4Frame">
+      <div class="fake-app-header"><span class="gear">⚙</span> Vortex Collection Tools — this simulates the real app's own sticky header</div>
+      <div class="v4-demo-inner">
+        <div class="group-head" style="margin-top:18px"><h2>Installed collections</h2><span class="n" id="v4InstalledCount"></span></div>
+        <div class="picker-grid" id="v4InstalledGrid"></div>
+
+        <div class="group-head"><h2>Workshop collections</h2><span class="n">collections you're authoring, not installed</span></div>
+        <div class="picker-grid" id="v4WorkshopGrid"></div>
+
+        <div class="v4-cartbar" id="v4CartBar">
+          <span>🩹</span>
+          <span><strong id="v4Count">0</strong> collection<span id="v4Plural">s</span> selected</span>
+          <button class="v4-toggle-tags" id="v4ToggleTags" style="display:none" onclick="v4ToggleTagList()">which ones?</button>
+          <div class="spacer"></div>
+          <button class="btn btn--primary" id="v4ScanBtn" disabled>Scan for Missing Files →</button>
+          <div class="v4-taglist" id="v4TagList"></div>
+        </div>
+
+        <p class="note">Scanning checks whether every mod's files actually exist in your staging folder —
+        nothing changes yet.</p>
+      </div>
+    </div>
   </div>
 
   <!-- ============================================================ -->
@@ -366,6 +452,74 @@
   window.clearSel = () => { boxes().forEach(b => { b.checked = false; paint(b); }); refresh(); };
   window.invert = () => { boxes().forEach(b => { b.checked = !b.checked; paint(b); }); refresh(); };
   refresh();
+
+  // ---- v4 addendum demo wiring ----
+  // Deliberately a LONG list (real big Vortex libraries easily run 20-40+ collections) so this
+  // demo frame has genuine scroll depth to prove the sticky behavior with, not just a token amount.
+  const V4_INSTALLED = [
+    {name:"Daughter of Coldharbour, SDA in GTS.", sub:"20 mods · installed"},
+    {name:"Beauty Salon for GTS", sub:"95 mods · installed"},
+    {name:"Legacy of the Dragonborn", sub:"312 mods · installed"},
+    {name:"Wintersun — Faiths of Skyrim", sub:"11 mods · installed"},
+    {name:"Northern Roads", sub:"6 mods · installed"},
+    {name:"Vokrii — Minimalistic Perks", sub:"4 mods · installed"},
+    {name:"Ordinator — Perks of Skyrim", sub:"9 mods · installed"},
+    {name:"Immersive Armors", sub:"38 mods · installed"},
+    {name:"Skyland AIO", sub:"14 mods · installed"},
+    {name:"Cathedral Weathers", sub:"3 mods · installed"},
+    {name:"NAT — Natural and Atmospheric Tamriel", sub:"7 mods · installed"},
+    {name:"Obsidian Weathers and Seasons", sub:"5 mods · installed"},
+    {name:"Simply Bigger Trees", sub:"2 mods · installed"},
+    {name:"3D Trees and Plants", sub:"6 mods · installed"},
+    {name:"Book Covers Skyrim", sub:"1 mod · installed"},
+    {name:"Cutting Room Floor", sub:"4 mods · installed"},
+    {name:"JK's Skyrim", sub:"22 mods · installed"},
+    {name:"Bellyaches Animal and Creature Pack", sub:"9 mods · installed"},
+    {name:"Total Character Makeover", sub:"41 mods · installed"},
+    {name:"Skyrim 3D Landscapes", sub:"17 mods · installed"},
+  ];
+  const V4_WORKSHOP = [
+    {name:"My WIP Overhaul", sub:"48 mods · authoring"},
+    {name:"Test Collection — do not publish", sub:"6 mods · authoring"},
+  ];
+  document.getElementById('v4InstalledCount').textContent = V4_INSTALLED.length + ' found';
+  document.getElementById('v4InstalledGrid').innerHTML = V4_INSTALLED.map((c, i) => `
+    <label class="coll-card" data-key="v4i${i}">
+      <input type="checkbox" onchange="v4OnPick(this)">
+      <div class="meta"><div class="name">${c.name}</div><div class="sub">${c.sub}</div></div>
+    </label>`).join('');
+  document.getElementById('v4WorkshopGrid').innerHTML = V4_WORKSHOP.map((c, i) => `
+    <label class="coll-card" data-key="v4w${i}">
+      <input type="checkbox" onchange="v4OnPick(this)">
+      <div class="meta"><div class="name">${c.name}</div><div class="sub">${c.sub}</div></div>
+    </label>`).join('');
+
+  const v4Picked = new Set();
+  const v4NameFor = (key) => key[2] === 'i' ? V4_INSTALLED[Number(key.slice(3))].name : V4_WORKSHOP[Number(key.slice(3))].name;
+  window.v4OnPick = (cb) => {
+    const card = cb.closest('.coll-card');
+    card.classList.toggle('sel', cb.checked);
+    const key = card.dataset.key;
+    cb.checked ? v4Picked.add(key) : v4Picked.delete(key);
+    v4Refresh();
+  };
+  function v4Refresh() {
+    const n = v4Picked.size;
+    document.getElementById('v4Count').textContent = n;
+    document.getElementById('v4Plural').textContent = n === 1 ? '' : 's';
+    document.getElementById('v4ScanBtn').disabled = n === 0;
+    document.getElementById('v4ToggleTags').style.display = n > 0 ? '' : 'none';
+    if (n === 0) document.getElementById('v4TagList').classList.remove('open');
+    document.getElementById('v4TagList').innerHTML = [...v4Picked].map((key) => `
+      <span class="v4-tag">${v4NameFor(key)}<button onclick="v4Remove('${key}')" title="Remove">×</button></span>`).join('');
+  }
+  window.v4Remove = (key) => {
+    v4Picked.delete(key);
+    const card = document.querySelector(`.coll-card[data-key="${key}"]`);
+    if (card) { card.classList.remove('sel'); card.querySelector('input').checked = false; }
+    v4Refresh();
+  };
+  window.v4ToggleTagList = () => document.getElementById('v4TagList').classList.toggle('open');
 </script>
 </body>
 </html>
