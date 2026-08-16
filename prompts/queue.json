@@ -19,11 +19,6 @@
       "doc": "DESIGN.md"
     },
     {
-      "title": "Harmonization (Phase 3b): back-port The Forge's cart-bar pattern",
-      "note": "The Forge (Merge Plugins) has a persistent sticky \"cart bar\" while picking multiple items (count + View chosen). Nothing else in the app has this -- Rebuild Missing Files' own multi-select collection picker just shows plain \"X collections selected\" text. Sequenced deliberately AFTER the filter-badge sweep (director's own call, 2026-08-15). Needs a mock-up/sign-off first (standing order for big UI changes) -- this is a real new visible UI pattern, not a mechanical fix like the filter sweep was.",
-      "doc": "DESIGN.md"
-    },
-    {
       "title": "Dynamic dashboard (Normal / Developer mode)",
       "note": "customizable per audience"
     }

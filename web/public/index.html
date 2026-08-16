@@ -2004,9 +2004,19 @@
       <div class="picker-grid" id="rmfUnfetchedGrid"></div>
     </div>
 
-    <div class="view-actions">
-      <span class="muted" id="rmfPickCount"><b>0</b> collections selected</span>
+    <!-- Sticky cart bar (Harmonization Phase 3b, back-ported from The Forge's own cart bar --
+         design/vortex-rebuild-missing-files-mockup.html's v4 addendum, approved 2026-08-15). This
+         picker can run long (a big Vortex library = dozens of collection cards across 3 grouped
+         sections); the plain muted text this replaces sat at the very bottom, easy to lose track of
+         once scrolled past. No "View chosen" popout window like Merge has -- nothing here is hidden
+         off-page, so the bar's own action IS the next step (Scan), directly in the bar. -->
+    <div class="rmf-cartbar" id="rmfCartBar">
+      <span>🩹</span>
+      <span><b id="rmfPickCountNum">0</b> collection<span id="rmfPickCountPlural">s</span> selected</span>
+      <button class="rmf-cartbar__toggle" id="rmfCartToggleBtn" hidden>which ones?</button>
+      <div class="rmf-cartbar__spacer"></div>
       <button id="rmfScanBtn" class="btn btn--primary" disabled>Scan for Missing Files →</button>
+      <div class="rmf-cartbar__taglist" id="rmfCartTagList"></div>
     </div>
     <p class="muted">Scanning checks whether every mod's files actually exist in your staging folder — nothing changes yet.</p>
   </div>

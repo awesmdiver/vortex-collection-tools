@@ -168,7 +168,9 @@ function rmfRenderPickerGroup(sectionId, gridId, countId, items, prefix, countTe
   for (const item of items) {
     item.isWorkshop = isWorkshop;
     rmfState.collectionsById.set(item.modId, item);
-    const checkbox = el('input', { type: 'checkbox' });
+    // data-mod-id: lets the cart bar's own "which ones?" tag list find and uncheck the right
+    // checkbox when a tag's × is clicked, without threading a separate id->element map around.
+    const checkbox = el('input', { type: 'checkbox', 'data-mod-id': item.modId });
     checkbox.checked = rmfState.picked.has(item.modId);
     // "Last checked" / "Last extracted" (queue: rebuild-missing-last-checked; "Last extracted" is
     // the director's own rename of the original "Last dealt with" label, matching Rebuild
@@ -265,11 +267,43 @@ function rmfRenderUnfetchedGroup(items) {
   }
 }
 
+// "which ones?" expander state -- collapses again whenever the pick set changes back to empty
+// (nothing left to show) or a fresh render happens; doesn't try to preserve open/closed across a
+// pick-count change otherwise, same as the mockup this was approved from.
+let rmfCartTagsOpen = false;
+
 function rmfUpdatePickCount() {
   const n = rmfState.picked.size;
-  $g('rmfPickCount').innerHTML = `<b>${n}</b> collection${n === 1 ? '' : 's'} selected`;
+  $g('rmfPickCountNum').textContent = String(n);
+  $g('rmfPickCountPlural').textContent = n === 1 ? '' : 's';
   $g('rmfScanBtn').disabled = n === 0;
+
+  const toggleBtn = $g('rmfCartToggleBtn');
+  toggleBtn.hidden = n === 0;
+  if (n === 0) rmfCartTagsOpen = false;
+
+  const tagList = $g('rmfCartTagList');
+  tagList.classList.toggle('open', rmfCartTagsOpen);
+  tagList.innerHTML = '';
+  for (const id of rmfState.picked) {
+    const name = rmfState.collectionsById.get(id)?.name || id;
+    const tag = el('span', { class: 'rmf-cartbar__tag' }, [name]);
+    const removeBtn = el('button', { title: 'Remove' }, '×');
+    removeBtn.addEventListener('click', () => {
+      rmfState.picked.delete(id);
+      const checkbox = document.querySelector(`.coll-card input[type="checkbox"][data-mod-id="${id}"]`);
+      if (checkbox) { checkbox.checked = false; checkbox.closest('.coll-card').classList.remove('sel'); }
+      rmfUpdatePickCount();
+    });
+    tag.appendChild(removeBtn);
+    tagList.appendChild(tag);
+  }
 }
+
+$g('rmfCartToggleBtn').addEventListener('click', () => {
+  rmfCartTagsOpen = !rmfCartTagsOpen;
+  rmfUpdatePickCount();
+});
 
 $g('rmfScanBtn').addEventListener('click', rmfStartScan);
 $g('rmfBackToPickerBtn').addEventListener('click', () => {

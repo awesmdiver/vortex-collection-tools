@@ -1271,6 +1271,41 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 }
 .merge-cart-bar strong { color: var(--accent); }
 
+/* Rebuild Missing Files' own cart bar (Harmonization Phase 3b, back-ported from .merge-cart-bar
+   above -- design/vortex-rebuild-missing-files-mockup.html's v4 addendum, approved 2026-08-15).
+   Same accent-tinted icon+bold-count+spacer+button language, but STICKY (Merge's own version never
+   needed this -- its cart persists across many separate searches on a mostly-one-table page; this
+   tool's own picker is a single long scroll of many collection cards across 3 grouped sections,
+   where the plain-text count it replaces sat at the very bottom, easy to lose track of while
+   scrolling). top: 65px sits it right below the app's own sticky .app-header (confirmed live at
+   ~64px tall); z-index below the header's 50 so the header always wins if they ever overlap during
+   the scroll transition. */
+.rmf-cartbar {
+  position: sticky; top: 65px; z-index: 10;
+  display: flex; align-items: center; gap: 10px; background: var(--accent-bg); border: 1px solid var(--accent);
+  border-radius: var(--radius); padding: 12px 16px; margin: 16px 0; font-size: 14px; flex-wrap: wrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+.rmf-cartbar b { color: var(--accent); }
+.rmf-cartbar__spacer { flex: 1; }
+.rmf-cartbar__toggle {
+  background: none; border: none; color: var(--accent); font-size: 12.5px; cursor: pointer;
+  text-decoration: underline; padding: 0;
+}
+.rmf-cartbar__taglist {
+  display: none; flex-basis: 100%; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);
+}
+.rmf-cartbar__taglist.open { display: block; }
+.rmf-cartbar__tag {
+  display: inline-flex; align-items: center; gap: 6px; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 20px; padding: 3px 6px 3px 12px; font-size: 12.5px; margin: 3px 4px 3px 0;
+}
+.rmf-cartbar__tag button {
+  background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px;
+  width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+}
+.rmf-cartbar__tag button:hover { background: var(--danger-bg); color: var(--danger); }
+
 /* Done step's plugins/mods/collections/records tally -- same grid-of-numbers shape as the mockup's
    own .stat-grid, built from tokens already used elsewhere (.summary-badges' own surrounding
    spacing) rather than reusing .summary-badges itself (that's a row of pill filters, a different
