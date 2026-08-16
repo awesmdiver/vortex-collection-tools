@@ -142,6 +142,10 @@
     {
       "title": "Theming: real color picker -- personal accent + background-tint override, per-theme, one color for both Appearance modes",
       "doc": "DESIGN.md"
+    },
+    {
+      "title": "Get Started book: redid The Forge's banner to include the carved-sign-on-chains element (matches the other 15)",
+      "doc": "design/gemini-book-tool-banner-prompts.md"
     }
   ]
 }
