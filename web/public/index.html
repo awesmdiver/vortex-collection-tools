@@ -863,8 +863,8 @@
         <span id="settingsDeleteBackupsStatus" class="muted"></span>
       </div>
 
-      <h3 class="settings-section-title">Mod Exceptions</h3>
-      <p class="muted">Where the "never auto-fix this mod" list is stored -- shared with Rebuild Missing Files. Manage the list itself under Reports &gt; Mod Exceptions.</p>
+      <h3 class="settings-section-title" data-tool-id="report-exceptions"><span data-brand-slot="name">Mod Exceptions</span></h3>
+      <p class="muted">Where the "never auto-fix this mod" list is stored -- shared with <span data-tool-id="missing-files"><span data-brand-slot="name">Rebuild Missing Files</span></span>. Manage the list itself from its own report.</p>
       <div class="field-group">
         <label class="field-label" for="settingsModExceptionListDirInput">Folder to store the exception list in <span class="field-required">(required)</span></label>
         <div class="path-input-row">
@@ -912,7 +912,7 @@
     <div class="settings-group">
       <div class="settings-group__header">
         <h2 data-brand-slot="name">Missing Masters</h2>
-        <p class="muted">Point Missing Masters at your Skyrim files here. It only reads these folders to track down missing masters -- it never changes anything in them.</p>
+        <p class="muted">Point <span data-brand-slot="name">Missing Masters</span> at your Skyrim files here. It only reads these folders to track down missing masters -- it never changes anything in them.</p>
       </div>
 
       <h3 class="settings-section-title">Skyrim Data folder</h3>
@@ -962,7 +962,7 @@
     <div class="settings-group">
       <div class="settings-group__header">
         <h2 data-brand-slot="name">Vortex Scrub</h2>
-        <p class="muted">Mark folders and archives as safe to keep, and they'll stop showing up as "Action Needed" in Vortex Scrub.</p>
+        <p class="muted">Mark folders and archives as safe to keep, and they'll stop showing up as "Action Needed" in <span data-brand-slot="name">Vortex Scrub</span>.</p>
       </div>
 
       <h3 class="settings-section-title">Exclude list location</h3>
@@ -1078,7 +1078,7 @@
       </div>
 
       <h3 class="settings-section-title">Vortex database backups</h3>
-      <p class="muted">Shared by both Update Collection and Rules Generator, since both write to Vortex's database. <strong>Restore</strong> lets you go back to an earlier backup if something goes wrong.</p>
+      <p class="muted">Shared by both <span data-tool-id="sync"><span data-brand-slot="name">Update Collection</span></span> and <span data-tool-id="rules-generator"><span data-brand-slot="name">Rules Generator</span></span>, since both write to Vortex's database. <strong>Restore</strong> lets you go back to an earlier backup if something goes wrong.</p>
       <div class="field-group">
         <label class="field-label" for="settingsMaxStateBackupsInput">Number of backups to keep (blank = unlimited, requires manual deletion)</label>
         <input id="settingsMaxStateBackupsInput" class="input input--small" type="number" min="1" step="1" placeholder="unlimited">
@@ -1128,6 +1128,20 @@
           <option value="dark">Dark</option>
           <option value="light">Light</option>
         </select>
+      </div>
+
+      <!-- "Style", not "Theme" -- Appearance's own Theme select right above is light/dark/system,
+           a completely different axis (DESIGN.md's "Brand theming framework": Appearance = how bright
+           the room is, Brand = whose room it is). Sharing the word "Theme" here would read as the
+           same setting twice. -->
+      <h3 class="settings-section-title">Style</h3>
+      <div class="field-group">
+        <label class="field-label" for="settingsBrandThemeSelect">App style</label>
+        <select id="settingsBrandThemeSelect" class="select select--small">
+          <option value="skyrim">Skyrim</option>
+          <option value="plain">Standard (no theme)</option>
+        </select>
+        <p class="muted" style="margin-top: 6px;">Renames and re-colors the app around a Skyrim theme -- every button still does exactly the same thing. Pick "Standard" for the plain, unthemed original.</p>
       </div>
 
       <h3 class="settings-section-title">Server</h3>
@@ -1291,12 +1305,12 @@
   </div>
 
   <div class="view-actions">
-    <button id="reports-sub-stats" class="btn btn--primary btn--small">Stats Report</button>
-    <button id="reports-sub-workthrough" class="btn btn--ghost btn--small">Work Through Report</button>
-    <button id="reports-sub-updatecompare" class="btn btn--ghost btn--small">Update Compare Report</button>
-    <button id="reports-sub-rulesgen" class="btn btn--ghost btn--small">Rules Generator Report</button>
-    <button id="reports-sub-workshop" class="btn btn--ghost btn--small">Workshop Report</button>
-    <button id="reports-sub-exceptions" class="btn btn--ghost btn--small">Mod Exceptions</button>
+    <button id="reports-sub-stats" class="btn btn--primary btn--small" data-tool-id="report-stats"><span data-brand-slot="name">Stats Report</span></button>
+    <button id="reports-sub-workthrough" class="btn btn--ghost btn--small" data-tool-id="report-workthrough"><span data-brand-slot="name">Work Through Report</span></button>
+    <button id="reports-sub-updatecompare" class="btn btn--ghost btn--small" data-tool-id="report-updatecompare"><span data-brand-slot="name">Update Compare Report</span></button>
+    <button id="reports-sub-rulesgen" class="btn btn--ghost btn--small" data-tool-id="report-rulesgen"><span data-brand-slot="name">Rules Generator Report</span></button>
+    <button id="reports-sub-workshop" class="btn btn--ghost btn--small" data-tool-id="report-workshop"><span data-brand-slot="name">Workshop Report</span></button>
+    <button id="reports-sub-exceptions" class="btn btn--ghost btn--small" data-tool-id="report-exceptions"><span data-brand-slot="name">Mod Exceptions</span></button>
   </div>
 
   <div id="reports-sub-area-stats">
@@ -1359,7 +1373,7 @@
 
   <div id="reports-sub-area-updatecompare" class="hidden">
   <div class="view-actions">
-    <button id="updateCompareBackBtn" class="btn btn--nav btn--back">&larr; Back to Update Collection</button>
+    <button id="updateCompareBackBtn" class="btn btn--nav btn--back">&larr; Back to <span data-tool-id="sync"><span data-brand-slot="name">Update Collection</span></span></button>
   </div>
   <!-- No redundant heading here -- the sub-nav button right above already names this report. This
        intro banner pitches the value instead (see DESIGN.md's "Tool intro banner" section). -->
@@ -1374,7 +1388,7 @@
   <div class="callout callout--info" id="updateComparePlaceholder">
     <div class="callout__title">&#9432; No report generated yet</div>
     <ol>
-      <li>Go to <strong>Update Collection</strong> and select the collection from the dropdown at the top.</li>
+      <li>Go to <strong><span data-tool-id="sync"><span data-brand-slot="name">Update Collection</span></span></strong> and select the collection from the dropdown at the top.</li>
       <li>Click <strong>Restore Backup</strong> and choose the backup you want to compare against.</li>
       <li>Scroll down to step 4, <strong>Compare</strong>, and click <strong>Generate Report</strong>.</li>
     </ol>
@@ -1420,7 +1434,7 @@
       <p class="muted">These need a bit more attention before everything's fully resolved.</p>
 
       <h3 class="settings-section-title">Needs a decision</h3>
-      <p class="muted">More than one mod in the original collection could be the real match for these &mdash; head to Rules Generator to pick the right one for each.</p>
+      <p class="muted">More than one mod in the original collection could be the real match for these &mdash; head to <span data-tool-id="rules-generator"><span data-brand-slot="name">Rules Generator</span></span> to pick the right one for each.</p>
       <ul id="rgReportNeedsDecisionList" class="sync-result-list"></ul>
 
       <h3 class="settings-section-title">Old version still installed</h3>
@@ -1504,7 +1518,7 @@
   <p class="muted" id="meAddStatus"></p>
 
   <h3 class="settings-section-title">Currently excepted</h3>
-  <div id="meEmpty" class="empty-row hidden">No mods excepted yet -- add one above, or click "Add to Exception List" on a Rebuild Missing Files scan row.</div>
+  <div id="meEmpty" class="empty-row hidden">No mods excepted yet -- add one above, or click "Add to Exception List" on a <span data-tool-id="missing-files"><span data-brand-slot="name">Rebuild Missing Files</span></span> scan row.</div>
   <div class="plan-table-wrap hidden" id="meTableWrap">
     <table class="plan-table">
       <thead><tr><th>Mod name</th><th>Nexus mod id</th><th>Added</th><th>Actions</th></tr></thead>
@@ -1523,10 +1537,10 @@
   </div>
 
   <div class="view-actions">
-    <button id="utilities-sub-missingmasters" class="btn btn--primary btn--small">Missing Masters</button>
-    <button id="utilities-sub-scrub" class="btn btn--ghost btn--small">Vortex Scrub</button>
-    <button id="utilities-sub-archivefinder" class="btn btn--ghost btn--small">Archive Finder</button>
-    <button id="utilities-sub-missingfiles" class="btn btn--ghost btn--small">Missing Files</button>
+    <button id="utilities-sub-missingmasters" class="btn btn--primary btn--small" data-tool-id="missing-masters"><span data-brand-slot="name">Missing Masters</span></button>
+    <button id="utilities-sub-scrub" class="btn btn--ghost btn--small" data-tool-id="scrub"><span data-brand-slot="name">Vortex Scrub</span></button>
+    <button id="utilities-sub-archivefinder" class="btn btn--ghost btn--small" data-tool-id="archive-finder"><span data-brand-slot="name">Archive Finder</span></button>
+    <button id="utilities-sub-missingfiles" class="btn btn--ghost btn--small" data-tool-id="missing-files"><span data-brand-slot="name">Missing Files</span></button>
   </div>
 
   <div id="utilities-sub-area-scrub">
@@ -2187,7 +2201,7 @@
          isn't enough (confirmed live, commit ed97e13) -- this callout now says what actually is. -->
     <div class="callout callout--info">
       <div class="callout__title">&#9432; Not seeing a Workshop-authored collection here?</div>
-      <p>Fetching its info from the <a href="/?area=reports&amp;reports=workshop">Workshop Report</a> alone isn't enough — this page needs at least one of its mods to have real files in your staging folder. Run <strong>Rebuild Missing Files</strong> or <strong>Rebuild Collection</strong> against it first, then it'll show up here.</p>
+      <p>Fetching its info from the <a href="/?area=reports&amp;reports=workshop" data-tool-id="report-workshop"><span data-brand-slot="name">Workshop Report</span></a> alone isn't enough — this page needs at least one of its mods to have real files in your staging folder. Run <strong><span data-tool-id="missing-files"><span data-brand-slot="name">Rebuild Missing Files</span></span></strong> or <strong><span data-tool-id="rebuild"><span data-brand-slot="name">Rebuild Collection</span></span></strong> against it first, then it'll show up here.</p>
     </div>
     <div class="view-actions">
       <button id="mergeCollSelectAllBtn" class="btn btn--ghost btn--small">Select All</button>

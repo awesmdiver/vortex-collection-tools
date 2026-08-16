@@ -90,7 +90,8 @@ async function afLoadConfig() {
     afState.downloadsDir = cfg.downloads || '';
     $g('afNotConfigured').classList.toggle('hidden', cfg.configured);
     if (!cfg.configured) {
-      $g('afNotConfigured').textContent = 'Set up your Vortex downloads folder and Archive Finder database folder under Settings first.';
+      const afName = window.themedToolName ? window.themedToolName('archive-finder', 'Archive Finder') : 'Archive Finder';
+      $g('afNotConfigured').textContent = `Set up your Vortex downloads folder and ${afName} database folder under Settings first.`;
       $g('afMain').classList.add('hidden');
       return;
     }

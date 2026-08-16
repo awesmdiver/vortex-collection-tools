@@ -50,7 +50,9 @@ async function refreshModExceptionsReport() {
   try {
     const data = await meApi('GET', '/api/mod-exceptions');
     if (!data.configured) {
-      $g('meNotConfigured').textContent = 'Set a folder for the Mod Exceptions list under Settings > Rebuild Collection first.';
+      const meName = window.themedToolName ? window.themedToolName('report-exceptions', 'Mod Exceptions') : 'Mod Exceptions';
+      const rebuildName = window.themedToolName ? window.themedToolName('rebuild', 'Rebuild Collection') : 'Rebuild Collection';
+      $g('meNotConfigured').textContent = `Set a folder for the ${meName} list under Settings > ${rebuildName} first.`;
       $g('meNotConfigured').classList.remove('hidden');
     } else {
       $g('meNotConfigured').classList.add('hidden');

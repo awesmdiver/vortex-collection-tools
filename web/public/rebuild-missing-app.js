@@ -15,6 +15,10 @@ const rmfState = {
   extractEventSource: null,
 };
 
+function rmfExceptionsName() {
+  return window.themedToolName ? window.themedToolName('report-exceptions', 'Mod Exceptions') : 'Mod Exceptions';
+}
+
 async function rmfApi(method, urlPath, body) {
   const res = await fetch(urlPath, {
     method,
@@ -490,7 +494,7 @@ function rmfRenderRows() {
     } else if (row.kind === 'ignored') {
       modCell.appendChild(el('div', { class: 'ignored-note' }, `⚪ ${row.reason}`));
     } else if (row.kind === 'excepted') {
-      modCell.appendChild(el('div', { class: 'ignored-note' }, '⚪ On the Mod Exceptions list -- never auto-fixed here.'));
+      modCell.appendChild(el('div', { class: 'ignored-note' }, `⚪ On the ${rmfExceptionsName()} list -- never auto-fixed here.`));
     }
     tr.appendChild(modCell);
 
@@ -514,7 +518,7 @@ function rmfBuildMissingCell(row, idx) {
     return el('span', { class: 'muted' }, 'Not checked — ignored in Vortex.');
   }
   if (row.kind === 'excepted') {
-    return el('span', { class: 'muted' }, 'Not checked — on the Mod Exceptions list.');
+    return el('span', { class: 'muted' }, `Not checked — on the ${rmfExceptionsName()} list.`);
   }
   const wrap = el('div', { class: 'detail-cell' }, [
     el('span', { class: 'status-pill status-pill--critical' }, `${row.missing.length} missing`),
@@ -588,7 +592,7 @@ async function rmfAddException(row, btn) {
         const statFiles = Math.max(0, Number($g('rmfStatFiles').textContent) - row.missing.length);
         $g('rmfStatFiles').textContent = statFiles;
       }
-      rmfState.rows[idx] = { kind: 'excepted', collectionModId: row.collectionModId, collectionName: row.collectionName, name: row.name, modId: row.modId ?? null, fileId: row.fileId ?? null, reason: 'On the Mod Exceptions list -- never auto-fixed here. Remove it from the list (Reports > Mod Exceptions) if you want this tool to manage it again.' };
+      rmfState.rows[idx] = { kind: 'excepted', collectionModId: row.collectionModId, collectionName: row.collectionName, name: row.name, modId: row.modId ?? null, fileId: row.fileId ?? null, reason: `On the ${rmfExceptionsName()} list -- never auto-fixed here. Remove it from its own report if you want this tool to manage it again.` };
       rmfState.selected.delete(idx);
       rmfRenderRows();
       $g('rmfStatMods').textContent = rmfState.rows.filter((r) => r.kind === 'missing').length;

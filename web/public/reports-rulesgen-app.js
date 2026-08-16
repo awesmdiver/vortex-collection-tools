@@ -182,7 +182,8 @@ async function rgReportGenerate() {
     const completedList = $g('rgReportCompletedList');
     completedList.innerHTML = '';
     if (report.completed.length === 0) {
-      completedList.appendChild(el('li', { class: 'muted' }, 'Nothing resolved yet -- run Rules Generator and click Apply to Vortex first.'));
+      const rgName = window.themedToolName ? window.themedToolName('rules-generator', 'Rules Generator') : 'Rules Generator';
+      completedList.appendChild(el('li', { class: 'muted' }, `Nothing resolved yet -- run ${rgName} and click Apply to Vortex first.`));
     } else {
       for (const c of report.completed) {
         completedList.appendChild(rgReportModRow(c.newModName, `${c.ruleCount} rule(s) copied from ${c.oldModName}`));

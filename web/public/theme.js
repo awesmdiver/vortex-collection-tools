@@ -13,12 +13,14 @@
 // called and how it reads, exactly per the golden rule in DESIGN.md.
 
 (function () {
-  // ?theme=<id> is a temporary preview override, NOT a real picker (that's still deferred, see
-  // DESIGN.md) -- lets a theme be eyeballed via a plain URL during Phase 2 review without needing
-  // devtools. Doesn't persist to localStorage; a normal reload without the param goes back to
-  // whatever's actually saved.
+  // ?theme=<id> overrides everything below for a one-off preview link (doesn't persist to
+  // localStorage; a normal reload without the param goes back to whatever's actually saved). The
+  // REAL picker lives in Settings > Style (settings-app.js's settingsBrandThemeSelect), same
+  // 'vct-theme' localStorage key. Default is 'skyrim', not 'plain' -- director's own call
+  // (2026-08-15): Skyrim is the default experience for a fresh install now; "Standard (no theme)"
+  // in the picker is the explicit opt-out for someone who wants the original, unthemed app.
   const urlTheme = new URLSearchParams(location.search).get('theme');
-  const THEME_ID = urlTheme || localStorage.getItem('vct-theme') || 'plain';
+  const THEME_ID = urlTheme || localStorage.getItem('vct-theme') || 'skyrim';
 
   // Small lookup helper for the page-label maps in app.js/shell.js/stats-app.js (AREA_LABELS,
   // VIEW_LABELS, REPORTS_SUB_TAB_LABELS) -- those build the browser-tab title and the visible
@@ -117,38 +119,39 @@
       if (window.refreshPageTitle) window.refreshPageTitle();
     }
 
-    // Every brand-carrying container (.home-card, .tool-hero) is tagged data-tool-id="<stable id>".
-    // Walk each one once and fill in whichever data-brand-slot children it actually has -- Home's
-    // own tool-hero has no cardDesc slot, Settings has no home-card at all, etc.
-    document.querySelectorAll('[data-tool-id]').forEach((container) => {
+    // Every brand-carrying container (.home-card, .tool-hero, a whole tool-area <main>, or a small
+    // inline span wrapping just one cross-reference to ANOTHER tool inside a paragraph -- see
+    // Settings' Mod Exceptions section for a real example) is tagged data-tool-id="<stable id>".
+    // Containers can NEST (a page's own outer data-tool-id="sync" wrapping a prose mention of a
+    // different tool, itself wrapped in its own inline data-tool-id="missing-files" span) -- so this
+    // walks every INDIVIDUAL data-brand-slot element and asks "which is the CLOSEST data-tool-id
+    // ancestor" via .closest(), rather than having each container claim every slot inside it
+    // (which would let an outer container's own name overwrite an inner cross-reference's). Also
+    // handles multiple same-slot occurrences sharing one container correctly (e.g. a page's own
+    // breadcrumb AND a later inline mention of its own name) -- each element is looked up
+    // independently, not "first match only".
+    document.querySelectorAll('[data-brand-slot]').forEach((el) => {
+      const container = el.closest('[data-tool-id]');
+      if (!container) return;
       const id = container.getAttribute('data-tool-id');
       const t = theme.tools && theme.tools[id];
       if (!t) return;
+      const slot = el.getAttribute('data-brand-slot');
 
-      const emojiEl = container.querySelector('[data-brand-slot="emoji"]');
-      if (emojiEl && t.emoji != null) emojiEl.textContent = t.emoji;
-
-      const nameEl = container.querySelector('[data-brand-slot="name"]');
-      if (nameEl && t.name != null) nameEl.textContent = t.name;
-
-      const cardDescEl = container.querySelector('[data-brand-slot="cardDesc"]');
-      if (cardDescEl && t.cardDesc != null) cardDescEl.innerHTML = t.cardDesc;
-
-      // heroTitle: the emoji and title text live combined in one text node today
-      // (e.g. "⚡ Rebuild Collections in Minutes, Not Hours") and no CSS depends on them being
-      // separate child nodes, so the simplest faithful reproduction is to set them combined here too
-      // rather than splitting tool-hero__title into child spans.
-      const heroTitleEl = container.querySelector('[data-brand-slot="heroTitle"]');
-      if (heroTitleEl && t.heroTitle != null) {
-        heroTitleEl.textContent = t.emoji ? `${t.emoji} ${t.heroTitle}` : t.heroTitle;
-      }
-
-      // heroBody/cardDesc can carry inline HTML (e.g. Update Collection's <strong> tags, &mdash;
+      if (slot === 'emoji' && t.emoji != null) el.textContent = t.emoji;
+      else if (slot === 'name' && t.name != null) el.textContent = t.name;
+      // cardDesc/heroBody can carry inline HTML (e.g. Update Collection's <strong> tags, &mdash;
       // entities) in the source copy, so these are set via innerHTML, not textContent.
-      const heroBodyEl = container.querySelector('[data-brand-slot="heroBody"]');
-      if (heroBodyEl && t.heroBody != null) heroBodyEl.innerHTML = t.heroBody;
-
-      applyBannerImage(container, t.bannerImage);
+      else if (slot === 'cardDesc' && t.cardDesc != null) el.innerHTML = t.cardDesc;
+      else if (slot === 'heroTitle' && t.heroTitle != null) {
+        // The emoji and title text live combined in one text node today (e.g. "⚡ Rebuild
+        // Collections in Minutes, Not Hours") and no CSS depends on them being separate child
+        // nodes, so the simplest faithful reproduction is to set them combined here too rather
+        // than splitting tool-hero__title into child spans.
+        el.textContent = t.emoji ? `${t.emoji} ${t.heroTitle}` : t.heroTitle;
+      }
+      else if (slot === 'heroBody' && t.heroBody != null) el.innerHTML = t.heroBody;
+      else if (slot === 'bannerImage') applyBannerImage(el, t.bannerImage);
     });
 
     // Section-GROUP banners (Home's "Main tools"/"Reports"/"Utilities" dividers) are a DIFFERENT
@@ -163,16 +166,16 @@
       if (!s) return;
       const nameEl = container.querySelector('[data-brand-slot="name"]');
       if (nameEl && s.name != null) nameEl.textContent = s.name;
-      applyBannerImage(container, s.bannerImage);
+      const bannerEl = container.querySelector('[data-brand-slot="bannerImage"]');
+      if (bannerEl) applyBannerImage(bannerEl, s.bannerImage);
     });
   }
 
-  // Shared by both the per-tool and per-section passes above -- an entry with no bannerImage (Plain
-  // never has one) leaves the <img> exactly as it started (.hidden, no src), so nothing renders and
-  // no failed-request console noise appears either.
-  function applyBannerImage(container, bannerImage) {
-    const bannerEl = container.querySelector('[data-brand-slot="bannerImage"]');
-    if (!bannerEl) return;
+  // Shared by both the per-tool and per-section passes above -- takes the actual <img> element
+  // itself (not a container to search within). An entry with no bannerImage (Plain never has one)
+  // leaves the <img> exactly as it started (.hidden, no src), so nothing renders and no
+  // failed-request console noise appears either.
+  function applyBannerImage(bannerEl, bannerImage) {
     if (bannerImage) {
       bannerEl.src = bannerImage;
       bannerEl.classList.remove('hidden');

@@ -14,17 +14,21 @@ let settingsDirty = false;
 // staging/downloads, and Update Collection can't save a backup without somewhere real to put it.
 // backupRoot/state are deliberately excluded: backupRoot only matters if backups are turned on
 // (off by default), and state auto-detects a real default.
+// label is a FUNCTION, not a static string -- the parenthetical tool name needs to reflect
+// whichever brand theme is active when the "missing required field" message actually renders
+// (window.themedToolName, theme.js), not whatever was true when this file loaded.
 const REQUIRED_FIELDS = [
-  { key: 'staging', inputId: 'settingsStagingInput', label: 'Vortex staging folder' },
-  { key: 'downloads', inputId: 'settingsDownloadsInput', label: 'Vortex downloads folder' },
-  { key: 'syncBackupRoot', inputId: 'settingsSyncBackupRootInput', label: 'Backups folder (Update Collection)' },
-  { key: 'cleanupExcludeListDir', inputId: 'settingsCleanupExcludeListDirInput', label: 'Exclude list location (Vortex Scrub)' },
-  { key: 'skyrimDataDir', inputId: 'settingsSkyrimDataDirInput', label: 'Skyrim Data folder (Missing Masters)' },
-  { key: 'pluginsListDir', inputId: 'settingsPluginsListDirInput', label: 'Plugins.txt location (Missing Masters)' },
-  { key: 'dummyMastersOutputDir', inputId: 'settingsDummyMastersOutputDirInput', label: 'Dummy Masters output folder (Missing Masters)' },
-  { key: 'archiveFinderDbDir', inputId: 'settingsArchiveFinderDbDirInput', label: 'Archive Finder database folder' },
-  { key: 'modExceptionListDir', inputId: 'settingsModExceptionListDirInput', label: 'Mod Exceptions list location' },
+  { key: 'staging', inputId: 'settingsStagingInput', label: () => 'Vortex staging folder' },
+  { key: 'downloads', inputId: 'settingsDownloadsInput', label: () => 'Vortex downloads folder' },
+  { key: 'syncBackupRoot', inputId: 'settingsSyncBackupRootInput', label: () => `Backups folder (${themedName('sync', 'Update Collection')})` },
+  { key: 'cleanupExcludeListDir', inputId: 'settingsCleanupExcludeListDirInput', label: () => `Exclude list location (${themedName('scrub', 'Vortex Scrub')})` },
+  { key: 'skyrimDataDir', inputId: 'settingsSkyrimDataDirInput', label: () => `Skyrim Data folder (${themedName('missing-masters', 'Missing Masters')})` },
+  { key: 'pluginsListDir', inputId: 'settingsPluginsListDirInput', label: () => `Plugins.txt location (${themedName('missing-masters', 'Missing Masters')})` },
+  { key: 'dummyMastersOutputDir', inputId: 'settingsDummyMastersOutputDirInput', label: () => `Dummy Masters output folder (${themedName('missing-masters', 'Missing Masters')})` },
+  { key: 'archiveFinderDbDir', inputId: 'settingsArchiveFinderDbDirInput', label: () => `${themedName('archive-finder', 'Archive Finder')} database folder` },
+  { key: 'modExceptionListDir', inputId: 'settingsModExceptionListDirInput', label: () => `${themedName('report-exceptions', 'Mod Exceptions')} list location` },
 ];
+function themedName(id, fallback) { return window.themedToolName ? window.themedToolName(id, fallback) : fallback; }
 
 async function settingsApi(method, path, body) {
   const res = await fetch(path, {
@@ -67,6 +71,22 @@ themeSelect.addEventListener('change', () => {
   const theme = themeSelect.value;
   localStorage.setItem('theme', theme);
   applyTheme(theme);
+});
+
+// ---------- Brand (theme.js's "Style") ----------
+// Separate axis from Appearance's own "theme" key above -- see DESIGN.md's "Brand theming
+// framework". theme.js reads this exact localStorage key ('vct-theme') and defaults to 'skyrim'
+// when nothing's been chosen yet (2026-08-15: director's own call -- Skyrim is the default
+// experience now, "Standard" is the opt-out for someone who wants the plain original). A full
+// reload is the simplest correct way to apply a brand swap -- theme.js's own DOM-filling pass only
+// ever runs once per page load today, and a brand change touches dozens of elements across the
+// whole app (Home cards, every tool-hero, Settings' own rail/panes, banners) -- not worth building
+// a live re-apply path for a setting that's rarely touched.
+const brandThemeSelect = $g('settingsBrandThemeSelect');
+brandThemeSelect.value = localStorage.getItem('vct-theme') || 'skyrim';
+brandThemeSelect.addEventListener('change', () => {
+  localStorage.setItem('vct-theme', brandThemeSelect.value);
+  location.reload();
 });
 
 // ---------- Two-pane category layout + rail pinning ----------
@@ -374,7 +394,7 @@ async function saveSettings() {
   // path through this form).
   const missing = REQUIRED_FIELDS.filter((f) => $g(f.inputId).value.trim() === '');
   if (missing.length > 0) {
-    statusEl.textContent = `Required setting(s) missing: ${missing.map((f) => f.label).join(', ')}.`;
+    statusEl.textContent = `Required setting(s) missing: ${missing.map((f) => f.label()).join(', ')}.`;
     return;
   }
   btn.disabled = true;
@@ -443,9 +463,10 @@ $g('settingsSaveBtn').addEventListener('click', saveSettings);
 // settings area (not one per field) so a field added later is covered automatically. window.* hooks
 // are the deliberate seam shell.js's nav-click guard uses -- shell.js otherwise knows nothing about
 // this file's internals (same "each area owns its own state" convention as app.js/sync-app.js).
-// settingsThemeSelect excluded -- it saves to localStorage instantly on its own 'change' listener
+// settingsThemeSelect/settingsBrandThemeSelect excluded -- both save to localStorage instantly on
+// their own 'change' listener
 // above and isn't part of saveSettings()'s payload at all, so it would be a false "unsaved" trigger.
-function markDirty(e) { if (e.target.id !== 'settingsThemeSelect') settingsDirty = true; }
+function markDirty(e) { if (e.target.id !== 'settingsThemeSelect' && e.target.id !== 'settingsBrandThemeSelect') settingsDirty = true; }
 document.getElementById('area-settings').addEventListener('input', markDirty);
 document.getElementById('area-settings').addEventListener('change', markDirty);
 window.settingsIsDirty = () => settingsDirty;
@@ -568,7 +589,7 @@ $g('settingsSyncDeleteBackupsBtn').addEventListener('click', async () => {
   try {
     const { backupRoot, count } = await settingsApi('GET', '/api/sync/backups-info');
     if (!backupRoot) {
-      statusEl.textContent = 'No Update Collection backups folder is configured -- nothing to delete.';
+      statusEl.textContent = `No ${themedName('sync', 'Update Collection')} backups folder is configured -- nothing to delete.`;
       return;
     }
     if (count === 0) {

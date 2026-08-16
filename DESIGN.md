@@ -721,17 +721,42 @@ surfaced building it, both fixed as part of Phase 2 rather than carried forward:
   structure; schema gained optional `accentLight`/`accentHoverLight`/`accentBgLight` (Plain sets all
   three, matching its exact pre-Phase-1 hex per mode; Skyrim doesn't yet — see Known gaps below).
 
+**Phase 2 continued — banners, section names, and the real picker (2026-08-15, same day).**
+- **`theme.sections` map, separate from `theme.tools` on purpose.** A section group ("Main tools"/
+  "Reports"/"Utilities") has no stable tool id, no routing, nothing in `data-area`/`data-sub` — the
+  stable-ID contract above is explicit that those are a permanent code/theme join, and a group isn't
+  one. Closes the "no themed group name" gap this section used to flag: Skyrim now names all three
+  (**The Rites** / main tools, **The Chronicle** / reports — already locked — and **The Satchel** /
+  utilities), the latter two still first-pass, not yet through a real four-brain pass. Wired via
+  `[data-section-id]` in `index.html` (Home's three `.home-section`s) — the Reports/Utilities pill-row
+  nav buttons (`reports-sub-*`/`utilities-sub-*`) and Settings rail also now theme correctly, via the
+  same `data-tool-id`/`data-brand-slot="name"` pattern as everywhere else.
+- **A real Gemini-illustrated banner, not a CSS placeholder** — director's explicit call. A new
+  `bannerImage` brand slot (`<img data-brand-slot="bannerImage">`, hidden unless a theme supplies one)
+  sits above Home's own tool-hero (The Arcaneum) and above each section's title/grid. Prompts:
+  `design/gemini-section-banner-prompts.md`. Images live in `web/public/theme-assets/<theme-id>/`
+  (the running app only serves `web/public/`, not repo-root `assets/` — confirmed via
+  `web/server.js`'s `express.static` call), with the full-res archive under `assets/` following the
+  same `-original`/versioned-`-vN` convention as every release banner.
+- **The real picker is built** — Settings > General > **Style** (`settingsBrandThemeSelect` in
+  `settings-app.js`), same `vct-theme` localStorage key `theme.js` already read. A brand swap reloads
+  the page rather than live-re-applying (`theme.js`'s DOM-filling pass only ever runs once per load;
+  not worth building a live-swap path for a rarely-touched setting). **Default changed to `skyrim`**
+  (was `plain`) — director's own call: Skyrim is the default experience for a fresh install now,
+  "Standard (no theme)" in the picker is the explicit, always-available opt-out.
+- **Small deliberate Plain-visible simplification**, flagged rather than silently applied: the
+  Reports/Utilities pill-row buttons used to show slightly different label text than each tool's own
+  canonical theme `name` (e.g. "Stats Report" vs. `report-stats`'s `name: "Stats"`; "Missing Files"
+  vs. `missing-files`'s `name: "Rebuild Missing Files"`). Wiring these through the same theme-driven
+  `name` slot as every other nav surface means Plain's own rendering picked up this same small
+  trim/lengthen too — accepted as a real consistency win (matches what Home already showed), not a
+  regression, since it makes every nav surface in the app agree on one name per tool.
+
 **Known gaps, not yet closed:**
-- **"Reports"/"Utilities" section-group labels have no themed name.** Only individual *tools* have a
-  stable ID + theme entry; the Home page's group headers and the matching breadcrumb/tab-title
-  segment for every report/utility sub-tool still read the plain English group name even under
-  Skyrim. `report-*`'s own drafted "The Chronicle" (see `design/theme-content-skyrim.md`) has nowhere
-  to live yet — would need a new `sections` map in the theme schema. "Utilities" has no drafted name
-  at all.
 - **Skyrim's accent has no light-mode variant** (unlike Plain) — same gold in both Appearance modes,
   a reasonable first-pass simplification, not a fidelity requirement the way Plain's is.
-- **No real picker UI yet** — `?theme=<id>` is a developer/review-only override, not a user-facing
-  control. Still deferred, see below.
+- **The Rites/The Satchel names are still first-pass**, not yet through a real four-brain pass like
+  the original 13 tool names + The Chronicle.
 
 There are now **two orthogonal theming layers**, and they must stay independent:
 

@@ -289,10 +289,12 @@ async function wrFetchFromNexus(row, btn) {
     // still-open gap, not something this button claims to solve.
     const resultBox = $g('wrFetchResult');
     resultBox.innerHTML = '';
+    const missingFilesName = window.themedToolName ? window.themedToolName('missing-files', 'Rebuild Missing Files') : 'Rebuild Missing Files';
+    const rebuildName = window.themedToolName ? window.themedToolName('rebuild', 'Rebuild Collection') : 'Rebuild Collection';
     resultBox.appendChild(document.createTextNode(`Fetched! We grabbed "${row.name}"'s info from Nexus — the mod files themselves aren't in your staging folder yet. Run `));
-    resultBox.appendChild(el('strong', {}, 'Rebuild Missing Files'));
+    resultBox.appendChild(el('strong', {}, missingFilesName));
     resultBox.appendChild(document.createTextNode(' or '));
-    resultBox.appendChild(el('strong', {}, 'Rebuild Collection'));
+    resultBox.appendChild(el('strong', {}, rebuildName));
     resultBox.appendChild(document.createTextNode(' next to pull those in.'));
     resultBox.classList.remove('hidden');
   } catch (e) {

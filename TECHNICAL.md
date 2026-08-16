@@ -4087,6 +4087,50 @@ nothing about routing, `data-area`/`data-sub`, or which API a button calls is to
   accent fix); no `... Report Report` duplication in the Reports sub-tab label (caught before
   shipping — `report-rulesgen`/`report-workshop`'s own theme `name` already ends in "Report").
 
+### Phase 2, banners + real picker + prose sweep (2026-08-15, later same day)
+
+- **`bannerImage` brand slot + `theme.sections` map** — see DESIGN.md's "Phase 2 continued" note for
+  the design rationale (why sections are a separate map from tools). Images served from
+  `web/public/theme-assets/<theme-id>/` (the app's `express.static` only covers `web/public/`, not
+  repo-root `assets/`, which stays the full-res archive per the release-banner convention).
+- **The real picker**: Settings > General > Style (`settingsBrandThemeSelect`,
+  `settings-app.js`), same `vct-theme` localStorage key as `?theme=`. Applies by full page reload —
+  `theme.js`'s DOM-filling pass is a one-shot per load, and a brand swap touches dozens of elements
+  app-wide, not worth a live-reapply path for a rarely-touched setting. **Default flipped
+  `plain` → `skyrim`** in `theme.js`'s own fallback chain (`?theme=` → `localStorage` → `'skyrim'`).
+- **`applyTheme`'s core loop rewritten** from "each `[data-tool-id]` container claims every
+  `data-brand-slot` child via `container.querySelector` (first match only)" to "each individual
+  `[data-brand-slot]` element finds its own nearest `[data-tool-id]` ancestor via `.closest()`".
+  Two real gaps in the old approach: (1) a container can't claim a slot's FIRST occurrence only when
+  a page can now have the same tool's name appear twice (e.g. the breadcrumb AND a later inline
+  prose mention) — the second occurrence silently stayed unthemed; (2) containers now nest (a page's
+  own outer `data-tool-id="sync"` wrapping a `<span data-tool-id="missing-files">` inline
+  cross-reference inside a paragraph) — the old outer-in walk let an outer container's `querySelector`
+  reach into and overwrite an inner cross-reference's slot with the WRONG tool's name.
+  `.closest()`-per-element is immune to both: it only ever asks "what's the nearest owning
+  `data-tool-id`", regardless of how many same-slot siblings exist or how deep the nesting goes.
+  `applyBannerImage` signature changed to match (takes the `<img>` element directly now, not a
+  container to search within).
+- **Cross-tool prose references swept app-wide** — director found one (`Settings > Rebuild
+  Collection` sub-section's Mod Exceptions help text still hardcoded "Rebuild Missing Files"/"Rebuild
+  Collection"/breadcrumb-style "Reports > Mod Exceptions"), which surfaced the same pattern in
+  ~10 more spots across `index.html` (static prose in Settings panes, empty-states, callouts) and
+  6 `*-app.js` files (dynamically-built error/status text: `archive-finder-app.js`,
+  `mod-exceptions-report-app.js`, `rebuild-missing-app.js`, `reports-rulesgen-app.js`,
+  `settings-app.js`'s `REQUIRED_FIELDS` — its `label` field is now a function evaluated at
+  display-time, not a static string baked in at module load, since the active theme can change after
+  the page already loaded — and `workshop-report-app.js`). Static HTML uses the same
+  `data-tool-id`/`data-brand-slot="name"` nested-span pattern; JS-built strings call
+  `window.themedToolName(id, fallback)` inline. One phrase simplified rather than themed
+  (director's own call): "Manage the list itself under Reports > Mod Exceptions" (a breadcrumb-style
+  path, fragile to theme/navigate) became "Manage the list itself from its own report" — avoids
+  needing to also theme the "Reports >" group-label prefix for one throwaway sentence.
+- **Verified live**: the director's own exact example (Settings > Rebuild Collection pane's Mod
+  Exceptions section) now reads correctly under Skyrim ("The Sanctuary" / "shared with The
+  Vault-Keeper"); Merge Plugins' Workshop-collection-blindspot callout (3 cross-references in one
+  paragraph) confirmed themed; Plain confirmed byte-identical on the same callout (regression check);
+  no console errors.
+
 ## Future work
 
 Tracked in the workspace `TODO.md` (not duplicated here — confirmed 2026-07-27, one place to check
