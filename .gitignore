@@ -15,8 +15,10 @@ terminal-flow-archive/
 # Personal data — mod lists, staging paths, full state.v2 snapshots, and the Nexus API key.
 # lib/vortex-sync/state-backups/ in particular can contain Vortex's stored
 # Nexus API tokens (under the "confidential" state namespace) — never commit or share this.
-# config.json (project root) is the single unified settings file (see lib/app-config.js) —
-# config.example.json is the committed, placeholder-only template for it.
+# config/config.json is the single unified settings file (see lib/app-config.js) —
+# config/config.example.json is the committed, placeholder-only template for it. All the small
+# personal/local-progress JSON state files below live alongside it in config/ too (keeps a user's
+# install root clean — see 2026-08-15 packaging cleanup), NOT project root:
 # work-through-state.json tracks manually-completed problem mods (Work Through Report) — also
 # personal, local-progress data (see lib/work-through-state.js).
 # offsite-import-map.json tracks manually-imported off-site archive associations (see
@@ -27,15 +29,15 @@ terminal-flow-archive/
 # rebuild-missing-last-fixed-state.json tracks each collection's own "last dealt with" timestamp
 # for Rebuild Missing Files' picker (see lib/rebuild-missing-last-fixed-state.js) — also personal,
 # local-progress data.
-# mod-exceptions/ (path configured via config.json's modExceptionListDir, no built-in default)
-# holds the Mod Exceptions list (see lib/mod-exception-store.js) — also personal, local data (which
-# specific mods this installer deliberately skips), same convention as cleanup-exclude-list's own
-# folder.
-config.json
-work-through-state.json
-offsite-import-map.json
-backup-ratio-dismiss-state.json
-rebuild-missing-last-fixed-state.json
+# mod-exceptions/ (path configured via config/config.json's modExceptionListDir, no built-in
+# default) holds the Mod Exceptions list (see lib/mod-exception-store.js) — also personal, local
+# data (which specific mods this installer deliberately skips), same convention as
+# cleanup-exclude-list's own folder.
+config/config.json
+config/work-through-state.json
+config/offsite-import-map.json
+config/backup-ratio-dismiss-state.json
+config/rebuild-missing-last-fixed-state.json
 mod-exceptions/
 lib/vortex-sync/backups/
 lib/vortex-sync/state-backups/
