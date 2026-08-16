@@ -265,12 +265,13 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 /* Themed hero banner image (theme.js's data-brand-slot="bannerImage") -- Plain has none, so this
    stays .hidden and the tool-hero reads exactly as it always did. A themed brand (e.g. Skyrim) that
    supplies one gets it rendered full-width above the title, own rounded corners matching every other
-   card/panel in the app. max-height + object-fit: cover crops the source image's own tall aspect
-   (currently ~1.83:1) down to roughly half that rendered height instead of showing it at full native
-   height -- director found the uncropped version pushed the actual page content almost off-screen
-   (confirmed live 2026-08-15). object-position: center keeps the carved-sign text (usually centered
-   in these Gemini prompts) in frame rather than cropping from a corner. */
-.home-banner-img { display: block; width: 100%; max-height: 340px; object-fit: cover; object-position: center; border-radius: var(--radius); margin: 0 0 var(--stack-gap); }
+   card/panel in the app. No forced max-height/object-fit crop -- an earlier pass tried cropping a
+   too-tall source image down via CSS (director found the original ~1.83:1 banner pushed page content
+   almost off-screen), but the real fix was regenerating the source art at the right proportions
+   instead (now ~3.76:1, 1280x341 -- matches what the crop was approximating anyway). Plain
+   width:100%/height:auto respects whatever aspect ratio the actual banner asset is now, no
+   CSS-side cropping needed. */
+.home-banner-img { display: block; width: 100%; height: auto; border-radius: var(--radius); margin: 0 0 var(--stack-gap); }
 
 /* Tool page breadcrumb eyebrow (see DESIGN.md's "Tool page breadcrumb" section) -- with the old
    five-tab nav gone (Home replaced it), the tool-hero title alone no longer names which tool a
