@@ -11,10 +11,21 @@ photorealistic-cinematic. This is the book page's own top image (see the mockup'
 | Tool | Source |
 | :-- | :-- |
 | 📖 The Arcaneum (Home) | `assets/home-banner-arcaneum.png` (already the right size/style) |
-| 🔨 The Forge (Merge Plugins) | `assets/release-v0.5.0-banner.png` |
 | 🔮 The Augur (Missing Masters) | `assets/release-v0.4.0-banner.png` |
 | ✒️ The Scribe (Rules Generator) | `assets/release-v0.3.0-banner.png` |
 | 🗝️ The Vault-Keeper (Rebuild Missing Files) | `assets/release-v0.6.0-banner.png` |
+
+## Redo — 1 tool
+
+**The Forge (Merge Plugins)** — director found live, 2026-08-15: the reused v0.5.0 release banner
+predates the "carved sign on iron chains" convention and doesn't have one, unlike every other book
+banner. The **release banner itself stays untouched** (already public on the v0.5.0 GitHub release —
+this redo is for the book's own copy only, `assets/book-banner-the-forge.png`).
+
+Tagline: **"Forge many plugins into one."**
+```
+A dark, moody Skyrim-style Nordic fantasy scene, photorealistic and cinematic, wide banner composition (2816x1536). A master smith stands at a roaring forge, hammer raised over a glowing anvil where several distinct plugin-ingots are being fused into one -- each ingot still faintly visible with its own maker's stamp before it melds into the single blade taking shape, sparks flying, the metal glowing white-orange at the seams where they join. Warm forge-light dominates the foreground, the smithy's stone walls fading into cool shadow. At the top, a large carved weathered wooden sign hangs by iron chains, with ornate Nordic knotwork carving, reading in bold engraved fantasy-serif lettering: "THE FORGE" and beneath it in smaller engraved text: "Forge many plugins into one." Rich detail, atmospheric depth, dramatic rim lighting.
+```
 
 ## Still needed — 11 tools
 
@@ -89,8 +100,10 @@ A dark, moody Skyrim-style Nordic fantasy scene, photorealistic and cinematic, w
 ```
 
 ## Status
-- **All 16 done, 2026-08-15.** 5 reused from existing banners (see table above); the 11 new ones
+- **15 of 16 done, 2026-08-15.** 4 reused from existing banners (see table above); the 11 new ones
   generated, compressed, and archived under `assets/book-banner-<slug>-original.jpeg` +
-  `assets/book-banner-<slug>.png`. All 16 (11 new + 5 reused) copied into
-  `web/public/theme-assets/skyrim/book/book-banner-<slug>.png` for the app to actually serve, ready
-  for whenever the book's own page/route gets built.
+  `assets/book-banner-<slug>.png`, all copied into
+  `web/public/theme-assets/skyrim/book/book-banner-<slug>.png` for the app to actually serve. The
+  book's own page is built and live.
+- **The Forge pending a redo** — the reused release banner has no carved-sign-on-chains element,
+  unlike every other book banner. Prompt above, ready.
