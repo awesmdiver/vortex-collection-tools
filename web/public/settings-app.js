@@ -89,6 +89,39 @@ brandThemeSelect.addEventListener('change', () => {
   location.reload();
 });
 
+// ---------- Font (only meaningful once a themed Style has its own fonts map) ----------
+// Own localStorage key PER theme ('vct-font-<themeId>'), not one shared key -- switching Style
+// later shouldn't silently carry a font choice made for a completely different theme's own font
+// list over to the new one. theme.js already reads this exact key/fallback (applyFont) -- this is
+// just the picker UI for it, kept in sync with whatever theme.js actually applied.
+function renderFontPicker() {
+  const theme = window.activeTheme;
+  const group = $g('settingsFontFieldGroup');
+  const select = $g('settingsFontSelect');
+  if (!theme || !theme.fonts || !theme.defaultFont) {
+    group.hidden = true;
+    return;
+  }
+  group.hidden = false;
+  const current = localStorage.getItem(`vct-font-${theme.id}`) || theme.defaultFont;
+  select.innerHTML = '';
+  for (const [fontId, font] of Object.entries(theme.fonts)) {
+    const opt = document.createElement('option');
+    opt.value = fontId;
+    opt.textContent = font.label;
+    if (fontId === current) opt.selected = true;
+    select.appendChild(opt);
+  }
+}
+renderFontPicker();
+window.addEventListener('themeready', renderFontPicker);
+$g('settingsFontSelect').addEventListener('change', () => {
+  const theme = window.activeTheme;
+  if (!theme) return;
+  localStorage.setItem(`vct-font-${theme.id}`, $g('settingsFontSelect').value);
+  location.reload();
+});
+
 // ---------- Two-pane category layout + rail pinning ----------
 // See DESIGN.md's "Settings -- two-pane category layout" and "Pinning" sections. Every field stays
 // in the DOM at all times -- switching category (or pinning a rail row) only ever toggles which
@@ -463,10 +496,11 @@ $g('settingsSaveBtn').addEventListener('click', saveSettings);
 // settings area (not one per field) so a field added later is covered automatically. window.* hooks
 // are the deliberate seam shell.js's nav-click guard uses -- shell.js otherwise knows nothing about
 // this file's internals (same "each area owns its own state" convention as app.js/sync-app.js).
-// settingsThemeSelect/settingsBrandThemeSelect excluded -- both save to localStorage instantly on
-// their own 'change' listener
-// above and isn't part of saveSettings()'s payload at all, so it would be a false "unsaved" trigger.
-function markDirty(e) { if (e.target.id !== 'settingsThemeSelect' && e.target.id !== 'settingsBrandThemeSelect') settingsDirty = true; }
+// settingsThemeSelect/settingsBrandThemeSelect/settingsFontSelect excluded -- all three save to
+// localStorage instantly on their own 'change' listener above and aren't part of saveSettings()'s
+// payload at all, so they'd otherwise trigger a false "unsaved changes" warning.
+const INSTANT_SAVE_IDS = new Set(['settingsThemeSelect', 'settingsBrandThemeSelect', 'settingsFontSelect']);
+function markDirty(e) { if (!INSTANT_SAVE_IDS.has(e.target.id)) settingsDirty = true; }
 document.getElementById('area-settings').addEventListener('input', markDirty);
 document.getElementById('area-settings').addEventListener('change', markDirty);
 window.settingsIsDirty = () => settingsDirty;

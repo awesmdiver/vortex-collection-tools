@@ -38,6 +38,12 @@
     .then((theme) => {
       window.activeTheme = theme;
       applyTheme(theme);
+      // settings-app.js's own font sub-picker needs theme.fonts, but this fetch is async and script
+      // tags run their own top-level code synchronously before it resolves -- window.activeTheme
+      // isn't set yet at the point settings-app.js's own top-level code would otherwise try to read
+      // it. Listen for this instead of assuming timing (settings-app.js checks window.activeTheme
+      // directly too, in case this already fired before it started listening).
+      window.dispatchEvent(new CustomEvent('themeready'));
     })
     .catch(() => {
       // Fetch/parse failed -- leave the hardcoded Plain strings already in the HTML exactly as they
@@ -107,8 +113,41 @@
     styleEl.textContent = css;
   }
 
+  // Generic per-brand CSS hook -- distinct from Appearance's own [data-theme] (light/dark).
+  // styles.css's Home background gradient scopes off this attribute; any future per-brand-only CSS
+  // (not modeled as a brand-string slot) should too, rather than adding another bespoke attribute.
+  function applyBrandAttribute(theme) {
+    document.documentElement.setAttribute('data-brand', theme.id);
+  }
+
+  // Themed display font (Theming: visual flourishes) -- Plain has no `fonts` map at all, so this is
+  // a no-op for it (styles.css's var(--font-display, inherit) fallback already covers "no theme
+  // font set" -- nothing here needs to explicitly unset anything). A theme WITH a fonts map picks
+  // the saved choice (own localStorage key per theme, 'vct-font-<themeId>', so switching brand
+  // themes later doesn't clobber a font preference already made for a different theme) or its own
+  // defaultFont. The font's own stylesheet (self-hosted @font-face rules, not a CDN link) is loaded
+  // once via a real <link> tag rather than fetched/inlined -- letting the browser's own font loading
+  // pipeline (preload, swap timing) handle it normally.
+  function applyFont(theme) {
+    if (!theme.fonts || !theme.defaultFont) return;
+    if (theme.fontStylesheet && !document.getElementById('theme-font-stylesheet')) {
+      const link = document.createElement('link');
+      link.id = 'theme-font-stylesheet';
+      link.rel = 'stylesheet';
+      link.href = `/${theme.fontStylesheet}`;
+      document.head.appendChild(link);
+    }
+    const fontId = localStorage.getItem(`vct-font-${theme.id}`) || theme.defaultFont;
+    const font = theme.fonts[fontId];
+    if (font && font.cssFamily) {
+      document.documentElement.style.setProperty('--font-display', font.cssFamily);
+    }
+  }
+
   function applyTheme(theme) {
     applyAccentStylesheet(theme);
+    applyBrandAttribute(theme);
+    applyFont(theme);
 
     if (theme.appName) {
       const appNameEl = document.querySelector('[data-brand-slot="appName"]');

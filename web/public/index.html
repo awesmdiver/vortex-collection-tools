@@ -1143,6 +1143,17 @@
         <p class="muted" style="margin-top: 6px;">Renames and re-colors the app around a Skyrim theme -- every button still does exactly the same thing. Pick "Standard" for the plain, unthemed original.</p>
       </div>
 
+      <!-- Font, only shown once a themed Style is picked -- Standard has no themed identity to pick a
+           font for, so this stays hidden entirely rather than showing a picker with nothing meaningful
+           to do (settings-app.js's rebrandSettingsFontVisibility). Options come from the active
+           theme's own themes/<id>.json fonts map, built at render time -- not hardcoded here, so a
+           future theme brings its own curated list without touching this markup. -->
+      <div class="field-group" id="settingsFontFieldGroup" hidden>
+        <label class="field-label" for="settingsFontSelect">Font</label>
+        <select id="settingsFontSelect" class="select select--small"></select>
+        <p class="muted" style="margin-top: 6px;">The display font used for tool names and headings under this style -- body text always stays the app's own plain, readable font.</p>
+      </div>
+
       <h3 class="settings-section-title">Server</h3>
       <p class="muted">Changes here need a server restart. This server has no login of its own, so leave the host as <code>127.0.0.1</code> unless you specifically want another device on your network to reach it.</p>
       <div class="settings-row-2">

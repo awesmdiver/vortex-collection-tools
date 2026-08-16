@@ -107,6 +107,16 @@ html, body {
 
 .hidden { display: none !important; }
 .muted { color: var(--text-muted); }
+/* Themed display font (Theming: visual flourishes) -- every element that already carries a brand
+   name/title via data-brand-slot (theme.js) renders in --font-display if the active theme/font sets
+   one; falls back to inherit (the app's own plain system font) otherwise, so Plain -- and Skyrim
+   before any font is picked -- render exactly as before. Deliberately scoped to name/heroTitle/
+   appName only, never body text (heroBody, cardDesc, everything else) -- a display face at
+   paragraph length fights its own readability, same reasoning DESIGN.md's "name for flavor,
+   subtitle for function" rule already applies elsewhere. */
+[data-brand-slot="name"], [data-brand-slot="heroTitle"], [data-brand-slot="appName"] {
+  font-family: var(--font-display, inherit);
+}
 /* Small "?" help marker -- native title attribute gives a browser tooltip on hover, no JS/modal
    needed for a single short explanatory line. */
 .help-marker {
@@ -299,6 +309,21 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    selector here overrides that shared rule without touching it, so every other tool area keeps its
    full width (2026-07-28). */
 #area-home .app-main { max-width: min(1280px, 96vw); }
+/* Themed Home background (Theming: visual flourishes, approved mockup design/vortex-visual-
+   flourishes-mockup.html) -- a faint, non-competing gradient wash behind Home's own content, scoped
+   to whichever brand theme is active via [data-brand] (set by theme.js, a generic per-brand hook --
+   not the same as Appearance's own [data-theme]). Plain has no rule here at all, so it stays exactly
+   as before -- this only ever fires for a themed brand. color-mix() derives the tint straight from
+   the theme's own --accent (already set by theme.js's accent stylesheet) rather than a hardcoded
+   color, so a different theme's own accent automatically produces a matching wash with zero extra
+   config. Kept CSS-only per the director's own call in the mockup review -- no new Gemini art needed
+   for this piece, it just needs to stay quiet, not decorative. */
+[data-brand="skyrim"] #area-home {
+  background-image:
+    radial-gradient(ellipse at 15% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 45%),
+    radial-gradient(ellipse at 85% 60%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 50%);
+  background-attachment: fixed;
+}
 .home-section-title {
   font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted);
   font-weight: 600; margin: 30px 0 12px;

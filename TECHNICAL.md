@@ -4171,6 +4171,52 @@ Rebuild Missing Files, Rules Generator Report, Stats, Work Through, and both log
 code-reviewed to the same converted pattern but not all individually live-tested with real problem
 data — worth a spot-check once real data exists.
 
+## Theming: visual flourishes -- per-theme font picker, background gradient (2026-08-15)
+
+DESIGN.md's "Visual flourishes" note has the design rationale; this is the implementation.
+
+- **`web/public/theme-assets/skyrim/fonts/`**: 12 self-hosted `.woff2` files (6 font families, 2
+  unicode-range subsets each — latin + latin-ext) + `skyrim-fonts.css` (the rewritten `@font-face`
+  rules, URLs pointed at the local files instead of `fonts.gstatic.com`). Downloaded from Google
+  Fonts' own CSS endpoint, license header at the top of the CSS file. No CDN reference anywhere in
+  the shipped files.
+- **`theme.js`**: `applyFont(theme)` — no-op if `theme.fonts`/`theme.defaultFont` are absent (Plain).
+  Otherwise: injects a `<link id="theme-font-stylesheet">` for `theme.fontStylesheet` (once, checked
+  via the id so a re-apply doesn't duplicate it), reads `localStorage['vct-font-<themeId>']` (falls
+  back to `theme.defaultFont`), sets `--font-display` to that font's `cssFamily`.
+  `applyBrandAttribute(theme)` sets `document.documentElement.dataset.brand = theme.id` — a new,
+  generic hook for any future per-brand-only CSS that isn't a brand-string slot (the Home background
+  gradient below is the first consumer). Both called from `applyTheme` alongside the existing accent/
+  DOM-fill passes.
+- **`window.dispatchEvent(new CustomEvent('themeready'))`**: fired once `window.activeTheme` is set,
+  after `applyTheme` runs. `settings-app.js`'s font-picker population needs `theme.fonts`, but script
+  tags run their own top-level code synchronously before the theme fetch resolves — this event (not
+  an assumption about timing) is what tells `settings-app.js` when it's safe to read
+  `window.activeTheme`. `settings-app.js` also checks `window.activeTheme` directly on its own
+  top-level run, in case the event already fired before it started listening (fetch is same-origin
+  localhost, effectively instant — a real race either way is unlikely, but the event removes the
+  need to assume that).
+- **`settings-app.js`'s `renderFontPicker()`**: hides `#settingsFontFieldGroup` entirely when the
+  active theme has no `fonts` map (Standard); otherwise populates `#settingsFontSelect` from
+  `theme.fonts` (label + id), pre-selects the saved-or-default choice. On change: saves to
+  `vct-font-<themeId>` (per-theme key, not shared — switching Style later shouldn't silently carry a
+  font pick over to an unrelated theme's own list) and reloads, same "full reload to apply a brand-
+  level change" pattern the Style picker itself already uses.
+  `settingsFontSelect` added to `INSTANT_SAVE_IDS` (renamed from the old two-item inline check) so it
+  doesn't trigger a false "unsaved changes" warning — it's not part of `saveSettings()`'s own payload.
+- **`styles.css`**: `[data-brand-slot="name"|"heroTitle"|"appName"] { font-family: var(--font-display,
+  inherit); }` — one shared rule covering every brand-name-carrying element via the attribute
+  selector already used everywhere else in the theming system, rather than touching each element's
+  own class individually. `[data-brand="skyrim"] #area-home` gets a `background-image` of two
+  `radial-gradient()`s using `color-mix(in srgb, var(--accent) N%, transparent)` — derives the tint
+  from whatever the active theme's own accent is (already set by `applyAccentStylesheet`), so a
+  future theme's own background wash needs zero extra CSS/config, just its own `--accent`.
+- **Verified live**: font CSS + `.woff2` files serve at 200 (confirmed one file requested twice by
+  the browser's own preload heuristics, not a bug); `--font-display` and computed `font-family` both
+  reflect the picked font on every brand-name element; switching fonts in Settings persists and
+  reapplies after reload; Plain confirmed to have no font picker, no `--font-display` value, and no
+  background gradient (`data-brand="plain"` — the CSS rule only matches `"skyrim"`).
+
 ## Future work
 
 Tracked in the workspace `TODO.md` (not duplicated here — confirmed 2026-07-27, one place to check

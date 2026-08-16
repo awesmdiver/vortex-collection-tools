@@ -769,11 +769,43 @@ surfaced building it, both fixed as part of Phase 2 rather than carried forward:
   trim/lengthen too — accepted as a real consistency win (matches what Home already showed), not a
   regression, since it makes every nav surface in the app agree on one name per tool.
 
+**Accent swapped gold → purple (2026-08-15).** The original `#c9a227` gold collided visually with
+`--warning` (also gold/amber, `#f5b942` — untouched by theming, per the golden rule above). Red/
+green/blue/yellow are all already spoken for by severity colors; picked outside that family instead
+— `#9b72d1`, a deep amethyst purple, which also fits the arcane/magic theme. First-pass pick, not
+final — the deferred "real color picker" item (below) is where this becomes fully adjustable.
+
+**Visual flourishes: themed font (per-theme, user-selectable) + Home background gradient
+(2026-08-15).** Mockup: `design/vortex-visual-flourishes-mockup.html`, approved live.
+- **Font is a real Settings control, not a single baked-in pick** — director's own call ("options are
+  always the best"). `theme.fonts` (a new map in `themes/<id>.json`, keyed by font id → `{label,
+  cssFamily}`) + `theme.defaultFont` + `theme.fontStylesheet` (a self-hosted `@font-face` CSS file,
+  `web/public/theme-assets/<id>/fonts/`, downloaded from Google Fonts — OFL/Apache licensed, free to
+  self-host, no live CDN call from a locally-run app). Skyrim ships 6 real candidates (Cinzel the
+  default, Cinzel Decorative, Uncial Antiqua, MedievalSharp, Marcellus, Metamorphous). Picker lives
+  in Settings > General > Style, **only shown when a theme actually has a `fonts` map** — Standard
+  has no themed identity to pick a font for, so nothing renders there at all. Saved per-theme
+  (`vct-font-<themeId>` in localStorage, not one shared key), so switching Style later doesn't carry
+  a font choice over to an unrelated theme.
+- **`--font-display`** (styles.css) applies to `[data-brand-slot="name"|"heroTitle"|"appName"]`
+  only — never body text (`heroBody`, `cardDesc`) — same "name for flavor, subtitle for function"
+  split this app already draws everywhere else; a display face at paragraph length fights its own
+  readability. Falls back to `inherit` (the plain system font) when unset, so Plain — and Skyrim
+  before its own fetch resolves — render exactly as before.
+- **Home's background gradient** is CSS-only (no new Gemini art), scoped via a new generic
+  `[data-brand="<id>"]` attribute (`theme.js`'s `applyBrandAttribute` — distinct from Appearance's
+  own `[data-theme]`) and derived straight from the active theme's own `--accent` via `color-mix()`,
+  so a future theme's own accent automatically produces a matching wash with zero extra config.
+  Deliberately quiet (~8-12% opacity) — the director's own call was "modest, design to not compete."
+
 **Known gaps, not yet closed:**
-- **Skyrim's accent has no light-mode variant** (unlike Plain) — same gold in both Appearance modes,
-  a reasonable first-pass simplification, not a fidelity requirement the way Plain's is.
 - **The Rites/The Satchel names are still first-pass**, not yet through a real four-brain pass like
   the original 13 tool names + The Chronicle.
+- **Get Started book** — mocked up (aged-parchment page styling, lore in the theme's display font,
+  "what it actually does" in plain voice), not built. Lore paragraphs need a real Gemini pass (third
+  brain, same process the original 13 tool names went through) before the content is final; the
+  functional "what it actually does" boxes still need writing across all ~16 tools. Where the page
+  itself lives/is reached from is still an open question too.
 
 There are now **two orthogonal theming layers**, and they must stay independent:
 

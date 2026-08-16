@@ -4,6 +4,16 @@
   "appName": "The Arcaneum",
   "accent": "#9b72d1",
   "palette": {},
+  "fontStylesheet": "theme-assets/skyrim/fonts/skyrim-fonts.css",
+  "defaultFont": "cinzel",
+  "fonts": {
+    "cinzel": { "label": "Cinzel (default)", "cssFamily": "'Cinzel', serif" },
+    "cinzeldecorative": { "label": "Cinzel Decorative", "cssFamily": "'Cinzel Decorative', serif" },
+    "uncialantiqua": { "label": "Uncial Antiqua", "cssFamily": "'Uncial Antiqua', serif" },
+    "medievalsharp": { "label": "MedievalSharp", "cssFamily": "'MedievalSharp', serif" },
+    "marcellus": { "label": "Marcellus", "cssFamily": "'Marcellus', serif" },
+    "metamorphous": { "label": "Metamorphous", "cssFamily": "'Metamorphous', serif" }
+  },
   "tools": {
     "home": {
       "name": "The Arcaneum",
