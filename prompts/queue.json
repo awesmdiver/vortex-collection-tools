@@ -4,11 +4,6 @@
   "items": [],
   "roadmap": [
     {
-      "title": "Theming: Skyrim-flavored \"Get Started\" book",
-      "note": "Mocked up (design/vortex-visual-flourishes-mockup.html, approved live). Content is done: lore for all 16 tools went through a real Gemini pass (design/get-started-book-content-draft-v1-Gemini.md), 2 names got relocked along the way (The Anvil's Mark, The Shadowmarked -- caught a naming collision with 2 other tools already called \"___ Ledger\"). Art is specced: 5 of 16 tools already have a reusable banner, 11 need one -- paste-ready prompts in design/gemini-book-tool-banner-prompts.md, none generated yet. Still not built: the actual page/route, and where it's reached from is still an open question.",
-      "doc": "design/get-started-book-content-draft-v1-Gemini.md"
-    },
-    {
       "title": "Theming: a real color picker + background color picker",
       "note": "Mocked up (design/vortex-color-picker-mockup.html) -- accent + background-tint pickers with a live preview, 3 open design questions flagged in the mockup itself (override vs. new saved theme; one color vs. a light/dark pair; what \"Reset\" resets to). Not built, pending sign-off on those 3 questions.",
       "doc": "design/vortex-color-picker-mockup.html"
@@ -139,6 +134,10 @@
     {
       "title": "Theming: gold accent swapped for purple (collided with --warning), real per-theme font picker (6 Skyrim candidates, self-hosted), Home background gradient",
       "doc": "DESIGN.md"
+    },
+    {
+      "title": "Theming: Skyrim-flavored \"Get Started\" book -- content, art, and the real page all built",
+      "doc": "design/get-started-book-content-draft-v1-Gemini.md"
     }
   ]
 }
