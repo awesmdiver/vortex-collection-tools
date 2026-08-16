@@ -10,7 +10,7 @@
      under theme-assets/. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Cinzel+Decorative:wght@700&family=Uncial+Antiqua&family=MedievalSharp&family=Marcellus&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Cinzel+Decorative:wght@700&family=Uncial+Antiqua&family=MedievalSharp&family=Marcellus&family=Metamorphous&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg:#0d0f14; --surface:#161922; --surface-2:#1d212c; --border:#2a2f3d; --border-strong:#3a4152;
@@ -46,6 +46,16 @@
   .f-uncial{font-family:'Uncial Antiqua',serif}
   .f-medieval{font-family:'MedievalSharp',serif}
   .f-marcellus{font-family:'Marcellus',serif}
+  .f-metamorphous{font-family:'Metamorphous',serif}
+
+  /* ---- Live font picker demo ---- */
+  .picker-demo{border:1px solid var(--border-strong);border-radius:var(--radius);padding:22px 24px;background:var(--surface);margin-bottom:18px}
+  .picker-demo__row{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+  .picker-demo__row label{font-size:12.5px;color:var(--text-muted);font-weight:600}
+  .picker-demo__row select{font-family:inherit;font-size:13.5px;padding:7px 10px;border-radius:8px;
+    border:1px solid var(--border);background:var(--surface-2);color:var(--text)}
+  .picker-demo__preview{border-top:1px solid var(--border);padding-top:16px}
+  .picker-demo__preview .n{font-size:24px;margin-bottom:6px;transition:font-family .1s}
 
   /* ---- Background art concept ---- */
   .bg-demo{position:relative;border:1px solid var(--border-strong);border-radius:var(--radius);overflow:hidden;
@@ -65,21 +75,32 @@
   .mini-card .n{font-family:'Cinzel',serif;font-weight:600;font-size:13.5px;margin-bottom:3px}
   .mini-card .d{font-size:11.5px;color:var(--text-muted)}
 
-  /* ---- Get Started book concept ---- */
-  .book-page{border:1px solid var(--border-strong);border-radius:var(--radius);overflow:hidden;background:var(--surface)}
+  /* ---- Get Started book concept -- aged parchment, not the app's own dark surface. This is a
+     deliberate exception to "match the app chrome" -- the book is meant to feel like a found object
+     you're reading, not another app panel, so it gets its own warm/light palette regardless of
+     whether the app itself is in dark or light Appearance mode. ---- */
+  .book-page{border-radius:var(--radius);overflow:hidden;
+    box-shadow:0 10px 40px rgba(0,0,0,.5), 0 0 0 1px #4a3826}
   .book-page__banner{width:100%;display:block;aspect-ratio:2816/1536;object-fit:cover;background:linear-gradient(160deg,#1a1520,#2b1f38)}
-  .book-page__body{padding:28px 32px}
-  .book-page__eyebrow{font-family:'Cinzel',serif;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin:0 0 6px}
-  .book-page__title{font-family:'Cinzel',serif;font-weight:700;font-size:28px;margin:0 0 4px}
-  .book-page__func{font-size:13px;color:var(--text-muted);margin:0 0 20px;font-style:italic}
-  .book-page__lore{font-size:14.5px;line-height:1.75;margin:0 0 16px;color:var(--text)}
-  .book-page__lore b{color:var(--accent)}
-  .book-page__whatitdoes{background:var(--surface-2);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;
-    padding:14px 18px;font-size:13.5px;line-height:1.7;margin:0 0 20px}
-  .book-page__whatitdoes b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-bottom:6px}
-  .book-nav{display:flex;justify-content:space-between;align-items:center;padding:14px 32px;border-top:1px solid var(--border);
-    background:var(--surface-2);font-size:12.5px;color:var(--text-muted)}
-  .book-nav a{color:var(--accent);text-decoration:none;font-weight:600}
+  .book-page__body{padding:32px 38px;position:relative;color:#3a2e1f;
+    background:
+      radial-gradient(ellipse at 20% 10%, rgba(255,250,235,.5), transparent 55%),
+      radial-gradient(ellipse at 85% 90%, rgba(120,90,50,.12), transparent 50%),
+      repeating-linear-gradient(0deg, rgba(120,90,50,.025) 0px, rgba(120,90,50,.025) 1px, transparent 1px, transparent 3px),
+      linear-gradient(155deg, #e8dcc0, #ddcda6 45%, #e3d5b3)}
+  .book-page__body::after{content:'';position:absolute;inset:0;pointer-events:none;
+    box-shadow:inset 0 0 60px rgba(74,56,38,.35)}
+  .book-page__eyebrow{font-family:'Cinzel',serif;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#8a5a2e;margin:0 0 6px;position:relative}
+  .book-page__title{font-family:'Cinzel',serif;font-weight:700;font-size:28px;margin:0 0 4px;color:#2e2313;position:relative}
+  .book-page__func{font-size:13px;color:#6b5a3f;margin:0 0 20px;font-style:italic;position:relative}
+  .book-page__lore{font-size:14.5px;line-height:1.75;margin:0 0 16px;color:#3a2e1f;position:relative}
+  .book-page__lore b{color:#8a5a2e}
+  .book-page__whatitdoes{background:rgba(255,252,240,.55);border-left:3px solid #8a5a2e;border-radius:0 8px 8px 0;
+    padding:14px 18px;font-size:13.5px;line-height:1.7;margin:0 0 4px;color:#3a2e1f;position:relative}
+  .book-page__whatitdoes b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#8a5a2e;margin-bottom:6px}
+  .book-nav{display:flex;justify-content:space-between;align-items:center;padding:14px 32px;
+    background:#2e2313;font-size:12.5px;color:#a89878}
+  .book-nav a{color:#d4b483;text-decoration:none;font-weight:600}
   .book-toc{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:18px}
   .book-toc a{display:block;padding:9px 12px;border:1px solid var(--border);border-radius:8px;color:var(--text);
     text-decoration:none;font-size:13px;background:var(--surface)}
@@ -95,17 +116,35 @@
 
   <!-- ============================================================ -->
   <div class="section">
-    <div class="section-title">1 · Themed display font</div>
-    <p class="section-sub">Right now every tool name renders in the app's own plain system font, same
-    weight as everything else — "The Arcaneum" reads exactly like "Settings." A themed display font just
-    for tool names/headings (never body text — that stays the readable system font) would give Skyrim
-    mode its own real visual identity, not just a color swap. Five real, license-free candidates below,
-    same sample text so they're easy to compare side by side. Loaded from Google Fonts for this preview
-    only — the real build self-hosts whichever one you pick.</p>
+    <div class="section-title">1 · Themed display font — a real per-theme picker</div>
+    <p class="section-sub">Director's own call: make this a real user-facing option, not a single baked-in
+    pick — "options are always the best." Scoped to the active brand theme, not global: pick <b>Skyrim</b>
+    as your Style under Settings > General, and a <b>Font</b> dropdown appears right below it with Skyrim's
+    own curated candidates (6 below). Pick <b>Standard</b> instead and there's no font picker at all — Plain
+    has no themed identity to pick a font for, it just stays the system font it always has. Try the live
+    picker below (same sample text either way, so it's easy to compare):</p>
+
+    <div class="picker-demo">
+      <div class="picker-demo__row">
+        <label for="fontPick">Settings &gt; General &gt; Style: Skyrim &gt; Font</label>
+        <select id="fontPick" onchange="var f='f-'+this.value; document.getElementById('fontPreview').className='n '+f; document.getElementById('fontPreviewSm').className='font-sample-sm '+f;">
+          <option value="cinzel" selected>Cinzel (default)</option>
+          <option value="cinzeld">Cinzel Decorative</option>
+          <option value="uncial">Uncial Antiqua</option>
+          <option value="medieval">MedievalSharp</option>
+          <option value="marcellus">Marcellus</option>
+          <option value="metamorphous">Metamorphous</option>
+        </select>
+      </div>
+      <div class="picker-demo__preview">
+        <div class="n f-cinzel" id="fontPreview">The Arcaneum</div>
+        <div class="font-sample-sm f-cinzel" id="fontPreviewSm">Restoration · The Forge · The Ward · The Scribe</div>
+      </div>
+    </div>
 
     <div class="font-grid">
       <div class="font-card picked">
-        <div class="font-card__label">Cinzel <span class="font-card__pick">MY PICK</span></div>
+        <div class="font-card__label">Cinzel <span class="font-card__pick">DEFAULT</span></div>
         <div class="font-sample-lg f-cinzel">The Arcaneum</div>
         <div class="font-sample-sm f-cinzel">Restoration · The Forge · The Ward</div>
       </div>
@@ -129,14 +168,17 @@
         <div class="font-sample-lg f-marcellus">The Arcaneum</div>
         <div class="font-sample-sm f-marcellus">Restoration · The Forge · The Ward</div>
       </div>
+      <div class="font-card">
+        <div class="font-card__label">Metamorphous</div>
+        <div class="font-sample-lg f-metamorphous">The Arcaneum</div>
+        <div class="font-sample-sm f-metamorphous">Restoration · The Forge · The Ward</div>
+      </div>
     </div>
-    <div class="note"><b>My pick, flagged not final:</b> Cinzel — reads clearly at small sizes (Home
-    cards, breadcrumbs) unlike Uncial Antiqua/MedievalSharp, which get hard to read below ~20px, and
-    it's the same face already used loosely in a lot of Skyrim fan/mod-community material, so it feels
-    "right" rather than generic-fantasy. Cinzel Decorative is striking but too heavy for repeated small
-    UI text (fine for a one-off banner, not a tool name shown 10+ times a page). Marcellus is elegant but
-    reads more "ancient Rome" than "Nordic," a little off-theme. Say the word if you want a different
-    pick or want to see a 6th option.</div>
+    <div class="note"><b>Default, not the only choice:</b> Cinzel reads clearly at small sizes (Home
+    cards, breadcrumbs) unlike Uncial Antiqua/MedievalSharp, which get hard to read below ~20px, so it's
+    the sensible default — but every candidate above is a real, selectable option, not just a preview.
+    Each theme gets its own curated list (Skyrim's 6 above; a future theme would bring its own, not reuse
+    these) rather than one global font list every theme picks from.</div>
   </div>
 
   <!-- ============================================================ -->
@@ -173,8 +215,10 @@
     <p class="section-sub">A themed help/onboarding page, reusing the release banner art (the real ones
     already made — this mockup's own banner placeholder below stands in for e.g. The Forge's actual
     release banner) with real lore + a genuinely useful "what this tool actually does" explanation per
-    tool, browsable like a table of contents. One sample page below (The Forge), plus what the table of
-    contents for the whole book would look like.</p>
+    tool, browsable like a table of contents. Director's call: the page itself should look like an old
+    book, not another dark app panel — warm parchment, ink-brown text, its own look regardless of
+    whether the app itself is in dark or light mode (below). One sample page (The Forge), plus what the
+    table of contents for the whole book would look like.</p>
 
     <div class="book-page">
       <img class="book-page__banner" src="../assets/release-v0.5.0-banner.png" onerror="this.style.display='none'" alt="">
@@ -218,13 +262,21 @@
       <a href="#"><span class="emoji">🗝️</span>The Vault-Keeper</a>
       <a href="#"><span class="emoji">🗿</span>The Standing Stones</a>
     </div>
-    <div class="note"><b>Real content work, not just layout:</b> the lore paragraphs already exist for
-    every tool (design/theme-content-skyrim.md's own "why these names" section) — the NEW writing needed
-    is each tool's own "what it actually does" box, at this level of real functional detail (more than
-    the one-line cardDesc, less than full TECHNICAL.md). That's a real writing pass across ~16 tools,
-    worth confirming you want before I start it. Where does this page live/how is it reached? Simplest:
-    a new Home-page link ("📖 Get Started" or similar) next to Settings, Skyrim-theme-only (Plain has no
-    book, nothing to show).</div>
+    <div class="note"><b>Two different writing passes, director's own split:</b>
+      <ul style="margin:8px 0 0;padding-left:20px">
+        <li><b>Lore paragraphs</b> ("Where raw materials are fused into one…" above) — bring Gemini in as
+        a third brain, same real four-brain process the original 13 tool names went through
+        (design/gemini-skyrim-tool-names-taglines.md). I'll draft a first pass per tool (the existing
+        "why these names" reasoning is the seed), Gemini drafts independently, we converge on the best
+        of both per tool rather than either one alone.</li>
+        <li><b>"What it actually does" boxes</b> — already in the plain-language-writer voice above (see
+        The Forge's own box), no Gemini pass needed for these, just a real writing pass across all ~16
+        tools once the lore side is settled.</li>
+      </ul>
+    </div>
+    <div class="note" style="margin-top:10px"><b>Still open:</b> where does this page live/how is it
+    reached? Simplest: a new Home-page link ("📖 Get Started" or similar) next to Settings,
+    Skyrim-theme-only (Plain has no book, nothing to show).</div>
   </div>
 
 </div>
