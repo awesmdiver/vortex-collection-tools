@@ -120,7 +120,9 @@ async function loadOverview(period) {
 // Vortex's installer, grouped by collection" was the explicit ask.
 let issuesData = null;
 const expandedCollections = new Set();
-let issuesStatusFilter = null;
+// A Set of active statuses -- empty shows everything, multi-select (union of every active status),
+// not isolate-to-one (workspace UX-PRINCIPLES.md rule 7, applied app-wide 2026-08-15).
+let issuesStatusFilter = new Set();
 
 async function loadIssues() {
   const listEl = $g('statsIssuesList');
@@ -144,7 +146,7 @@ function renderIssuesBadges() {
     for (const m of c.problemMods) counts[m.status] = (counts[m.status] || 0) + 1;
   }
   for (const [status, count] of Object.entries(counts)) {
-    const active = issuesStatusFilter === status;
+    const active = issuesStatusFilter.has(status);
     const badge = el('span', {
       class: `badge badge--clickable badge--${status.toLowerCase()}${active ? ' badge--filter-active' : ''}`,
       'data-status': status,
@@ -152,14 +154,14 @@ function renderIssuesBadges() {
     // Toggle, not just a one-way filter set -- click an active badge again to clear it, same as
     // clicking "Show all" below (both are valid ways to reset).
     badge.addEventListener('click', () => {
-      issuesStatusFilter = active ? null : status;
+      if (active) issuesStatusFilter.delete(status); else issuesStatusFilter.add(status);
       renderIssuesBadges();
       renderIssuesList();
     });
     badgesEl.appendChild(badge);
   }
-  const showAll = el('span', { class: `badge badge--show-all${issuesStatusFilter === null ? ' badge--filter-active' : ''}` }, 'Show all');
-  showAll.addEventListener('click', () => { issuesStatusFilter = null; renderIssuesBadges(); renderIssuesList(); });
+  const showAll = el('span', { class: `badge badge--show-all${issuesStatusFilter.size === 0 ? ' badge--filter-active' : ''}` }, 'Show all');
+  showAll.addEventListener('click', () => { issuesStatusFilter.clear(); renderIssuesBadges(); renderIssuesList(); });
   badgesEl.appendChild(showAll);
 }
 
@@ -170,29 +172,34 @@ function renderIssuesList() {
     listEl.appendChild(el('p', { class: 'muted' }, 'No problem mods in any collection\'s latest run -- everything is clean.'));
     return;
   }
+  const hasFilter = issuesStatusFilter.size > 0;
   const visible = issuesData.collections.filter((c) =>
-    !issuesStatusFilter || c.problemMods.some((m) => m.status === issuesStatusFilter));
+    !hasFilter || c.problemMods.some((m) => issuesStatusFilter.has(m.status)));
   if (visible.length === 0) {
-    listEl.appendChild(el('p', { class: 'muted' }, `No collection currently has a "${issuesStatusFilter}" mod.`));
+    const activeLabels = [...issuesStatusFilter].map((s) => `"${s}"`).join(' or ');
+    listEl.appendChild(el('p', { class: 'muted' }, `No collection currently has a ${activeLabels} mod.`));
     return;
   }
+  // Multi-value ?status= (comma-separated) round-trips to the log-view page's own multi-select
+  // filter (web/rebuild-routes.js's applyStatusFilter) -- same convention on both ends.
+  const statusQueryValue = [...issuesStatusFilter].join(',');
   for (const c of visible) {
-    const modsToShow = issuesStatusFilter ? c.problemMods.filter((m) => m.status === issuesStatusFilter) : c.problemMods;
-    const isExpanded = issuesStatusFilter != null || expandedCollections.has(c.collectionModId);
+    const modsToShow = hasFilter ? c.problemMods.filter((m) => issuesStatusFilter.has(m.status)) : c.problemMods;
+    const isExpanded = hasFilter || expandedCollections.has(c.collectionModId);
 
     const header = el('div', { class: 'muted', style: 'display:flex; align-items:center; gap:10px; cursor:pointer;' }, [
       el('span', {}, isExpanded ? '▼' : '▶'),
       el('strong', { style: 'color: var(--text);' }, c.collectionName),
-      el('span', {}, `${modsToShow.length} problem mod(s)${issuesStatusFilter ? ' matching filter' : ''}, latest run ${fmtDate(c.startedAt)} (${c.runStatus})`),
+      el('span', {}, `${modsToShow.length} problem mod(s)${hasFilter ? ' matching filter' : ''}, latest run ${fmtDate(c.startedAt)} (${c.runStatus})`),
       el('a', {
         class: 'btn btn--ghost btn--small',
         // Carries the active filter through to the log page (it already reads ?status= on load) and
         // tags where we came from so the log page's back button can say "Back to Reports" and return
         // to this exact sub-tab instead of a generic "Back to Collections".
-        href: `/api/rebuild/logs/view/${encodeURIComponent(c.logFile)}?from=stats${issuesStatusFilter ? '&status=' + encodeURIComponent(issuesStatusFilter) : ''}`,
+        href: `/api/rebuild/logs/view/${encodeURIComponent(c.logFile)}?from=stats${hasFilter ? '&status=' + encodeURIComponent(statusQueryValue) : ''}`,
       }, 'View Log'),
     ]);
-    if (!issuesStatusFilter) {
+    if (!hasFilter) {
       header.addEventListener('click', (e) => {
         if (e.target.closest('a')) return; // let View Log navigate normally, don't toggle
         if (expandedCollections.has(c.collectionModId)) expandedCollections.delete(c.collectionModId);

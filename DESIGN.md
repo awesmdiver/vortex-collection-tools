@@ -408,6 +408,23 @@ Select all + bulk action(s)" note under Core components.
   both. Scoping selection UI to files-mode would silently break the tree mode's pre-existing Extract
   — the "mockup governs look, the app governs what it does" rule again.
 
+### Filter badges are multi-select toggles, app-wide (Harmonization Phase 3, 2026-08-15)
+
+Every clickable filter-badge row in this app (Rebuild Collection's own plan/log-view pages, Missing
+Masters, Rebuild Missing Files, Rules Generator + its Report, Stats' Issues badges, Work Through,
+Merge Plugins' Review step) was single-select-only until this pass — clicking a badge isolated to
+just that one status, clearing whichever was active before. That violates the workspace's own
+`docs/UX-PRINCIPLES.md` rule 7: **"Filters are multi-select toggles... combine (the list shows the
+union)... Not single-select-one-at-a-time."** Converted app-wide: every filter's state is now a
+`Set` (empty = show everything), each badge toggles its own membership independently, and the
+visible rows/sections are the union of every active badge. "Show all" clears the whole set. A
+stale active filter (its own category count just dropped to 0) drops just that one key, not the
+whole filter — other active filters, if any, stay untouched. Two pages round-trip the filter through
+a `?status=` URL query param when navigating to a related page (Stats/Work Through → the log-view
+page); that param is now comma-separated for multiple active statuses, parsed back into a `Set` on
+the receiving end (both `web/public/app.js`'s embedded script equivalent and
+`web/rebuild-routes.js`'s server-rendered log-view page).
+
 ### Multi-select, grouped picker cards — a distinct shape from a plain select-and-act list (added 2026-08-14)
 
 `.picker-grid` / `.coll-card` (Rebuild Missing Files' Step 1, `design/vortex-rebuild-missing-files-

@@ -97,7 +97,11 @@ const wtExpandedCollections = new Set();
 // location.search once here at script-load time is enough -- confirmed live this was missing
 // before: the log page kept its own selected filter fine, but "Back to Reports" always reset this
 // page's filter to "Show all" regardless of what was active before clicking into the log.
-let wtStatusFilter = new URLSearchParams(location.search).get('status') || null;
+// Multi-select (workspace UX-PRINCIPLES.md rule 7, applied app-wide 2026-08-15) -- ?status= can now
+// carry a comma-separated list (same convention Stats' own issuesStatusFilter round-trips through
+// the log-view page with), parsed into a Set here at script-load time.
+const wtInitialStatus = new URLSearchParams(location.search).get('status');
+let wtStatusFilter = new Set(wtInitialStatus ? wtInitialStatus.split(',') : []);
 
 function loadWorkThroughPageOnce() {
   if (wtLoaded) return;
@@ -143,20 +147,20 @@ function renderWtBadges() {
     for (const m of c.problemMods) counts[m.status] = (counts[m.status] || 0) + 1;
   }
   for (const [status, count] of Object.entries(counts)) {
-    const active = wtStatusFilter === status;
+    const active = wtStatusFilter.has(status);
     const badge = el('span', {
       class: `badge badge--clickable badge--${status.toLowerCase()}${active ? ' badge--filter-active' : ''}`,
       'data-status': status,
     }, [el('span', { class: 'badge__count' }, String(count)), ' ' + statusLabel(status)]);
     badge.addEventListener('click', () => {
-      wtStatusFilter = active ? null : status;
+      if (active) wtStatusFilter.delete(status); else wtStatusFilter.add(status);
       renderWtBadges();
       renderWtList();
     });
     badgesEl.appendChild(badge);
   }
-  const showAll = el('span', { class: `badge badge--show-all${wtStatusFilter === null ? ' badge--filter-active' : ''}` }, 'Show all');
-  showAll.addEventListener('click', () => { wtStatusFilter = null; renderWtBadges(); renderWtList(); });
+  const showAll = el('span', { class: `badge badge--show-all${wtStatusFilter.size === 0 ? ' badge--filter-active' : ''}` }, 'Show all');
+  showAll.addEventListener('click', () => { wtStatusFilter.clear(); renderWtBadges(); renderWtList(); });
   badgesEl.appendChild(showAll);
 }
 
@@ -167,28 +171,31 @@ function renderWtList() {
     listEl.appendChild(el('p', { class: 'muted' }, 'No problem mods in any collection\'s latest run -- everything is clean.'));
     return;
   }
-  const visible = wtData.collections.filter((c) => !wtStatusFilter || c.problemMods.some((m) => m.status === wtStatusFilter));
+  const hasFilter = wtStatusFilter.size > 0;
+  const visible = wtData.collections.filter((c) => !hasFilter || c.problemMods.some((m) => wtStatusFilter.has(m.status)));
   if (visible.length === 0) {
-    listEl.appendChild(el('p', { class: 'muted' }, `No collection currently has a "${wtStatusFilter}" mod.`));
+    const activeLabels = [...wtStatusFilter].map((s) => `"${s}"`).join(' or ');
+    listEl.appendChild(el('p', { class: 'muted' }, `No collection currently has a ${activeLabels} mod.`));
     return;
   }
+  const statusQueryValue = [...wtStatusFilter].join(',');
   for (const c of visible) {
-    const modsToShow = wtStatusFilter ? c.problemMods.filter((m) => m.status === wtStatusFilter) : c.problemMods;
-    const isExpanded = wtStatusFilter != null || wtExpandedCollections.has(c.collectionModId);
+    const modsToShow = hasFilter ? c.problemMods.filter((m) => wtStatusFilter.has(m.status)) : c.problemMods;
+    const isExpanded = hasFilter || wtExpandedCollections.has(c.collectionModId);
 
     const header = el('div', { class: 'muted', style: 'display:flex; align-items:center; gap:10px; cursor:pointer;' }, [
       el('span', {}, isExpanded ? '▼' : '▶'),
       el('strong', { style: 'color: var(--text);' }, c.collectionName),
-      el('span', {}, `${modsToShow.length} problem mod(s)${wtStatusFilter ? ' matching filter' : ''}, latest run ${fmtDate(c.startedAt)} (${c.runStatus})`),
+      el('span', {}, `${modsToShow.length} problem mod(s)${hasFilter ? ' matching filter' : ''}, latest run ${fmtDate(c.startedAt)} (${c.runStatus})`),
       el('a', {
         class: 'btn btn--ghost btn--small',
         // Carries the active filter through to the log page (it already reads ?status= on load) and
         // tags where we came from so the log page's back button can say "Back to Reports" and return
         // to this exact sub-tab instead of a generic "Back to Collections".
-        href: `/api/rebuild/logs/view/${encodeURIComponent(c.logFile)}?from=work-through${wtStatusFilter ? '&status=' + encodeURIComponent(wtStatusFilter) : ''}`,
+        href: `/api/rebuild/logs/view/${encodeURIComponent(c.logFile)}?from=work-through${hasFilter ? '&status=' + encodeURIComponent(statusQueryValue) : ''}`,
       }, 'View Log'),
     ]);
-    if (!wtStatusFilter) {
+    if (!hasFilter) {
       header.addEventListener('click', (e) => {
         if (e.target.closest('a')) return;
         if (wtExpandedCollections.has(c.collectionModId)) wtExpandedCollections.delete(c.collectionModId);

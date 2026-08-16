@@ -333,7 +333,7 @@ function rmfHandleScanEvent(frame) {
 function rmfRenderReport(collectionResults, stats, refreshFailures) {
   rmfState.rows = [];
   rmfState.selected = new Set();
-  rmfKindFilter = null; // a fresh scan starts clean -- same reset as rmfState.selected above
+  rmfKindFilter.clear(); // a fresh scan starts clean -- same reset as rmfState.selected above
   const failedCollections = collectionResults.filter((c) => c.error);
   if (failedCollections.length > 0) {
     $g('rmfScanError').textContent = `Couldn't check ${failedCollections.length} collection(s): ` +
@@ -412,9 +412,12 @@ const RMF_KIND_INFO = {
   excepted: { label: 'Excepted', badgeClass: 'badge--neutral' },
 };
 
-// null shows everything -- same toggle-on-click behavior as mmStatusFilter (click the active pill
-// again, or "Show all", to clear).
-let rmfKindFilter = null;
+// A Set of active kinds -- empty shows everything. Multi-select: each badge toggles independently
+// and the shown rows are the UNION of every active kind, not "isolate to just one" (workspace
+// UX-PRINCIPLES.md rule 7: "Filters are multi-select toggles... combine (the list shows the
+// union)... Not single-select-one-at-a-time." -- confirmed real 2026-08-15, this file along with
+// every other clickable filter-badge in the app was single-select only until this pass).
+let rmfKindFilter = new Set();
 
 function rmfRenderSummaryBadges() {
   const badgesEl = $g('rmfSummaryBadges');
@@ -427,35 +430,36 @@ function rmfRenderSummaryBadges() {
   for (const key of ['missing', 'archive-missing', 'ignored', 'excepted']) {
     if (!counts[key]) continue;
     const info = RMF_KIND_INFO[key];
-    const active = rmfKindFilter === key;
+    const active = rmfKindFilter.has(key);
     const badge = el('span', {
       class: `badge ${info.badgeClass} badge--clickable${active ? ' badge--filter-active' : ''}`,
       'data-kind': key,
     }, [el('span', { class: 'badge__count' }, String(counts[key])), ' ' + info.label]);
     badge.addEventListener('click', () => {
-      rmfKindFilter = active ? null : key;
+      if (active) rmfKindFilter.delete(key); else rmfKindFilter.add(key);
       rmfRenderRows();
     });
     badgesEl.appendChild(badge);
   }
-  const showAll = el('span', { class: `badge badge--show-all${rmfKindFilter === null ? ' badge--filter-active' : ''}` }, 'Show all');
+  const showAll = el('span', { class: `badge badge--show-all${rmfKindFilter.size === 0 ? ' badge--filter-active' : ''}` }, 'Show all');
   showAll.addEventListener('click', () => {
-    rmfKindFilter = null;
+    rmfKindFilter.clear();
     rmfRenderRows();
   });
   badgesEl.appendChild(showAll);
 }
 
 function rmfRenderRows() {
-  // Judgment call (flagged, not silently copied from Missing Masters): if the active filter's own
+  // Judgment call (flagged, not silently copied from Missing Masters): if an ACTIVE filter's own
   // category count just dropped to 0 (everything in it got fixed via Extract/Download Archive),
-  // reset to "Show all" here rather than leaving the user staring at an empty table with a filter
-  // that no longer means anything. Missing Masters' own mmRenderMasterList doesn't do this -- it
-  // just shows an empty-state message and leaves the stale filter active, which reads as "did my
-  // fix not work?" rather than "you fixed all of these." Recomputed every render (not just once)
-  // so counts always reflect the live row set, per this task's own scope item 5.
-  if (rmfKindFilter && !rmfState.rows.some((r) => r.kind === rmfKindFilter)) {
-    rmfKindFilter = null;
+  // drop just that one kind from the filter rather than leaving the user staring at a stale badge
+  // that no longer means anything -- other active kinds (if any, now that this is multi-select)
+  // stay untouched. Missing Masters' own mmRenderMasterList doesn't do this -- it just shows an
+  // empty-state message and leaves the stale filter active, which reads as "did my fix not work?"
+  // rather than "you fixed all of these." Recomputed every render (not just once) so counts always
+  // reflect the live row set, per this task's own scope item 5.
+  for (const key of [...rmfKindFilter]) {
+    if (!rmfState.rows.some((r) => r.kind === key)) rmfKindFilter.delete(key);
   }
   rmfRenderSummaryBadges();
 
@@ -465,9 +469,11 @@ function rmfRenderRows() {
   // every action handler below key off the row's real position in rmfState.rows, unaffected by
   // which rows are currently visible (a hidden row keeps its selection state, same as Archive
   // Finder's own "Show selected only" toggle already does).
+  // Multi-select: empty filter shows everything; a non-empty filter shows the UNION of every
+  // active kind (workspace UX-PRINCIPLES.md rule 7), not "isolate to exactly one".
   const entries = rmfState.rows
     .map((row, idx) => ({ row, idx }))
-    .filter(({ row }) => !rmfKindFilter || row.kind === rmfKindFilter);
+    .filter(({ row }) => rmfKindFilter.size === 0 || rmfKindFilter.has(row.kind));
   entries.forEach(({ row, idx }) => {
     const tr = el('tr', { 'data-idx': String(idx) });
     // Acknowledged tier (DESIGN.md's own fifth, non-severity tier) -- muted grey row, same

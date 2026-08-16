@@ -390,11 +390,14 @@ function mmRenderMasterRow(master) {
   return el('div', { class: `mm-row ${status.cardClass}` }, children);
 }
 
-// Which status pill is currently isolated -- null shows everything. Never auto-reset by mmRender
-// itself (including the silent background poll) so an active filter survives both a manual Refresh
-// and a live data change -- only clearing it (clicking the active pill again, or "Show all") resets
-// it, same as every other clickable-pill filter in this app.
-let mmStatusFilter = null;
+// A Set of active statuses -- empty shows everything. Multi-select: each badge toggles
+// independently and the shown list is the UNION of every active status, not "isolate to just one"
+// (workspace UX-PRINCIPLES.md rule 7 -- confirmed real 2026-08-15, this was single-select-only
+// until this pass, same as every other clickable filter-badge in the app). Never auto-reset by
+// mmRender itself (including the silent background poll) so an active filter survives both a manual
+// Refresh and a live data change -- only clearing it (clicking an active pill again, or "Show all")
+// changes it.
+let mmStatusFilter = new Set();
 
 function mmRenderSummaryBadges() {
   const badgesEl = $g('mmSummaryBadges');
@@ -411,21 +414,21 @@ function mmRenderSummaryBadges() {
   for (const key of ['missing', 'present-but-inactive', 'eslifier-swap', 'ready-to-deploy']) {
     if (!counts[key]) continue;
     const status = MM_STATUS[key];
-    const active = mmStatusFilter === key;
+    const active = mmStatusFilter.has(key);
     const badge = el('span', {
       class: `badge ${status.badgeClass} badge--clickable${active ? ' badge--filter-active' : ''}`,
       'data-status': key,
     }, [el('span', { class: 'badge__count' }, String(counts[key])), ' ' + status.label]);
     badge.addEventListener('click', () => {
-      mmStatusFilter = active ? null : key;
+      if (active) mmStatusFilter.delete(key); else mmStatusFilter.add(key);
       mmRenderSummaryBadges();
       mmRenderMasterList();
     });
     badgesEl.appendChild(badge);
   }
-  const showAll = el('span', { class: `badge badge--show-all${mmStatusFilter === null ? ' badge--filter-active' : ''}` }, 'Show all');
+  const showAll = el('span', { class: `badge badge--show-all${mmStatusFilter.size === 0 ? ' badge--filter-active' : ''}` }, 'Show all');
   showAll.addEventListener('click', () => {
-    mmStatusFilter = null;
+    mmStatusFilter.clear();
     mmRenderSummaryBadges();
     mmRenderMasterList();
   });
@@ -435,11 +438,12 @@ function mmRenderSummaryBadges() {
 function mmRenderMasterList() {
   const container = $g('mmGroupsList');
   container.innerHTML = '';
-  const visible = mmStatusFilter
-    ? mmLastProblemMasters.filter((m) => mmDisplayStatus(m) === mmStatusFilter)
-    : mmLastProblemMasters;
+  const visible = mmStatusFilter.size === 0
+    ? mmLastProblemMasters
+    : mmLastProblemMasters.filter((m) => mmStatusFilter.has(mmDisplayStatus(m)));
   if (visible.length === 0) {
-    container.appendChild(el('p', { class: 'muted' }, `No "${MM_STATUS[mmStatusFilter].label}" masters right now.`));
+    const activeLabels = [...mmStatusFilter].map((k) => `"${MM_STATUS[k].label}"`).join(' or ');
+    container.appendChild(el('p', { class: 'muted' }, `No ${activeLabels} masters right now.`));
     return;
   }
   for (const master of visible) container.appendChild(mmRenderMasterRow(master));

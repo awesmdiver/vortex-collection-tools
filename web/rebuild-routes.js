@@ -1235,34 +1235,51 @@ document.getElementById('logTableBody').addEventListener('click', async (e) => {
     btn.textContent = 'Delete';
   }
 });
-// Pulled out of the click handler so a page reload (e.g. after resolving a mismatch) can re-apply
-// whichever filter was active, instead of always resetting to "show all" -- confirmed live this was
-// confusing: resolving one mismatched mod reloaded the whole page and silently dropped back to
-// showing every row, when the user was deliberately filtered down to just the mismatched ones.
-function applyStatusFilter(status) {
-  document.querySelectorAll('#statusBadges .badge').forEach((b) => b.classList.remove('badge--filter-active'));
+// A Set of active statuses -- empty shows everything, multi-select (union of every active status),
+// not isolate-to-one (workspace UX-PRINCIPLES.md rule 7, applied app-wide 2026-08-15). Module-level
+// so the click handler below can toggle membership, and a page reload (e.g. after resolving a
+// mismatch) can re-apply whichever filter was active instead of always resetting to "show all" --
+// confirmed live this was confusing: resolving one mismatched mod reloaded the whole page and
+// silently dropped back to showing every row, when the user was deliberately filtered down to just
+// the mismatched ones.
+let activeStatusFilter = new Set();
+function applyStatusFilter(statuses) {
+  activeStatusFilter = statuses;
+  document.querySelectorAll('#statusBadges .badge').forEach((b) => {
+    const s = b.dataset.status;
+    b.classList.toggle('badge--filter-active', s ? activeStatusFilter.has(s) : activeStatusFilter.size === 0);
+  });
   const rows = document.querySelectorAll('#logTableBody tr');
-  if (!status) {
+  if (activeStatusFilter.size === 0) {
     rows.forEach((r) => { r.style.display = ''; });
     return;
   }
-  const badge = document.querySelector('#statusBadges .badge--clickable[data-status="' + CSS.escape(status) + '"]');
-  if (badge) badge.classList.add('badge--filter-active');
-  rows.forEach((r) => { r.style.display = r.dataset.status === status ? '' : 'none'; });
+  rows.forEach((r) => { r.style.display = activeStatusFilter.has(r.dataset.status) ? '' : 'none'; });
 }
 document.getElementById('statusBadges').addEventListener('click', (e) => {
   const badge = e.target.closest('.badge--clickable, .badge--show-all');
   if (!badge) return;
   const status = badge.dataset.status;
-  applyStatusFilter(status);
+  if (!status) {
+    activeStatusFilter.clear();
+  } else if (activeStatusFilter.has(status)) {
+    activeStatusFilter.delete(status);
+  } else {
+    activeStatusFilter.add(status);
+  }
+  applyStatusFilter(activeStatusFilter);
   // Persist the active filter in the URL (no navigation, just updates the address bar) so a later
   // location.reload() -- e.g. after resolving a mismatch below -- restores it instead of resetting.
+  // Comma-separated, same convention Stats'/Work Through's own issuesStatusFilter/wtStatusFilter
+  // round-trip a multi-value filter through this exact query param.
   const url = new URL(location.href);
-  if (status) url.searchParams.set('status', status); else url.searchParams.delete('status');
+  if (activeStatusFilter.size > 0) url.searchParams.set('status', [...activeStatusFilter].join(','));
+  else url.searchParams.delete('status');
   history.replaceState(null, '', url);
 });
 // Restore whatever filter was active before this page load, if the URL says so.
-applyStatusFilter(new URLSearchParams(location.search).get('status') || '');
+const initialStatusParam = new URLSearchParams(location.search).get('status');
+applyStatusFilter(new Set(initialStatusParam ? initialStatusParam.split(',') : []));
 </script>
 </main></body></html>`);
     });

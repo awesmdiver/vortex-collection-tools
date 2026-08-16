@@ -842,27 +842,36 @@ function renderPlan(plan) {
   const hasWork = plan.rebuildQueue.length > 0;
   for (const id of ['startRebuildBtn', 'startRebuildBtnTop']) $(id).disabled = !hasWork;
   for (const id of ['nothingToRebuildNote', 'nothingToRebuildNoteTop']) $(id).classList.toggle('hidden', hasWork);
-  applyPlanStatusFilter(''); // fresh plan render -- always start unfiltered, same as a fresh page load
+  planStatusFilter.clear(); // fresh plan render -- always start unfiltered, same as a fresh page load
+  applyPlanStatusFilter();
 }
 
-// Same clickable-badge-filters-the-table pattern as the log-view page's own statusBadges/
-// applyStatusFilter (web/rebuild-routes.js's /logs/view/:filename) -- lets a collection with a lot
-// of yellow/red rows be reviewed by status instead of scrolling to find them all.
-function applyPlanStatusFilter(status) {
-  document.querySelectorAll('#planSummary .badge').forEach((b) => b.classList.remove('badge--filter-active'));
+// A Set of active statuses -- empty shows everything. Multi-select, each badge toggles
+// independently (workspace UX-PRINCIPLES.md rule 7, applied app-wide 2026-08-15) -- same pattern as
+// the log-view page's own statusBadges/applyStatusFilter (web/rebuild-routes.js's
+// /logs/view/:filename), which this was originally copied from. Lets a collection with a lot of
+// yellow/red rows be reviewed by status instead of scrolling to find them all.
+let planStatusFilter = new Set();
+function applyPlanStatusFilter() {
+  document.querySelectorAll('#planSummary .badge').forEach((b) => {
+    const s = b.dataset.status;
+    b.classList.toggle('badge--filter-active', s ? planStatusFilter.has(s) : planStatusFilter.size === 0);
+  });
   const rows = document.querySelectorAll('#planTableBody tr');
-  if (!status) {
+  if (planStatusFilter.size === 0) {
     rows.forEach((r) => { r.style.display = ''; });
     return;
   }
-  const badge = document.querySelector('#planSummary .badge--clickable[data-status="' + CSS.escape(status) + '"]');
-  if (badge) badge.classList.add('badge--filter-active');
-  rows.forEach((r) => { r.style.display = r.dataset.status === status ? '' : 'none'; });
+  rows.forEach((r) => { r.style.display = planStatusFilter.has(r.dataset.status) ? '' : 'none'; });
 }
 $('planSummary').addEventListener('click', (e) => {
   const badge = e.target.closest('.badge--clickable, .badge--show-all');
   if (!badge) return;
-  applyPlanStatusFilter(badge.dataset.status);
+  const status = badge.dataset.status;
+  if (!status) planStatusFilter.clear();
+  else if (planStatusFilter.has(status)) planStatusFilter.delete(status);
+  else planStatusFilter.add(status);
+  applyPlanStatusFilter();
 });
 
 $('resumeToggle').addEventListener('change', (e) => {

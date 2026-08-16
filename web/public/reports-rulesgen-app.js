@@ -128,29 +128,31 @@ function rgReportUpdateGenerateButton() {
   $g('rgReportGenerateBtn').disabled = !($g('rgReportOldSelect').value && $g('rgReportNewSelect').value);
 }
 
-// Which section is currently isolated -- null shows both (Completed/Exceptions), matching this
-// app's established "click a badge to filter, click again (or Show all) to clear" convention
-// elsewhere (Stats Report, Work Through Report, Rules Generator's own summary badges). Converted
-// 2026-07-27 from plain non-clickable badges, for consistency with those.
-let rgReportSectionFilter = null;
+// A Set of active sections -- empty shows both (Completed/Exceptions), multi-select (each badge
+// toggles independently), matching this app's established "click a badge to filter, click again
+// (or Show all) to clear" convention elsewhere (Stats Report, Work Through Report, Rules
+// Generator's own summary badges) -- workspace UX-PRINCIPLES.md rule 7, applied app-wide
+// 2026-08-15. Only 2 possible sections here, so "both selected" and "none selected" render
+// identically (both sections shown) -- still a correct multi-select, just a small state space.
+let rgReportSectionFilter = new Set();
 let rgReportLastCounts = { completed: 0, exceptions: 0 };
 const RG_REPORT_SECTION_IDS = { completed: 'rgReportCompletedSection', exceptions: 'rgReportExceptionsSection' };
 
 function rgReportRenderBadges() {
   const badges = $g('rgReportSummaryBadges');
   badges.innerHTML = '';
-  const activeCompleted = rgReportSectionFilter === 'completed';
-  const activeExceptions = rgReportSectionFilter === 'exceptions';
+  const activeCompleted = rgReportSectionFilter.has('completed');
+  const activeExceptions = rgReportSectionFilter.has('exceptions');
   const completedBadge = el('span', { class: `badge badge--success badge--clickable${activeCompleted ? ' badge--filter-active' : ''}`, 'data-section': 'completed' },
     [el('span', { class: 'badge__count' }, String(rgReportLastCounts.completed)), ' Completed']);
   const exceptionsBadge = el('span', { class: `badge badge--warning badge--clickable${activeExceptions ? ' badge--filter-active' : ''}`, 'data-section': 'exceptions' },
     [el('span', { class: 'badge__count' }, String(rgReportLastCounts.exceptions)), ' Exceptions']);
-  const showAll = el('span', { class: `badge badge--show-all${rgReportSectionFilter === null ? ' badge--filter-active' : ''}` }, 'Show all');
+  const showAll = el('span', { class: `badge badge--show-all${rgReportSectionFilter.size === 0 ? ' badge--filter-active' : ''}` }, 'Show all');
   badges.appendChild(completedBadge);
   badges.appendChild(exceptionsBadge);
   badges.appendChild(showAll);
   for (const [section, id] of Object.entries(RG_REPORT_SECTION_IDS)) {
-    $g(id).classList.toggle('hidden', rgReportSectionFilter !== null && rgReportSectionFilter !== section);
+    $g(id).classList.toggle('hidden', rgReportSectionFilter.size > 0 && !rgReportSectionFilter.has(section));
   }
 }
 
@@ -172,7 +174,7 @@ async function rgReportGenerate() {
       completed: report.completed.length + report.resolvedAnomalyCount,
       exceptions: report.exceptions.unresolvedAnomalies.length + report.exceptions.leftoverOldInstalls.length,
     };
-    rgReportSectionFilter = null; // fresh report -- always start showing both sections
+    rgReportSectionFilter.clear(); // fresh report -- always start showing both sections
     rgReportRenderBadges();
 
     $g('rgReportResolvedNote').textContent = report.resolvedAnomalyCount > 0
@@ -222,14 +224,14 @@ document.addEventListener('DOMContentLoaded', () => {
   $g('rgReportGenerateBtn').addEventListener('click', rgReportGenerate);
   $g('rgReportSummaryBadges').addEventListener('click', (e) => {
     if (e.target.closest('.badge--show-all')) {
-      rgReportSectionFilter = null;
+      rgReportSectionFilter.clear();
       rgReportRenderBadges();
       return;
     }
     const badge = e.target.closest('.badge--clickable[data-section]');
     if (!badge) return;
     const section = badge.dataset.section;
-    rgReportSectionFilter = rgReportSectionFilter === section ? null : section;
+    if (rgReportSectionFilter.has(section)) rgReportSectionFilter.delete(section); else rgReportSectionFilter.add(section);
     rgReportRenderBadges();
   });
 });

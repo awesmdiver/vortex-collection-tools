@@ -4131,6 +4131,46 @@ nothing about routing, `data-area`/`data-sub`, or which API a button calls is to
   paragraph) confirmed themed; Plain confirmed byte-identical on the same callout (regression check);
   no console errors.
 
+## Harmonization Phase 3: multi-select filter badges (2026-08-15)
+
+DESIGN.md's "Filter badges are multi-select toggles" section has the rationale (workspace
+UX-PRINCIPLES.md rule 7); this is the implementation-site inventory. Every site converted from a
+single value (`null` or `''` = show everything, a string = isolate to exactly one) to a `Set`
+(empty = show everything, membership = active), with the click handler now toggling membership
+instead of replacing the whole filter:
+
+- `web/public/missing-masters-app.js` — `mmStatusFilter`
+- `web/public/rebuild-missing-app.js` — `rmfKindFilter` (also: the "drop a stale filter key on
+  empty count" cleanup now deletes just that one key from the Set, not the whole filter)
+- `web/public/stats-app.js` — `issuesStatusFilter` (Issues badges only; `statsSummaryBadges` is
+  informational, not clickable)
+- `web/public/work-through-app.js` — `wtStatusFilter` (now parses a comma-separated `?status=` at
+  script-load time into a `Set`, was a single raw string)
+- `web/public/reports-rulesgen-app.js` — `rgReportSectionFilter` (2-value: Completed/Exceptions)
+- `web/public/rules-generator-app.js` — `rgSectionFilter` (3-value: ready/review/nolink)
+- `web/public/merge-app.js` — `mergeReviewFilter` (new module-level variable — previously had NO
+  persistent state at all, just baked `badge--filter-active` into the initial render string and
+  mutated classes directly on click, so a re-render from an unrelated cart change silently reset
+  the filter back to "Show all"; also moved the row-hiding pass to run AFTER the table body is
+  rebuilt, not before — the original single-select version didn't need to care about ordering
+  since it only ever touched pre-existing rows from a click handler, never from the render
+  function itself)
+- `web/public/app.js` — `planStatusFilter` (Rebuild Collection's own Plan step; mirrors
+  `web/rebuild-routes.js`'s log-view page below, which this was originally copied from)
+- `web/rebuild-routes.js` — the log-view page's embedded client script, `activeStatusFilter`
+  (server-rendered, not a real module — same Set-based conversion, plus the `?status=` URL
+  round-trip is now comma-separated to match Stats'/Work Through's own multi-value param)
+
+**Verified**: `node -c` on every touched file (the log-view page's embedded script extracted and
+checked separately, since it's a JS template literal inside a Node route file, not a real `.js`
+file `node -c` can see directly). Live: Merge Plugins' Review step, Rules Generator, and Rebuild
+Missing Files each exercised with synthetic data injected via devtools (director's own real data
+had no problem mods/masters at the time to click-test against) — confirmed two badges can be active
+simultaneously, the visible set is the union, and "Show all" clears correctly. Missing Masters,
+Rebuild Missing Files, Rules Generator Report, Stats, Work Through, and both log-view pages were
+code-reviewed to the same converted pattern but not all individually live-tested with real problem
+data — worth a spot-check once real data exists.
+
 ## Future work
 
 Tracked in the workspace `TODO.md` (not duplicated here — confirmed 2026-07-27, one place to check

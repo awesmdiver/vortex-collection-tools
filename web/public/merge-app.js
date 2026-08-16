@@ -64,6 +64,12 @@ const mergeState = {
 let mergeLastClickedCheckbox = null; // shift-click range select, Step 1's results table
 let mergeCartWindow = null; // the live-updating separate OS window ("View chosen")
 let mergeEventSource = null; // SSE for the Merging… step's progress
+// Review step's status filter -- a Set of active statuses ('master'/'override'/'ok'), empty shows
+// everything. Multi-select, each badge toggles independently (workspace UX-PRINCIPLES.md rule 7,
+// applied app-wide 2026-08-15) -- module-level so it survives a re-render of the badges themselves
+// (e.g. removing an item from the cart re-runs mergeRenderReviewStep, which used to always reset
+// back to "Show all" since the old markup hardcoded badge--filter-active on the "all" badge).
+let mergeReviewFilter = new Set();
 
 // ---------- Stepper + navigation ----------
 
@@ -595,11 +601,19 @@ function mergeRenderReviewStep() {
     }
   }
 
+  // Drop any active filter status that no longer has a matching row (e.g. the last "Needs a
+  // master" item got removed from the cart) -- same "stale filter" cleanup Rebuild Missing Files'
+  // own rmfRenderRows does, per-key rather than clearing the whole filter.
+  const presentStatuses = new Set(items.map((it) => it.status));
+  for (const key of [...mergeReviewFilter]) {
+    if (!presentStatuses.has(key)) mergeReviewFilter.delete(key);
+  }
+  const badgeActive = (status) => mergeReviewFilter.has(status) ? ' badge--filter-active' : '';
   $m('mergeReviewBadges').innerHTML = [
-    `<span class="badge badge--neutral badge--clickable badge--filter-active" data-status="all"><span class="badge__count">${items.length}</span> Show all</span>`,
-    `<span class="badge badge--warning badge--clickable" data-status="master"><span class="badge__count">${nMaster}</span> ⚠️ Needs a master</span>`,
-    `<span class="badge badge--warning badge--clickable" data-status="override"><span class="badge__count">${nOverride}</span> ⚠️ Contains overrides</span>`,
-    `<span class="badge badge--success badge--clickable" data-status="ok"><span class="badge__count">${nClean}</span> Clean</span>`,
+    `<span class="badge badge--neutral badge--show-all${mergeReviewFilter.size === 0 ? ' badge--filter-active' : ''}" data-status="all"><span class="badge__count">${items.length}</span> Show all</span>`,
+    `<span class="badge badge--warning badge--clickable${badgeActive('master')}" data-status="master"><span class="badge__count">${nMaster}</span> ⚠️ Needs a master</span>`,
+    `<span class="badge badge--warning badge--clickable${badgeActive('override')}" data-status="override"><span class="badge__count">${nOverride}</span> ⚠️ Contains overrides</span>`,
+    `<span class="badge badge--success badge--clickable${badgeActive('ok')}" data-status="ok"><span class="badge__count">${nClean}</span> Clean</span>`,
   ].join('');
 
   const body = $m('mergeReviewTableBody');
@@ -625,6 +639,9 @@ function mergeRenderReviewStep() {
     tr.appendChild(el('td', { style: 'text-align: right;' }, [rmBtn]));
     body.appendChild(tr);
   }
+  document.querySelectorAll('#mergeReviewTableBody tr').forEach((tr) => {
+    tr.classList.toggle('hidden', mergeReviewFilter.size > 0 && !mergeReviewFilter.has(tr.dataset.status));
+  });
 
   $m('mergeOutputDirInput').value = mergeState.outputDir || '';
   mergeUpdateOutputPreview();
@@ -636,10 +653,14 @@ document.addEventListener('click', (e) => {
   const badge = e.target.closest('#mergeReviewBadges .badge');
   if (!badge) return;
   const status = badge.dataset.status;
-  document.querySelectorAll('#mergeReviewBadges .badge').forEach((b) => b.classList.remove('badge--filter-active'));
-  badge.classList.add('badge--filter-active');
+  if (status === 'all') mergeReviewFilter.clear();
+  else if (mergeReviewFilter.has(status)) mergeReviewFilter.delete(status);
+  else mergeReviewFilter.add(status);
+  document.querySelectorAll('#mergeReviewBadges .badge').forEach((b) => {
+    b.classList.toggle('badge--filter-active', b.dataset.status === 'all' ? mergeReviewFilter.size === 0 : mergeReviewFilter.has(b.dataset.status));
+  });
   document.querySelectorAll('#mergeReviewTableBody tr').forEach((tr) => {
-    tr.classList.toggle('hidden', status !== 'all' && tr.dataset.status !== status);
+    tr.classList.toggle('hidden', mergeReviewFilter.size > 0 && !mergeReviewFilter.has(tr.dataset.status));
   });
 });
 

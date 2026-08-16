@@ -56,8 +56,10 @@ let rgLastResult = null;
 // input/Nothing to do), matching this app's established "click a badge to filter, click again (or
 // Show all) to clear" convention elsewhere (Stats Report, Work Through Report, etc.). Unlike those
 // reports (one shared table, rows carry data-status), this page has three separate sections with
-// no shared row structure -- so filtering here means showing only the matching SECTION, not rows.
-let rgSectionFilter = null;
+// no shared row structure -- so filtering here means showing only the matching SECTION(s), not rows.
+// A Set, not a single value -- multi-select, each badge toggles independently (workspace
+// UX-PRINCIPLES.md rule 7, applied app-wide 2026-08-15); empty shows all three sections.
+let rgSectionFilter = new Set();
 const RG_SECTION_IDS = { ready: 'rgReadySection', review: 'rgReviewSection', nolink: 'rgNoLinkSection' };
 
 async function rgLoadPickers() {
@@ -496,17 +498,17 @@ function rgRenderNoLinkBody(noLinkFound, nameByKey) {
 function rgRenderSummaryBadges() {
   const result = rgLastResult;
   const badgeHtml = (section, cls, count, label) => {
-    const active = rgSectionFilter === section;
+    const active = rgSectionFilter.has(section);
     return `<span class="badge ${cls} badge--clickable${active ? ' badge--filter-active' : ''}" data-section="${section}"><span class="badge__count">${count}</span> ${label}</span>`;
   };
   $rg('rgSummaryBadges').innerHTML = [
     badgeHtml('ready', 'badge--success', result.mapping.length, 'Ready to copy'),
     badgeHtml('review', 'badge--warning', result.anomalies.length, 'Needs your input'),
     badgeHtml('nolink', 'badge--neutral', result.noLinkFound.length, 'Nothing to do'),
-    `<span class="badge badge--show-all${rgSectionFilter === null ? ' badge--filter-active' : ''}">Show all</span>`,
+    `<span class="badge badge--show-all${rgSectionFilter.size === 0 ? ' badge--filter-active' : ''}">Show all</span>`,
   ].join('');
   for (const [section, id] of Object.entries(RG_SECTION_IDS)) {
-    $rg(id).classList.toggle('hidden', rgSectionFilter !== null && rgSectionFilter !== section);
+    $rg(id).classList.toggle('hidden', rgSectionFilter.size > 0 && !rgSectionFilter.has(section));
   }
 }
 
@@ -527,7 +529,7 @@ function rgRender(result) {
   rgLastResult.oldMembersLookup = result.oldMembers;
   rgLastResult.newMembersLookup = result.newMembers;
 
-  rgSectionFilter = null; // fresh analysis -- always start showing all three sections
+  rgSectionFilter.clear(); // fresh analysis -- always start showing all three sections
   rgRenderSummaryBadges();
 
   // Disabled, not just relying on the existing click-time preview check (which already catches
@@ -656,14 +658,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // to clear), for consistency with every other report in this app.
   $rg('rgSummaryBadges').addEventListener('click', (e) => {
     if (e.target.closest('.badge--show-all')) {
-      rgSectionFilter = null;
+      rgSectionFilter.clear();
       rgRenderSummaryBadges();
       return;
     }
     const badge = e.target.closest('.badge--clickable[data-section]');
     if (!badge) return;
     const section = badge.dataset.section;
-    rgSectionFilter = rgSectionFilter === section ? null : section;
+    if (rgSectionFilter.has(section)) rgSectionFilter.delete(section); else rgSectionFilter.add(section);
     rgRenderSummaryBadges();
   });
 
