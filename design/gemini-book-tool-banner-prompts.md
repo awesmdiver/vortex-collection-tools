@@ -100,10 +100,8 @@ A dark, moody Skyrim-style Nordic fantasy scene, photorealistic and cinematic, w
 ```
 
 ## Status
-- **15 of 16 done, 2026-08-15.** 4 reused from existing banners (see table above); the 11 new ones
-  generated, compressed, and archived under `assets/book-banner-<slug>-original.jpeg` +
-  `assets/book-banner-<slug>.png`, all copied into
-  `web/public/theme-assets/skyrim/book/book-banner-<slug>.png` for the app to actually serve. The
-  book's own page is built and live.
-- **The Forge pending a redo** — the reused release banner has no carved-sign-on-chains element,
-  unlike every other book banner. Prompt above, ready.
+- **All 16 done, 2026-08-15** (including The Forge's redo). Every book banner generated, compressed,
+  and archived under `assets/book-banner-<slug>-original.jpeg` + `assets/book-banner-<slug>.png`,
+  copied into `web/public/theme-assets/skyrim/book/book-banner-<slug>.png` for the app to actually
+  serve. The book's own page is built and live. The Forge's own release banner
+  (`assets/release-v0.5.0-banner.png`) stays untouched — only the book's own copy was redone.
