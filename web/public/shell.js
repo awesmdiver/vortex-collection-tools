@@ -17,12 +17,21 @@ let currentArea = null;
 // stats-app.js (the Reports sub-tabs) can refine it further once their own navigation runs -- each
 // area's showToolArea() call here sets a reasonable default first, then gets overridden with
 // something more specific a moment later by whichever script owns that area's own view-state.
+let lastPageLabel = '';
 function setPageLabel(label) {
+  lastPageLabel = label;
   const el = document.getElementById('headerMeta');
   if (el) el.textContent = label;
-  document.title = label ? `Vortex Collection Tools — ${label}` : 'Vortex Collection Tools';
+  // appName is theme data (theme.js/DESIGN.md's "Brand theming framework") -- read live off
+  // window.activeTheme rather than baked in here, so re-theming updates the tab title too. Falls
+  // back to today's literal name until the theme fetch resolves (or if it never does).
+  const appName = (window.activeTheme && window.activeTheme.appName) || 'Vortex Collection Tools';
+  document.title = label ? `${appName} — ${label}` : appName;
 }
 window.setPageLabel = setPageLabel;
+// Lets theme.js re-derive document.title once the theme finishes loading, using whatever page
+// label is currently showing (it has no way to know that itself).
+window.refreshPageTitle = () => setPageLabel(lastPageLabel);
 
 // A fetch() that can't even connect (the server process is fully down, nothing listening at all)
 // rejects with a plain TypeError -- no HTTP status, unlike a normal 4xx/5xx response, which every

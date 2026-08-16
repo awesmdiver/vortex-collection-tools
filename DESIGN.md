@@ -692,6 +692,15 @@ snippet (see below), and reuses the same badge/table components as its two sibli
 
 ## Brand theming framework — names, icons & color as data, not code (2026-07-28, v1.0)
 
+**Phase 1 — shipped 2026-08-15.** The extract-and-indirect refactor below is built: every brand
+string and the accent color now come from `web/public/themes/plain.json`, applied at runtime by
+`web/public/theme.js` (loaded right after `shell.js`). `shell.js`'s `setPageLabel` reads the app name
+from `window.activeTheme.appName` (set by `theme.js` once its fetch resolves) instead of a hardcoded
+literal. Verified live: the rendered app is byte-for-byte identical to before the refactor — same
+strings, same emoji, same `#5b8def` accent — with only `data-tool-id`/`data-brand-slot` attributes
+added to the markup. Phase 2 (game themes, the picker UI, full palettes) is still fully deferred; see
+below.
+
 There are now **two orthogonal theming layers**, and they must stay independent:
 
 1. **Appearance** (the section above) — dark / light / follow-system, driven by the shared CSS
@@ -749,12 +758,14 @@ One theme = one plain-data object (its own JSON file, `web/public/themes/<id>.js
 
 ### Stable tool IDs — the contract
 
-These IDs are the permanent join between code and theme. They must match `shell.js`'s `TOOL_AREAS`
-keys and never change once shipped:
+These IDs are the permanent join between code and theme. They match the `data-area`/`data-sub`
+combination each tool already navigates by (see `shell.js`'s `TOOL_AREAS` and `navigateToArea`) and
+never change once shipped:
 
-`home`, `rebuild`, `update`, `rules`, `merge` (The Forge, new in v1.0), `missing-masters`, `scrub`,
-`archive-finder`, `settings`, and the four reports `report-stats`, `report-workthrough`,
-`report-compare`, `report-rules`.
+`home`, `rebuild`, `sync`, `rules-generator`, `merge` (The Forge), `missing-masters`, `scrub`,
+`archive-finder`, `missing-files`, `settings`, and the six reports `report-stats`,
+`report-workthrough`, `report-updatecompare`, `report-rulesgen`, `report-workshop`,
+`report-exceptions`.
 
 ### Name for flavor, subtitle for function — the discoverability rule
 
@@ -771,26 +782,35 @@ current `index.html` — the app looks and reads *identically* to v0.4 after the
 success criterion: the plumbing is proven end-to-end by a theme that changes nothing visible. The
 build pass is a pure **extract-and-indirect refactor**, not a redesign.
 
-Plain theme content = the current values already in the app (do not rewrite them):
+Plain theme content = the current values already in the app (do not rewrite them). This table
+supersedes the stale one this section originally shipped with (2026-07-28) — `merge`, `missing-files`,
+`report-workshop`, and `report-exceptions` all shipped after that date and are now included; `update`/
+`rules`/`report-compare`/`report-rules` are corrected to their real stable IDs (`sync`,
+`rules-generator`, `report-updatecompare`, `report-rulesgen`):
 
 | Tool ID | Emoji | Name | Hero title |
 | :-- | :-- | :-- | :-- |
 | `home` | 🧰 | Home | Your Whole Vortex Toolkit, in One Place |
+| `merge` | 🧬 | Merge Plugins | Merge Many Plugins Into One |
 | `rebuild` | ⚡ | Rebuild Collection | Rebuild Collections in Minutes, Not Hours |
-| `update` | 🔄 | Update Collection | Update Without Redoing Your Mod Cleanup |
-| `rules` | 🔗 | Rules Generator | Skip Re-Resolving Conflicts You Already Fixed |
-| `merge` | 🧬 | Merge Plugins | Merge Many Plugins Into One *(new in v1.0)* |
+| `sync` | 🔄 | Update Collection | Update Without Redoing Your Mod Cleanup |
+| `rules-generator` | 🔗 | Rules Generator | Skip Re-Resolving Conflicts You Already Fixed |
+| `report-stats` | 📊 | Stats | See Every Rebuild at a Glance |
+| `report-workthrough` | ✅ | Work Through | Work Through Every Problem Mod, One by One |
+| `report-updatecompare` | 🔍 | Update Compare | See Exactly What an Update Changed |
+| `report-rulesgen` | 📋 | Rules Generator Report | Check Your Rules Generator Progress |
+| `report-workshop` | 🕒 | Workshop Report | See When You Last Touched Each Workshop Collection |
+| `report-exceptions` | 🙅 | Mod Exceptions | Mods to Never Auto-Fix |
 | `missing-masters` | 🧩 | Missing Masters | Triage Missing Masters in Seconds |
 | `scrub` | 🧽 | Vortex Scrub | Scrub Away Clutter in Seconds |
 | `archive-finder` | 📦 | Archive Finder | Find Any File Inside Any Archive |
-| `report-stats` | 📊 | Stats | See Every Rebuild at a Glance |
-| `report-workthrough` | ✅ | Work Through | Work Through Every Problem Mod, One by One |
-| `report-compare` | 🔍 | Update Compare | See Exactly What an Update Changed |
-| `report-rules` | 📋 | Rules Generator Report | Check Your Rules Generator Progress |
+| `missing-files` | 🩹 | Rebuild Missing Files | Fix Just the Files That Are Actually Missing |
 | `settings` | ⚙️ | Settings | Set It Up Once, Use It Everywhere |
 
 The `.tool-hero__body` paragraphs and Home card pitches come across **verbatim** too — the build pass
-lifts the current copy into the theme map; it does not rewrite it.
+lifts the current copy into the theme map; it does not rewrite it. The real, current implementation of
+this table is `web/public/themes/plain.json`; treat that file as the source of truth going forward,
+not this table (kept here for a quick human-readable reference).
 
 ### Runtime (engineer-facing summary; full detail → TECHNICAL.md)
 

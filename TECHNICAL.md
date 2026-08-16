@@ -4017,6 +4017,37 @@ right before extracting, rather than trusting the client-held scan result outrig
 /open-staging-folder` (path-validated inside the configured staging directory, same
 defense-in-depth as Missing Masters' identical route).
 
+## Brand theming — Phase 1 runtime (added 2026-08-15)
+
+DESIGN.md's "Brand theming framework" section has the full spec/rationale; this is the runtime
+mechanism only. Golden rule: every tool's name/emoji/hero copy/Home-card copy and the app's one
+accent color are DATA (`web/public/themes/<id>.json`), keyed by a stable tool ID that never changes —
+nothing about routing, `data-area`/`data-sub`, or which API a button calls is touched by this layer.
+
+- **`web/public/theme.js`** (loaded right after `shell.js`, before the per-area `*-app.js` files):
+  reads `localStorage.getItem('vct-theme') || 'plain'`, `fetch`es `/themes/<id>.json`, sets
+  `window.activeTheme`, then applies it — `--accent` on `:root`, and every `[data-brand-slot]`
+  element scoped under the nearest ancestor `[data-tool-id="<id>"]` (`.home-card` buttons and
+  `.tool-hero` containers in `index.html`). `heroTitle` is applied as `emoji + ' ' + heroTitle` in one
+  `textContent` write (today's markup already combines them in one text node, and no CSS depends on
+  them being separate children, so splitting into child spans would be pure churn). `heroBody`/
+  `cardDesc` are written via `innerHTML`, not `textContent`, because the source copy carries inline
+  HTML (`&mdash;`, Update Collection's `<strong>` tags) that must survive verbatim.
+- **No loading state.** This is a same-origin static-file fetch on localhost — effectively instant.
+  `index.html` keeps its hardcoded Plain-theme text as the fallback (so there's never a blank/flash
+  state to design around) and `theme.js` simply overwrites it once the fetch resolves; a failed fetch
+  just leaves the hardcoded text in place.
+- **`appName` thread-through**: `shell.js`'s `setPageLabel` used to hardcode
+  `'Vortex Collection Tools'` in its `document.title` template. It now reads
+  `window.activeTheme?.appName` at call time (falling back to the same literal if the theme hasn't
+  loaded yet), and `theme.js` calls the newly-exposed `window.refreshPageTitle()` — which just re-runs
+  `setPageLabel` with whatever page label was last set — once its fetch resolves, so the title bar
+  picks up a themed `appName` without `theme.js` needing to know what page is currently showing.
+- **Verification**: `themes/plain.json` and `theme.js` both serve at their expected paths (200), no
+  console errors, live-browser DOM text diffed against the pre-refactor extraction and matched exactly
+  (including the `<strong>` tags and `&mdash;` entities in Update Collection's hero body) — see the
+  handoff for the full run.
+
 ## Future work
 
 Tracked in the workspace `TODO.md` (not duplicated here — confirmed 2026-07-27, one place to check
