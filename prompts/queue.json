@@ -4,9 +4,9 @@
   "items": [],
   "roadmap": [
     {
-      "title": "Theming: visual flourishes (background art, themed fonts, a Skyrim-flavored Get Started guide)",
-      "note": "Director, thinking out loud while reviewing Phase 2 (2026-08-15): maybe a background image per theme, themed fonts for tool names, and a Skyrim-themed \"Get Started\" book reusing the release banner art to explain what each tool really does in more depth. Captured only -- not scoped or built. Needs its own mock-up before any build work (standing order for big UI/visual changes), and probably its own round of Gemini asset generation for backgrounds/book art.",
-      "doc": null
+      "title": "Theming: Skyrim-flavored \"Get Started\" book",
+      "note": "The remaining third of \"visual flourishes\" (font picker + background gradient shipped 2026-08-15, see shipped list). Mocked up (design/vortex-visual-flourishes-mockup.html, approved live -- aged-parchment page, lore in the theme's own display font, \"what it actually does\" in plain voice). Not built. Two real writing passes needed first: lore paragraphs go through Gemini as a third brain (same four-brain process the original 13 tool names got); \"what it actually does\" boxes need writing across all ~16 tools (no Gemini needed, plain-language-writer voice). Where the page lives/is reached from is still open too.",
+      "doc": "design/vortex-visual-flourishes-mockup.html"
     },
     {
       "title": "Theming: a real color picker + background color picker",
@@ -130,6 +130,10 @@
     {
       "title": "Harmonization Phase 3b: sticky cart bar back-ported from The Forge to Rebuild Missing Files",
       "doc": "design/vortex-rebuild-missing-files-mockup.html"
+    },
+    {
+      "title": "Theming: gold accent swapped for purple (collided with --warning), real per-theme font picker (6 Skyrim candidates, self-hosted), Home background gradient",
+      "doc": "DESIGN.md"
     }
   ]
 }
