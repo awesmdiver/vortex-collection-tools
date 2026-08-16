@@ -147,6 +147,38 @@
       // entities) in the source copy, so these are set via innerHTML, not textContent.
       const heroBodyEl = container.querySelector('[data-brand-slot="heroBody"]');
       if (heroBodyEl && t.heroBody != null) heroBodyEl.innerHTML = t.heroBody;
+
+      applyBannerImage(container, t.bannerImage);
     });
+
+    // Section-GROUP banners (Home's "Main tools"/"Reports"/"Utilities" dividers) are a DIFFERENT
+    // concept from a stable tool id -- a group has no tool of its own, no routing, nothing in
+    // data-area/data-sub. Kept as its own theme.sections map (id: "mainTools"/"reports"/"utilities",
+    // matching each .home-section's own data-section-id) rather than overloading theme.tools, since
+    // DESIGN.md is explicit that stable tool IDs are a permanent code/theme join -- a section group
+    // isn't one and shouldn't be treated like one.
+    document.querySelectorAll('[data-section-id]').forEach((container) => {
+      const id = container.getAttribute('data-section-id');
+      const s = theme.sections && theme.sections[id];
+      if (!s) return;
+      const nameEl = container.querySelector('[data-brand-slot="name"]');
+      if (nameEl && s.name != null) nameEl.textContent = s.name;
+      applyBannerImage(container, s.bannerImage);
+    });
+  }
+
+  // Shared by both the per-tool and per-section passes above -- an entry with no bannerImage (Plain
+  // never has one) leaves the <img> exactly as it started (.hidden, no src), so nothing renders and
+  // no failed-request console noise appears either.
+  function applyBannerImage(container, bannerImage) {
+    const bannerEl = container.querySelector('[data-brand-slot="bannerImage"]');
+    if (!bannerEl) return;
+    if (bannerImage) {
+      bannerEl.src = bannerImage;
+      bannerEl.classList.remove('hidden');
+    } else {
+      bannerEl.classList.add('hidden');
+      bannerEl.removeAttribute('src');
+    }
   }
 })();

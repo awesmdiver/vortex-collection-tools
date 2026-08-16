@@ -262,6 +262,11 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .settings-header-row .tool-hero { margin-bottom: 0; }
 .tool-hero__title { font-size: 22px; margin: 0 0 8px; }
 .tool-hero__body { margin: 0; color: var(--text); font-size: 14px; line-height: 1.6; }
+/* Themed hero banner image (theme.js's data-brand-slot="bannerImage") -- Plain has none, so this
+   stays .hidden and the tool-hero reads exactly as it always did. A themed brand (e.g. Skyrim) that
+   supplies one gets it rendered full-width above the title, own rounded corners matching every other
+   card/panel in the app. */
+.home-banner-img { display: block; width: 100%; height: auto; border-radius: var(--radius); margin: 0 0 var(--stack-gap); }
 
 /* Tool page breadcrumb eyebrow (see DESIGN.md's "Tool page breadcrumb" section) -- with the old
    five-tab nav gone (Home replaced it), the tool-hero title alone no longer names which tool a
@@ -293,6 +298,12 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted);
   font-weight: 600; margin: 30px 0 12px;
 }
+/* Themed section-divider banner (theme.js's data-brand-slot="bannerImage" scoped to [data-section-id],
+   a shallow wide strip -- not the taller .home-banner-img treatment above, which is Home's own hero).
+   Plain has none, stays .hidden. Sits above the section's own title/grid, same top margin as the
+   title it's replacing visually so a themed vs. unthemed section takes the same vertical space. */
+.home-section-banner-img { display: block; width: 100%; height: auto; border-radius: var(--radius); margin: 30px 0 12px; }
+.home-section-banner-img + .home-section-title { margin-top: 0; }
 /* No :first-of-type zero-margin override -- which section/the Pinned row visually ends up first
    changes at runtime now (pinning can hide a whole section, see the Pinning note below), so a
    static "first" rule can't track it. Matches design/vortex-home-mockup.html, which accepts the

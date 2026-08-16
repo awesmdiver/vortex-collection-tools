@@ -87,6 +87,7 @@
 <main class="app-main">
 
   <div class="tool-hero" data-tool-id="home">
+    <img class="home-banner-img hidden" data-brand-slot="bannerImage" alt="">
     <h2 class="tool-hero__title" data-brand-slot="heroTitle">🧰 Your Whole Vortex Toolkit, in One Place</h2>
     <p class="tool-hero__body" data-brand-slot="heroBody">Pick a tool to get started. Everything here works on collections you've already installed in Vortex&mdash;rebuild them faster, keep your Ignored and Disabled mods through an update, sort out conflict rules, and see how it all went.</p>
   </div>
@@ -94,8 +95,9 @@
   <div id="homePinnedRow"></div>
 
   <div id="homeCategorySections">
-  <div class="home-section" id="homeSectionMainTools">
-  <div class="home-section-title">Main tools</div>
+  <div class="home-section" id="homeSectionMainTools" data-section-id="mainTools">
+  <img class="home-section-banner-img hidden" data-brand-slot="bannerImage" alt="">
+  <div class="home-section-title" data-brand-slot="name">Main tools</div>
   <div class="home-grid">
     <div class="home-card-wrap" data-section="homeSectionMainTools">
       <button class="home-card" data-area="merge" data-tool-id="merge">
@@ -136,8 +138,9 @@
   </div>
   </div>
 
-  <div class="home-section" id="homeSectionReports">
-  <div class="home-section-title">Reports</div>
+  <div class="home-section" id="homeSectionReports" data-section-id="reports">
+  <img class="home-section-banner-img hidden" data-brand-slot="bannerImage" alt="">
+  <div class="home-section-title" data-brand-slot="name">Reports</div>
   <div class="home-grid">
     <div class="home-card-wrap" data-section="homeSectionReports">
       <button class="home-card" data-area="reports" data-sub="stats" data-tool-id="report-stats">
@@ -196,8 +199,9 @@
   </div>
   </div>
 
-  <div class="home-section" id="homeSectionUtilities">
-  <div class="home-section-title">Utilities</div>
+  <div class="home-section" id="homeSectionUtilities" data-section-id="utilities">
+  <img class="home-section-banner-img hidden" data-brand-slot="bannerImage" alt="">
+  <div class="home-section-title" data-brand-slot="name">Utilities</div>
   <div class="home-grid">
     <div class="home-card-wrap" data-section="homeSectionUtilities">
       <button class="home-card" data-area="utilities" data-sub="missingmasters" data-tool-id="missing-masters">
