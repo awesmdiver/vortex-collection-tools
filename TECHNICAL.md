@@ -4217,6 +4217,48 @@ DESIGN.md's "Visual flourishes" note has the design rationale; this is the imple
   reapplies after reload; Plain confirmed to have no font picker, no `--font-display` value, and no
   background gradient (`data-brand="plain"` — the CSS rule only matches `"skyrim"`).
 
+## Get Started book (2026-08-15)
+
+DESIGN.md's own note has the content/naming history; this is the runtime.
+
+- **`web/public/themes/skyrim-book.json`**: `{ title, chapters: [{ toolId, banner, lore,
+  whatItDoes }, ...] }`, 16 entries. Deliberately separate from `themes/skyrim.json` — the book's own
+  lore/whatItDoes are longer, fuller-paragraph versions of the same tool, not the compact
+  `heroTitle`/`heroBody` shown on each tool's own regular page. Names/emoji/function labels are
+  **not** duplicated into this file — `book-app.js` reads those live from `window.activeTheme.tools`
+  at render time, same single source of truth the rest of theming already uses.
+- **`web/public/book-app.js`**: fetches `skyrim-book.json` once, lazily, only when the book area is
+  actually visited (`shell.js`'s `navigateToArea`/deep-link branch both call `window.bookLoadOnce()`,
+  same "don't fetch what nobody's looking at" convention every other area already follows). Two
+  views toggled by `.hidden` — `#bookToc` (16 links) and `#bookChapter` (one tool at a time, banner +
+  eyebrow + title + function + lore + what-it-does + prev/next). `?area=book&chapter=<toolId>` deep-
+  links straight to one chapter; `history.replaceState` keeps the URL in sync with prev/next/back
+  navigation so it stays shareable/refreshable, same pattern the log-view page's own status filter
+  already uses.
+- **Deliberately NOT part of `theme.js`**: `theme.js`'s `applyTheme` only ever fills brand-slot
+  markup already present in the DOM — it doesn't own whole new page content. The book is its own
+  self-contained area (`area-book`, matching every other top-level tool area's own shape) with its
+  own fetch/render logic, not bolted onto the generic theming pass.
+- **Book-icon visibility bug found and fixed while building this**: the header's new `#nav-book`
+  button started `[hidden]` in the markup (Plain's own default), gated visible only via
+  `[data-brand="skyrim"] #nav-book { display: inline-block }` — but `.nav-tab` (the button's own
+  shared class) already sets its own explicit `display: inline-block`, an author-stylesheet rule
+  that wins over the UA stylesheet's `[hidden]` default regardless of selector specificity.
+  Confirmed live: the book icon stayed visible under Plain too. Fixed with an explicit `#nav-book {
+  display: none }` (ID selector, beats `.nav-tab`'s class selector) as the real default, with the
+  `[data-brand="skyrim"]` rule re-enabling it on top — the `[hidden]` attribute is now just a
+  redundant semantic/accessibility hint, not the thing actually controlling visibility.
+- **Aged-parchment chapter styling** (`.book-page*` in styles.css) reuses the exact palette/gradient
+  approach from the approved mockup (`design/vortex-visual-flourishes-mockup.html`) verbatim — own
+  warm/light palette independent of the app's own dark/light Appearance mode, by design (a found
+  object being read, not another app panel). Lore text uses `var(--font-display, inherit)` (the same
+  themed-font mechanism visual flourishes already built); the what-it-does box deliberately doesn't.
+- **Verified live**: all 16 TOC entries render with correct themed names/emoji; a chapter's banner,
+  eyebrow, title, function, lore, what-it-does, and position (`N of 16`) all populate correctly;
+  next/prev/back-to-TOC all work and keep the URL in sync; a direct `?chapter=` deep link jumps
+  straight to that chapter; all 16 banner images confirmed reachable at 200; Plain confirmed to have
+  no visible book icon at all (regression-checked after the visibility fix above); no console errors.
+
 ## Future work
 
 Tracked in the workspace `TODO.md` (not duplicated here — confirmed 2026-07-27, one place to check

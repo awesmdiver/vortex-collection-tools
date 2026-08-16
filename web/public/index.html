@@ -25,6 +25,10 @@
   <div></div>
   <div class="app-header__right">
     <div id="headerMeta" class="app-header__meta"></div>
+    <!-- Get Started book -- Skyrim-only (styles.css hides it entirely unless [data-brand="skyrim"];
+         Plain has no lore content to show a book for). Sits beside Settings, not mixed into Home's
+         own tool cards -- it's not a functional tool, so it shouldn't read as one. -->
+    <button id="nav-book" class="settings-gear-btn nav-tab" title="Get Started" hidden>&#128214;</button>
     <button id="nav-settings" class="settings-gear-btn nav-tab" title="Settings">&#9881;</button>
   </div>
 </header>
@@ -2378,6 +2382,48 @@
 </main>
 </section>
 
+<!-- Get Started book (Skyrim-only) -- book-app.js drives everything here; no static Plain-theme
+     fallback content the way tool pages have, since Plain has no lore to show at all. Fetches
+     themes/skyrim-book.json itself (a theme.js concern would be a layering violation -- theme.js
+     only ever fills brand-slot markup already in the DOM, it doesn't own whole new page content).
+     Two views: a table of contents (#bookToc) and one chapter at a time (#bookChapter) -- toggled by
+     book-app.js, never both visible together. -->
+<section id="area-book" class="tool-area hidden">
+<main class="app-main book-shell">
+  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span>Get Started</div>
+
+  <div id="bookToc">
+    <div class="tool-hero">
+      <h2 class="tool-hero__title" id="bookTocTitle">📖 The Arcaneum — A Traveler's Guide</h2>
+      <p class="tool-hero__body">Every tool in the collection, and the story behind its name. Pick a chapter to start reading.</p>
+    </div>
+    <div class="book-toc" id="bookTocList"></div>
+  </div>
+
+  <div id="bookChapter" class="hidden">
+    <button class="book-back-link" id="bookBackToToc">&larr; Table of Contents</button>
+    <div class="book-page">
+      <img class="book-page__banner" id="bookChapterBanner" alt="">
+      <div class="book-page__body">
+        <div class="book-page__eyebrow" id="bookChapterEyebrow"></div>
+        <div class="book-page__title" id="bookChapterTitle"></div>
+        <p class="book-page__func" id="bookChapterFunc"></p>
+        <p class="book-page__lore" id="bookChapterLore"></p>
+        <div class="book-page__whatitdoes">
+          <b>What it actually does</b>
+          <span id="bookChapterWhatItDoes"></span>
+        </div>
+      </div>
+      <div class="book-nav">
+        <button class="book-nav__link" id="bookPrevBtn"></button>
+        <span id="bookChapterPos"></span>
+        <button class="book-nav__link" id="bookNextBtn"></button>
+      </div>
+    </div>
+  </div>
+</main>
+</section>
+
 <!-- Outside every .tool-area on purpose, same reason as #unsavedChangesModal below -- these were
      previously nested inside <section id="area-reports">, which has display:none whenever Reports
      isn't the active tab. That silently suppressed the modal (display:none on an ancestor always
@@ -2437,5 +2483,6 @@
 <script src="rebuild-missing-app.js"></script>
 <script src="workshop-report-app.js"></script>
 <script src="mod-exceptions-report-app.js"></script>
+<script src="book-app.js"></script>
 </body>
 </html>

@@ -5,7 +5,7 @@
 // index.html; this only toggles which one is visible. app.js and sync-app.js each own their own
 // internal view-state exactly as before -- this file knows nothing about either.
 
-const TOOL_AREAS = ['home', 'rebuild', 'sync', 'settings', 'reports', 'rules-generator', 'utilities', 'merge'];
+const TOOL_AREAS = ['home', 'rebuild', 'sync', 'settings', 'reports', 'rules-generator', 'utilities', 'merge', 'book'];
 let currentArea = null;
 
 // "What page am I on" was genuinely hard to tell across several of this app's pages -- confirmed
@@ -121,7 +121,7 @@ fetch('/api/settings')
 // "reports"/"utilities" are section GROUPS, not a real stable tool id (no themes/*.json entry for
 // them), so they stay a plain literal here even under a themed brand -- see DESIGN.md, group-level
 // naming is a known gap, not yet part of the schema.
-const AREA_LABELS = { home: 'Home', rebuild: 'Rebuild Collection', sync: 'Update Collection', settings: 'Settings', reports: 'Reports', 'rules-generator': 'Rules Generator', utilities: 'Utilities', merge: 'Merge Plugins' };
+const AREA_LABELS = { home: 'Home', rebuild: 'Rebuild Collection', sync: 'Update Collection', settings: 'Settings', reports: 'Reports', 'rules-generator': 'Rules Generator', utilities: 'Utilities', merge: 'Merge Plugins', book: 'Get Started' };
 
 function showToolArea(id) {
   currentArea = id;
@@ -197,11 +197,16 @@ async function navigateToArea(id, subTab) {
   // unconditionally on every page load regardless of the active area, which could pop the shared
   // Vortex-running modal on a totally unrelated page and silently steal any OTHER page's own retry.
   if (id === 'rules-generator' && window.rgLoadPickers) window.rgLoadPickers();
+  // Book has no Vortex-gated data to worry about (it's static lore content), but still only loads
+  // its own JSON the first time this area is actually visited, not eagerly on page load -- same
+  // "don't fetch what nobody's looking at yet" convention as every other area's own lazy-load hook.
+  if (id === 'book' && window.bookLoadOnce) window.bookLoadOnce();
 }
 window.navigateToArea = navigateToArea;
 
 document.getElementById('appHeaderTitle').addEventListener('click', () => navigateToArea('home'));
 document.getElementById('nav-settings').addEventListener('click', () => navigateToArea('settings'));
+document.getElementById('nav-book').addEventListener('click', () => navigateToArea('book'));
 
 // Tool page breadcrumb eyebrow's "Home" link (DESIGN.md's "Tool page breadcrumb" section) -- one
 // delegated listener covers every .tool-eyebrow__home across every tool page's own tool-hero,
@@ -394,6 +399,9 @@ if (reportsSubTab) {
     // Same reasoning as the 'sync' case above -- a direct "?area=rules-generator" link/refresh needs
     // this too, not just the live-navigation path through navigateToArea.
     if (jumpArea === 'rules-generator') window.rgLoadPickers?.();
+    // ?area=book&chapter=<toolId> jumps straight to one chapter instead of the table of contents --
+    // book-app.js's own bookLoadOnce() reads params.get('chapter') itself once its data is ready.
+    if (jumpArea === 'book') window.bookLoadOnce?.();
   });
 } else {
   // First-run check: land on Settings automatically when staging/downloads aren't configured yet,

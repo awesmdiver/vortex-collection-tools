@@ -798,14 +798,24 @@ final — the deferred "real color picker" item (below) is where this becomes fu
   so a future theme's own accent automatically produces a matching wash with zero extra config.
   Deliberately quiet (~8-12% opacity) — the director's own call was "modest, design to not compete."
 
+**Get Started book — built 2026-08-15.** All 16 tools, real Gemini lore pass
+(`design/get-started-book-content-draft-v1-Gemini.md`), all 16 tool banners in place (5 reused from
+existing release/section banners, 11 newly generated — `design/gemini-book-tool-banner-prompts.md`).
+Two tool NAMES got relocked along the way, not just their lore: `report-workshop`'s "The Artisan's
+Log" → **The Anvil's Mark** (Gemini's own first alternative, "The Blacksmith's Ledger," collided with
+two other tools already named "___ Ledger" — caught before locking, not after), `report-exceptions`'s
+"The Sanctuary" → **The Shadowmarked** (a real Skyrim Thieves Guild convention — a shadowmark carved
+into a doorpost is an unspoken law to leave the place alone — more specific than the generic
+original). Lives behind a book-icon button in the header, beside Settings, Skyrim-only (CSS-hidden
+entirely for Plain — no lore content exists for it). Own `themes/skyrim-book.json` data file
+(structured form of the Gemini-pass doc) and `book-app.js` controller — deliberately NOT part of
+`theme.js`'s own DOM-filling pass, since that only ever fills brand-slot markup already in the page;
+owning a whole new page/data set would be a layering violation. See TECHNICAL.md for the runtime
+detail.
+
 **Known gaps, not yet closed:**
 - **The Rites/The Satchel names are still first-pass**, not yet through a real four-brain pass like
   the original 13 tool names + The Chronicle.
-- **Get Started book** — mocked up (aged-parchment page styling, lore in the theme's display font,
-  "what it actually does" in plain voice), not built. Lore paragraphs need a real Gemini pass (third
-  brain, same process the original 13 tool names went through) before the content is final; the
-  functional "what it actually does" boxes still need writing across all ~16 tools. Where the page
-  itself lives/is reached from is still an open question too.
 
 There are now **two orthogonal theming layers**, and they must stay independent:
 
