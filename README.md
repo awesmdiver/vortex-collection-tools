@@ -16,9 +16,11 @@ custom mod-order rules intact when a collection gets updated, and merging plugin
 load-order slots. A set of smaller Utilities rounds it
 out — clearing away leftover mod clutter, catching missing master files before they crash your
 game, and finding any file inside any archive without unpacking it. Every tool lives behind one
-Home page, so you're never more than a click away from the one you need.
+Home page, so you're never more than a click away from the one you need. Want to have some fun with
+it? Switch on the Skyrim theme and every tool gets a lore name to match — see **🎨 Make It Yours**
+below.
 
-![The Home page — every tool, one click away](assets/readme-home-screenshot.png)
+![The Arcaneum — the Skyrim-themed Home page, one click away from every tool](assets/readme-home-screenshot.png)
 
 ### 📋 At a Glance
 
@@ -40,64 +42,72 @@ Home page, so you're never more than a click away from the one you need.
 * **Settings, all in one easy-to-scan place:** Pick a category on the left, see just its settings
   on the right — instead of one long scrolling page. Pin the ones you touch most, same as the Home
   page.
-* **Rebuilds mods at full speed:** Extracting a big collection inside Vortex takes hours and can
-  even run your PC out of memory. This tool extracts the same files — including FOMOD installer
-  choices — outside of Vortex, at full speed. ⚡ Turn on parallel extraction (up to 8 mods at once)
-  under Settings to cut that time down further, typically 2-3x faster depending on your drive.
-* **Pause a rebuild and pick it up later:** Extracting 1,000+ mods can take a while. Pause partway
-  through, close the app, and resume right where you left off whenever you're ready — nothing
-  already finished gets redone.
-* **Downloads missing mods for you:** No more manually hunting down missing archive files on Nexus
-  one by one. If you have Nexus Premium, this tool detects what's missing and downloads the exact
-  version your collection needs, automatically.
-* **Checks for missing files without a full rebuild:** Something not working in-game usually means
-  a few files quietly went missing from staging — not your whole collection. Rebuild Missing Files
-  checks one or more collections, shows you exactly what's gone mod by mod, and restores just those
-  files straight from the archive.
-* **See when you actually last touched a Workshop collection:** Nexus shows a fixed date for a
-  private collection that never changes, even as you keep working on it. Workshop Report pulls the
-  real timestamp from the collection's own revision history instead, so you can sort newest to
-  oldest and spot exactly which ones are overdue for an update.
+
+### 🧰 Main Tools
+
+* **Rebuild Collection** *(✨ Restoration)*: Extracting a big collection inside
+  Vortex takes hours and can even run your PC out of memory. This rebuilds the same files —
+  including FOMOD installer choices — outside of Vortex, at full speed. ⚡ Turn on parallel
+  extraction (up to 8 mods at once) under Settings to cut that time down further, typically 2-3x
+  faster depending on your drive. Pause partway through and pick it up right where you left off
+  whenever you're ready — nothing already finished gets redone. If you have Nexus Premium, it can
+  even download missing archives for you automatically. And it leaves your `.ghost` files (Vortex's
+  own marker for a disabled file) untouched, so custom file tweaks survive a reinstall.
+* **Update Collection** *(🛡️ The Ward)*: Updating a collection in Vortex normally forgets which
+  mods you'd marked Ignored or Disabled, leaving you to dig through a list of 1,900+ mods to turn
+  off the same 35 again. This snapshots those choices before the update and restores them
+  automatically once it's done — no manual cleanup. The whole update walks you through it one clear
+  step at a time, previewing what's about to happen before it touches anything real.
+* **Rules Generator** *(✒️ The Scribe)*: Updating a collection can leave the "load after"-style
+  rules you'd set up pointing at nothing. This matches your old rules to their counterparts in the
+  updated collection automatically — even auto-updating a rule that used to point at an older
+  version of a mod — so you're not manually re-linking hundreds of mods by hand.
+* **Merge Plugins** *(🔨 The Forge)*: Skyrim's plugin limit fills up fast, especially with lots of
+  small mods. This bundles new-content plugins from your collections into a single file — review
+  exactly what's going in first — and flags the result ESL automatically when it qualifies, so it
+  costs you 0 slots and the originals are safe to disable afterward.
+
+### 🧩 Utilities
+
+* **Missing Masters** *(🔮 The Augur)*: Shows you every active plugin whose master file isn't
+  actually there — the classic Skyrim "missing master" crash — the moment it happens, with no
+  manual rescan needed. Use **Create Dummy Master** to patch it instantly, or **Rebuild This Mod**
+  to re-extract the real files if the install just came up empty.
+* **Mod Scrub** *(🔥 The Cleansing)*: Finds staging folders and downloaded archives Vortex no
+  longer has any connection to — leftovers from a mod you uninstalled, or an old duplicate download
+  — and lets you review and remove them, with a permanent exclude list for anything you want to
+  keep around on purpose.
+* **Archive Finder** *(👁️ Clairvoyance)*: Indexes every archive in your downloads folder up front
+  — no unpacking required — so you can search across all of them by file or mod name and pull out
+  exactly the file you need, whenever you need it.
+* **Rebuild Missing Files** *(🗝️ The Vault-Keeper)*: Something not working in-game usually means a
+  few files quietly went missing from staging — not your whole collection. This checks one or more
+  collections, shows you exactly what's gone mod by mod, and restores just those files straight
+  from the archive.
 * **Skip mods that need a human, not a rebuild:** Some mods are hand-pick-only installers where you
   deliberately chose just a few of the files inside — auto-restoring "everything" would install
   content you never wanted, risking missing masters or crashes. Add a mod to the Mod Exceptions
   list once, and both Rebuild Collection and Rebuild Missing Files leave it alone from then on,
   wherever it shows up.
-* **Keeps your Ignored/Disabled choices:** Updating a collection in Vortex normally forgets which
-  mods you'd marked Ignored or Disabled, leaving you to dig through a list of 1,900+ mods to turn
-  off the same 35 again. This tool snapshots those choices before the update and restores them
-  automatically once it's done — no manual cleanup. The whole update now walks you through it one
-  clear step at a time, so you always know what to do and when.
-* **Rebuilds your custom mod-order rules after an update:** Updating a collection can leave the
-  "load after"-style rules you'd set up pointing at nothing. Rules Generator matches your old rules
-  to their counterparts in the updated collection automatically — even auto-updating a rule that
-  used to point at an older version of a mod — so you're not manually re-linking hundreds of mods
-  by hand.
-* **Fixes broken and missing files instantly:** Whether caused by accidental deletion, Windows
-  errors, or an unexpected Vortex deployment hiccup, this tool identifies missing or corrupted
-  files and extracts fresh copies straight from your archives to get mods working again.
-* **Leaves your Ghost files alone:** Vortex marks disabled files with a `.ghost` extension.
-  Reinstalling a mod normally wipes these out or creates confusing duplicates — this tool detects
-  `.ghost` files and leaves them untouched, so your custom file tweaks survive a reinstall.
-* **Shows you exactly what changed:** Every step previews what it's about to do before it touches
-  anything real, and the Compare Report gives you a clear, color-coded summary of what was kept,
-  disabled, added, or removed by the collection author.
-* **Cleans up mod-manager clutter safely:** Mod Scrub finds staging folders and downloaded
-  archives Vortex no longer has any connection to — leftovers from a mod you uninstalled, or an old
-  duplicate download — and lets you review and remove them, with a permanent exclude list for
-  anything you want to keep around on purpose.
-* **Catches missing master files before they crash your game:** Missing Masters shows you every
-  active plugin whose master file isn't actually there — the classic Skyrim "missing master" crash
-  — the moment it happens, with no manual rescan needed. Use **Create Dummy Master** to patch it
-  instantly, or **Rebuild This Mod** to re-extract the real files if the install just came up empty.
-* **Finds any file inside any archive, instantly:** Archive Finder indexes every archive in your
-  downloads folder up front — no unpacking required — so you can search across all of them by file
-  or mod name and pull out exactly the file you need, whenever you need it.
-* **Merges plugins into one, freeing up load-order slots:** Skyrim's plugin limit fills up fast,
-  especially with lots of small mods. Merge Plugins bundles new-content plugins from your
-  collections into a single file — review exactly what's going in first — and flags the result ESL
-  automatically when it qualifies, so it costs you 0 slots and the originals are safe to disable
-  afterward.
+
+> [!TIP]
+> Every Report (Stats, Work Through, Update Compare, Rules Generator Report, Workshop Report, Mod
+> Exceptions) lives behind the **Reports** tab and is covered as it ships, in each release's own
+> notes — see the [Releases page](../../releases).
+
+### 🎨 Make It Yours
+
+* **A Skyrim theme for the whole app:** Flip a switch in Settings and every tool gets its own lore
+  name and icon — Rebuild Collection becomes Restoration, Merge Plugins becomes The Forge, and so
+  on — with a matching color accent throughout. Switch back to the plain theme any time; nothing
+  about how the tools work changes either way.
+* **Pick your own accent and background tint:** Not a fan of the theme's default color? Override
+  just the accent, just the background tint, or both, right from Settings — your pick sticks
+  per theme.
+* **Six Skyrim-style fonts to choose from:** Cinzel by default, or pick from five other
+  Skyrim-flavored fonts for the Skyrim theme's own headings and lore text.
+* **The Arcaneum — a Get Started book:** A story-flavored tour of what every tool actually does,
+  one chapter per tool, reachable from the book icon in the header or right from the Home page.
 
 ---
 

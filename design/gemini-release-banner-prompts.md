@@ -53,10 +53,29 @@ replace one relic.*
 A dark, moody Skyrim-style Nordic fantasy scene, photorealistic and cinematic, wide banner composition (2816x1536). Deep inside a torch-lit ancient Nordic vault, rows of stone alcoves line a curved stone wall, each holding a weathered relic on its own pedestal -- urns, carved idols, an enchanted blade -- all catalogued and complete except for one alcove near the center, where a faint golden outline glows on an empty pedestal, marking exactly what belongs there. An old armored vault-keeper in worn leather and fur reaches into a satchel and carefully sets a single glowing relic onto that one empty pedestal, completing the row; dust motes drift through shafts of warm torchlight, deep shadow everywhere else. At the top, a large carved weathered wooden sign hangs by iron chains, with ornate Nordic knotwork carving, reading in bold engraved fantasy-serif lettering: "THE VAULT-KEEPER" and beneath it in smaller engraved text: "Only what's missing, restored." Rich detail, atmospheric depth, dramatic rim lighting.
 ```
 
+## v1.0.0 — The first great work, complete 🐉
+
+Not a single-tool flagship like every release before it -- v1.0.0 covers the whole milestone (all 8
+main/utility tools, the Skyrim theming system, the color/font pickers, The Arcaneum's own Get Started
+book). Director's own ask for this one: something that reads as "we did something big" -- a
+dragon-slain, victory-at-dawn scene instead of the usual moody workshop-in-progress framing every
+other banner uses. Still the same carved-sign format and 2816x1536 composition for consistency, but
+warmer/triumphant lighting instead of the series' usual dim workshop mood -- a deliberate one-off for
+this milestone, not a new standing style.
+
+Sign tagline (matches title): **"The first great work, complete."**
+Fuller theme tagline (if a subtitle is wanted): *Every tool in The Arcaneum, forged, warded, and
+catalogued -- v1.0.0 is here.*
+
+```
+A dramatic Skyrim-style Nordic fantasy scene, photorealistic and cinematic, wide banner composition (2816x1536). Dawn breaks over a windswept mountain ridge above an ancient stone college -- warm golden sunrise light instead of the usual deep shadow. A lone armored dragonborn stands triumphant, breathing steady, longsword still raised, before the fallen form of a massive dragon sprawled across broken stone at their feet, wisps of pale dragon-soul essence rising into the dawn sky and dissolving into light. Behind them, the many carved towers and stained-glass windows of an ancient mage's college (matching The Arcaneum's own library) catch the first sunlight. At the top, a large carved weathered wooden sign hangs by iron chains, with ornate Nordic knotwork carving, reading in bold engraved fantasy-serif lettering: "V1.0.0" and beneath it in smaller engraved text: "The first great work, complete." Rich detail, atmospheric depth, dramatic golden-hour rim lighting.
+```
+
 ## Status
 - **Done 2026-07-29:** v0.5.0 The Forge, v0.4.0 The Augur, v0.3.0 The Scribe — titles, themed banners
   (Gemini-generated, swapped + compressed to 1280px/~1.5 MB), and alt captions all live. Prior banners
   archived as `-v1` (+ `-v1-original`).
 - **Pending:** v0.6.0 The Vault-Keeper (Rebuild Missing Files) — prompt above ready, banner not yet
   generated.
+- **Pending:** v1.0.0 dragon-slain milestone banner — prompt above ready, banner not yet generated.
 - v0.2.0 / v0.1.0: left as-is (per user).
