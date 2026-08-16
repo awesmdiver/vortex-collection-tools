@@ -296,9 +296,8 @@
         <div class="callout__title">⚠️ Before fetching, read this</div>
         <ol>
           <li>This only fetches a revision <strong>already saved to NexusMods</strong> (published or not) -- pick the one you want from the Revision dropdown below.</li>
-          <li>If you've made changes in the Workshop since your last save/upload, this download will <strong>not</strong> include them.</li>
-          <li><strong>Recommended:</strong> save/upload your latest Workshop changes to NexusMods first, then fetch here.</li>
-          <li>If you skip that, you'll need to manually reconcile any unsaved changes yourself after rebuilding.</li>
+          <li>If you've updated or removed mods in Vortex since that revision was saved, fetching it brings back the <strong>older</strong> setup -- mods you've since changed or removed can get restored into staging, which can cause real problems (missing masters, mismatched files, content you don't actually want back).</li>
+          <li><strong>Recommended:</strong> save/upload your latest Workshop changes to NexusMods first, so what's published actually matches your current Vortex setup, then fetch here. If you skip that, you'll need to manually reconcile anything unsaved yourself afterward.</li>
         </ol>
       </div>
       <div class="collection-picker">
@@ -1982,12 +1981,12 @@
         <input type="checkbox" id="rmfRefreshToggle">
         Refresh selected Workshop collections from Nexus before scanning
       </label>
-      <p class="muted" style="max-width:560px;margin-top:6px">Pulls each selected collection's newest saved version from Nexus (draft or published) right before it's scanned — no extra clicks per collection. <code>collection.json</code> is always backed up first. Installed collections aren't affected; they don't have this drift to worry about.</p>
+      <p class="muted" style="max-width:560px;margin-top:6px">Pulls each selected collection's newest saved version from Nexus (draft or published) right before it's scanned — no extra clicks per collection. <code>collection.json</code> is always backed up first. Installed collections aren't affected — they were installed straight from Vortex, so there's no separate Nexus copy that can drift out of sync.</p>
       <div id="rmfRefreshWarning" class="callout callout--warning hidden" style="max-width:560px;margin-top:14px">
         <div class="callout__title">⚠️ Before you scan, read this</div>
-        <p>This pulls the newest version <strong>you've saved to Nexus</strong> for each selected Workshop collection — it won't include any local changes you haven't uploaded yet. If you've made edits in Workshop since your last save, they'll be overwritten for:</p>
+        <p>This tool scans against what <code>collection.json</code> says <strong>should</strong> be installed — so if you've updated or removed mods in Vortex since your last save to Nexus, it's still working from the <strong>older</strong> list. That means it can flag files from mods you've since changed or removed as "missing" and restore them, bringing back content you don't actually want anymore (which can cause its own problems — missing masters, mismatched files, conflicts). This will overwrite any unsaved local changes for:</p>
         <ul id="rmfRefreshWarningList"></ul>
-        <p><strong>Recommended:</strong> save/upload your latest Workshop changes to Nexus first, then scan. If you skip that, you'll need to manually reconcile anything unsaved yourself afterward.</p>
+        <p><strong>Recommended:</strong> save/upload your latest Workshop changes to Nexus first, so the published version actually matches your current Vortex setup, then scan. If you skip that, you'll need to manually reconcile anything unsaved yourself afterward.</p>
       </div>
     </div>
 
