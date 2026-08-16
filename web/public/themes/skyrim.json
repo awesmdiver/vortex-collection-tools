@@ -89,19 +89,19 @@
       "cardDesc": "Which rules copied over cleanly, and which still need a look."
     },
     "report-workshop": {
-      "name": "The Artisan's Log",
+      "name": "The Anvil's Mark",
       "emoji": "📓",
       "function": "Workshop Report",
-      "heroTitle": "The Artisan's Log",
-      "heroBody": "An artisan's own workshop log tells the truth about when the bench was last touched&mdash;a shopfront sign never does. Nexus's own collection page shows a date that never moves for a private collection; this pulls the real one, straight from each collection's revision history, so you can tell at a glance which ones you've actually worked on recently.",
+      "heroTitle": "The Anvil's Mark",
+      "heroBody": "The painted trade sign out front only tells you when the shop first opened, not when a hammer last fell upon glowing steel&mdash;a true armorer looks to the fresh mark stamped into the anvil's own face instead. Nexus's own collection page shows a date that never moves for a private collection; this pulls the real one, straight from each collection's revision history, so you can tell at a glance which ones you've actually worked on recently.",
       "cardDesc": "The real date you last set hand to an unfinished work&mdash;not Nexus's frozen one."
     },
     "report-exceptions": {
-      "name": "The Sanctuary",
+      "name": "The Shadowmarked",
       "emoji": "🕊️",
       "function": "Mod Exceptions",
-      "heroTitle": "The Sanctuary",
-      "heroBody": "A Sanctuary is set apart on purpose, left undisturbed by design, not by oversight. Some mods are hand-pick-only installers where you deliberately chose a subset of what the archive contains&mdash;auto-extracting or auto-mending the full archive for one of these doesn't restore what's \"missing,\" it installs content you never chose, which can cause missing masters or crashes. Add a mod here once, and both Restoration and The Vault-Keeper will leave it alone from then on, wherever it shows up.",
+      "heroTitle": "The Shadowmarked",
+      "heroBody": "Carved into doorposts across the cities of Skyrim, a shadowmark conveys an unspoken law to those who know the code: do not pillage, do not interfere, leave this house completely alone. Some mods are hand-pick-only installers where you deliberately chose a subset of what the archive contains&mdash;auto-extracting or auto-mending the full archive for one of these doesn't restore what's \"missing,\" it installs content you never chose, which can cause missing masters or crashes. Add a mod here once, and both Restoration and The Vault-Keeper will leave it alone from then on, wherever it shows up.",
       "cardDesc": "Marks the mods you handle yourself&mdash;left untouched, wherever they turn up."
     },
     "missing-masters": {

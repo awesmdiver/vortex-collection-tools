@@ -12,10 +12,14 @@ that pass) — give them a final `plain-language-writer` polish at build time. E
 
 **Updated 2026-08-15** for three tools shipped since the original four-brain pass — `missing-files`,
 `report-workshop`, `report-exceptions`. `missing-files` reuses **The Vault-Keeper**, already locked
-and Gemini-illustrated for the v0.6.0 release banner — not a fresh draft. The other two
-(**The Artisan's Log**, **The Sanctuary**) are first-pass names only, same naming principle applied
-(a Skyrim term whose in-world meaning maps to the tool's real function) but **not yet run through
-the same four-brain confirmation** the original 13 got — treat as draft until that happens.
+and Gemini-illustrated for the v0.6.0 release banner — not a fresh draft. The other two are now
+**locked too**, confirmed live through a real Gemini lore pass (`design/get-started-book-content-
+draft-v1-Gemini.md`) — `report-workshop` is **The Anvil's Mark** (an armorer's own maker's-mark
+records the real date work was last done, not the shop's stale public sign — first drafted as "The
+Artisan's Log," renamed after "The Blacksmith's Ledger" collided with two other tools already named
+"___ Ledger"), `report-exceptions` is **The Shadowmarked** (a real Skyrim Thieves Guild shadowmark —
+carved into a doorpost, an unspoken law to leave the place alone — replacing the more generic "The
+Sanctuary").
 
 App title (themed): **The Arcaneum** · accent: TBD at build (Skyrim gold/parchment; `palette` empty in v1.0).
 
@@ -35,8 +39,8 @@ App title (themed): **The Arcaneum** · accent: TBD at build (Skyrim gold/parchm
 | ↳ `report-workthrough` | Work Through | **The Quest Log** | ✅ | Every problem mod left to knock out, in one checklist. |
 | ↳ `report-compare` | Update Compare | **Scroll of Retrospection** | 🔍 | Holds your previous setup beside the new one — exactly what was kept, added, or removed. |
 | ↳ `report-rules` | Rules Generator Report | **The Scribe's Ledger** | 📋 | Which rules copied over cleanly, and which still need a look. |
-| ↳ `report-workshop` | Workshop Report | **The Artisan's Log** | 📓 | The real date you last set hand to an unfinished work — not Nexus's frozen one. |
-| ↳ `report-exceptions` | Mod Exceptions | **The Sanctuary** | 🕊️ | Marks the mods you handle yourself — left untouched, wherever they turn up. |
+| ↳ `report-workshop` | Workshop Report | **The Anvil's Mark** | 📓 | The real date you last set hand to your work. |
+| ↳ `report-exceptions` | Mod Exceptions | **The Shadowmarked** | 🕊️ | Marks what's meant to be left alone. |
 | `settings` | Settings | **The Standing Stones** | 🗿 | Choose your paths and preferences once; every tool draws on them. |
 
 ## Why these names (Skyrim lore → tool function)
@@ -77,12 +81,17 @@ meaning maps to what the tool actually does.** That's why they land as right rat
   whole hoard. Rebuild Missing Files restores only what's actually gone, no full rebuild needed.
   *(only the missing piece)* — already locked and illustrated (v0.6.0 release banner,
   `design/gemini-release-banner-prompts.md`); carried over here as-is, not re-drafted.
-- **The Artisan's Log** — a workshop's own real record of when work was last done, not a stale
-  public notice. Workshop Report surfaces the genuine last-touched date from a collection's own
-  revision history, not Nexus's frozen listing date. *(the real date, not the posted one)*
-- **The Sanctuary** — a place explicitly set apart, left undisturbed. Mod Exceptions marks mods
-  that need a human hand, not an automated fix — protected from auto-rebuild wherever they show up.
-  *(set apart, left alone)*
+- **The Anvil's Mark** — an armorer's own maker's-mark, freshly stamped into the anvil's face, tells
+  the real story of when a blade was last worked — the shop's own trade sign out front never does.
+  Workshop Report surfaces the genuine last-touched date from a collection's own revision history,
+  not Nexus's frozen listing date. *(the real date, not the posted one)* — locked 2026-08-15 via a
+  real Gemini lore pass; first drafted as "The Artisan's Log," renamed after "The Blacksmith's
+  Ledger" (Gemini's own first alternative) collided with two other tools already named "___ Ledger"
+  (The Ledger, The Scribe's Ledger).
+- **The Shadowmarked** — a real Skyrim Thieves Guild convention: a shadowmark carved into a doorpost
+  is an unspoken law to leave that place alone. Mod Exceptions marks mods that need a human hand, not
+  an automated fix — protected from auto-rebuild wherever they show up. *(marked, left alone)* —
+  locked 2026-08-15 via the same Gemini lore pass, replacing the more generic "The Sanctuary."
 
 ## Notes
 - **Emoji:** `merge` is **🔨** here (The Forge) but **🧬** in the Plain theme (Merge Plugins) — the
