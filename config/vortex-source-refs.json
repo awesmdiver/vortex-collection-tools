@@ -1,0 +1,165 @@
+{
+  "_comment": "Every Vortex/fomod-installer source file this project ported or derived logic from (not called at runtime -- their behavior is hardcoded into lib/*.js). 'lastVerifiedCommit' is the SHA of the last commit that touched that exact file path, as of when we read it. check-vortex-source-drift.js re-queries GitHub for the CURRENT last-touching commit per file and flags any that no longer match, so an upstream Vortex behavior change doesn't silently desync our replicated logic. Re-run after any Vortex update, or periodically.",
+  "refs": [
+    {
+      "repo": "Nexus-Mods/fomod-installer",
+      "path": "src/InstallScripting/XmlScript/XmlScriptExecutor.cs",
+      "lastVerifiedCommit": "e39f685e5b51b7abfb84d79b3170d4d3129caa62",
+      "lastVerifiedDate": "2026-04-23T07:23:26Z",
+      "derivedInto": "lib/choice-resolver.js",
+      "whatWeDerived": "flag application order (enableOption/disableOption via ConditionStateManager), per-option file collection via Union of selected options' Files"
+    },
+    {
+      "repo": "Nexus-Mods/fomod-installer",
+      "path": "src/InstallScripting/XmlScript/XmlScriptInstaller.cs",
+      "lastVerifiedCommit": "9d815d70bd07178d10d65acbe2e97fed25a586e7",
+      "lastVerifiedDate": "2025-12-13T17:04:45Z",
+      "derivedInto": "lib/choice-resolver.js",
+      "whatWeDerived": "the 3-phase install order + hardcoded priority offsets (requiredInstallFiles=-10^9, selected-option files=0, conditionalFileInstalls=+10^9) and the ShouldUpdate destination-collision tie-break (higher priority wins; tie -> lexicographically greater source path wins)"
+    },
+    {
+      "repo": "Nexus-Mods/fomod-installer",
+      "path": "src/InstallScripting/XmlScript/ConditionStateManager.cs",
+      "lastVerifiedCommit": "ce1b335913d3733ddbdaf460fecdae3293bf2fb5",
+      "lastVerifiedDate": "2025-10-27T12:45:32Z",
+      "derivedInto": "lib/choice-resolver.js",
+      "whatWeDerived": "conditionFlags accumulation semantics: SetFlagValue is a plain dictionary overwrite, so a later step's same-named flag replaces an earlier one; others persist"
+    },
+    {
+      "repo": "Nexus-Mods/fomod-installer",
+      "path": "src/InstallScripting/XmlScript/InstallableFile.cs",
+      "lastVerifiedCommit": "ce1b335913d3733ddbdaf460fecdae3293bf2fb5",
+      "lastVerifiedDate": "2025-10-27T12:45:32Z",
+      "derivedInto": "lib/choice-resolver.js",
+      "whatWeDerived": "confirms Priority defaults/comparison semantics referenced by XmlScriptInstaller's tie-break (not directly ported, used to cross-check ShouldUpdate)"
+    },
+    {
+      "repo": "Nexus-Mods/fomod-installer",
+      "path": "src/FomodInstaller.Interface/ModInstaller/Mod.cs",
+      "lastVerifiedCommit": "80fb2da73f42b7506559c44f6376f2e1ebaad871",
+      "lastVerifiedDate": "2025-11-11T09:38:15Z",
+      "derivedInto": "lib/mod-root.js",
+      "whatWeDerived": "when a script IS found but its path isn't literally '...fomod\\ModuleConfig.xml', the mod root falls back to ArchiveStructure.FindPathPrefix -- confirms our simpler 'always scan for fomod/ModuleConfig.xml anywhere' approach is a valid, simpler special case of the real logic"
+    },
+    {
+      "repo": "Nexus-Mods/fomod-installer",
+      "path": "src/FomodInstaller.Interface/ModInstaller/ArchiveStructure.cs",
+      "lastVerifiedCommit": "ce1b335913d3733ddbdaf460fecdae3293bf2fb5",
+      "lastVerifiedDate": "2025-10-27T12:45:32Z",
+      "derivedInto": "lib/simple-installer.js",
+      "whatWeDerived": "the FindPathPrefix(fileList, expressions) algorithm itself: scan the file list in order, first path matching any stop-pattern regex, prefix = everything before the match. This is the core algorithm ported (not just referenced) into findPathPrefix() in simple-installer.js"
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/installer_fomod_shared/utils/gameSupport.ts",
+      "lastVerifiedCommit": "193bf67f0e183f2674978af1c8fa8b0c5b25d0cd",
+      "lastVerifiedDate": "2026-05-06T09:38:21Z",
+      "derivedInto": "lib/simple-installer.js",
+      "whatWeDerived": "the exact skyrimse stopPatterns list (uniPatterns + gamebryoPatterns + ['skse']), hardcoded verbatim as SKYRIMSE_STOP_PATTERNS/GAMEBRYO_TOP_LEVEL. THE single highest-risk drift point: if Vortex adds/removes a recognized top-level folder name or changes the pattern-building logic for skyrimse, our hardcoded list goes stale silently."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/installer_fomod_native/tester.ts",
+      "lastVerifiedCommit": "254485e322065a16a6aab10dd35dc76fb512bfb3",
+      "lastVerifiedDate": "2026-05-27T09:22:58Z",
+      "derivedInto": "extract-mod.js (choice of FOMOD vs simple path)",
+      "whatWeDerived": "confirms a non-FOMOD archive is handled by the SAME native installer in 'Basic' mode (isBasic=true), not a wholly separate code path -- justifies reusing the same stopPatterns mechanism for simple archives"
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/installer_fomod_native/installer.ts",
+      "lastVerifiedCommit": "193bf67f0e183f2674978af1c8fa8b0c5b25d0cd",
+      "lastVerifiedDate": "2026-05-06T09:38:21Z",
+      "derivedInto": "lib/simple-installer.js",
+      "whatWeDerived": "confirms getStopPatterns(gameId, ...) is passed straight through to the native installer for both FOMOD and Basic mode -- no separate pluginPath-based second stripping pass observed in this file, which is why simple-installer.js does NOT do extra 'Data\\' stripping"
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/mod_management/util/modUpdateState.ts",
+      "lastVerifiedCommit": "193bf67f0e183f2674978af1c8fa8b0c5b25d0cd",
+      "lastVerifiedDate": "2026-05-06T09:38:21Z",
+      "derivedInto": "lib/state-query-worker.js (buildModVersionIndex)",
+      "whatWeDerived": "confirms Vortex's OWN update-checking logic (updateState()) reads attributes.version + attributes.fileId as the authoritative 'what's currently installed' fields -- NOT modVersion (doesn't appear in this logic at all) and NOT isPrimary. Grounded a real live experiment: after manually switching a mod's installed version in Vortex, attributes.version updated correctly but attributes.modVersion stayed stale at the old value -- this file is why we trust version/fileId and ignore modVersion when cross-referencing a mod's other installed versions."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/mod_management/types/IMod.ts",
+      "lastVerifiedCommit": "7305f8b6fbf38245c4c429ba54ac5a8bb1587b98",
+      "lastVerifiedDate": "2026-06-16T14:29:45Z",
+      "derivedInto": "lib/state-query-worker.js (buildModVersionIndex)",
+      "whatWeDerived": "ICommonModAttributes confirms version and modVersion are two genuinely separate, independently-settable fields (not a typo/duplicate) -- explains why they can diverge after a manual version switch. isPrimary is listed under 'Special mod types and flags', not the version/update section -- consistent with it being a Nexus 'main file' designation, not a local Vortex install-state concept, which is why we don't use it to determine what Vortex would deploy."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/collections/index.ts",
+      "lastVerifiedCommit": "fba98ff394cd6b75cbd021010958f7c97da747bf",
+      "lastVerifiedDate": "2026-07-23T11:38:49Z",
+      "derivedInto": "lib/state-query-worker.js (scanAllCollections)",
+      "whatWeDerived": "generateCollectionMap(): the real algorithm behind Vortex's own '+N collections' badge on the Mods page. Prefers rule.reference.id (a direct live-modKey link), falls back to findModByRef content-identity matching for a rule with no such id. CONFIRMED LIVE this session that rule.reference.id is NEVER populated for real collection-sourced rules -- only the fallback path is actually exercised for this project's data, which is why scanAllCollections mirrors findModByRef/testModReference below, not this file's primary path."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/mod_management/util/findModByRef.ts",
+      "lastVerifiedCommit": "6e6b9361db1815f8918f6471a6aace43c6963648",
+      "lastVerifiedDate": "2026-06-16T08:59:13Z",
+      "derivedInto": "lib/state-query-worker.js (scanAllCollections / ruleIdentityKeys)",
+      "whatWeDerived": "confirms the real fallback path when rule.reference.id is absent: delegates to testModReference (testRef) for content-identity matching, tried against every currently-installed mod."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/mod_management/util/testModReference.ts",
+      "lastVerifiedCommit": "3f018ff9c86e2745310c33441ec06b6036f40b38",
+      "lastVerifiedDate": "2026-07-02T06:59:29Z",
+      "derivedInto": "lib/state-query-worker.js (scanAllCollections / ruleIdentityKeys)",
+      "whatWeDerived": "testRef()'s real matching precedence: a tag MISMATCH is not immediately fatal if a stricter identifying marker (fileMD5, then repo.modId+repo.fileId) is present -- it falls through instead of refusing. Directly explains a real, confirmed-live finding: the identical file had a DIFFERENT rule.reference.tag value in each of 3 collections referencing it (tag is a deterministic-but-PER-COLLECTION value, not a stable cross-collection identity key -- see deterministicReferenceTag.ts, not separately pinned here). ruleIdentityKeys() deliberately matches by fileMD5 then repo.modId+fileId only, never tag, mirroring this real precedence rather than the naive assumption that a matching tag would be reliable."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "extensions/gamebryo-plugin-management/src/statics.ts",
+      "lastVerifiedCommit": "6c1ce01da65dbd7af238095a1ea6ca864323494b",
+      "lastVerifiedDate": "2026-02-02T10:30:52Z",
+      "derivedInto": "lib/ghost-files.js",
+      "whatWeDerived": "confirms GHOST_EXT = '.ghost' is a real, Vortex-defined constant (gamebryo-plugin-management extension) -- the mechanism is specifically plugin (ESP/ESM/ESL) ghosting, not a generic deployment feature for arbitrary file types. Added AFTER the fix already shipped (the original fix was based on real observed on-disk behavior, not a source read) -- backfilled per this project's own standing practice of verifying against real Vortex source before/after implementing logic that mirrors it."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "extensions/gamebryo-plugin-management/src/util/toPluginId.ts",
+      "lastVerifiedCommit": "193bf67f0e183f2674978af1c8fa8b0c5b25d0cd",
+      "lastVerifiedDate": "2026-05-06T09:38:21Z",
+      "derivedInto": "lib/ghost-files.js",
+      "whatWeDerived": "toPluginId(fileName) = path.basename(fileName.toLowerCase(), GHOST_EXT) -- Vortex's own real logic for recovering a ghosted file's base identity: lowercase, then strip the literal '.ghost' suffix. Confirms stripGhostPairs()'s case-insensitive suffix-matching approach (match a '.ghost'-suffixed name in current staging against its stripped counterpart in the fresh archive extraction) is the same normalization Vortex itself uses, not an invented convention."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/collections/util/transformCollection.ts",
+      "lastVerifiedCommit": "a6ea65456dabb7df64651a4bc70f029cf2739bff",
+      "lastVerifiedDate": "2026-06-23T13:00:30Z",
+      "derivedInto": "lib/vortex-sync/lib.js (scanStagingCollections), lib/state-query-worker.js (scanAllCollections)",
+      "whatWeDerived": "makeCollectionId(baseId) = 'vortex_collection_' + baseId -- confirms the 'vortex_collection_<id>' staging-folder naming convention this project uses to distinguish a Workshop-tab-only collection (never installed, or the Workshop copy only) from a real archive-installed one is Vortex's OWN real naming function, not an inferred/guessed pattern. Backfilled after the fact (the distinction was originally confirmed via live real-install observation, not a source read) per this project's standing practice of verifying against real Vortex source."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/health_check/utils/modRequirements/onDownloadRequirement.ts",
+      "lastVerifiedCommit": "abebc145b4ac89549de6659bf68799eb7fb17899",
+      "lastVerifiedDate": "2026-07-02T10:53:40Z",
+      "derivedInto": "lib/nexus-mod-download.js",
+      "whatWeDerived": "Vortex's own real 'download this exact modId+fileId from Nexus' trigger: build an nxm://<domain>/mods/<modId>/files/<fileId> URL and emit a 'start-download' event. Confirms the modId+fileId (not a search/guess) is the correct identity to resolve a specific file against, matching what this project's downloadModArchive() does via the direct REST call instead of the nxm:// protocol indirection (this project has no OS-level protocol handler to route through -- it calls the same underlying API endpoint directly)."
+    },
+    {
+      "repo": "Nexus-Mods/Vortex",
+      "path": "src/renderer/src/extensions/nexus_integration/eventHandlers.ts",
+      "lastVerifiedCommit": "b8ef79b034f3c5e3ba523849635bed3b5655d717",
+      "lastVerifiedDate": "2026-07-23T12:12:07Z",
+      "derivedInto": "lib/nexus-mod-download.js",
+      "whatWeDerived": "downloadFile()'s own explicit Premium-only gate for direct/automated downloads: 'nexusmods can't let users download files directly from client, without showing ads' -- a non-Premium account is refused client-side, by design, to protect Nexus's ad-supported revenue model for free users. This project's checkPremiumStatus() + upfront Premium check before any download attempt mirrors this exact policy rather than working around it -- a non-Premium account gets the same refusal Vortex's own client would give, with no attempt to route around Nexus's ad model."
+    },
+    {
+      "repo": "Nexus-Mods/node-nexus-api",
+      "path": "src/Nexus.ts",
+      "lastVerifiedCommit": "d2856eccdc852f6b7eb36ac7288f9446b3bc66e5",
+      "lastVerifiedDate": "2026-07-23T07:59:24Z",
+      "derivedInto": "lib/nexus-mod-download.js",
+      "whatWeDerived": "getDownloadURLs()'s real endpoint shape: GET /v1/games/{gameId}/mods/{modId}/files/{fileId}/download_link.json, no key/expires needed for Premium accounts (those are only for the free-user nxm-link-click flow this project does not implement). Response is an array of {URI,...} (or a single object) -- resolveDownloadLink() handles both shapes, matching this library's own res.download_links ?? [res.download_link] fallback."
+    }
+  ]
+}

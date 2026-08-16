@@ -5,9 +5,19 @@
 # (node\node.exe, tools\7-Zip\7z.exe -- see lib/sevenzip.js's own bundled-path check) and what
 # README.md tells users to expect ("comes with everything bundled").
 #
-# Source file list comes from `git ls-files` -- anything gitignored (config.json, logs/, the
-# archived terminal-flow-archive/, etc.) is correctly excluded automatically, no separate exclude
-# list to keep in sync.
+# The release zip is a RUN package, not a copy of the source tree -- it ships only what
+# start-server.bat/web/server.js actually need at runtime, plus the still-supported cli/ entry
+# points (see TECHNICAL.md's repo-layout tree: "still-supported ... for scripting/automation").
+# Everything dev-only (build/test scripts, design mockups, docs/plans, prompts, CLAUDE.md,
+# DESIGN.md, TECHNICAL.md, package.json/-lock.json, this script itself, etc.) stays out -- that's
+# what the source zip/tarball GitHub generates automatically from the tag is for. Source file list
+# still comes from `git ls-files` (so anything gitignored, like config.json or logs/, is correctly
+# excluded with no separate list to maintain) filtered through $excludePrefixes below.
+#
+# The final package root is deliberately flat and minimal: START HERE.txt, README.md, the
+# start/stop scripts, config/ (config.example.json + vortex-source-refs.json), docs/
+# (THIRD-PARTY-NOTICES.md -- required license attribution for the bundled XEditLib.dll), lib/, web/,
+# cli/, node/, tools/, node_modules/.
 #
 # Usage:
 #   .\build-release.ps1                                  # bundles whatever's CURRENTLY latest
@@ -49,25 +59,52 @@ Write-Host "Building $releaseName (bundling Node v$NodeVersion, 7-Zip $SevenZipR
 if (Test-Path $work) { Remove-Item $work -Recurse -Force }
 New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
 
-# 1. Copy every git-tracked file -- same set as what's actually in the repo, no separate list to
-#    keep in sync with .gitignore.
-Write-Host "Copying tracked source files..."
+# 1. Copy every git-tracked file EXCEPT dev-only paths -- runtime code (lib/, web/, cli/), the
+#    run-config template (config/), and the small set of root files an end user actually needs.
+#    Everything else (docs, design mockups, prompts, dev/test scripts, diagnostics, this project's
+#    own CLAUDE.md/DESIGN.md/TECHNICAL.md/TESTIMONIALS.md, package.json/-lock.json) is build/dev-only
+#    and stays out of the run package -- it's all still in the source zip/tarball GitHub builds from
+#    the tag automatically.
+Write-Host "Copying tracked runtime files..."
+$excludePrefixes = @(
+    'assets/', 'design/', 'diagnostics/', 'docs/plans/', 'docs/reference-', 'docs/DOCUMENTATION-STYLE.md',
+    'prompts/', 'scripts/'
+)
+$excludeExact = @(
+    '.gitignore', 'CLAUDE.md', 'DESIGN.md', 'TECHNICAL.md', 'TESTIMONIALS.md', 'THIRD-PARTY-NOTICES.md',
+    'build-release.ps1', 'package.json', 'package-lock.json'
+)
 Push-Location $root
 $files = git ls-files
 Pop-Location
 foreach ($f in $files) {
+    if ($excludeExact -contains $f) { continue }
+    if ($excludePrefixes | Where-Object { $f.StartsWith($_) }) { continue }
     $dest = Join-Path $stageDir $f
     $destDir = Split-Path $dest -Parent
     if ($destDir -and !(Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir -Force | Out-Null }
     Copy-Item (Join-Path $root $f) $dest -Force
 }
 
-# 2. Clean production install, matching package-lock.json exactly (npm ci, not install).
+# THIRD-PARTY-NOTICES.md is the one .md file besides README that ships -- it's required license
+# attribution for the bundled XEditLib.dll, not dev-only. Goes in docs/ per the packaging cleanup
+# (root stays README-only).
+New-Item -ItemType Directory -Path (Join-Path $stageDir "docs") -Force | Out-Null
+Copy-Item (Join-Path $root "THIRD-PARTY-NOTICES.md") (Join-Path $stageDir "docs\THIRD-PARTY-NOTICES.md") -Force
+
+# 2. Clean production install, matching package-lock.json exactly (npm ci, not install). npm needs
+#    package.json/-lock.json present to run -- copy them in just for this step, then remove them
+#    (they're excluded from the shipped package: nothing at runtime reads them, the bundled node.exe
+#    is invoked directly, never through npm).
+Copy-Item (Join-Path $root "package.json") (Join-Path $stageDir "package.json") -Force
+Copy-Item (Join-Path $root "package-lock.json") (Join-Path $stageDir "package-lock.json") -Force
 Write-Host "Running npm ci --omit=dev in the staged copy..."
 Push-Location $stageDir
 npm ci --omit=dev --no-audit --no-fund
 if ($LASTEXITCODE -ne 0) { throw "npm ci failed" }
 Pop-Location
+Remove-Item (Join-Path $stageDir "package.json") -Force
+Remove-Item (Join-Path $stageDir "package-lock.json") -Force
 
 # 3. Bundle a portable Node.js runtime -- only node.exe is actually needed (start-server.bat never
 #    calls npm from the bundled copy; node_modules already ships pre-installed), but the LICENSE
@@ -131,8 +168,9 @@ https://github.com/awesmdiver/vortex-collection-tools/issues
 Include what you were doing, what you expected, and what actually happened -- a screenshot helps
 a lot.
 
-Full details (what each tool does, command-line usage, troubleshooting): see README.md and
-TECHNICAL.md in this folder.
+Full details (what each tool does, troubleshooting): see README.md in this folder. For the deeper
+technical reference and source, see the project on GitHub:
+https://github.com/awesmdiver/vortex-collection-tools
 "@ | Set-Content (Join-Path $stageDir "START HERE.txt") -Encoding UTF8
 
 # 6. Zip it into github-releases/ (never loose at the project root -- see docs/DESIGN-GUIDE.md's

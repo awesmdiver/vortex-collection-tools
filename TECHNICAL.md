@@ -91,13 +91,13 @@ least exist; not worth that risk for a few MB.
 ## Settings & configuration
 
 Every path (staging/downloads/backup-root/Vortex database) and the Nexus API key live in a single
-unified `config.json` (project root, gitignored — see `lib/app-config.js`; `config.example.json` is
-the committed, placeholder-only template). **No personal path or credential is hardcoded anywhere in
+unified `config.json` (project root, gitignored — see `lib/app-config.js`; `config/config.example.json`
+is the committed, placeholder-only template). **No personal path or credential is hardcoded anywhere in
 source** — this project is meant to be shared, so a fresh clone has nothing machine-specific baked
 in. Resolution order everywhere (both the web UI and every CLI script): explicit CLI flag wins, then
 `config.json`, then (Vortex database path only) auto-detected under `%APPDATA%`.
 
-**Keep `config.example.json` in sync with `lib/app-config.js`'s `DEFAULT_CONFIG` whenever a field is
+**Keep `config/config.example.json` in sync with `lib/app-config.js`'s `DEFAULT_CONFIG` whenever a field is
 added, removed, or renamed.** Confirmed live 2026-07-27: `config.example.json` had silently drifted
 out of sync — missing both `maxStateBackupsToKeep` (added that same day) and `hideVortexVersionWarning`
 (added earlier, 2026-07-25) — nothing enforces this automatically, so it's a manual step, easy to
@@ -2705,7 +2705,7 @@ recording that sibling's source as the configured ESLifier folder) -- confirmed 
 only when `eslifierOutputDir` is configured and matches, `false`/absent-equivalent otherwise (byte-
 identical fallback to pre-existing behavior when the folder isn't configured).
 
-**Two new config fields** (`lib/app-config.js`, `config.example.json`):
+**Two new config fields** (`lib/app-config.js`, `config/config.example.json`):
 - `eslifierOutputDir` (path field, restart-required, blank is a supported/inert state, same
   treatment as `archiveFinderOutputDir`) -- Settings > Missing Masters, with a Browse... picker and
   an "ⓘ Learn more about ESLifier" link using the established `.mod-name-link` separate-window
@@ -4320,11 +4320,14 @@ Vortex-Collection-Tools/
 ├── CLAUDE.md                                             — standing instructions for Claude Code in this repo
 ├── DESIGN.md                                             — UI/UX design guide: colors, components, voice,
 │                                                            "every report must look the same" rule
-├── config.json (gitignored), config.example.json      — single unified settings file, see lib/app-config.js
+├── config.json (gitignored)                              — single unified settings file, see lib/app-config.js
 ├── start-server.bat, start-server.ps1                    — double-click launchers (npm install on first run, then start + auto-open browser)
 ├── stop.bat, stop.ps1                                     — clean shutdown from anywhere
-├── build-release.ps1                                      — packages a release zip (bundled Node/7-Zip + git-tracked files)
-├── vortex-source-refs.json                                — curated Vortex/fomod-installer source citations,
+├── build-release.ps1                                      — packages the minimal ready-to-run release zip (see
+│                                                              its own header comment for the include/exclude list)
+├── config/
+│   ├── config.example.json                                — placeholder-only template for config.json
+│   └── vortex-source-refs.json                             — curated Vortex/fomod-installer source citations,
 │                                                              see scripts/check-vortex-source-drift.js
 ├── terminal-flow-archive/ (gitignored, not pushed to GitHub) — sync-menu.js, the old interactive
 │   terminal menu; kept only as a reference for a possible future non-web-based flow
