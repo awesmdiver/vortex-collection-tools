@@ -4,9 +4,9 @@
   "items": [],
   "roadmap": [
     {
-      "title": "Theming: a real color picker + background color picker",
-      "note": "Mocked up (design/vortex-color-picker-mockup.html) -- accent + background-tint pickers with a live preview, 3 open design questions flagged in the mockup itself (override vs. new saved theme; one color vs. a light/dark pair; what \"Reset\" resets to). Not built, pending sign-off on those 3 questions.",
-      "doc": "design/vortex-color-picker-mockup.html"
+      "title": "Get Started book art/lore doesn't generalize past Skyrim",
+      "note": "Director's own note reviewing the built book live (2026-08-15): the book's art and lore read as unmistakably Skyrim, which would feel out of place if a future non-Skyrim theme reused it unchanged. Left as-is for now -- Skyrim is the default theme anyway. Worth its own pass (new art + tone, or a theme-specific book) whenever a second game theme gets built.",
+      "doc": "DESIGN.md"
     },
     {
       "title": "Minor: deep-link URL with a ?reports= sub-tab param can show the English page-title fallback briefly",
@@ -138,6 +138,10 @@
     {
       "title": "Theming: Skyrim-flavored \"Get Started\" book -- content, art, and the real page all built",
       "doc": "design/get-started-book-content-draft-v1-Gemini.md"
+    },
+    {
+      "title": "Theming: real color picker -- personal accent + background-tint override, per-theme, one color for both Appearance modes",
+      "doc": "DESIGN.md"
     }
   ]
 }
