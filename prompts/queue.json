@@ -3,14 +3,6 @@
   "inFlight": null,
   "items": [
     {
-      "id": "vortex-running-retry-broken-other-pages",
-      "tag": "bug",
-      "title": "Normalize Vortex-running handling: real modal everywhere, fix the broken retry too",
-      "why": "Director's own call: the real modal (with a working Try Again) is the standard everywhere else in this app -- Rules Generator / Rules Generator Report instead show a plain grey inline line for the same 'Vortex must be closed' condition, easy to miss and inconsistent. Convert those to the real modal, and fix the same broken-retry bug already found on 4 files while in there.",
-      "prompt": "Follow-up, found and explicitly flagged (not fixed) while fixing the same bug on Rebuild Missing Files (commit b3eb0c7, queue: rmf-vortex-running-retry-broken). Confirmed via `grep -n \"showVortexRunningModal\" web/public/*.js`: the SAME hardcoded-`() => {}` empty-retry bug exists in FOUR other files -- `cleanup-app.js`, `missing-masters-app.js`, `reports-rulesgen-app.js`, `rules-generator-app.js`. Only `app.js`, `merge-app.js` (fixed 2026-07-28), and now `rebuild-missing-app.js` do this correctly.\n\nSYMPTOM (same as the already-fixed case): if any of these four pages' own actions hits a 'Vortex is running' 409 while Vortex is open, the modal shows correctly, but clicking Try Again after closing Vortex does nothing -- no retry fires. The only recovery is navigating away and starting over, on whichever page hits this.\n\nSCOPE: for EACH of the four files, find every call site of `showVortexRunningModal` (same `grep` as above), give the shared error handler (or wherever the modal gets triggered) an optional `retryFn` parameter, and thread the REAL retry action through each call site -- same pattern as `rebuild-missing-app.js`'s own `rmfHandleError(e, box, retryFn)` (b3eb0c7), don't reinvent the approach. Some call sites may genuinely have nothing sensible to retry (e.g. a background/informational check) -- it's fine to leave those as an intentional no-op, but say which ones and why in the handoff rather than leaving it ambiguous.\n\nVERIFY LIVE, at least one real repro per file (not just code-reasoned) -- trigger a real 'Vortex is running' 409 on each of the four pages' own most likely action (e.g. Vortex Scrub's own scan, Missing Masters' own scan, Rules Generator's own apply/plan step), close Vortex, click Try Again, confirm the action actually retries and completes -- not just that the modal closes. Handoff with what you tested per file.\n\n--- SCOPE CORRECTION, director's own explicit direction (2026-08-15) ---\n\nDirector checked Rules Generator Report live: instead of the modal, its 'new collection' dropdown shows a plain grey `.muted` inline line (\"Close Vortex to load the list of new collections.\") when Vortex is open -- no modal, not even warning-colored. Director's own call: **the real modal is the standard everywhere else in this app, and that's what should show here too, not a quiet grey line.** \"bottom line if Vortex is open we should do the modal, pop-up not a single simple line.\"\n\nREVISED SCOPE -- for EACH of the four files (`cleanup-app.js`, `missing-masters-app.js`, `reports-rulesgen-app.js`, `rules-generator-app.js`), do BOTH of these, not just the retry fix:\n1. Fix the broken retry on every EXISTING `showVortexRunningModal` call site (as originally scoped above).\n2. AUDIT each file for any OTHER place that currently shows Vortex-must-be-closed as a plain inline/muted line instead of the real modal (the Rules Generator Report dropdown is the confirmed real example -- check the other three files for the same pattern, don't assume only Rules Generator has it) -- convert those to use the real `showVortexRunningModal(retryFn)` instead, with a real working retry wired the same way as every other call site in this pass. The end state: EVERY 'Vortex is open, can't do this yet' moment in this app shows the same real modal, consistently -- no quiet inline exceptions anywhere.\n\nVERIFY LIVE for both the retry fix AND the modal-consistency conversion, per file -- trigger the real condition, confirm the real modal shows (not an inline line), confirm Try Again actually retries and completes once Vortex is closed. Handoff with what you tested and a plain list of every spot that got converted from inline-text to modal, per file.",
-      "ready": true
-    },
-    {
       "id": "rulesgen-unresolved-rule-no-detail",
       "tag": "bug",
       "title": "Rules Generator: phantom \"(unknown)\" rules that don't exist in Vortex's own current data",
@@ -133,6 +125,9 @@
     },
     {
       "title": "Rebuild Missing Files: fixed broken 'Try Again' on the Vortex-running modal (all 10 call sites)"
+    },
+    {
+      "title": "Normalize Vortex-running handling: real modal everywhere (5 more files, 21 call sites), fixed a real load-collision bug found along the way"
     }
   ]
 }
