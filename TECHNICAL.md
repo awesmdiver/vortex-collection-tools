@@ -4259,6 +4259,39 @@ DESIGN.md's own note has the content/naming history; this is the runtime.
   straight to that chapter; all 16 banner images confirmed reachable at 200; Plain confirmed to have
   no visible book icon at all (regression-checked after the visibility fix above); no console errors.
 
+## Real color picker (2026-08-15)
+
+DESIGN.md's own note has the design rationale/the 3 resolved open questions; this is the runtime.
+
+- **`theme.js`**: `getColorOverride(themeId, key)` reads `localStorage['vct-color-<key>-<themeId>']`
+  (`key` is `'accent'` or `'bg'`), exposed as `window.getThemeColorOverride` for `settings-app.js`'s
+  own picker UI to read back the currently-active value. `applyAccentStylesheet` checks for an
+  accent override first; when present, it's used for BOTH the dark and light CSS branches
+  (`accentBlock(accentOverride)` called once, reused for both `darkCss`/`lightCss`) — the theme's own
+  `accentLight`/`accentHoverLight`/`accentBgLight` are skipped entirely rather than partially applied,
+  matching the "one color for both modes" decision. `applyBackgroundTint` sets (or removes) a new
+  `--bg-tint` custom property directly (not run through the dark/light stylesheet injection accent
+  goes through, since the background wash isn't itself Appearance-aware).
+- **`styles.css`**: the Home background gradient's `color-mix()` calls now read
+  `var(--bg-tint, var(--accent))` instead of `var(--accent)` directly — unset by default, so the
+  fallback resolves straight to `--accent` and produces byte-identical output to before the picker
+  existed; only set when the background-tint override is active.
+- **`settings-app.js`'s `renderColorPickers()`**: reads the CURRENTLY COMPUTED `--accent` (not
+  `theme.accent`) as the accent swatch's starting value, so the picker reflects an override already
+  in effect, not always the theme's own unmodified default. Background-tint field group's visibility
+  is hardcoded to `theme.id === 'skyrim'` (see DESIGN.md's own flagged gap) rather than derived from
+  a real theme-declared capability. Both color inputs are native `<input type="color">` — the
+  browser's own OS-level picker, no custom widget needed. `change` (not `input`) triggers the
+  save+reload, so dragging inside the picker doesn't fire a flood of reloads — only firing once the
+  picker dialog closes with a value, same "one decision, one reload" pattern Style/Font already use.
+  Reset buttons just `localStorage.removeItem` the override key and reload.
+- **Verified live**: accent override applies and persists across reload, confirmed identical in both
+  light and dark Appearance mode (the "one color for both" decision); Reset correctly returns to the
+  theme's own default and clears the localStorage key; accent override works for Standard too (a
+  real `#e05a5a` test value applied and reset cleanly); background-tint field group confirmed hidden
+  for Standard, visible for Skyrim; per-theme key isolation confirmed (an override set for one theme
+  doesn't appear when the other theme is active); no console errors.
+
 ## Future work
 
 Tracked in the workspace `TODO.md` (not duplicated here — confirmed 2026-07-27, one place to check

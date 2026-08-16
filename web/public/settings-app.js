@@ -122,6 +122,64 @@ $g('settingsFontSelect').addEventListener('change', () => {
   location.reload();
 });
 
+// ---------- Color (a personal override layered on top of whichever Style is active) ----------
+// Unlike Font above, always shown regardless of Style -- useful even for Standard, which has a real
+// --accent of its own to override. Own localStorage key per theme+color
+// ('vct-color-accent-<themeId>'/'vct-color-bg-<themeId>'), same per-theme scoping the font picker
+// already established. theme.js's own getThemeColorOverride reads these same keys -- this is just
+// the picker UI, kept in sync with whatever theme.js actually applied. Reads the CURRENT computed
+// --accent (not theme.accent) as the swatch's starting value, so it reflects an override that's
+// already active, not always the theme's own unmodified default.
+function renderColorPickers() {
+  const theme = window.activeTheme;
+  if (!theme) return;
+  const computedAccent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+  const accentInput = $g('settingsAccentColorInput');
+  accentInput.value = computedAccent || theme.accent || '#000000';
+  $g('settingsAccentColorHex').textContent = accentInput.value;
+
+  // Background tint only has anything visible to affect under a theme that actually has a Home
+  // background rule (styles.css's own [data-brand="skyrim"] #area-home) -- Standard has none, so
+  // the picker would be a no-op with nothing to show for it. Hardcoded to 'skyrim' for now (the
+  // only theme with that rule); if a future theme adds its own background wash, this check should
+  // grow into something the theme itself declares rather than another hardcoded id.
+  const bgGroup = $g('settingsBgTintFieldGroup');
+  bgGroup.style.display = theme.id === 'skyrim' ? '' : 'none';
+  if (theme.id === 'skyrim') {
+    const bgOverride = window.getThemeColorOverride ? window.getThemeColorOverride(theme.id, 'bg') : null;
+    const bgInput = $g('settingsBgTintColorInput');
+    bgInput.value = bgOverride || computedAccent || theme.accent || '#000000';
+    $g('settingsBgTintColorHex').textContent = bgInput.value;
+  }
+}
+renderColorPickers();
+window.addEventListener('themeready', renderColorPickers);
+
+$g('settingsAccentColorInput').addEventListener('change', () => {
+  const theme = window.activeTheme;
+  if (!theme) return;
+  localStorage.setItem(`vct-color-accent-${theme.id}`, $g('settingsAccentColorInput').value);
+  location.reload();
+});
+$g('settingsAccentColorReset').addEventListener('click', () => {
+  const theme = window.activeTheme;
+  if (!theme) return;
+  localStorage.removeItem(`vct-color-accent-${theme.id}`);
+  location.reload();
+});
+$g('settingsBgTintColorInput').addEventListener('change', () => {
+  const theme = window.activeTheme;
+  if (!theme) return;
+  localStorage.setItem(`vct-color-bg-${theme.id}`, $g('settingsBgTintColorInput').value);
+  location.reload();
+});
+$g('settingsBgTintColorReset').addEventListener('click', () => {
+  const theme = window.activeTheme;
+  if (!theme) return;
+  localStorage.removeItem(`vct-color-bg-${theme.id}`);
+  location.reload();
+});
+
 // ---------- Two-pane category layout + rail pinning ----------
 // See DESIGN.md's "Settings -- two-pane category layout" and "Pinning" sections. Every field stays
 // in the DOM at all times -- switching category (or pinning a rail row) only ever toggles which
@@ -499,7 +557,7 @@ $g('settingsSaveBtn').addEventListener('click', saveSettings);
 // settingsThemeSelect/settingsBrandThemeSelect/settingsFontSelect excluded -- all three save to
 // localStorage instantly on their own 'change' listener above and aren't part of saveSettings()'s
 // payload at all, so they'd otherwise trigger a false "unsaved changes" warning.
-const INSTANT_SAVE_IDS = new Set(['settingsThemeSelect', 'settingsBrandThemeSelect', 'settingsFontSelect']);
+const INSTANT_SAVE_IDS = new Set(['settingsThemeSelect', 'settingsBrandThemeSelect', 'settingsFontSelect', 'settingsAccentColorInput', 'settingsBgTintColorInput']);
 function markDirty(e) { if (!INSTANT_SAVE_IDS.has(e.target.id)) settingsDirty = true; }
 document.getElementById('area-settings').addEventListener('input', markDirty);
 document.getElementById('area-settings').addEventListener('change', markDirty);

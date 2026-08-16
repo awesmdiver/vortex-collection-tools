@@ -86,17 +86,39 @@
     return `--accent: ${accent}; --accent-hover: ${hover}; --accent-bg: ${bg};`;
   }
 
+  // Real color picker (Theming: color picker, 2026-08-15) -- a personal override layered ON TOP of
+  // whichever Style is active, not a new saved "theme" of its own (director's own call: simpler
+  // mental model than a 3rd concept competing with Style/Font for what "theme" even means). Own
+  // localStorage key PER theme+color ('vct-color-accent-<themeId>', 'vct-color-bg-<themeId>'), same
+  // per-theme-scoping reasoning the font picker already established -- switching Style later
+  // shouldn't carry a custom color over to an unrelated theme. One color for both light/dark
+  // Appearance modes (director's own call, #2 of 3 open questions from the mockup) -- Plain is the
+  // one exception with real separate light/dark hex values, because Plain predates theming and its
+  // whole point is staying byte-identical to what it always was; a personal override doesn't carry
+  // that same fidelity requirement.
+  function getColorOverride(themeId, key) {
+    return localStorage.getItem(`vct-color-${key}-${themeId}`) || null;
+  }
+  window.getThemeColorOverride = getColorOverride;
+
   function applyAccentStylesheet(theme) {
     if (!theme.accent) return;
-    const darkCss = accentBlock(theme.accent, theme.accentHover, theme.accentBg);
+    const accentOverride = getColorOverride(theme.id, 'accent');
+    // Overridden: the SAME custom color for both modes (see fn comment above) -- skip theme's own
+    // accentLight/accentHoverLight/accentBgLight entirely rather than partially applying them.
+    const darkCss = accentOverride
+      ? accentBlock(accentOverride)
+      : accentBlock(theme.accent, theme.accentHover, theme.accentBg);
     // accentLight/accentHoverLight/accentBgLight are optional -- a theme that doesn't bother with a
     // light-mode variant just uses the same accent everywhere, a legitimate choice for a first-pass
     // brand-new theme (nothing to be "faithful" to yet, unlike Plain).
-    const lightCss = accentBlock(
-      theme.accentLight || theme.accent,
-      theme.accentHoverLight || theme.accentHover,
-      theme.accentBgLight || theme.accentBg
-    );
+    const lightCss = accentOverride
+      ? accentBlock(accentOverride)
+      : accentBlock(
+          theme.accentLight || theme.accent,
+          theme.accentHoverLight || theme.accentHover,
+          theme.accentBgLight || theme.accentBg
+        );
 
     const css = `
       :root { ${darkCss} }
@@ -111,6 +133,20 @@
       document.head.appendChild(styleEl);
     }
     styleEl.textContent = css;
+  }
+
+  // Background tint (the Home gradient wash) -- separate override from accent, even though it
+  // defaults to deriving from --accent (styles.css's own color-mix(var(--accent)...)). Setting
+  // --bg-tint here gives styles.css's own var(--bg-tint, var(--accent)) fallback chain something to
+  // prefer; leaving it unset (the common case -- most people won't touch this) costs nothing, the
+  // CSS fallback already produces today's exact behavior.
+  function applyBackgroundTint(theme) {
+    const bgOverride = getColorOverride(theme.id, 'bg');
+    if (bgOverride) {
+      document.documentElement.style.setProperty('--bg-tint', bgOverride);
+    } else {
+      document.documentElement.style.removeProperty('--bg-tint');
+    }
   }
 
   // Generic per-brand CSS hook -- distinct from Appearance's own [data-theme] (light/dark).
@@ -146,6 +182,7 @@
 
   function applyTheme(theme) {
     applyAccentStylesheet(theme);
+    applyBackgroundTint(theme);
     applyBrandAttribute(theme);
     applyFont(theme);
 

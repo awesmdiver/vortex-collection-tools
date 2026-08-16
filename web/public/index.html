@@ -1162,6 +1162,32 @@
         <p class="muted" style="margin-top: 6px;">The display font used for tool names and headings under this style -- body text always stays the app's own plain, readable font.</p>
       </div>
 
+      <!-- Color -- a personal override layered on top of whichever Style is active (design/vortex-
+           color-picker-mockup.html, approved 2026-08-15). Unlike Font above, this is NOT conditionally
+           hidden -- useful regardless of Style, including Standard. One color for both Appearance
+           modes (director's own call, mockup's open question #2); Reset goes back to the current
+           Style's own default (open question #3), not some third neutral color. -->
+      <div class="field-group">
+        <label class="field-label" for="settingsAccentColorInput">Accent color</label>
+        <div class="color-picker-row">
+          <input type="color" id="settingsAccentColorInput" class="color-swatch-input">
+          <span class="muted color-hex-val" id="settingsAccentColorHex"></span>
+          <button class="reset-link" id="settingsAccentColorReset">Reset to theme default</button>
+        </div>
+      </div>
+      <!-- Hidden for Standard -- no Home background wash exists there at all (only
+           [data-brand="skyrim"] #area-home has the gradient rule), so the picker would be a no-op
+           with nothing visible to show for it. settings-app.js's renderColorPickers toggles this. -->
+      <div class="field-group" id="settingsBgTintFieldGroup">
+        <label class="field-label" for="settingsBgTintColorInput">Background tint</label>
+        <div class="color-picker-row">
+          <input type="color" id="settingsBgTintColorInput" class="color-swatch-input">
+          <span class="muted color-hex-val" id="settingsBgTintColorHex"></span>
+          <button class="reset-link" id="settingsBgTintColorReset">Reset to match accent</button>
+        </div>
+        <p class="muted" style="margin-top: 6px;">Only affects the faint Home-page wash -- never body text or card backgrounds, those stay exactly as readable as they are today regardless of this color.</p>
+      </div>
+
       <h3 class="settings-section-title">Server</h3>
       <p class="muted">Changes here need a server restart. This server has no login of its own, so leave the host as <code>127.0.0.1</code> unless you specifically want another device on your network to reach it.</p>
       <div class="settings-row-2">

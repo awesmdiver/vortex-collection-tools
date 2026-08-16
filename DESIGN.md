@@ -811,9 +811,30 @@ entirely for Plain — no lore content exists for it). Own `themes/skyrim-book.j
 (structured form of the Gemini-pass doc) and `book-app.js` controller — deliberately NOT part of
 `theme.js`'s own DOM-filling pass, since that only ever fills brand-slot markup already in the page;
 owning a whole new page/data set would be a layering violation. See TECHNICAL.md for the runtime
-detail.
+detail. Director's own note reviewing it live: the book's own art/lore reads as unmistakably Skyrim,
+which will feel out of place if a future non-Skyrim theme reused this same book unchanged — left as-
+is for now (Skyrim is the default theme anyway), flagged as a real gap for whenever a second game
+theme gets built.
+
+**Real color picker — built 2026-08-15.** Mockup: `design/vortex-color-picker-mockup.html`. Resolved
+all 3 open questions the mockup flagged: (1) a **personal override layered on top of whichever
+Style is active**, not a new saved theme — own localStorage key per theme+color
+(`vct-color-accent-<themeId>`/`vct-color-bg-<themeId>`), same per-theme scoping the font picker
+already established; (2) **one color for both** Appearance modes, not a light/dark pair — Plain
+stays the one exception with real separate light/dark hex values, since it predates theming and its
+whole point is staying byte-identical, a fidelity requirement a personal override doesn't carry; (3)
+**Reset goes back to the current Style's own default**, not a third neutral color. Accent picker is
+always shown (useful for Standard too — it has a real `--accent` of its own); the background-tint
+picker is hidden for Standard specifically, since no Home background wash exists there to tint at
+all (`[data-brand="skyrim"] #area-home` is the only theme with that CSS rule right now — hardcoded
+to `theme.id === 'skyrim'` in `settings-app.js`, a real gap to revisit if a second themed background
+ever ships). See TECHNICAL.md for the runtime detail.
 
 **Known gaps, not yet closed:**
+- **Get Started book art doesn't generalize past Skyrim** — see the book's own note above.
+- **Background-tint visibility check is hardcoded to `'skyrim'`**, not derived from whether the
+  active theme actually declares a background wash — fine while Skyrim is the only themed brand,
+  worth revisiting before a second one ships.
 - **The Rites/The Satchel names are still first-pass**, not yet through a real four-brain pass like
   the original 13 tool names + The Chronicle.
 

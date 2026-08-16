@@ -319,15 +319,16 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    flourishes-mockup.html) -- a faint, non-competing gradient wash behind Home's own content, scoped
    to whichever brand theme is active via [data-brand] (set by theme.js, a generic per-brand hook --
    not the same as Appearance's own [data-theme]). Plain has no rule here at all, so it stays exactly
-   as before -- this only ever fires for a themed brand. color-mix() derives the tint straight from
-   the theme's own --accent (already set by theme.js's accent stylesheet) rather than a hardcoded
-   color, so a different theme's own accent automatically produces a matching wash with zero extra
-   config. Kept CSS-only per the director's own call in the mockup review -- no new Gemini art needed
-   for this piece, it just needs to stay quiet, not decorative. */
+   as before -- this only ever fires for a themed brand. color-mix() derives the tint from
+   var(--bg-tint, var(--accent)) -- --bg-tint is the color picker's own background-tint override
+   (theme.js's applyBackgroundTint), unset by default so the fallback resolves straight to --accent,
+   same behavior as before the color picker existed. Kept CSS-only per the director's own call in
+   the mockup review -- no new Gemini art needed for this piece, it just needs to stay quiet, not
+   decorative. */
 [data-brand="skyrim"] #area-home {
   background-image:
-    radial-gradient(ellipse at 15% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 45%),
-    radial-gradient(ellipse at 85% 60%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 50%);
+    radial-gradient(ellipse at 15% 0%, color-mix(in srgb, var(--bg-tint, var(--accent)) 12%, transparent), transparent 45%),
+    radial-gradient(ellipse at 85% 60%, color-mix(in srgb, var(--bg-tint, var(--accent)) 8%, transparent), transparent 50%);
   background-attachment: fixed;
 }
 .home-section-title {
@@ -1382,6 +1383,24 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 }
 .book-nav__link { background: none; border: none; color: #d4b483; font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 0; }
 .book-nav__link:disabled { visibility: hidden; }
+
+/* Real color picker, Settings > General > Style (Theming: color picker, 2026-08-15) -- native
+   <input type="color"> (no custom widget needed, every modern browser's own OS-level color picker
+   is already a fine UI for this), plus a hex readout and a "Reset to theme default" link matching
+   the approved mockup's own shape (design/vortex-color-picker-mockup.html). */
+.color-picker-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.color-swatch-input {
+  -webkit-appearance: none; appearance: none; width: 34px; height: 34px; border-radius: 8px;
+  border: 1px solid var(--border); background: none; cursor: pointer; padding: 0;
+}
+.color-swatch-input::-webkit-color-swatch-wrapper { padding: 3px; }
+.color-swatch-input::-webkit-color-swatch { border-radius: 5px; border: none; }
+.color-hex-val { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 12.5px; min-width: 66px; }
+.reset-link {
+  background: none; border: none; color: var(--accent); font-size: 12.5px; cursor: pointer;
+  text-decoration: underline; padding: 0; margin-left: auto;
+}
+.reset-link:hover { color: var(--accent-hover); }
 
 /* Done step's plugins/mods/collections/records tally -- same grid-of-numbers shape as the mockup's
    own .stat-grid, built from tokens already used elsewhere (.summary-badges' own surrounding
