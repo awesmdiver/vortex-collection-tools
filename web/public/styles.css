@@ -187,16 +187,37 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   line-height: 1;
 }
 .settings-gear-btn.nav-tab--active { background: var(--surface-2); color: var(--accent); font-weight: normal; }
-/* Get Started book icon -- Skyrim-only (Plain has no lore content to show a book for). The markup's
-   own [hidden] attribute isn't enough on its own here -- .nav-tab (below) sets its own explicit
-   `display: inline-block`, an author-stylesheet rule that wins over the UA stylesheet's [hidden]
-   default regardless of selector specificity, so #nav-book would stay visible under Plain too
-   without an explicit override (confirmed live 2026-08-15: it did). #nav-book { display: none }
-   here (an ID selector, so it beats .nav-tab's class selector) restores the default-hidden state;
-   the [data-brand="skyrim"] rule below then re-enables it, same generic per-brand CSS hook the Home
-   background gradient already uses. */
+/* Get Started book icon -- Skyrim-only (Plain has no lore content to show a book for). Deliberately
+   NOT sized/styled like the plain-utility .settings-gear-btn next to it -- this is the one header
+   element meant to catch a first-time visitor's eye, so it's bigger, sits in a tinted accent circle,
+   and gets a gentle hover lift. Selectors here use the #nav-book ID rather than .nav-book-btn --
+   .nav-tab (below, same specificity as a class) sets its own font-size/display and comes LATER in
+   this file, so source order would let it silently win over an equal-specificity class selector
+   (confirmed live 2026-08-15: the icon rendered at .nav-tab's 13.5px, not this rule's 26px, until
+   switched to an ID selector). The markup's own [hidden] attribute isn't enough on its own either --
+   .nav-tab sets its own explicit `display: inline-block`, an author-stylesheet rule that wins over
+   the UA stylesheet's [hidden] default regardless of selector specificity, so #nav-book would stay
+   visible under Plain too without an explicit override (confirmed live 2026-08-15: it did).
+   #nav-book { display: none } here (an ID selector, so it beats .nav-tab's class selector) restores
+   the default-hidden state; the [data-brand="skyrim"] rule below then re-enables it, same generic
+   per-brand CSS hook the Home background gradient already uses. */
+#nav-book {
+  font-size: 26px;
+  line-height: 1;
+  padding: 6px 10px;
+  border-radius: 50%;
+  background: var(--accent-bg);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+#nav-book:hover { background: var(--accent-bg); transform: scale(1.08); }
+#nav-book.nav-tab--active { background: var(--surface-2); }
 #nav-book { display: none; }
 [data-brand="skyrim"] #nav-book { display: inline-block; }
+/* Settings' first-run "meet the book" callout -- same Skyrim-only reasoning as #nav-book above,
+   since the book it points at doesn't exist under Plain. shell.js unhides it purely on the
+   first-run condition (no theme check of its own); this is the theme gate on top. */
+#settingsFirstRunBookBanner { display: none !important; }
+[data-brand="skyrim"] #settingsFirstRunBookBanner:not(.hidden) { display: block !important; }
 
 /* .nav-tab/.nav-tab--active are still used by the Settings gear button (the one nav-* element left
    after Home replaced the old five-tab .app-nav row -- see DESIGN.md's "Home / landing page"
@@ -288,6 +309,17 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    width:100%/height:auto respects whatever aspect ratio the actual banner asset is now, no
    CSS-side cropping needed. */
 .home-banner-img { display: block; width: 100%; height: auto; border-radius: var(--radius); margin: 0 0 var(--stack-gap); }
+/* Home's own banner image + title double as a second way into the Get Started book -- Skyrim-only
+   (shell.js's click handler already no-ops under any other brand; this is just the visual cue so
+   Skyrim users can tell it's clickable at all). Title only shifts color on hover, not underline --
+   an underlined <h2> would read as a broken heading rather than an intentional link. */
+[data-brand="skyrim"] #area-home .tool-hero[data-tool-id="home"] .home-banner-img,
+[data-brand="skyrim"] #area-home .tool-hero[data-tool-id="home"] .tool-hero__title {
+  cursor: pointer;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+[data-brand="skyrim"] #area-home .tool-hero[data-tool-id="home"] .home-banner-img:hover { opacity: 0.9; }
+[data-brand="skyrim"] #area-home .tool-hero[data-tool-id="home"] .tool-hero__title:hover { color: var(--accent); }
 
 /* Tool page breadcrumb eyebrow (see DESIGN.md's "Tool page breadcrumb" section) -- with the old
    five-tab nav gone (Home replaced it), the tool-hero title alone no longer names which tool a

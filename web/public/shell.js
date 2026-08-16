@@ -200,13 +200,31 @@ async function navigateToArea(id, subTab) {
   // Book has no Vortex-gated data to worry about (it's static lore content), but still only loads
   // its own JSON the first time this area is actually visited, not eagerly on page load -- same
   // "don't fetch what nobody's looking at yet" convention as every other area's own lazy-load hook.
-  if (id === 'book' && window.bookLoadOnce) window.bookLoadOnce();
+  // subTab here is a chapter's toolId (e.g. Home's own banner/title link straight to the "home"
+  // chapter instead of the table of contents -- same subTab convention as reports/utilities above).
+  if (id === 'book' && window.bookLoadOnce) window.bookLoadOnce(subTab);
 }
 window.navigateToArea = navigateToArea;
 
 document.getElementById('appHeaderTitle').addEventListener('click', () => navigateToArea('home'));
 document.getElementById('nav-settings').addEventListener('click', () => navigateToArea('settings'));
 document.getElementById('nav-book').addEventListener('click', () => navigateToArea('book'));
+document.getElementById('settingsFirstRunBookBtn').addEventListener('click', () => navigateToArea('book'));
+
+// Home page's own banner image + title are ALSO a way into the book (besides the header icon) --
+// Skyrim-only, matching #nav-book's own visibility (styles.css hides the pointer/hover styling for
+// any other brand, so this is a harmless no-op click under Plain rather than a dead-looking one).
+// Jumps straight to the book's own "home" chapter (The Arcaneum) instead of the table of contents --
+// clicking a specific tool's own name/art should land you on that tool's own page, not one click
+// short of it.
+const homeHeroBanner = document.querySelector('#area-home .tool-hero[data-tool-id="home"]');
+if (homeHeroBanner) {
+  const homeBannerImg = homeHeroBanner.querySelector('[data-brand-slot="bannerImage"]');
+  const homeHeroTitle = homeHeroBanner.querySelector('[data-brand-slot="heroTitle"]');
+  [homeBannerImg, homeHeroTitle].forEach((el) => {
+    if (el) el.addEventListener('click', () => { if (document.documentElement.getAttribute('data-brand') === 'skyrim') navigateToArea('book', 'home'); });
+  });
+}
 
 // Tool page breadcrumb eyebrow's "Home" link (DESIGN.md's "Tool page breadcrumb" section) -- one
 // delegated listener covers every .tool-eyebrow__home across every tool page's own tool-hero,
@@ -416,6 +434,8 @@ if (reportsSubTab) {
         if (banner) banner.classList.remove('hidden');
         const premiumBanner = document.getElementById('settingsFirstRunPremiumBanner');
         if (premiumBanner) premiumBanner.classList.remove('hidden');
+        const bookBanner = document.getElementById('settingsFirstRunBookBanner');
+        if (bookBanner) bookBanner.classList.remove('hidden');
         showToolArea('settings');
       } else {
         showToolArea('home');

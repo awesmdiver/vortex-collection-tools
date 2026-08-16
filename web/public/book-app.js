@@ -11,8 +11,11 @@ function $bk(id) { return document.getElementById(id); }
 let bookData = null; // { title, chapters: [{ toolId, banner, lore, whatItDoes }, ...] }
 let bookLoaded = false;
 
-function bookLoadOnce() {
-  const chapterParam = new URLSearchParams(location.search).get('chapter');
+function bookLoadOnce(forceChapter) {
+  // forceChapter (a chapter's toolId) wins over the URL's own ?chapter= -- used by a live click that
+  // wants a SPECIFIC chapter (e.g. Home's banner/title jumping straight to the "home" chapter)
+  // regardless of whatever the address bar currently says.
+  const chapterParam = forceChapter || new URLSearchParams(location.search).get('chapter');
   if (bookLoaded) {
     // Already loaded (e.g. returning to this area via the header link, not a fresh page load) --
     // a ?chapter= param still jumps straight to that chapter instead of always landing on the ToC.

@@ -24,11 +24,13 @@
   </div>
   <div></div>
   <div class="app-header__right">
-    <div id="headerMeta" class="app-header__meta"></div>
     <!-- Get Started book -- Skyrim-only (styles.css hides it entirely unless [data-brand="skyrim"];
-         Plain has no lore content to show a book for). Sits beside Settings, not mixed into Home's
-         own tool cards -- it's not a functional tool, so it shouldn't read as one. -->
-    <button id="nav-book" class="settings-gear-btn nav-tab" title="Get Started" hidden>&#128214;</button>
+         Plain has no lore content to show a book for). Sits to the LEFT of the tool-title text
+         (#headerMeta), not grouped with Settings' small utility icon -- it's the one header element
+         meant to catch the eye and get clicked, not blend in as a peer of the gear icon (confirmed
+         2026-08-15: previous far-right placement next to Settings read as too small/easy to miss). -->
+    <button id="nav-book" class="nav-tab" title="Get Started -- browse every tool in The Arcaneum" hidden>&#128214;</button>
+    <div id="headerMeta" class="app-header__meta"></div>
     <button id="nav-settings" class="settings-gear-btn nav-tab" title="Settings">&#9881;</button>
   </div>
 </header>
@@ -782,6 +784,19 @@
   <div id="settingsFirstRunPremiumBanner" class="callout callout--info hidden">
     <div class="callout__title">&#9432; One thing to know: this app is built with Nexus Premium in mind</div>
     <p>Most tools work fine either way, but a few features -- like automatically downloading a missing archive -- need Nexus Premium. That's Nexus's own rule for keeping downloads ad-supported on free accounts, not something this app adds. Wherever Premium is required, you'll get a clear note plus a way to grab the file yourself instead.</p>
+  </div>
+
+  <!-- Same first-run condition as the two banners above (shown/hidden together by shell.js), plus a
+       Skyrim-only CSS gate (styles.css) -- the book it points at doesn't exist under Plain, so
+       Plain never renders this even if first-run fires. Its own callout so the eye-catching book
+       icon can be a real button inside it, not just prose mentioning one. Deliberately doesn't name
+       the theme's appName ("The Arcaneum") -- theme.js's own data-brand-slot="appName" fill is a
+       single document.querySelector (first match only, already claimed by the header title), so a
+       second slot here would just sit unfilled. -->
+  <div id="settingsFirstRunBookBanner" class="callout callout--info hidden">
+    <div class="callout__title">&#128214; New here? Meet every tool first</div>
+    <p>Before you dive in, click the book icon in the top-right corner for a quick, story-flavored tour of what every tool actually does.</p>
+    <button id="settingsFirstRunBookBtn" class="btn btn--secondary">&#128214; Open the book</button>
   </div>
 
   <div id="settingsRestartBanner" class="callout callout--warning hidden">
