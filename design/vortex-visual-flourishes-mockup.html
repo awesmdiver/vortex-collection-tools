@@ -93,7 +93,13 @@
   .book-page__eyebrow{font-family:'Cinzel',serif;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#8a5a2e;margin:0 0 6px;position:relative}
   .book-page__title{font-family:'Cinzel',serif;font-weight:700;font-size:28px;margin:0 0 4px;color:#2e2313;position:relative}
   .book-page__func{font-size:13px;color:#6b5a3f;margin:0 0 20px;font-style:italic;position:relative}
-  .book-page__lore{font-size:14.5px;line-height:1.75;margin:0 0 16px;color:#3a2e1f;position:relative}
+  /* Lore paragraph reads in the theme's own display font (Cinzel here, whichever font is actually
+     picked in the real build) -- it's the "storytelling" half of the page. The "what it actually
+     does" box right below stays the plain system font on purpose (see .book-page__whatitdoes,
+     unchanged) -- that's the "just tell me plainly" half, and a display face at body-text length
+     would fight its own readability. Same in-world/functional split DESIGN.md's own "name for
+     flavor, subtitle for function" rule already draws everywhere else in this app. */
+  .book-page__lore{font-family:'Cinzel',serif;font-size:15px;line-height:1.85;margin:0 0 16px;color:#3a2e1f;position:relative}
   .book-page__lore b{color:#8a5a2e}
   .book-page__whatitdoes{background:rgba(255,252,240,.55);border-left:3px solid #8a5a2e;border-radius:0 8px 8px 0;
     padding:14px 18px;font-size:13.5px;line-height:1.7;margin:0 0 4px;color:#3a2e1f;position:relative}
