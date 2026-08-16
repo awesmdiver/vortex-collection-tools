@@ -89,5 +89,8 @@ A dark, moody Skyrim-style Nordic fantasy scene, photorealistic and cinematic, w
 ```
 
 ## Status
-- **5 covered already** (see table above), 0 new work needed for those.
-- **11 pending** — prompts ready above, none generated yet.
+- **All 16 done, 2026-08-15.** 5 reused from existing banners (see table above); the 11 new ones
+  generated, compressed, and archived under `assets/book-banner-<slug>-original.jpeg` +
+  `assets/book-banner-<slug>.png`. All 16 (11 new + 5 reused) copied into
+  `web/public/theme-assets/skyrim/book/book-banner-<slug>.png` for the app to actually serve, ready
+  for whenever the book's own page/route gets built.
