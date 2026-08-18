@@ -1,0 +1,95 @@
+node_modules/
+logs/
+reports/
+
+# Release zip built by build-release.ps1 -- a build artifact uploaded directly to the GitHub
+# release, never committed to source.
+github-releases/
+
+# Archived interactive terminal menu (sync-menu.js) -- this project is 100% web-UI-driven now;
+# kept on disk only as a reference/fallback for a possible future non-web-based flow, never pushed
+# to GitHub or bundled into a release package. sync-cli.js (the flag-based CLI) is unaffected and
+# stays tracked/active.
+terminal-flow-archive/
+
+# Personal data — mod lists, staging paths, full state.v2 snapshots, and the Nexus API key.
+# lib/vortex-sync/state-backups/ in particular can contain Vortex's stored
+# Nexus API tokens (under the "confidential" state namespace) — never commit or share this.
+# config/config.json is the single unified settings file (see lib/app-config.js) —
+# config/config.example.json is the committed, placeholder-only template for it. All the small
+# personal/local-progress JSON state files below live alongside it in config/ too (keeps a user's
+# install root clean — see 2026-08-15 packaging cleanup), NOT project root:
+# work-through-state.json tracks manually-completed problem mods (Work Through Report) — also
+# personal, local-progress data (see lib/work-through-state.js).
+# offsite-import-map.json tracks manually-imported off-site archive associations (see
+# lib/offsite-import-map.js) — also personal, local filenames.
+# backup-ratio-dismiss-state.json tracks which collections have been dismissed from Update
+# Collection's backup ratio warning (see lib/backup-ratio-dismiss-state.js) — also personal,
+# local-preference data.
+# rebuild-missing-last-fixed-state.json tracks each collection's own "last dealt with" timestamp
+# for Rebuild Missing Files' picker (see lib/rebuild-missing-last-fixed-state.js) — also personal,
+# local-progress data.
+# cycle-helper-snapshot.json is Cycle Helper's own on-demand "rules right before you went and
+# hand-edited them in Vortex" snapshot (see lib/cycle-helper-snapshot.js) — also personal,
+# point-in-time local data, same convention as work-through-state.json above.
+# mod-exceptions/ (path configured via config/config.json's modExceptionListDir, no built-in
+# default) holds the Mod Exceptions list (see lib/mod-exception-store.js) — also personal, local
+# data (which specific mods this installer deliberately skips), same convention as
+# cleanup-exclude-list's own folder.
+# cycle-helper-history/ (path configured via config/config.json's cycleHelperHistoryDir, built-in
+# default here if unset) is Cycle Helper's own Change History — a GROWING set of per-session fix-log
+# files (see lib/cycle-helper-history.js), unlike cycle-helper-snapshot.json's single overwritten
+# record above — also personal, local data.
+config/config.json
+config/work-through-state.json
+config/offsite-import-map.json
+config/backup-ratio-dismiss-state.json
+config/rebuild-missing-last-fixed-state.json
+config/cycle-helper-snapshot.json
+config/rules-generator-anomaly-choices.json
+config/relink-scripts-cache.json
+config/cycle-helper-history/
+mod-exceptions/
+lib/vortex-sync/backups/
+lib/vortex-sync/state-backups/
+
+# Update Collection's snapshot backups (syncBackupRoot in config.json) -- personal collection
+# state, nested here since the 2026-07-26 F:\Claude Workspace reorg moved it from a sibling
+# "Config files" folder outside the project into this project's own tree.
+collection-backups/
+
+# Clean Up report's exclude-list data file (cleanupExcludeListDir in config.json, defaulted here
+# to a project-relative folder during testing) -- personal, install-specific folder/archive names.
+clean-up-exclude-list/
+
+# Ephemeral terminal→design handoff wrap-up (see CLAUDE.md "End every task by writing a handoff
+# file"). Overwritten each run, read by the design-side session off the shared filesystem, never
+# committed.
+prompts/handoff-latest.md
+
+# Board lifecycle state (Claude Workflow Board owns this; ephemeral check-off/sent state, not versioned)
+prompts/.board-state.json
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Downloaded portable binary for scripts/compress-image.js (lossless PNG re-optimization) -- same
+# "bundled copy, checked first, never committed" convention lib/sevenzip.js already uses for
+# tools/7-Zip/7z.exe. compress-image.js auto-downloads this on first use if missing.
+tools/oxipng/
+
+# Downloaded BSA Browser CLI (bsab.exe, GPL-3.0, github.com/AlexxEG/BSA_Browser) -- Relink Scripts'
+# own BSA-reading dependency (lib/bsab-cli.js). Same convention as tools/oxipng/ above -- a
+# downloaded binary, not source, auto-fetched on first use.
+tools/bsa-browser-cli/
+
+# claude-workflow-board's own local runtime state -- this project's queue.json + CLAUDE.md match its
+# multi-project auto-discovery criteria, so its own app can write these here if it's ever pointed at
+# this repo. Never real project content; safe to ignore/regenerate.
+prompts/.board-state.json.bak*
+prompts/.board-index.sqlite*
+prompts/.session-log.json
+prompts/.run-current.*
+prompts/.run-last.*
+prompts/handoffs/

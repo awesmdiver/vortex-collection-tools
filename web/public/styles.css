@@ -1,0 +1,1689 @@
+:root {
+  --bg: #0d0f14;
+  --surface: #161922;
+  --surface-2: #1d212c;
+  --border: #2a2f3d;
+  --text: #e6e9ef;
+  --text-muted: #8b93a3;
+  --accent: #5b8def;
+  --accent-hover: #75a1f5;
+  --accent-bg: rgba(91, 141, 239, 0.12);
+  --nav: #3d6ba8;
+  --nav-hover: #4a7cbd;
+  --success: #3ecf8e;
+  --success-bg: rgba(62, 207, 142, 0.12);
+  --warning: #f5b942;
+  --warning-bg: rgba(245, 185, 66, 0.10);
+  --danger: #f0546b;
+  --danger-bg: rgba(240, 84, 107, 0.12);
+  --neutral: #7c8494;
+  --neutral-bg: rgba(124, 132, 148, 0.12);
+  --radius: 10px;
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  /* Standard vertical gap between stacked cards/sections app-wide -- see DESIGN.md's "Spacing --
+     give stacked things room, consistently" section (2026-07-28). Not themed (same in light/dark),
+     so this lives only in the base :root block, not repeated in the light-theme overrides below. */
+  --stack-gap: 24px;
+}
+
+/* Light theme -- the :root block above is the default/fallback (dark). Applied two ways: (1)
+   following the OS/browser's own prefers-color-scheme when the user hasn't picked an explicit
+   theme on the Settings page (":not([data-theme=\"dark\"])" lets an explicit dark override still
+   win even on a light-preferring system); (2) an explicit override regardless of system
+   preference. Every existing rule in this file already consumes var(--x) rather than a literal
+   color, so this is purely additive -- no existing rule needs to change. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #eef0f4;
+    --border: #d8dce3;
+    --text: #1a1d24;
+    --text-muted: #5b6472;
+    --accent: #3568c9;
+    --accent-hover: #4a7bd6;
+    --accent-bg: rgba(53, 104, 201, 0.12);
+    --nav: #2f5c94;
+    --nav-hover: #3a6da8;
+    --success: #1f9d63;
+    --success-bg: rgba(31, 157, 99, 0.12);
+    --warning: #b8790a;
+    --warning-bg: rgba(184, 121, 10, 0.12);
+    --danger: #c23652;
+    --danger-bg: rgba(194, 54, 82, 0.12);
+    --neutral: #6b7280;
+    --neutral-bg: rgba(107, 114, 128, 0.12);
+    --shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #eef0f4;
+  --border: #d8dce3;
+  --text: #1a1d24;
+  --text-muted: #5b6472;
+  --accent: #3568c9;
+  --accent-hover: #4a7bd6;
+  --accent-bg: rgba(53, 104, 201, 0.12);
+  --nav: #2f5c94;
+  --nav-hover: #3a6da8;
+  --success: #1f9d63;
+  --success-bg: rgba(31, 157, 99, 0.12);
+  --warning: #b8790a;
+  --warning-bg: rgba(184, 121, 10, 0.12);
+  --danger: #c23652;
+  --danger-bg: rgba(194, 54, 82, 0.12);
+  --neutral: #6b7280;
+  --neutral-bg: rgba(107, 114, 128, 0.12);
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* Global scrollbar styling -- requirement for every scrollable region in this app (confirmed
+   2026-07-26): matches Vortex's own grey, rounded scrollbar instead of the browser's default
+   stark-white one. Chromium/Electron-only (::-webkit-scrollbar has no Firefox equivalent), which
+   is fine -- this app only ever runs in a Chromium-based browser or Vortex's own Electron shell. */
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--neutral);
+  border-radius: 8px;
+  border: 3px solid var(--bg);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--text-muted); }
+
+.hidden { display: none !important; }
+.muted { color: var(--text-muted); }
+/* Themed display font (Theming: visual flourishes) -- every element that already carries a brand
+   name/title via data-brand-slot (theme.js) renders in --font-display if the active theme/font sets
+   one; falls back to inherit (the app's own plain system font) otherwise, so Plain -- and Skyrim
+   before any font is picked -- render exactly as before. Deliberately scoped to name/heroTitle/
+   appName only, never body text (heroBody, cardDesc, everything else) -- a display face at
+   paragraph length fights its own readability, same reasoning DESIGN.md's "name for flavor,
+   subtitle for function" rule already applies elsewhere. */
+[data-brand-slot="name"], [data-brand-slot="heroTitle"], [data-brand-slot="appName"] {
+  font-family: var(--font-display, inherit);
+}
+/* Small "?" help marker -- native title attribute gives a browser tooltip on hover, no JS/modal
+   needed for a single short explanatory line. */
+.help-marker {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 1px solid var(--border); color: var(--text-muted);
+  font-size: 11px; font-weight: 700; cursor: help; user-select: none;
+  margin-left: 4px; vertical-align: middle;
+}
+.help-marker:hover { border-color: var(--accent); color: var(--accent); }
+/* Update Collection's own status spans (Backup/Apply Ignores/Apply Disables) sometimes show a
+   longer, multi-line message (e.g. the numbered crash/not-yet-in-state-database explanation) --
+   without this, \n characters in .textContent collapse to a single run-on line by default. Short
+   one-line status text is unaffected. */
+#syncBackupStatus, #syncIgnoresStatus, #syncDisablesStatus { white-space: pre-line; }
+code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 0.9em; }
+
+/* Header */
+.app-header {
+  /* Grid, not flex+space-between -- with 3 flex children, the middle nav's on-screen position
+     shifts whenever the breadcrumb (right-hand item) changes length, confirmed live (moved left/
+     right as pages with longer/shorter breadcrumbs were visited). Equal 1fr side columns keep the
+     center column (nav) truly centered regardless of either side's content width. */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 16px 28px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  /* Stays visible while scrolling any long page (a long collection/log list, etc.) instead of
+     scrolling off-screen -- background is required here, not optional, same "sticky-but-
+     transparent" gotcha already fixed once for the plan table's own sticky header. */
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+/* Home replaced the old five-tab .app-nav as the app's only "go somewhere else" control besides
+   Settings, so the logo/title itself is now clickable -- returns Home from anywhere (shell.js's
+   navigateToArea('home')). Same hover treatment as .settings-gear-btn (surface-2 + rounded), just
+   sized to fit the text instead of a square icon button. */
+.app-header__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  justify-self: start;
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 4px 8px;
+  margin: -4px -8px;
+  transition: background 0.15s ease;
+}
+.app-header__title:hover { background: var(--surface-2); }
+.app-header__logo { font-size: 20px; opacity: 0.85; }
+.app-header__right { display: flex; align-items: center; gap: 14px; justify-self: end; }
+.app-header__meta { color: var(--text-muted); font-size: 13px; text-align: right; }
+/* Settings lives here instead of the main nav row -- it's a one-and-done config page, not a
+   workflow tab you switch between like the others, so it gets a small icon at the header's far
+   right instead of competing for space as a text tab. Shares .nav-tab so shell.js's generic
+   TOOL_AREAS click-handling/active-state code (which toggles .nav-tab--active by element id)
+   still works unmodified -- only the visual treatment differs, via this class overriding it below. */
+.settings-gear-btn {
+  font-size: 19px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  line-height: 1;
+}
+.settings-gear-btn.nav-tab--active { background: var(--surface-2); color: var(--accent); font-weight: normal; }
+/* Get Started book icon -- Skyrim-only (Plain has no lore content to show a book for). Deliberately
+   NOT sized/styled like the plain-utility .settings-gear-btn next to it -- this is the one header
+   element meant to catch a first-time visitor's eye, so it's bigger, sits in a tinted accent circle,
+   and gets a gentle hover lift. Selectors here use the #nav-book ID rather than .nav-book-btn --
+   .nav-tab (below, same specificity as a class) sets its own font-size/display and comes LATER in
+   this file, so source order would let it silently win over an equal-specificity class selector
+   (confirmed live 2026-08-15: the icon rendered at .nav-tab's 13.5px, not this rule's 26px, until
+   switched to an ID selector). The markup's own [hidden] attribute isn't enough on its own either --
+   .nav-tab sets its own explicit `display: inline-block`, an author-stylesheet rule that wins over
+   the UA stylesheet's [hidden] default regardless of selector specificity, so #nav-book would stay
+   visible under Plain too without an explicit override (confirmed live 2026-08-15: it did).
+   #nav-book { display: none } here (an ID selector, so it beats .nav-tab's class selector) restores
+   the default-hidden state; the [data-brand="skyrim"] rule below then re-enables it, same generic
+   per-brand CSS hook the Home background gradient already uses. */
+#nav-book {
+  font-size: 26px;
+  line-height: 1;
+  padding: 6px 10px;
+  border-radius: 50%;
+  background: var(--accent-bg);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+#nav-book:hover { background: var(--accent-bg); transform: scale(1.08); }
+#nav-book.nav-tab--active { background: var(--surface-2); }
+#nav-book { display: none; }
+[data-brand="skyrim"] #nav-book { display: inline-block; }
+/* Settings' first-run "meet the book" callout -- same Skyrim-only reasoning as #nav-book above,
+   since the book it points at doesn't exist under Plain. shell.js unhides it purely on the
+   first-run condition (no theme check of its own); this is the theme gate on top. */
+#settingsFirstRunBookBanner { display: none !important; }
+[data-brand="skyrim"] #settingsFirstRunBookBanner:not(.hidden) { display: block !important; }
+
+/* .nav-tab/.nav-tab--active are still used by the Settings gear button (the one nav-* element left
+   after Home replaced the old five-tab .app-nav row -- see DESIGN.md's "Home / landing page"
+   section) -- kept for that, not for a tab row anymore. */
+.nav-tab {
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  padding: 7px 16px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  /* The log-view page's own nav uses real <a> links (cross-page navigation, not JS-driven like the
+     main app's <button> tabs) -- browsers underline anchors by default but not buttons, which is
+     the only reason the two ever looked different. Normalizes both to the same button-like look. */
+  text-decoration: none;
+  display: inline-block;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.nav-tab:hover { background: var(--surface-2); color: var(--text); }
+.nav-tab--active { background: var(--accent); color: #0b1220; font-weight: 600; }
+.tool-area.hidden { display: none !important; }
+
+/* Shared "N-per-row" result list -- used well beyond Update Collection now (Rules Generator's
+   report, Cleanup, Archive Finder, Missing Masters, Settings' cleanup-ignored lists all reuse this
+   same class), so it stays even though Update Collection's own Preview lists (Apply Ignores/Apply
+   Disables) moved OFF this component onto the shared .chip-row/.chip grid instead (DESIGN.md's
+   "Informational name lists" -- the shown, not collapsed, variant) -- don't remove this without
+   checking every one of those other call sites first. */
+.sync-result-list { list-style: none; margin: 10px 0 0; padding: 0; font-size: 13.5px; }
+.sync-result-list li { padding: 4px 0; border-bottom: 1px solid var(--border); }
+.sync-result-list li:last-child { border-bottom: none; }
+/* Every "Select all" + checkbox-list section in the app needs the SAME 20px indent under "Select
+   all" (confirmed 2026-07-27: not a one-off, the intended look everywhere this pattern is used).
+   It only happens automatically when the list sits inside a .callout (".callout ul" already sets
+   padding-left: 20px there, e.g. the Clean Up report's "Action Needed" list) -- everywhere else
+   (a modal, a <details> disclosure, plain page content) needs it set explicitly here, since
+   .sync-result-list itself is zero-padding. */
+#cleanupResultsList,
+#cleanupCrossCheckList,
+#settingsCleanupIgnoredStagingList,
+#settingsCleanupIgnoredArchivesList { padding-left: 20px; }
+/* .mm-neededby-list deliberately does NOT get this same padding-left -- its own rows now use the
+   same 4-column grid as .mm-row__header with an empty leading column (see .mm-neededby-row above),
+   which already provides the visual indent AND keeps every column aligned with the header's own.
+   Adding this same 20px on top would double up and break that alignment again. */
+/* "+N more / Show less" toggle -- same collapsed-by-default convention as Rebuild Collection's own
+   long file lists (.file-list-toggle), just its own class since that one is scoped under
+   .detail-cell and this list isn't nested inside one. .sync-list-toggle-row wraps it as its own
+   <li> for .sync-result-list's own callers (Missing Masters, etc); Update Collection's own chip-row
+   usage doesn't need that wrapper -- the toggle sits inline as a plain <a>, and the chip-row's own
+   flex+gap already spaces it out correctly among the .chip elements. */
+.sync-list-toggle-row { padding-top: 6px !important; }
+.sync-list-toggle { display: inline-block; color: var(--accent); cursor: pointer; text-decoration: underline; }
+.sync-list-toggle:hover { color: var(--accent-hover); }
+
+/* Main */
+.app-main {
+  /* Was capped at 1400px even on a wide monitor -- left a lot of unused space on both sides,
+     confirmed live ("I have a ton of space on the left and right"). Wider cap gives real tables
+     (Detail/Extraction columns especially) more room to breathe before anything needs to wrap. */
+  max-width: min(1800px, 96vw);
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+}
+
+/* Acts as the "banner before the first block" on views that have no .tool-hero of their own (Rebuild
+   Collection's logs/plan/progress/summary views) -- same standard gap as tool-hero's own. */
+.view-header { margin-bottom: var(--stack-gap); }
+.view-header h1 { font-size: 22px; margin: 6px 0 4px; }
+.view-header p { margin: 4px 0; }
+
+/* Tool intro banner -- replaces a redundant "<h2>Tool Name</h2>" (the sub-nav button right above it
+   already names the tool) with an eye-catching value pitch instead: an emoji-led headline plus a
+   friendly what/why sentence or two. See DESIGN.md's "Tool intro banner" section -- first shipped on
+   Missing Masters 2026-07-27, meant to be reused by every tool page's own intro over time. */
+.tool-hero { margin-bottom: var(--stack-gap); }
+.tool-hero__title { font-size: 22px; margin: 0 0 8px; }
+.tool-hero__body { margin: 0; color: var(--text); font-size: 14px; line-height: 1.6; }
+/* Themed hero banner image (theme.js's data-brand-slot="bannerImage") -- Plain has none, so this
+   stays .hidden and the tool-hero reads exactly as it always did. A themed brand (e.g. Skyrim) that
+   supplies one gets it rendered full-width above the title, own rounded corners matching every other
+   card/panel in the app. No forced max-height/object-fit crop -- an earlier pass tried cropping a
+   too-tall source image down via CSS (director found the original ~1.83:1 banner pushed page content
+   almost off-screen), but the real fix was regenerating the source art at the right proportions
+   instead (now ~3.76:1, 1280x341 -- matches what the crop was approximating anyway). Plain
+   width:100%/height:auto respects whatever aspect ratio the actual banner asset is now, no
+   CSS-side cropping needed. */
+.home-banner-img { display: block; width: 100%; height: auto; border-radius: var(--radius); margin: 0 0 var(--stack-gap); }
+/* Home's own banner image + title double as a second way into the Get Started book -- Skyrim-only
+   (shell.js's click handler already no-ops under any other brand; this is just the visual cue so
+   Skyrim users can tell it's clickable at all). Title only shifts color on hover, not underline --
+   an underlined <h2> would read as a broken heading rather than an intentional link. */
+[data-brand="skyrim"] #area-home .tool-hero[data-tool-id="home"] .home-banner-img,
+[data-brand="skyrim"] #area-home .tool-hero[data-tool-id="home"] .tool-hero__title {
+  cursor: pointer;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+[data-brand="skyrim"] #area-home .tool-hero[data-tool-id="home"] .home-banner-img:hover { opacity: 0.9; }
+[data-brand="skyrim"] #area-home .tool-hero[data-tool-id="home"] .tool-hero__title:hover { color: var(--accent); }
+
+/* Tool page breadcrumb eyebrow (see DESIGN.md's "Tool page breadcrumb" section) -- with the old
+   five-tab nav gone (Home replaced it), the tool-hero title alone no longer names which tool a
+   user is in (it's a value pitch, e.g. "Skip Re-Resolving Conflicts You Already Fixed", not the
+   tool's name). Sits above every VIEW within a tool now, not just the landing tool-hero (2026-07-28)
+   -- every view except Home/Settings gets one, directly above its own heading. */
+.tool-eyebrow {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--text-muted); margin: 0 0 8px; display: flex; align-items: center; gap: 8px;
+}
+/* .tool-eyebrow__home always returns to Home. .tool-eyebrow__area is the SAME link treatment for
+   the area segment, used only on a tool's deeper views (not its own landing, where the area name is
+   plain text -- see the "is-current" comment at each usage) -- it replaces the old in-flow
+   ".btn--nav.btn--back" controls entirely (2026-07-28's "breadcrumb replaces back buttons" decision). */
+.tool-eyebrow__home, .tool-eyebrow__area { color: var(--accent); text-decoration: none; cursor: pointer; }
+.tool-eyebrow__home:hover, .tool-eyebrow__area:hover { color: var(--accent-hover); text-decoration: underline; }
+.tool-eyebrow__sep { opacity: 0.5; }
+
+/* Home landing page -- card-based launcher for every tool (see DESIGN.md's "Home / landing page"
+   section). Built entirely from existing tokens/recipes, no new colors: .home-card is the
+   .settings-group card recipe made clickable; .home-section-title reuses the exact same
+   uppercase/letter-spacing/muted label treatment as .settings-group .settings-section-title above. */
+/* Scoped to Home only -- the shared .app-main is deliberately wide (1800px, for data tables
+   elsewhere in the app), which leaves Home's cards clustered on the left on a big monitor. The ID
+   selector here overrides that shared rule without touching it, so every other tool area keeps its
+   full width (2026-07-28). */
+#area-home .app-main { max-width: min(1280px, 96vw); }
+/* Themed Home background (Theming: visual flourishes, approved mockup design/vortex-visual-
+   flourishes-mockup.html) -- a faint, non-competing gradient wash behind Home's own content, scoped
+   to whichever brand theme is active via [data-brand] (set by theme.js, a generic per-brand hook --
+   not the same as Appearance's own [data-theme]). Plain has no rule here at all, so it stays exactly
+   as before -- this only ever fires for a themed brand. color-mix() derives the tint from
+   var(--bg-tint, var(--accent)) -- --bg-tint is the color picker's own background-tint override
+   (theme.js's applyBackgroundTint), unset by default so the fallback resolves straight to --accent,
+   same behavior as before the color picker existed. Kept CSS-only per the director's own call in
+   the mockup review -- no new Gemini art needed for this piece, it just needs to stay quiet, not
+   decorative. */
+[data-brand="skyrim"] #area-home {
+  background-image:
+    radial-gradient(ellipse at 15% 0%, color-mix(in srgb, var(--bg-tint, var(--accent)) 12%, transparent), transparent 45%),
+    radial-gradient(ellipse at 85% 60%, color-mix(in srgb, var(--bg-tint, var(--accent)) 8%, transparent), transparent 50%);
+  background-attachment: fixed;
+}
+.home-section-title {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted);
+  font-weight: 600; margin: 30px 0 12px;
+}
+/* Themed section-divider banner (theme.js's data-brand-slot="bannerImage" scoped to [data-section-id],
+   a shallow wide strip -- not the taller .home-banner-img treatment above, which is Home's own hero).
+   Plain has none, stays .hidden. Sits above the section's own title/grid, same top margin as the
+   title it's replacing visually so a themed vs. unthemed section takes the same vertical space. */
+.home-section-banner-img { display: block; width: 100%; height: auto; border-radius: var(--radius); margin: 30px 0 12px; }
+.home-section-banner-img + .home-section-title { margin-top: 0; }
+/* No :first-of-type zero-margin override -- which section/the Pinned row visually ends up first
+   changes at runtime now (pinning can hide a whole section, see the Pinning note below), so a
+   static "first" rule can't track it. Matches design/vortex-home-mockup.html, which accepts the
+   uniform top margin even on whichever one is first. */
+.home-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.home-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  transition: border-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+.home-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow); }
+.home-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.home-card__icon {
+  width: 44px; height: 44px; border-radius: 10px; background: var(--accent-bg);
+  display: grid; place-items: center; font-size: 24px;
+}
+.home-card__name { font-size: 17px; font-weight: 600; margin: 0; }
+.home-card__desc { font-size: 14px; color: var(--text-muted); line-height: 1.5; margin: 0; flex: 1; }
+.home-card__open {
+  font-size: 13px; font-weight: 600; color: var(--accent);
+  display: inline-flex; align-items: center; gap: 5px; transition: gap 0.15s ease;
+}
+.home-card:hover .home-card__open { gap: 8px; }
+/* Cards must fill their wrapper now that the grid item is .home-card-wrap, not .home-card itself
+   (see below) -- without this a card would only be as wide as its own content. height: 100% makes
+   cards in the same grid row match height (a CSS grid row already stretches to its tallest item by
+   default; this is what makes the shorter cards actually fill that height instead of leaving
+   whitespace below) -- combined with the flex column above + .home-card__desc's flex: 1, "Open →"
+   pins to the bottom of every card regardless of description length (2026-07-28). */
+.home-card { width: 100%; height: 100%; }
+
+/* Pinning (see DESIGN.md's "Pinning" section) -- a star SIBLING to the card button, not nested
+   inside it (nested buttons are invalid HTML and unclickable in practice). .home-card-wrap is the
+   actual grid item now; position: relative lets the star corner-pin over the card beneath it;
+   height: 100% lets .home-card's own height: 100% above actually reach the full grid-row height. */
+.home-card-wrap { position: relative; height: 100%; }
+.home-card__star {
+  position: absolute; top: 11px; right: 11px; z-index: 2;
+  width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text-muted);
+  display: grid; place-items: center; font-size: 17px; line-height: 1;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.home-card__star:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+.home-card__star.on { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+
+/* Settings page header -- Restart/Stop Server sit in their own small row ABOVE the tool-hero title
+   now (director's own call, 2026-08-15; was previously laid out beside the full title+body block
+   via a shared flex row, .settings-header-row, which read as level with the body text rather than
+   the title and could wrap awkwardly under a narrow window -- see git history for that version).
+   Right-aligned, tucked up against the top of the page as a small utility strip, deliberately
+   smaller than a normal .btn--small (13px/5px 12px) -- these are maintenance actions, not something
+   that should visually compete with the page's own primary content. */
+.settings-header-actions { display: flex; gap: 6px; justify-content: flex-end; margin: 0 0 4px; }
+.settings-header-actions .btn { font-size: 12px; padding: 4px 10px; }
+
+.btn--back { margin-bottom: 10px; }
+
+/* Buttons */
+.btn {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+  /* A button sitting in a flex row next to a long sibling (a file path, in particular) got squeezed
+     below its own natural width, wrapping its label to two lines ("Dele"/"te") -- confirmed live.
+     Buttons never need to wrap here, and never need to shrink to make room for a sibling; let the
+     sibling (the file path, which already wraps/scrolls on its own) give up the space instead. */
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.btn:active { transform: translateY(1px); }
+.btn--primary {
+  background: var(--accent);
+  color: #0b1220;
+  font-weight: 600;
+}
+.btn--primary:hover { background: var(--accent-hover); }
+.btn--primary:disabled { background: var(--neutral); color: var(--bg); cursor: not-allowed; }
+.btn--ghost {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border);
+}
+.btn--ghost:hover { background: var(--surface-2); border-color: var(--accent); }
+/* A step's action button once its required action has actually completed (Apply -> "Applied ✓") --
+   see DESIGN.md's "Gate 'Next' on a step's required action". Deliberately quiet/success, not the
+   live accent -- .btn--primary is reserved for whatever the user's next real move is (Next, once
+   it enables), so a finished action never competes with it for attention. Always paired with
+   `disabled` in markup/JS (the done state is sticky -- re-running Preview is what re-arms it). */
+.btn--done { background: var(--success-bg); color: var(--success); border-color: var(--success); cursor: not-allowed; }
+.btn--small { padding: 5px 12px; font-size: 13px; }
+/* A distinct blue for navigation ("back to collections") -- deliberately NOT the same shade as
+   .btn--primary's --accent, so a nav button never reads as "an action to take" at a glance. */
+.btn--nav {
+  background: var(--nav);
+  color: #fff;
+  font-weight: 600;
+}
+.btn--nav:hover { background: var(--nav-hover); }
+
+/* Vortex data cache box */
+.vortex-data-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-top: var(--stack-gap);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.vortex-data-box__status { font-size: 13.5px; color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
+.vortex-data-box__status.is-fresh { color: var(--success); }
+
+/* Collection picker (dropdown, not a scrolling list) */
+.collection-picker { display: flex; gap: 12px; margin-top: 20px; }
+.select {
+  flex: 1;
+  font-family: inherit;
+  font-size: 14.5px;
+  padding: 10px 14px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.select:hover { border-color: var(--accent); }
+.select:focus { outline: none; border-color: var(--accent); }
+/* 340px, not 260px -- confirmed live the Workshop-only revision dropdown's real option text
+   (e.g. "Revision 113 — 7/17/2026 (published)") was wider than 260px and got cut off in the
+   closed box. text-overflow/ellipsis is defensive for any future longer label, not the primary
+   fix -- the width increase is. */
+.select--small { flex: none; width: 460px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select:disabled { opacity: 0.55; cursor: not-allowed; }
+/* Error state: e.g. the Workshop revision dropdown when no Nexus id is on record at all --
+   the plain 0.55-opacity disabled look was too easy to miss, per live user report. */
+.select--error, .select--error:disabled { color: var(--danger); border-color: var(--danger); opacity: 0.85; }
+.loading-row, .empty-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 24px;
+  color: var(--text-muted);
+}
+
+/* Progress bar (plan classify progress, "X of Y checked") */
+.progress-bar-wrap {
+  height: 6px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 0 0 20px;
+}
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+/* Spinner */
+.spinner {
+  width: 16px; height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Summary badges */
+.summary-badges { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 20px; }
+.badge {
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+/* Clickable status badges (log viewer + live plan table) -- filters the table below to just that
+   status; click the active one again (or "Show all") to clear. Border ring, not a background/color
+   change, so the badge's own status color stays legible either way. */
+.badge--clickable { cursor: pointer; border: 2px solid transparent; transition: border-color 0.15s ease; }
+.badge--clickable:hover { border-color: currentColor; }
+.badge--filter-active { border-color: currentColor; }
+.badge--show-all {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+.badge--show-all:hover { border-color: var(--text-muted); }
+.wt-row--completed { opacity: 0.55; text-decoration: line-through; }
+.badge--rebuilt, .badge--rebuild { background: var(--success-bg); color: var(--success); }
+.badge--skip_ignored, .badge--skip_optional_not_installed { background: var(--neutral-bg); color: var(--neutral); }
+.badge--skip_no_archive, .badge--skip_open_fomod { background: var(--warning-bg); color: var(--warning); }
+.badge--failed_mismatch_not_touched, .badge--failed_extraction_not_touched,
+.badge--failed_extraction_no_prior_data { background: var(--danger-bg); color: var(--danger); }
+.badge--critical_manual_restore_needed { background: var(--danger); color: #fff; }
+/* Update Collection's Ignored/Disabled report -- same color convention as the status-pill variants
+   of the same name above. */
+.badge--ignored { background: var(--neutral-bg); color: var(--neutral); }
+.badge--disabled { background: var(--warning-bg); color: var(--warning); }
+.badge__count { font-variant-numeric: tabular-nums; }
+/* Generic severity variants (Compare Report and any future badge that isn't one of the specific
+   per-status colors above) -- same four-color convention as .callout-- / .modal--, see TECHNICAL.md's
+   "Callout severity conventions". */
+.badge--info { background: var(--accent-bg); color: var(--accent); }
+.badge--success { background: var(--success-bg); color: var(--success); }
+.badge--warning { background: var(--warning-bg); color: var(--warning); }
+.badge--critical { background: var(--danger-bg); color: var(--danger); }
+.badge--neutral { background: var(--neutral-bg); color: var(--neutral); }
+/* Rules Generator's section headers reuse .badge's pill shape/color directly (confirmed with the
+   user 2026-07-26: "Needs your input" should mimic its own summary-badge color) instead of a
+   separate one-off style. .badge normally lives inside .summary-badges, a flex row where each pill
+   is a flex ITEM sized to its own content -- a bare heading has no such container, so plain
+   `display:flex` (a block-level box) would stretch the pill across the whole section. This override
+   keeps it shrink-to-fit, and restores heading-scale text size over .badge's smaller default. */
+h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
+/* Rules Generator section header + "Expand all" button on the same line, button right-justified.
+   The header row now owns the vertical rhythm (the standard --stack-gap above, 10px below) instead
+   of the bare h2 -- wrapping the h2 in this row would otherwise confuse .settings-section-title's
+   own :first-of-type rule (each wrapped h2 becomes the only h2 under ITS OWN parent, so every one
+   would incorrectly match :first-of-type once wrapped). Explicit per-id margins here sidestep that
+   instead of fighting the cascade. */
+.rg-section-header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.rg-section-header-row .settings-section-title { margin: 0; }
+#rgReadySectionHeaderRow, #rgReviewSectionHeaderRow { margin: var(--stack-gap) 0 10px; }
+/* "Expand all" / "Collapse all" -- follows the "Nothing to do" badge's muted/neutral color on
+   purpose (confirmed with the user 2026-07-26), regardless of which section it's attached to, so it
+   never competes visually with that section's own success/warning-colored pill. It's a real
+   <button> (needs a click handler, unlike the other pill-styled badges which are just <span>s), so
+   reset the couple of button-specific UA defaults .badge doesn't already cover. */
+.rg-section-header-row button.badge { font-family: inherit; }
+/* Same generic severities for a table's own Status column pill (as opposed to the clickable filter
+   badge above the table) -- one color language for "this row is an info/neutral/warning/critical
+   item" used in both places at once. */
+.status-pill--info { background: var(--accent-bg); color: var(--accent); }
+.status-pill--success { background: var(--success-bg); color: var(--success); }
+.status-pill--warning { background: var(--warning-bg); color: var(--warning); }
+.status-pill--critical { background: var(--danger-bg); color: var(--danger); }
+.status-pill--neutral { background: var(--neutral-bg); color: var(--neutral); }
+.table-empty-note { color: var(--text-muted); font-style: italic; padding: 20px; text-align: center; }
+
+/* Callouts */
+.callout {
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  border: 1px solid;
+}
+/* Four severities -- see TECHNICAL.md's "Callout severity conventions" for when to use which.
+   info: plain status/instructions, nothing wrong (e.g. "Next steps in Vortex"). success: something
+   completed. warning: needs attention but isn't blocking (e.g. a misconfiguration that only skips
+   an optional feature). critical: a real failure or blocking problem (e.g. a write to Vortex's
+   database failed). */
+.callout--info { background: var(--accent-bg); border-color: var(--accent); }
+.callout--success { background: var(--success-bg); border-color: var(--success); }
+.callout--warning { background: var(--warning-bg); border-color: var(--warning); }
+.callout--critical { background: var(--danger-bg); border-color: var(--danger); }
+/* Hanging indent so a wrapped second (or third) line aligns with the TEXT, not the leading icon --
+   confirmed real 2026-07-28 via direct pixel measurement in-browser: every callout title is one
+   plain text string ("🛑 Make sure...", no separate icon markup anywhere), so a wrapped line
+   naturally fell flush to the container's own left edge instead of lining up under "Make". Measured
+   across four different icons (🛑 ⚠️ 🚀 🧩) at this class's real 15px font-size -- text-indent
+   pulls the FIRST line back left by the icon+space's own width, padding-left pushes the WHOLE block
+   right by the same amount, so wrapped lines land exactly under the first line's actual text start
+   (verified within 0.02px for all four). Applies everywhere .callout__title is used, not a one-off. */
+.callout__title { font-weight: 700; margin-bottom: 6px; text-indent: -1.65em; padding-left: 1.65em; }
+.callout ul, .callout ol { margin: 8px 0 0; padding-left: 20px; }
+.callout p { margin: 4px 0; font-size: 13.5px; }
+.callout ol li { font-size: 13.5px; margin: 4px 0; }
+.callout .callout { margin: 12px 0 8px; }
+/* An off-site mismatch (a same-size candidate file exists but fails the md5 check) is a more
+   alarming case than a plain "nothing here yet" -- danger-colored so it stands out inside the
+   yellow off-site-missing callout instead of reading the same as every other list item. */
+.mismatch-note { color: var(--danger); font-weight: 600; }
+/* Off-site source-URL links (Plan page warning, plan table Detail column, log-view Extraction
+   column, Work Through Report) -- browser-default link purple/blue was hard to read against the
+   dark theme, so all of these use the same --accent color as every other interactive element
+   instead. :visited overridden too so clicking one doesn't turn it an even harder-to-read purple. */
+.archive-link, .archive-link:visited { color: var(--accent); }
+.archive-link:hover { color: var(--accent-hover); }
+/* Log-view mod names link out to their Nexus mod page (new tab) -- same --accent color as every
+   other link in this app, just no underline (requested explicitly: the Mod column reads as a
+   table of names first, links second). */
+.mod-name-link, .mod-name-link:visited { color: var(--accent); text-decoration: none; }
+.mod-name-link:hover { color: var(--accent-hover); }
+/* A long URL and/or mod name on the same line as the Import button either overflowed or wrapped
+   awkwardly -- given its own row, with overflow-wrap so a long URL (one unbroken "word") wraps
+   inside the callout instead of forcing horizontal scroll/overflow. */
+.archive-link-row { margin-top: 4px; overflow-wrap: anywhere; }
+
+/* Inline text input (workshop-fetch slug field, etc.) */
+.input {
+  font-family: inherit;
+  font-size: 13.5px;
+  padding: 8px 12px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.input:focus { outline: none; border-color: var(--accent); }
+.input--small { width: 220px; }
+.input--tiny { width: 140px; }
+.input--wide { width: 480px; }
+
+/* Settings page section headers -- plain h2s, same rhythm as .view-header's h1 but smaller/lighter.
+   Only used bare (no .settings-group ancestor) inside .settings-group__header now; everywhere else
+   the more specific .settings-group .settings-section-title rule below wins instead. */
+/* Page-level section dividers (Reports/Rules Generator, used bare -- not inside a .settings-group
+   card): a consistent standard gap above every one of these, first-of-type or not (no need for a
+   separate first-of-type override now that both cases converge on the same value). */
+.settings-section-title { font-size: 16px; margin: var(--stack-gap) 0 10px; }
+/* Settings page: groups fields by which tool they serve (General / Rebuild Collection / Update
+   Collection) instead of one long flat list -- same bordered-card look as .sync-phase (Update
+   Collection's own numbered steps use this already), just without a numbered circle since these
+   aren't a sequence. */
+.settings-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin: var(--stack-gap) 0;
+}
+.settings-group__header { margin-bottom: 4px; }
+.settings-group__header h2 { font-size: 17px; margin: 0; }
+.settings-group__header p { margin: 4px 0 0; }
+/* Sub-headings INSIDE an already-bounded card -- tighter and quieter than the old flat-list rhythm
+   above, same uppercase/letter-spacing/muted treatment this app already uses for table headers
+   (.plan-table th), applied here to a new context rather than inventing another label style. */
+.settings-group .settings-section-title {
+  font-size: 12px; margin: 18px 0 8px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-muted); font-weight: 600;
+}
+.settings-group .settings-section-title:first-of-type { margin-top: 4px; }
+
+/* Settings two-pane layout (see DESIGN.md's "Settings -- two-pane category layout" section) -- a
+   sticky category rail on the left, one category's .settings-group card(s) on the right, replacing
+   the old single long scroll of every card stacked together. */
+.settings-layout { display: grid; grid-template-columns: 224px 1fr; gap: var(--stack-gap); align-items: start; }
+/* Caps the content column's own reading width (independent of the rail, which stays as-is) so
+   callouts/hints wrap at a comfortable width instead of running edge-to-edge on a wide monitor --
+   the two-pane layout's own right column can otherwise stretch past 1000px+ (2026-07-28). */
+#settingsPanes { max-width: 960px; }
+.settings-rail { position: sticky; top: 92px; display: flex; flex-direction: column; gap: 3px; }
+.settings-rail__row { position: relative; }
+.settings-rail__item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 34px 9px 12px; border-radius: 8px; border: 1px solid transparent;
+  background: transparent; color: var(--text-muted); cursor: pointer;
+  font-family: inherit; font-size: 14px; text-align: left; width: 100%;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.settings-rail__item:hover { background: var(--surface-2); color: var(--text); }
+.settings-rail__item.active { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+.settings-rail__icon { font-size: 16px; width: 20px; text-align: center; flex: none; }
+/* The pin star only appears on hover (or once pinned) -- same "don't clutter every row all the
+   time" reasoning as Vortex Scrub's own row-hover affordances elsewhere in this app. */
+.settings-rail__pin {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 26px; border-radius: 6px; border: 1px solid transparent;
+  background: transparent; color: var(--text-muted); cursor: pointer; font-size: 15px; line-height: 1;
+  display: grid; place-items: center; opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+.settings-rail__row:hover .settings-rail__pin { opacity: 0.75; }
+.settings-rail__pin:hover { opacity: 1; color: var(--accent); background: var(--surface-2); }
+.settings-rail__pin.on { opacity: 1; color: var(--accent); }
+.settings-rail__group {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);
+  font-weight: 600; padding: 0 12px; margin: 4px 0 2px;
+}
+.settings-rail__divider { height: 1px; background: var(--border); margin: 8px 6px 4px; }
+.settings-pane { display: none; }
+.settings-pane.active { display: block; }
+/* Pins to the bottom of the content pane regardless of which category is open -- Save Settings is
+   always in reach without scrolling back up, same idea as .progress-header-row further up. */
+.settings-save-bar {
+  position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--border);
+  padding: 14px 0 6px; display: flex; align-items: center; gap: 12px; justify-content: flex-end;
+  margin-top: 6px;
+}
+.save-hint { color: var(--text-muted); font-size: 13px; margin-right: auto; }
+@media (max-width: 820px) {
+  .settings-layout { grid-template-columns: 1fr; }
+  .settings-rail { position: static; flex-direction: row; flex-wrap: wrap; }
+}
+
+/* Informational name lists -- collapsed neutral chips (DESIGN.md's "Informational name lists"
+   section; reference mockup design/vortex-nothing-todo-mockup.html's "Chips, collapsed" treatment).
+   For a read-only "here's the set, nothing to do about it" list -- first used by Rules Generator's
+   "Nothing to do" bucket -- demotes the lowest-priority content on the page behind a collapsed
+   disclosure that expands to a wrapping row of neutral, non-interactive chips. Reuse this for any
+   future list of the same kind rather than inventing a one-off style. */
+.chip-list-details {
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+  margin-top: 8px;
+}
+.chip-list-details summary {
+  list-style: none; cursor: pointer; padding: 12px 16px;
+  display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-muted);
+}
+.chip-list-details summary::-webkit-details-marker { display: none; }
+.chip-list-details__caret { display: inline-block; transition: transform 0.15s ease; }
+.chip-list-details[open] .chip-list-details__caret { transform: rotate(90deg); }
+.chip-list-details__count { color: var(--neutral); font-weight: 600; }
+.chip-list-details__body { padding: 0 16px 16px; }
+.chip-list-details__body p { margin: 0 0 10px; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-size: 13px; color: var(--text-muted); background: var(--neutral-bg);
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px;
+}
+/* A "Nothing to do" chip that actually has a pending Step 1 (Relationship Check) pick on it --
+   still sits in the same noLinkFound bucket server-side until a real Apply+re-analyze moves it, but
+   needs to read as "this one's spoken for" rather than identical to a genuinely-untouched mod (see
+   rgRenderNoLinkBody in rules-generator-app.js). */
+.chip--pending { color: var(--success); background: var(--success-bg); border-color: var(--success); }
+
+/* Rules Generator's review list: one radio-pair choice inside a .settings-group card, when a rule
+   could point at either an original mod or its new-collection counterpart. See DESIGN.md's
+   "Rules Generator review choice" note. */
+.rg-choice-row { margin: 12px 0; padding-top: 12px; border-top: 1px solid var(--border); }
+.rg-choice-row:first-of-type { border-top: none; padding-top: 0; }
+/* Rules Generator's expanded per-mod rule table: indented under its card header so the
+   header-vs-rules hierarchy reads at a glance, and a narrow rule-type dropdown (before/after/???/
+   never-together-with is all it ever needs to fit -- .select--small's 460px default is sized for
+   free-text selects elsewhere in the app, not a 4-word fixed vocabulary like this one). */
+.rg-ready-card .plan-table-wrap { margin-left: 28px; margin-top: 4px; }
+.rg-rule-type-select { width: 150px; flex: none; }
+/* Anomaly review cards (Needs your input) reuse the exact same collapsed-header/expand pattern as
+   Ready to copy cards above -- added 2026-07-26 so "Expand all" has real collapsed state to act on
+   for this list too, not just Ready to copy. Same indent convention as .plan-table-wrap. */
+.rg-anomaly-card__body { margin-left: 28px; margin-top: 4px; }
+.rg-anomaly-card__body .checkbox { margin: 4px 0; }
+/* "Copying from X" -- opens the read-only reference view in a real separate window, same
+   accent-colored no-underline treatment as .mod-name-link elsewhere, but its own class since the
+   content is client-rendered in-app data, not an external Nexus link. */
+.rg-mod-link { color: var(--accent); text-decoration: none; cursor: pointer; }
+.rg-mod-link:hover { text-decoration: underline; }
+.rg-choice-row p { margin: 0 0 6px; font-weight: 600; }
+.rg-choice-row .checkbox { margin: 4px 0; }
+/* Vortex's own "N conflicting file(s)" indicator, mirrored on each rule row. Muted/plain while the
+   count is still loading or comes back zero (nothing to click); once a real count is in, it swaps
+   to accent-colored + clickable, same look as .rg-mod-link, and opens .rg-conflict-popover below. */
+.rg-conflict-count { font-size: 12.5px; }
+.rg-conflict-count--muted { color: var(--text-muted); }
+.rg-conflict-count--clickable { color: var(--accent); cursor: pointer; }
+.rg-conflict-count--clickable:hover { text-decoration: underline; }
+/* Small anchored popup listing the actual conflicting file paths -- "just like Vortex" per the
+   user's own screenshot: a lightweight box near the click point, not a full modal/window. Reuses
+   the app's own global scrollbar styling for its file list, same as every other scroll region. */
+.rg-conflict-popover {
+  position: fixed;
+  z-index: 60;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 10px 12px;
+  max-width: 420px;
+  min-width: 220px;
+}
+.rg-conflict-popover__title { font-weight: 600; font-size: 13px; margin: 0 0 6px; }
+.rg-conflict-popover__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+  overflow-x: auto;
+  font-size: 12.5px;
+  font-family: var(--mono, monospace);
+}
+/* No wrap -- a long path stays on one line and scrolls horizontally (the popover's own scrollbar,
+   same grey global styling) rather than wrapping mid-path, confirmed live 2026-07-26 looked wrong. */
+.rg-conflict-popover__list li { padding: 2px 0; white-space: nowrap; }
+
+/* Step 1: Relationship Check (design/vortex-rules-generator-relationship-check-mockup.html) -- the
+   mockup's own .summary-row/.stat, scoped under the rg- prefix this file's own Rules Generator rules
+   already use, rather than introducing bare generic class names. */
+.rg-rel-stat-row { display: flex; gap: 12px; flex-wrap: wrap; margin: 0 0 18px; }
+.rg-rel-stat { flex: 1; min-width: 150px; border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; background: var(--surface); }
+.rg-rel-stat__num { font-size: 24px; font-weight: 700; color: var(--text); }
+.rg-rel-stat--warn .rg-rel-stat__num { color: var(--warning); }
+.rg-rel-stat--fix .rg-rel-stat__num { color: var(--success); }
+.rg-rel-stat__lbl { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+/* Deliberately a DIFFERENT name from .rg-conflict-count above, even though both show a file count --
+   that one is a lazily-loaded, click-to-open-a-file-list indicator ("…" then a real count once
+   fetched); this one is a statically-rendered, always-already-known count with no popover, a
+   different enough interaction to deserve its own class rather than overloading one name with two
+   meanings. --big is a plain visual-urgency signal (large vs small conflict count), not a semantic
+   state like --muted/--clickable above. */
+.rg-relationship-count { font-size: 12px; font-weight: 600; color: var(--warning); }
+.rg-relationship-count--big { color: var(--danger); }
+.rg-relationship-count--fix { color: var(--success); }
+/* Two short fields side by side (Port/Host, the two backup-cleanup rows) -- stacks on narrow
+   screens via the existing 640px breakpoint below. */
+.settings-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+.path-input-row { display: flex; gap: 8px; align-items: center; }
+.path-input-row .input--wide { flex: 1; }
+
+/* Workshop-only collections callout -- pulled down from the picker above it so the two dropdowns
+   (installed collections vs. Workshop-only) don't visually run together. */
+#workshopOnlySection { margin-top: 28px; }
+.workshop-only-row__fetch { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.workshop-fetch-status { font-size: 13px; padding-bottom: 9px; }
+
+/* Small label above an input, e.g. the workshop-fetch slug/revision fields -- otherwise those
+   two boxes give no clue what they're for beyond a placeholder that vanishes on typing. */
+.field-group { display: flex; flex-direction: column; gap: 5px; }
+.field-label { font-size: 12px; color: var(--text-muted); }
+/* Marks a Settings field that has no valid blank state (e.g. staging/downloads/Update Collection's
+   backups folder) -- distinct from fields like backupRoot/state that have a real, working default
+   when left empty. */
+.field-required { color: var(--danger); font-weight: 600; }
+.workshop-rev-hint { font-size: 12.5px; margin-top: 10px; }
+/* Distinct from the informational (draft/unlisted) use of this same element -- applied only for
+   the "never published to Nexus" case, and explicitly removed elsewhere so it never lingers. */
+.workshop-rev-hint--error { color: var(--danger); }
+
+/* Plan / progress table */
+.plan-table-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin-bottom: 20px;
+}
+/* Live progress view only -- the mod list scrolls within its own bounded region (scrollIntoView()
+   naturally confines itself to the nearest scrollable ancestor) so the header/phase/backup notice
+   above it stay fixed in place instead of the whole page jumping around as rows update. */
+.plan-table-wrap--scrollable { max-height: 78vh; overflow-y: auto; }
+/* The background must be on the TH itself, not just the (non-sticky) thead ancestor -- otherwise a
+   sticky, effectively-transparent header lets scrolling rows show through it, which looks exactly
+   like the header isn't sticking at all even though its position is technically correct. */
+.plan-table-wrap--scrollable thead th { position: sticky; top: 0; z-index: 1; background: var(--surface-2); }
+.plan-table { width: 100%; border-collapse: collapse; }
+.plan-table thead { background: var(--surface-2); }
+.plan-table th {
+  text-align: left;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.plan-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  vertical-align: top;
+}
+/* Mod name column never wraps -- if we wrap anything, wrap the Detail column instead (already
+   handled via .detail-cell's overflow-wrap). A long name just widens the table, scrollable within
+   its own wrapper above rather than breaking mid-name. CONFIRMED this breaks down for a real,
+   extreme case: a 178-character mod name (some Nexus authors concatenate several patch names into
+   one) forces this column to claim nearly the entire table width under table-layout:auto, starving
+   the Detail column down to ~75px and turning every other row's short one-line content into
+   200-300px of character-by-character wrapped text -- looked exactly like "huge blank gaps" between
+   rows. Fixed at the source (see .mod-name below): names over MOD_NAME_TRUNCATE_AT are now
+   shortened to a fixed short string BEFORE reaching the DOM, so nowrap never has an extreme value
+   to blow the column out on -- click a truncated name to see the full one. */
+.plan-table td:first-child, .plan-table th:first-child { white-space: nowrap; }
+/* Sortable column header (Workshop Report's own "Last updated on Nexus" -- the first sortable
+   header in this app, queue: workshop-report-sortable-updated). Muted -> brighter on hover, same
+   "interactive element brightens" signal this app already uses for other clickable-but-not-a-link
+   elements; the arrow itself (accent-colored, only rendered while a sort is active) is what marks
+   this as the current sort key. */
+.plan-table th.sortable { cursor: pointer; user-select: none; }
+.plan-table th.sortable:hover { color: var(--text); }
+.plan-table th.sortable .sort-arrow { color: var(--accent); margin-left: 2px; }
+.mod-name--truncated { cursor: pointer; border-bottom: 1px dotted var(--text-muted); }
+.mod-name--truncated:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.plan-table tbody tr:last-child td { border-bottom: none; }
+/* The off-site "Import"/message block's raw URL had no wrapping at all (unlike .detail-cell's own
+   file-list, which already has overflow-wrap) -- under table-layout:auto, one long unbroken URL
+   forces this column to blow out to fit it, starving the Detail column down to a hairline of
+   character-by-character wrapped text. Same failure mode already documented above for a long mod
+   name, just triggered by a URL here instead -- confirmed live via a real Google Drive link. */
+.extraction-cell { vertical-align: middle; overflow-wrap: anywhere; }
+/* align-items defaults to 'stretch' in a column flex container -- with no explicit value here, a
+   SINGLE button (Retry Download, on its own with nothing else in the cell) stretched to fill the
+   entire column width, while other rows with multiple/paired buttons didn't look that way,
+   confirmed live as an inconsistent, "off-center of each other" look across different mods'
+   Extraction cells. flex-start makes every button here content-sized and left-aligned, uniformly. */
+.extraction-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+/* AMBIGUOUS duplicate-candidate list -- a shared CSS grid (not one flex row per candidate) so every
+   "Delete" button lines up in the same column regardless of how long/wrapped each file path is.
+   Children are emitted in pairs (path, button) and auto-flow two-per-row into these columns. */
+.ambiguous-candidates { display: grid; grid-template-columns: 1fr auto; align-items: start; gap: 10px 12px; }
+.plan-table tbody tr:hover { background: var(--surface-2); }
+/* A selected (checked) row -- see the "Selectable results tables" note above (styles.css keeps the
+   zebra/hover rules here, right next to the base .plan-table rules, rather than duplicating the
+   whole row-state group down in the Archive Finder section). Comes after :hover in source order
+   (equal specificity) so a selected row's accent tint always wins even while hovered. */
+.plan-table tbody tr.selected { background: var(--accent-bg); }
+.plan-table tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+/* Acknowledged tier (DESIGN.md's "Color & severity system" -- the fifth, non-severity tier below
+   Warning) applied to a <tr>, same shape as .selected above but --neutral instead of --accent.
+   Missing Masters' own mm-row--soft is the card-based version of this same tier; this is the
+   table-row adaptation (Rebuild Missing Files' report is a <table>, not a card list) -- same
+   token pair, not a new color. Comes after .selected in source order so a row that's somehow both
+   (never happens today -- an ignored row's checkbox is always disabled -- but keep the cascade
+   sane) still shows its selection state on top. */
+.plan-table tbody tr.row--ignored { background: var(--neutral-bg); }
+.plan-table tbody tr.row--ignored td:first-child { box-shadow: inset 3px 0 0 var(--neutral); }
+.status-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.status-pill--rebuilt, .status-pill--rebuild, .status-pill--rebuild_queued { background: var(--success-bg); color: var(--success); }
+.status-pill--skip_ignored, .status-pill--skip_optional_not_installed { background: var(--neutral-bg); color: var(--neutral); }
+.status-pill--skip_no_archive, .status-pill--skip_open_fomod { background: var(--warning-bg); color: var(--warning); }
+.status-pill--failed_mismatch_not_touched, .status-pill--failed_extraction_not_touched,
+.status-pill--failed_extraction_no_prior_data { background: var(--danger-bg); color: var(--danger); }
+.status-pill--critical_manual_restore_needed { background: var(--danger); color: #fff; }
+.status-pill--pending { background: var(--surface-2); color: var(--text-muted); }
+/* Update Collection's Ignored/Disabled report -- same color convention as the Rebuild Collection
+   pills above (neutral for a plain informational status, warning for one that needs attention). */
+.status-pill--ignored { background: var(--neutral-bg); color: var(--neutral); }
+.status-pill--disabled { background: var(--warning-bg); color: var(--warning); }
+.detail-cell { color: var(--text-muted); font-size: 13px; overflow-wrap: anywhere; white-space: pre-line; }
+.detail-cell .file-list { margin: 4px 0 0; overflow-wrap: anywhere; }
+.detail-cell .detail-group { margin-top: 10px; }
+.detail-cell .file-list-extra.hidden { display: none; }
+.detail-cell .file-list-toggle { display: inline-block; margin-top: 2px; color: var(--accent); cursor: pointer; text-decoration: underline; }
+.detail-cell .file-list-toggle:hover { color: var(--accent-hover); }
+
+/* Resume box -- warning-colored (like .callout--warning) so a resumable incomplete run stands out
+   rather than blending in as an ordinary neutral option. */
+.resume-box {
+  background: var(--warning-bg);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-bottom: var(--stack-gap);
+}
+.checkbox { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.checkbox input { width: 16px; height: 16px; accent-color: var(--accent); }
+
+.view-actions { display: flex; align-items: center; gap: 14px; margin-top: 8px; margin-bottom: 20px; }
+
+/* Keeps Pause anchored on the same row as the phase text regardless of whether the backup/download
+   notice rows below it are shown -- those rows appearing/disappearing must not shift the button. */
+.progress-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 4px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.progress-header-row .phase-indicator { margin-top: 0; }
+
+/* Phase indicator */
+.phase-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 6, 9, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 26px 28px;
+  max-width: 440px;
+  box-shadow: var(--shadow);
+}
+.modal h2 { margin-top: 0; font-size: 18px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+/* .select's own flex:1 only applies inside a flex row -- a bare <select> dropped straight into a
+   modal (e.g. the Restore Backup picker) needs its own full-width rule instead. */
+.modal .select { display: block; width: 100%; }
+.modal--wide { max-width: 640px; }
+/* Severity variants for a blocking modal -- same color tokens/icon as the callout severities above
+   (see TECHNICAL.md's "Callout severity conventions"), just applied to a modal's border/title
+   instead of a full-width callout box. Use warning for a gate the user can resolve and retry
+   ("Vortex is running"), critical for a real failure ("Can't reach the server"). */
+.modal--warning { border-color: var(--warning); }
+.modal--warning h2 { color: var(--warning); }
+.modal--critical { border-color: var(--danger); }
+.modal--critical h2 { color: var(--danger); }
+.error-modal-text { white-space: pre-line; line-height: 1.55; font-size: 14px; max-height: 55vh; overflow-y: auto; }
+
+/* Path rows */
+.path-rows { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 24px; }
+.path-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+}
+.path-row__label { color: var(--text-muted); font-size: 13px; width: 100px; flex-shrink: 0; }
+.path-row__value { flex: 1; overflow-wrap: anywhere; }
+/* Flags a real misconfiguration (e.g. backups turned on but no folder configured) distinctly from
+   the plain default-state text .path-row__value normally shows. */
+.path-row__value--warning { color: var(--warning); }
+/* Backup/Downloads notices on the Rebuilding page are two sibling .path-row divs, not wrapped in a
+   .path-rows group, so they need their own gap -- otherwise they render flush against each other
+   when both are visible at once. */
+#downloadNotice { margin-top: 10px; }
+
+/* Missing Masters (Utilities sub-tab) -- master-first row cards, UX-UI-DEPENDENCY-DESIGNER.md's
+   "Badge & Highlight Table" pattern (see reference_ux_dependency_designer_skill memory / TECHNICAL.md
+   for the full design writeup). Color-coded by status via a left accent border + a subtle tinted
+   background, not a plain grey card -- confirmed explicitly 2026-07-27 that an all-muted-grey list
+   reads as visually flat over a long scan. */
+/* Refresh button lives on the SAME line as the "N problem master(s)..." meta text (confirmed
+   2026-07-27: a separate .view-actions row above it was unnecessary vertical space) -- meta on the
+   left, button pinned right via space-between/margin-left:auto rather than a fixed width. */
+.mm-header-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 8px 0 20px; }
+.mm-header-row p { margin: 0; }
+/* Scanning... indicator sits on this SAME line, right before Refresh, instead of its own block
+   below -- confirmed 2026-07-27: a separate .loading-row inserted/removed a whole line every time
+   it toggled visible/hidden (every scan, every 5s silent poll check), making the page visibly
+   bounce. Grouped with the button in its own flex wrapper so a 3rd flex item doesn't get spread out
+   by .mm-header-row's own space-between -- it stays pinned right next to Refresh instead. */
+.mm-header-row__right { display: flex; align-items: center; gap: 12px; }
+.mm-inline-loading { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 13px; }
+/* .mm-header-row used as a .settings-group card's own header row (title + action button,
+   space-between) needs its bare <h2> sized to match every other card title in the app -- .mm-
+   header-row itself is also used bare (Missing Masters' own meta-text + Refresh row), so this is
+   scoped to the .settings-group context rather than changing .mm-header-row h2 everywhere
+   (2026-07-28, Archive Finder's two-card layout). */
+.settings-group .mm-header-row h2 { font-size: 17px; margin: 0; }
+/* Archive Finder's own content width, scoped to this one sub-tab only (its wrapper div already
+   exists as the scoping hook) -- same "cap the working measure, don't touch the shared wide
+   .app-main" reasoning as Settings' own #settingsPanes cap above; the shared Utilities <main> is
+   used by Missing Masters/Vortex Scrub too, so this can't live on .app-main itself (2026-07-28). */
+#utilities-sub-area-archivefinder { max-width: min(1080px, 96vw); margin: 0 auto; }
+/* Converged onto the standard --stack-gap (2026-07-28's app-wide spacing normalization) -- these
+   two cards previously used a deliberately tighter 16px on the theory that they're "one continuous
+   search setup flow, not separate page sections," but DESIGN.md's spacing rule calls for the SAME
+   consistent gap between every stacked card everywhere, no per-page exceptions. */
+#afIndexCard, #afSearchCard { margin: 0 0 var(--stack-gap); }
+/* Breathing room between the mode radios and the search input row below them -- they were touching
+   directly with zero gap (.field-group has no margin-bottom of its own, and adding one there would
+   ripple into the other 30+ .field-group uses across Settings/modals). Scoped to this one card. */
+#afSearchCard .field-group { margin-bottom: 12px; }
+
+/* Selectable results tables -- the standard for any long, paginated, checkbox-selectable list (see
+   DESIGN.md's "Selectable results tables" section). First used by Archive Finder's search results
+   (2026-07-28); reuse this for any future selectable .plan-table rather than inventing a second
+   selection-bar/row-state pattern. */
+.af-selection-bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin: 8px 0 4px; }
+.af-selection-bar__left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+/* The "Select all M results?" offer -- Gmail/GitHub pattern: the header checkbox only ever selects
+   the current PAGE; when the full result set is bigger than one page, this banner offers to extend
+   that to everything. A plain inline button styled as a link (not a full .btn) since it's phrased
+   as part of the sentence, not a separate action button. */
+.af-inline-link-btn {
+  background: none; border: none; padding: 0; font: inherit; color: var(--accent);
+  text-decoration: underline; cursor: pointer;
+}
+.af-inline-link-btn:hover { color: var(--accent-hover); }
+.af-show-selected-only { margin: 10px 0 4px; font-size: 13.5px; }
+
+.col-check { width: 34px; }
+.col-ext { width: 70px; color: var(--text-muted); }
+/* Row states never go bright/white (DESIGN.md is explicit about this): hover is --surface-2
+   (already existed below), a selected row is a faint --accent-bg wash with a 3px inset accent edge
+   on the first cell only. A subtle zebra sits under both so a long list stays trackable row-to-row
+   -- source order matters here: zebra first, then the existing :hover rule, then .selected LAST, so
+   .selected always wins over both (equal specificity, later wins). */
+.plan-table tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.022); }
+
+/* Archive name cell: readable name + a hover-revealed copy-full-path button. The raw filename
+   (with the Nexus id/version/timestamp tail, when present) is only the title tooltip now, not the
+   visible text -- see afStripArchiveSuffix() in archive-finder-app.js. */
+.af-arch-cell { display: flex; align-items: center; gap: 8px; }
+.af-arch-name { color: var(--text); }
+.af-copy-btn {
+  opacity: 0; flex: none; background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-size: 13px; padding: 3px 5px; border-radius: 6px; line-height: 1;
+  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+.plan-table tbody tr:hover .af-copy-btn { opacity: 0.75; }
+.af-copy-btn:hover { opacity: 1; color: var(--accent); background: var(--bg); }
+.af-copy-btn.done { opacity: 1; color: var(--success); }
+/* "N matching files" group-row expander -- a quiet caret + accent text, level with the plain rows,
+   not a heavy button (DESIGN.md is explicit this should NOT look like this app's other buttons).
+   Its own class rather than reusing .sync-list-toggle (which stays underlined elsewhere -- Missing
+   Masters' own "+N more"/"Show less" -- changing that globally would be an uninvited visual change
+   there for a look this feature never asked for). */
+.af-expander {
+  background: none; border: none; padding: 0; font: inherit;
+  display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-weight: 500; cursor: pointer;
+}
+.af-expander:hover { color: var(--accent-hover); }
+.mm-row {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.mm-row--critical { border-left-color: var(--danger); background: var(--danger-bg); }
+.mm-row--warning { border-left-color: var(--warning); background: var(--warning-bg); }
+.mm-row--success { border-left-color: var(--success); background: var(--success-bg); }
+/* ESLifier-recognized swap -- a calmer, muted tier that sits BELOW mm-row--warning (an
+   acknowledged, intentional swap, not a real problem to flag), reusing --neutral/--neutral-bg (the
+   same "no severity implied" grey already used for badge--neutral elsewhere) rather than inventing
+   a new color. See missing-masters-app.js's mmDisplayStatus/MM_STATUS for how a row lands here. */
+.mm-row--soft { border-left-color: var(--neutral); background: var(--neutral-bg); }
+/* Grid, not flex -- gives the mod-name its own genuine column (confirmed 2026-07-27: a raw plugin
+   filename alone doesn't say which mod it's from) instead of just appending it as more inline text.
+   [badge] [filename] [mod name] [actions] -- the two middle columns are both `fr` so they expand to
+   fill all remaining width, which is what naturally pins the actions column flush right without
+   needing its own margin-left:auto.
+   Badge and actions columns are FIXED widths, not `auto` -- each .mm-row__header is its own
+   independent grid, so with `auto` the badge/actions columns were sized per-row from that row's own
+   content (a "Missing" row's badge text differs in length from "Disabled", and a Missing row has an
+   extra "Create Dummy Master" button the Disabled rows don't) -- that shifted where the fr columns
+   landed row to row, so the mod-name column visibly didn't line up between a Missing row and a
+   Disabled row (reported 2026-07-27). Fixed widths make every row's gutters identical so the two fr
+   columns always start/end at the same x regardless of that row's own badge label or action count. */
+.mm-row__header { display: grid; grid-template-columns: 118px minmax(160px, 1.2fr) minmax(140px, 1fr) 480px; align-items: center; gap: 10px; }
+/* The "Manual Action Needed" callout sits directly under the header with no gap otherwise -- .callout
+   only has its own margin-BELOW (for whatever comes after it), nothing above. */
+.mm-row__header + .callout { margin-top: 14px; }
+.mm-row__header > .badge { justify-self: start; }
+.mm-master-name { font-size: 15px; color: var(--text); overflow-wrap: anywhere; }
+.mm-row__actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.mm-row__neededby-label { margin-top: 10px; font-weight: 600; font-size: 13px; color: var(--text); }
+/* Same 4-column grid as .mm-row__header (badge/filename/mod-name/actions), not just a matching
+   2-column shape -- confirmed real 2026-07-27: two SEPARATE grids using the same fr ratios still
+   land their columns at DIFFERENT absolute pixel positions once their own total reserved-column
+   widths differ (header reserves 118px+480px for badge/actions; this row reserved nothing), so
+   filename/mod-name visibly zigzagged between the header line and its own "Needed by" rows instead
+   of lining up as one consistent table. Using the IDENTICAL template and leaving columns 1/4 empty
+   (see mmRenderNeededByRow's grid-column assignments) makes every column land at the exact same x
+   position down the whole card -- the empty first column reads as "this row has no badge of its
+   own," which is the correct visual (only the master row gets one), not a bug. */
+.mm-neededby-row { display: grid; grid-template-columns: 118px minmax(160px, 1.2fr) minmax(140px, 1fr) 480px; gap: 10px; align-items: baseline; }
+.mm-neededby-row > *:first-child { grid-column: 2; }
+.mm-neededby-row > *:last-child { grid-column: 3; }
+/* Master row's own mod name is bold (a <strong>, matches its filename right next to it) and full
+   text color -- it's the primary thing on this row. The needed-by list's mod names (a plain <span>)
+   are normal weight and a step quieter, since they're supplementary context for each dependent, not
+   the main point of that row -- but still not flat grey-on-grey; italic carries the "secondary"
+   signal instead of relying on color alone. */
+.mm-row__header .mm-modname { color: var(--text); overflow-wrap: anywhere; }
+.mm-neededby-row .mm-modname { font-style: italic; color: var(--text-muted); font-size: 13px; overflow-wrap: anywhere; }
+/* The count numbers in "N problem master(s) are affecting M plugin(s) total." -- accent-colored,
+   not the default muted-grey meta text, so the two numbers that actually matter stand out at a
+   glance instead of blending into the sentence around them. */
+.accent-count { color: var(--accent); font-weight: 700; }
+
+/* Archive Finder -- per-item extract/failed-action result lines, and the extension tag pills'
+   own remove button (a plain "x" inside an existing .badge, not a whole new pill style). */
+.ok { color: var(--success); margin: 4px 0; font-size: 13.5px; }
+.fail { color: var(--danger); margin: 4px 0; font-size: 13.5px; }
+.af-tag-remove {
+  background: none; border: none; color: inherit; cursor: pointer; font-size: 14px;
+  line-height: 1; padding: 0 0 0 4px; opacity: 0.7;
+}
+.af-tag-remove:hover { opacity: 1; }
+
+/* Merge Plugins (The Forge) -- see TECHNICAL.md's "Merge engine" section and DESIGN.md's own
+   mockup-derived stepper/cart shapes. Reuses existing components wherever one already fits
+   (.settings-group cards, .plan-table/.plan-table-wrap + .col-check for both result tables,
+   .af-selection-bar/.af-inline-link-btn for the select-and-act bar + banner, .status-pill for both
+   the file-type badge and the review status pill, .summary-badges for the stat grid) -- only new,
+   genuinely new shapes (the stepper, the running cart bar, the collection-picker rows, the
+   step-nav row) get their own small classes below, none of them inventing a new color. */
+.merge-stepper { display: flex; gap: 8px; margin: 0 0 var(--stack-gap); flex-wrap: wrap; }
+.merge-step {
+  display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted);
+  padding: 7px 12px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface);
+}
+.merge-step b {
+  width: 20px; height: 20px; border-radius: 50%; background: var(--surface-2); color: var(--text-muted);
+  display: grid; place-items: center; font-size: 12px; font-weight: 700;
+}
+.merge-step.active { border-color: var(--accent); color: var(--accent); }
+.merge-step.active b { background: var(--accent); color: #0b1220; }
+.merge-step.done { color: var(--success); }
+.merge-step.done b { background: var(--success); color: #0b1220; }
+/* A step with genuinely nothing to do this run (e.g. Apply Disables when the backup captured zero
+   disabled mods) -- greyed out further than an ordinary not-yet-visited pill, same opacity dial
+   already used for a muted/disabled control elsewhere (.select:disabled). Still fully clickable --
+   this is a visual hint, not a lockout, per DESIGN.md/the task's own "still clickable" requirement. */
+.merge-step.muted { opacity: 0.55; }
+
+/* Update Collection's own stepper is fully navigable (jump to any step, unlike The Forge's mostly-
+   linear one -- see DESIGN.md's "Navigable vs. linear") -- scoped to this modifier rather than the
+   base .merge-step so The Forge's own pills (not yet wired to jump) don't silently look clickable. */
+.merge-stepper--nav .merge-step { cursor: pointer; }
+.merge-stepper--nav .merge-step:hover { border-color: var(--accent-hover); }
+
+/* Update Collection: "Show Ignored & Disabled" shares the stepper's own row instead of sitting on
+   its own line above it (2026-07-28 -- reclaims a full row of vertical space). Pills stay left
+   (.merge-stepper keeps its own internal flex-wrap for the pills themselves); the button pushes to
+   the right edge via margin-left: auto. On a narrow window the row wraps as a whole -- the button
+   drops to its own line below the pills (still right-aligned there, via the same auto margin)
+   rather than crowding or overlapping them. */
+/* margin-top added 2026-07-29 -- the header-tighten pass (moving "Show Ignored & Disabled" onto
+   this row) removed the row that used to separate the Profile/Collection pickers from the stepper,
+   leaving them cramped together with no breathing room; .collection-picker has no bottom margin of
+   its own, so this row's own top margin is the only thing establishing that gap now. */
+.sync-stepper-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin: var(--stack-gap) 0; }
+.sync-stepper-row .merge-stepper { margin: 0; }
+.sync-stepper-row #syncListModsBtn { margin-left: auto; }
+
+/* A bare stepper with no sibling row/button sharing its line (unlike sync-stepper-row's stepper +
+   button layout above) still needs its own top margin from whatever sits directly above it --
+   .collection-picker (like most other form-row containers) has no bottom margin of its own.
+   Confirmed real 2026-08-16: Rules Generator's own Relationship Check stepper (#rgStepper) sat
+   cramped directly under its collection picker, the exact same root cause sync-stepper-row's own
+   margin-top already fixed for Update Collection's stepper -- this is the same fix as a small,
+   reusable modifier for any OTHER bare stepper that doesn't need a shared button row. */
+.merge-stepper--spaced { margin-top: var(--stack-gap); }
+
+.merge-navrow { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; }
+
+/* Collection-picker rows (Step 1) -- a small, rarely-more-than-a-handful list, so a full
+   .plan-table is unwarranted; a clickable checkbox row that highlights when checked, same visual
+   language (accent-bg wash) as a selected table row elsewhere in this app. */
+.merge-chk-row {
+  display: flex; align-items: center; gap: 12px; padding: 11px 12px; border: 1px solid var(--border);
+  border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: background 0.12s ease, border-color 0.12s ease;
+}
+.merge-chk-row:hover { border-color: var(--accent); }
+.merge-chk-row.on { background: var(--accent-bg); border-color: var(--accent); }
+.merge-chk-row input { width: 16px; height: 16px; accent-color: var(--accent); flex-shrink: 0; }
+.merge-chk-row .merge-chk-row__name { font-weight: 600; }
+.merge-chk-row .merge-chk-row__meta { color: var(--text-muted); font-size: 13px; margin-left: auto; }
+
+/* The running "chosen for merge" cart bar -- always visible on Step 2 (Find & select plugins),
+   accumulating across every search. Accent-tinted like a callout--info, but its own class since it
+   also needs the icon+bold-count+spacer+button layout the plain .callout shape doesn't have. */
+/* Sticky (2026-08-17, merge-plugins-sticky-step-nav) -- director's own real confusion: Step 1's
+   Back/Next buttons only ever existed at the very bottom of the page, past a results table that can
+   run 500+ rows ("Show: All"), and were mistaken for missing entirely. This bar already sat above
+   that table in the initial viewport, so pinning it (rather than the plain-text count it started as)
+   is the fix -- same top: 65px/z-index: 10 treatment as .rmf-cartbar below (this WAS the bar that
+   pattern got copied FROM for Rebuild Missing Files, but never made sticky itself at the time). */
+.merge-cart-bar {
+  position: sticky; top: 65px; z-index: 10;
+  display: flex; align-items: center; gap: 10px; background: var(--accent-bg); border: 1px solid var(--accent);
+  border-radius: var(--radius); padding: 12px 16px; margin: 0 0 var(--stack-gap); font-size: 14px; flex-wrap: wrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+.merge-cart-bar strong { color: var(--accent); }
+.merge-cart-bar .spacer { flex: 1; }
+.merge-cart-bar__navrow { display: flex; gap: 8px; align-items: center; }
+
+/* Rebuild Missing Files' own cart bar (Harmonization Phase 3b, back-ported from .merge-cart-bar
+   above -- design/vortex-rebuild-missing-files-mockup.html's v4 addendum, approved 2026-08-15).
+   Same accent-tinted icon+bold-count+spacer+button language, but STICKY (Merge's own version never
+   needed this -- its cart persists across many separate searches on a mostly-one-table page; this
+   tool's own picker is a single long scroll of many collection cards across 3 grouped sections,
+   where the plain-text count it replaces sat at the very bottom, easy to lose track of while
+   scrolling). top: 65px sits it right below the app's own sticky .app-header (confirmed live at
+   ~64px tall); z-index below the header's 50 so the header always wins if they ever overlap during
+   the scroll transition. */
+.rmf-cartbar {
+  position: sticky; top: 65px; z-index: 10;
+  display: flex; align-items: center; gap: 10px; background: var(--accent-bg); border: 1px solid var(--accent);
+  border-radius: var(--radius); padding: 12px 16px; margin: 16px 0; font-size: 14px; flex-wrap: wrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+.rmf-cartbar b { color: var(--accent); }
+.rmf-cartbar__spacer { flex: 1; }
+.rmf-cartbar__toggle {
+  background: none; border: none; color: var(--accent); font-size: 12.5px; cursor: pointer;
+  text-decoration: underline; padding: 0;
+}
+.rmf-cartbar__taglist {
+  display: none; flex-basis: 100%; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);
+}
+.rmf-cartbar__taglist.open { display: block; }
+.rmf-cartbar__tag {
+  display: inline-flex; align-items: center; gap: 6px; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 20px; padding: 3px 6px 3px 12px; font-size: 12.5px; margin: 3px 4px 3px 0;
+}
+.rmf-cartbar__tag button {
+  background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px;
+  width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+}
+.rmf-cartbar__tag button:hover { background: var(--danger-bg); color: var(--danger); }
+
+/* Get Started book (Skyrim-only) -- approved mockup design/vortex-visual-flourishes-mockup.html.
+   Table of contents uses the app's own normal tokens (it's still "app chrome"); the chapter page
+   itself deliberately does NOT -- see .book-page below. */
+.book-shell { max-width: min(900px, 96vw); }
+.book-toc {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 8px;
+}
+.book-toc__link {
+  display: block; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text); text-decoration: none; cursor: pointer;
+  font-family: var(--font-display, inherit); font-size: 14.5px;
+}
+.book-toc__link:hover { border-color: var(--accent); }
+.book-toc__note { margin: 18px 2px 0; font-size: 13px; color: var(--text-muted); }
+.book-toc__note a { color: var(--accent); text-decoration: none; }
+.book-toc__note a:hover { text-decoration: underline; }
+.book-back-link {
+  background: none; border: none; color: var(--accent); font-size: 13px; cursor: pointer;
+  padding: 0; margin-bottom: 14px; text-decoration: underline;
+}
+
+/* The chapter page itself -- aged parchment, not the app's own dark surface (director's own call,
+   2026-08-15 mockup review: "make the background of the book, we make it look like it's an old
+   book?"). Deliberate exception to "match the app chrome" everywhere else -- this is meant to read
+   as a found object you're reading, not another app panel, so it keeps its own warm/light palette
+   regardless of whether the app itself is in dark or light Appearance mode. */
+.book-page { border-radius: var(--radius); overflow: hidden; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px #4a3826; }
+.book-page__banner { width: 100%; display: block; aspect-ratio: 2816 / 1536; object-fit: cover; background: linear-gradient(160deg, #1a1520, #2b1f38); }
+.book-page__body {
+  padding: 32px 38px; position: relative; color: #3a2e1f;
+  background:
+    radial-gradient(ellipse at 20% 10%, rgba(255, 250, 235, 0.5), transparent 55%),
+    radial-gradient(ellipse at 85% 90%, rgba(120, 90, 50, 0.12), transparent 50%),
+    repeating-linear-gradient(0deg, rgba(120, 90, 50, 0.025) 0px, rgba(120, 90, 50, 0.025) 1px, transparent 1px, transparent 3px),
+    linear-gradient(155deg, #e8dcc0, #ddcda6 45%, #e3d5b3);
+}
+.book-page__body::after { content: ''; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 60px rgba(74, 56, 38, 0.35); }
+.book-page__eyebrow { font-family: var(--font-display, inherit); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #8a5a2e; margin: 0 0 6px; position: relative; }
+.book-page__title { font-family: var(--font-display, inherit); font-weight: 700; font-size: 28px; margin: 0 0 4px; color: #2e2313; position: relative; }
+.book-page__func { font-size: 13px; color: #6b5a3f; margin: 0 0 20px; font-style: italic; position: relative; }
+/* Lore reads in the theme's own display font -- the "storytelling" half of the page. The
+   what-it-does box right below stays the plain system font on purpose (see .book-page__whatitdoes)
+   -- same in-world/functional split DESIGN.md's own "name for flavor, subtitle for function" rule
+   already draws everywhere else in this app. */
+.book-page__lore { font-family: var(--font-display, inherit); font-size: 15px; line-height: 1.85; margin: 0 0 16px; color: #3a2e1f; position: relative; }
+.book-page__whatitdoes {
+  background: rgba(255, 252, 240, 0.55); border-left: 3px solid #8a5a2e; border-radius: 0 8px 8px 0;
+  padding: 14px 18px; font-size: 13.5px; line-height: 1.7; margin: 0; color: #3a2e1f; position: relative;
+}
+.book-page__whatitdoes b { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #8a5a2e; margin-bottom: 6px; }
+.book-nav {
+  display: flex; justify-content: space-between; align-items: center; padding: 14px 32px;
+  background: #2e2313; font-size: 12.5px; color: #a89878;
+}
+.book-nav__link { background: none; border: none; color: #d4b483; font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 0; }
+.book-nav__link:disabled { visibility: hidden; }
+
+/* Real color picker, Settings > General > Style (Theming: color picker, 2026-08-15) -- native
+   <input type="color"> (no custom widget needed, every modern browser's own OS-level color picker
+   is already a fine UI for this), plus a hex readout and a "Reset to theme default" link matching
+   the approved mockup's own shape (design/vortex-color-picker-mockup.html). */
+.color-picker-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.color-swatch-input {
+  -webkit-appearance: none; appearance: none; width: 34px; height: 34px; border-radius: 8px;
+  border: 1px solid var(--border); background: none; cursor: pointer; padding: 0;
+}
+.color-swatch-input::-webkit-color-swatch-wrapper { padding: 3px; }
+.color-swatch-input::-webkit-color-swatch { border-radius: 5px; border: none; }
+.color-hex-val { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 12.5px; min-width: 66px; }
+.reset-link {
+  background: none; border: none; color: var(--accent); font-size: 12.5px; cursor: pointer;
+  text-decoration: underline; padding: 0; margin-left: auto;
+}
+.reset-link:hover { color: var(--accent-hover); }
+
+/* Done step's plugins/mods/collections/records tally -- same grid-of-numbers shape as the mockup's
+   own .stat-grid, built from tokens already used elsewhere (.summary-badges' own surrounding
+   spacing) rather than reusing .summary-badges itself (that's a row of pill filters, a different
+   shape from a stat tally). */
+.merge-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 8px 0 var(--stack-gap); }
+.merge-stat { background: var(--surface-2); border-radius: 8px; padding: 14px; }
+.merge-stat .merge-stat__n { font-size: 24px; font-weight: 600; }
+.merge-stat .merge-stat__l { font-size: 12.5px; color: var(--text-muted); }
+/* Done step's "View merge log" disclosure (2026-08-17) -- plain-language summary of what the merge
+   did, written next to the output file itself; expands inline rather than launching a separate
+   window (this app's own "mimic Vortex, don't make the user go back to it" product direction). */
+#mergeDoneLogDetails { margin-top: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+#mergeDoneLogDetails summary { list-style: none; cursor: pointer; padding: 10px 14px; font-size: 14px; color: var(--text-muted); }
+#mergeDoneLogDetails summary::-webkit-details-marker { display: none; }
+#mergeDoneLogDetails summary::before { content: '▸ '; }
+#mergeDoneLogDetails[open] summary::before { content: '▾ '; }
+.merge-log-pre {
+  margin: 0 14px 14px; padding: 12px; background: var(--surface-2); border-radius: 8px;
+  font-family: var(--font-mono, monospace); font-size: 12.5px; line-height: 1.5;
+  white-space: pre-wrap; overflow-x: auto; max-height: 360px; overflow-y: auto;
+}
+/* Critical-severity modifier -- Rebuild Missing Files' own "Missing files total" tile, the one
+   number in a merge-stat-grid that represents a real problem rather than a plain count. */
+.merge-stat__n--critical { color: var(--danger); }
+
+/* Rebuild Missing Files -- Step 1's collection picker (design/vortex-rebuild-missing-files-mockup.html,
+   Approved 2026-08-05). A genuinely new shape: a MULTI-select, GROUPED grid of cards, unlike
+   .merge-chk-row's plain single-pick list -- so it gets its own small classes rather than reusing
+   that one, same "only new, genuinely new shapes get their own class" rule the Merge Plugins block
+   above already follows. Built entirely from existing tokens, no new colors. */
+.stepnote {
+  display: inline-block; font-size: 11.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--accent); background: var(--accent-bg); padding: 4px 10px; border-radius: 12px; margin: 0 0 18px;
+}
+.group-head { display: flex; align-items: center; gap: 10px; margin: 22px 0 10px; }
+.group-head h2 { font-size: 14px; margin: 0; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.group-head .n { font-size: 12px; color: var(--text-muted); }
+.picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.coll-card {
+  display: flex; align-items: flex-start; gap: 11px; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px 14px; background: var(--surface); cursor: pointer;
+}
+.coll-card:hover { border-color: var(--accent-hover); }
+.coll-card.sel { border-color: var(--accent); background: var(--accent-bg); }
+.coll-card input { width: 16px; height: 16px; accent-color: var(--accent); margin-top: 2px; flex: none; }
+.coll-card .meta { min-width: 0; }
+.coll-card .name { color: var(--text); font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.coll-card .sub { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+/* Sits inside the card's own <label> -- its click handler calls preventDefault/stopPropagation so
+   clicking it doesn't also toggle the card's checkbox (see rebuild-missing-app.js). */
+.rmf-refresh-btn { margin-top: 8px; }
+/* A "not yet downloaded" row (queue: rebuild-missing-vortex-db-read) -- a plain <div>, not a
+   <label>+checkbox like a normal scannable .coll-card, since there's nothing to check yet (see
+   rebuild-missing-app.js's own rmfRenderUnfetchedGroup). cursor:default overrides the base
+   .coll-card's own cursor:pointer -- only the Fetch button inside is actually clickable. */
+.coll-card--unfetched { cursor: default; border-style: dashed; }
+
+/* A mod row whose archive isn't on disk -- warning-colored (not danger; the row itself isn't a
+   failure, it's a "here's what to do next" note), matching the small-note treatment .mismatch-note
+   uses for a different (danger) case. */
+.archive-missing-note { color: var(--warning); font-size: 11.5px; margin-top: 3px; }
+/* Acknowledged tier's own small-note treatment -- same shape as .archive-missing-note above, --neutral
+   instead of --warning (this isn't a severity, so it doesn't get a warning color). */
+.ignored-note { color: var(--neutral); font-size: 11.5px; margin-top: 3px; }
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+/* Workshop Report's own Actions column has a genuinely variable button count row to row (0, 1, or
+   2 -- "not downloaded yet" text, a lone View on Nexus when there's no fetched folder to open, or
+   both) -- right-packing (the default above) means the first button lands at a different x per row,
+   reading as misaligned. Left-align just here instead of flipping the shared default everywhere
+   else, where every row has the same button count and right-packed already lines up fine. */
+.row-actions--left { justify-content: flex-start; }
+
+@media (max-width: 640px) {
+  .app-main { padding: 20px 14px 60px; }
+  .plan-table th:nth-child(3), .plan-table td:nth-child(3) { display: none; }
+  .settings-row-2 { grid-template-columns: 1fr; }
+}
+
+/* ---- Cycle Helper -- scoped .ch- classes, everything else (.tool-hero/.tool-eyebrow/.callout/
+   .modal/.summary-badges/.badge/.merge-stepper/.chip-list-details) reused as-is from elsewhere in
+   this app rather than duplicated. See design/vortex-cycle-helper-mockup.html for the approved
+   layout this mirrors -- these rules translate its mockup-only CSS onto this app's own real design
+   tokens (:root's --accent/--success/--warning/--danger/--neutral/--border/--surface-2 etc), not a
+   fresh palette. */
+.ch-snap-status {
+  display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: var(--radius);
+  border: 1px solid var(--border); background: var(--surface-2); font-size: 13.5px; margin-bottom: 16px;
+}
+.ch-snap-status .ch-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex: none; }
+.ch-snap-status.taken { border-color: var(--success); background: var(--success-bg); }
+.ch-snap-status.taken .ch-dot { background: var(--success); }
+.ch-snap-status .ch-spacer { flex: 1; }
+.ch-snap-status .ch-when { color: var(--text-muted); font-size: 12px; }
+
+.ch-cyclepath {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0; margin-bottom: 18px; padding: 16px;
+  border: 1px dashed var(--border); border-radius: var(--radius); background: rgba(255, 255, 255, 0.015);
+}
+.ch-cyclepath .ch-node {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px;
+  font-size: 12.5px; font-weight: 600; color: var(--text); white-space: nowrap;
+}
+.ch-cyclepath .ch-node.suspect { border-color: var(--danger); background: var(--danger-bg); color: var(--danger); }
+.ch-cyclepath .ch-arrow { color: var(--text-muted); font-size: 16px; margin: 0 8px; flex: none; }
+.ch-cyclepath .ch-arrow.bad { color: var(--danger); font-weight: 700; }
+.ch-cyclepath .ch-wrap-arrow { width: 100%; display: flex; justify-content: center; color: var(--danger); font-size: 12px; margin-top: 4px; font-weight: 600; }
+
+.ch-candidate { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; background: var(--surface-2); }
+.ch-candidate:last-child { margin-bottom: 0; }
+.ch-candidate.top { border-color: var(--accent); }
+.ch-candidate__head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.ch-candidate__rule { font-weight: 600; font-size: 13.5px; }
+.ch-candidate__rule .ch-arrow { color: var(--text-muted); margin: 0 6px; }
+.ch-rank-badge { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 12px; background: var(--accent); color: #0b1220; flex: none; }
+.ch-rank-badge--muted { background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border); }
+.ch-signals { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.ch-signal { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px; }
+.ch-signal--snapshot { background: var(--success-bg); color: var(--success); }
+.ch-signal--removal { background: var(--accent-bg); color: var(--accent); }
+.ch-signal--shortest { background: var(--neutral-bg); color: var(--neutral); }
+.ch-candidate__actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+.ch-fix-options { display: flex; flex-direction: column; gap: 10px; margin: 14px 0 18px; }
+.ch-fix-option { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; cursor: pointer; }
+.ch-fix-option:hover { border-color: var(--accent-hover); }
+.ch-fix-option.sel { border-color: var(--accent); background: var(--accent-bg); }
+.ch-fix-option input { margin-top: 3px; accent-color: var(--accent); }
+.ch-fix-option .ch-lbl { font-weight: 600; font-size: 13.5px; }
+.ch-fix-option .ch-desc { color: var(--text-muted); font-size: 12.5px; margin-top: 2px; }
+
+.ch-result-hero { text-align: center; padding: 36px 20px; }
+.ch-result-hero .ch-icon { font-size: 40px; margin-bottom: 10px; }
+.ch-result-hero h2 { font-size: 19px; margin: 0 0 6px; }
+.ch-result-hero p { color: var(--text-muted); font-size: 13.5px; max-width: 440px; margin: 0 auto; }
+
+.numbered-list { margin: 0; padding-left: 20px; font-size: 13.5px; color: var(--text); }
+.numbered-list li { margin-bottom: 8px; line-height: 1.6; }
+.numbered-list li:last-child { margin-bottom: 0; }
+
+.ch-full-tangle {
+  font-family: Consolas, monospace; font-size: 12px; color: var(--text-muted); background: var(--surface-2);
+  border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; line-height: 1.7; word-break: break-word;
+}
+
+/* ---- Change History + Revert (2026-08-18) -- see docs/plans/2026-08-17-cycle-helper-change-
+   history-revert-plan.md and design/vortex-cycle-helper-mockup.html's screens 6/7. ---- */
+.ch-eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 8px; }
+.ch-eyebrow a { color: var(--accent); text-decoration: none; }
+.ch-session-fix-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0;
+  border-bottom: 1px solid var(--border); font-size: 13.5px;
+}
+.ch-session-fix-row:last-of-type { border-bottom: none; }
+.ch-revert-danger { border-color: var(--danger); color: var(--danger); }
+.ch-revert-danger:hover { border-color: var(--danger); background: var(--danger-bg); }
+
+.ch-history-card { padding: 14px 16px; cursor: default; }
+.ch-history-card__head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.ch-history-card__head h2 { margin: 0; font-size: 15px; }
+
+.ch-danger-text { color: var(--danger); }
+
+/* ---- Update Collection v2 (2026-08-18) -- Phase 1 (read-only Check for Updates + Review, no real
+   apply/deploy yet). Mirrors design/vortex-update-collection-v2-mockup.html closely -- reuses this
+   file's own existing .plan-table/.status-pill/.btn/.callout tokens directly for the Update Review
+   table (screen2), same tokens the mockup itself was designed against; only genuinely new component
+   shapes (the collection grid, the Removed Mods decision rows, the instructions modal) get their own
+   ucv2- prefixed classes here, matching this project's own established per-feature namespacing
+   (ch- for Cycle Helper, rg- for Rules Generator). ---- */
+.ucv2-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; margin-bottom: 8px; }
+.ucv2-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; display: flex; flex-direction: column; }
+/* Title/author/mod-count now overlay the cover image itself, matching Vortex's own real Added
+   Collections cards (director's own screenshot, 2026-08-18) -- text sits over a bottom scrim
+   gradient instead of a separate card body below the image. Aspect-ratio taller than a plain
+   16:9 crop (real Nexus tile images are 960x540) to leave the overlay text real breathing room
+   without crowding the art itself. */
+.ucv2-card__image { aspect-ratio: 3/4; background: linear-gradient(135deg, var(--surface-2), var(--bg)); position: relative; display: flex; align-items: flex-start; justify-content: space-between; padding: 10px; }
+.ucv2-card__image img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+.ucv2-card__scrim { position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(to top, rgba(8,10,14,.95) 0%, rgba(8,10,14,.82) 28%, rgba(8,10,14,.32) 58%, rgba(8,10,14,0) 78%); }
+.ucv2-card__badge { position: relative; z-index: 2; font-size: 10.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; padding: 3px 8px; border-radius: 10px; background: var(--neutral); color: #0b1220; }
+.ucv2-card__update { position: relative; z-index: 2; font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 10px; background: var(--accent); color: #0b1220; display: flex; align-items: center; gap: 4px; }
+.ucv2-card__body { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 3px; }
+.ucv2-card__title { font-size: 14px; font-weight: 700; line-height: 1.3; color: #fff; }
+.ucv2-card__author { font-size: 12px; color: rgba(255,255,255,.72); }
+.ucv2-card__meta { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; color: rgba(255,255,255,.72); margin-top: 2px; }
+.ucv2-card__revision { background: var(--surface-2); border-radius: 8px; padding: 2px 8px; font-weight: 600; color: var(--text); }
+.ucv2-card__actions { padding: 10px 14px 14px; }
+.ucv2-card__actions .review-lock-note { display: none; font-size: 11px; color: var(--text-muted); margin: 6px 2px 0; text-align: center; }
+
+.ucv2-op-section { margin-bottom: 22px; }
+.ucv2-op-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); margin-bottom: 8px; }
+.ucv2-op-row--remove { border-color: rgba(240, 84, 107, .3); }
+.ucv2-op-row__name { font-size: 13.5px; font-weight: 600; flex: 1; }
+.ucv2-op-row__detail { font-size: 12px; color: var(--text-muted); }
+
+.ucv2-instr-btn { width: 22px; height: 22px; border-radius: 6px; border: none; background: var(--warning); color: #0b1220;
+  font-size: 11px; font-weight: 700; cursor: pointer; flex: none; display: inline-flex; align-items: center; justify-content: center; }
+.ucv2-instr-btn:hover { background: #f7c665; }
+
+.ucv2-modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, .6); display: none; align-items: center; justify-content: center; z-index: 50; }
+.ucv2-modal-backdrop.open { display: flex; }
+.ucv2-modal { width: min(480px, 90vw); max-height: 80vh; overflow: auto; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: 0 20px 60px rgba(0, 0, 0, .5); }
+.ucv2-modal__head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.ucv2-modal__head strong { font-size: 14px; }
+.ucv2-modal__close { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; line-height: 1; }
+.ucv2-modal__body { padding: 16px 18px; font-size: 13.5px; color: var(--text); line-height: 1.7; white-space: pre-line; }

@@ -1,0 +1,156 @@
+{
+  "id": "plain",
+  "label": "Plain",
+  "appName": "Vortex Collection Tools",
+  "accent": "#5b8def",
+  "accentHover": "#75a1f5",
+  "accentBg": "rgba(91, 141, 239, 0.12)",
+  "accentLight": "#3568c9",
+  "accentHoverLight": "#4a7bd6",
+  "accentBgLight": "rgba(53, 104, 201, 0.12)",
+  "palette": {},
+  "tools": {
+    "home": {
+      "name": "Home",
+      "emoji": "🧰",
+      "function": "Home",
+      "heroTitle": "Your Whole Vortex Toolkit, in One Place",
+      "heroBody": "Pick a tool to get started. Everything here works on collections you've already installed in Vortex&mdash;rebuild them faster, keep your Ignored and Disabled mods through an update, sort out conflict rules, and see how it all went."
+    },
+    "merge": {
+      "name": "Merge Plugins",
+      "emoji": "🧬",
+      "function": "Merge Plugins",
+      "heroTitle": "Merge Many Plugins Into One",
+      "heroBody": "Skyrim's plugin slots fill up fast. Pick plugins from one or more collections and this tool bundles them into a single file&mdash;freeing up slots without touching xEdit. Review exactly what's going in first, and it'll flag the result as ESL automatically when it fits.",
+      "cardDesc": "Bundle several plugins into one file and free up load-order slots."
+    },
+    "rebuild": {
+      "name": "Rebuild Collection",
+      "emoji": "⚡",
+      "function": "Rebuild Collection",
+      "heroTitle": "Rebuild Collections in Minutes, Not Hours",
+      "heroBody": "Skip Vortex's slow archive-install process entirely! This tool re-extracts an already-installed collection's mods directly into your staging folder&mdash;same result, dramatically faster. Review exactly what would change before anything happens, then let it run while you do something else.",
+      "cardDesc": "Re-extract an installed collection straight into staging&mdash;same result, dramatically faster."
+    },
+    "sync": {
+      "name": "Update Collection (Classic)",
+      "emoji": "🔄",
+      "function": "Update Collection",
+      "heroTitle": "Update Without Redoing Your Mod Cleanup",
+      "heroBody": "Updating a collection in Vortex often resets your carefully-set <strong>Ignored</strong> and <strong>Disabled</strong> mods back to their defaults. This tool remembers exactly how you had things set and restores it after the update, so that cleanup work never has to happen twice. Work through the steps below in order &mdash; you'll hop over to Vortex between some of them, and your place here is saved while you do.",
+      "cardDesc": "Keep your Ignored and Disabled mods exactly as you set them after an update."
+    },
+    "rules-generator": {
+      "name": "Rules Generator",
+      "emoji": "🔗",
+      "function": "Rules Generator",
+      "heroTitle": "Skip Re-Resolving Conflicts You Already Fixed",
+      "heroBody": "Updated to a new collection? Chances are you already spent time getting load-order rules just right in the old one. This tool matches mods between both collections and copies those rules straight across, so you're not stuck resolving the exact same conflicts twice. Review every match below before applying anything to Vortex.",
+      "cardDesc": "Copy the conflict rules you already fixed from an old collection to its update."
+    },
+    "update-collection-v2": {
+      "name": "Update Collection (Preview)",
+      "emoji": "🔄️",
+      "function": "Update Collection (Preview)",
+      "heroTitle": "See Exactly What a Collection Update Changes",
+      "heroBody": "Check your installed collections for updates and review exactly what a new revision changes &mdash; mods removed, updated, and added &mdash; before anything touches Vortex. This preview covers the review step only; applying the update is a later phase, not built yet.",
+      "cardDesc": "Check for updates and see exactly what a new revision changes, before anything touches Vortex."
+    },
+    "report-stats": {
+      "name": "Stats",
+      "emoji": "📊",
+      "function": "Stats",
+      "heroTitle": "See Every Rebuild at a Glance",
+      "heroBody": "Track how every collection you've rebuilt has performed over time, and instantly spot which mods still need attention right now. No more digging through individual run logs one at a time to piece together the full picture.",
+      "cardDesc": "See how every rebuild performed, and what still needs attention."
+    },
+    "report-workthrough": {
+      "name": "Work Through",
+      "emoji": "✅",
+      "function": "Work Through",
+      "heroTitle": "Work Through Every Problem Mod, One by One",
+      "heroBody": "Instead of hunting through separate run logs for what still needs fixing, this report gathers every problem mod across every collection into one checklist. Fix resolvable mismatches and missing archives right here; check off anything else as you handle it in Vortex yourself&mdash;your progress sticks around until a fresh rerun clears it.",
+      "cardDesc": "Gather every problem mod across every collection into one checklist."
+    },
+    "report-updatecompare": {
+      "name": "Update Compare",
+      "emoji": "🔍",
+      "function": "Update Compare",
+      "heroTitle": "See Exactly What an Update Changed",
+      "heroBody": "After running Update Collection, get a clear before-and-after comparison of your mods&mdash;what stayed, what got added, and what got removed&mdash;so you're never left guessing what an update actually did.",
+      "cardDesc": "See a clear before-and-after of what an update added, kept, and removed."
+    },
+    "report-rulesgen": {
+      "name": "Rules Generator Report",
+      "emoji": "📋",
+      "function": "Rules Generator Report",
+      "heroTitle": "Check Your Rules Generator Progress",
+      "heroBody": "See at a glance which mods already have their conflict rules copied over correctly, and which ones still need a decision or a second look in Vortex&mdash;all without re-running the matching process itself.",
+      "cardDesc": "Check which mods have their rules copied, and which still need a decision."
+    },
+    "report-workshop": {
+      "name": "Workshop Report",
+      "emoji": "🕒",
+      "function": "Workshop Report",
+      "heroTitle": "See When You Last Touched Each Workshop Collection",
+      "heroBody": "Nexus's own collection page shows a date that never moves for a private collection&mdash;this pulls the real one, straight from each collection's revision history, so you can tell at a glance which ones you've actually worked on recently.",
+      "cardDesc": "See when you actually last touched each Workshop collection, straight from Nexus."
+    },
+    "report-exceptions": {
+      "name": "Mod Exceptions",
+      "emoji": "🙅",
+      "function": "Mod Exceptions",
+      "heroTitle": "Mods to Never Auto-Fix",
+      "heroBody": "Some mods are hand-pick-only installers where you deliberately chose a subset of what the archive contains. Auto-extracting or auto-rebuilding the full archive for one of these doesn't restore what's \"missing\" -- it installs content you never chose, which can cause missing masters or crashes. Add a mod here once, and both Rebuild Collection and Rebuild Missing Files will leave it alone from then on, wherever it shows up.",
+      "cardDesc": "See and manage the mods Rebuild Collection and Rebuild Missing Files should never auto-fix."
+    },
+    "missing-masters": {
+      "name": "Missing Masters",
+      "emoji": "🧩",
+      "function": "Missing Masters",
+      "heroTitle": "Triage Missing Masters in Seconds",
+      "heroBody": "Easily pinpoint missing master files and instantly see every mod relying on them&mdash;all in one clear view! Designed to streamline your troubleshooting, this tool takes the hassle out of tracking down broken dependencies so you can jump straight into Vortex and fix them with confidence.",
+      "cardDesc": "Pinpoint missing master files and every mod that depends on them."
+    },
+    "scrub": {
+      "name": "Mod Scrub",
+      "emoji": "🧽",
+      "function": "Mod Scrub",
+      "heroTitle": "Scrub Away Clutter in Seconds",
+      "heroBody": "Easily spot staging folders and archives that Vortex has quietly stopped tracking&mdash;no digging through anything by hand! Designed to take the guesswork out of cleanup, this tool shows you exactly what's safe to remove so you can reclaim disk space with confidence.",
+      "cardDesc": "Spot staging folders and archives Vortex stopped tracking, and reclaim the space."
+    },
+    "archive-finder": {
+      "name": "Archive Finder",
+      "emoji": "📦",
+      "function": "Archive Finder",
+      "heroTitle": "Find Any File Inside Any Archive",
+      "heroBody": "Stop extracting archives just to see what's inside! This tool indexes every zipped mod archive's contents up front&mdash;no unpacking needed&mdash;so you can instantly search across all of them by file or mod name, and pull out exactly the patch you need.",
+      "cardDesc": "Search inside every mod archive without extracting a thing."
+    },
+    "cycle-helper": {
+      "name": "Cycle Helper",
+      "emoji": "🔀",
+      "function": "Cycle Helper",
+      "heroTitle": "Pinpoint the Rule Actually Causing a Cycle",
+      "heroBody": "When Vortex reports a rule cycle after you've hand-edited your load-order rules, this points at the rule(s) actually responsible instead of dumping every mod caught in the tangle&mdash;fix it, apply it, and confirm the cycle's really gone, all in one place.",
+      "cardDesc": "Pinpoint the rule actually causing a Vortex cycle, fix it, and confirm it's really gone."
+    },
+    "missing-files": {
+      "name": "Rebuild Missing Files",
+      "emoji": "🩹",
+      "function": "Rebuild Missing Files",
+      "heroTitle": "Fix Just the Files That Are Actually Missing",
+      "heroBody": "Sometimes a mod's files quietly go missing from your staging folder, and rebuilding the whole collection to fix it feels like overkill. This tool checks the collections you pick and shows you exactly which files are gone&mdash;then restores just those, straight from the archive.",
+      "cardDesc": "Check your collections for missing staging files, then fix just the ones that need it."
+    },
+    "settings": {
+      "name": "Settings",
+      "emoji": "⚙️",
+      "function": "Settings",
+      "heroTitle": "Set It Up Once, Use It Everywhere",
+      "heroBody": "Set your Vortex paths and preferences here just once, and every tool picks them up automatically! Designed to keep all your setup in one place, this saves you from entering the same folders and options over and over&mdash;so you can spend your time on the actual work, not the configuration."
+    }
+  }
+}
