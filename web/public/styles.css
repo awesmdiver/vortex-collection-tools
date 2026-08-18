@@ -91,6 +91,15 @@ html, body {
   line-height: 1.5;
 }
 
+/* A bare <a> with no specific class fell back to the browser's raw default blue -- harsh against
+   this app's dark theme, confirmed via real tester feedback (2026-08-18). A handful of components
+   already opted individual links into var(--accent) (.tool-eyebrow__area, .ch-eyebrow a,
+   .book-toc__note a) -- this generalizes that same treatment so EVERY link gets it by default,
+   without having to remember to style each new one. Purely additive: those existing rules already
+   used the identical color, so nothing visually changes for them. */
+a { color: var(--accent); }
+a:hover { color: var(--accent-hover); }
+
 /* Global scrollbar styling -- requirement for every scrollable region in this app (confirmed
    2026-07-26): matches Vortex's own grey, rounded scrollbar instead of the browser's default
    stark-white one. Chromium/Electron-only (::-webkit-scrollbar has no Firefox equivalent), which

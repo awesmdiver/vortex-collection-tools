@@ -2782,9 +2782,30 @@
       </div>
     </div>
 
-    <div style="display:flex;justify-content:space-between;margin-top:24px">
+    <!-- Real Apply results (2026-08-18, Phase 2) -- shown in place after a real Apply completes.
+         Added mods are explicitly out of scope this phase (Phase 3) -- their row in the table above
+         gets a "not applied yet" note rather than a real outcome. -->
+    <div id="ucv2ApplyResult" class="hidden" style="margin-top:20px">
+      <div class="callout" id="ucv2ApplyResultSummary"></div>
+      <div id="ucv2ApplyResultList"></div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;margin-top:24px" id="ucv2ReviewActions">
       <button class="btn btn--ghost" id="ucv2CancelReviewBtn">Cancel</button>
-      <button class="btn btn--primary" id="ucv2ApplyUpdateBtn" title="Applying updates isn't built yet -- this is a preview of what the review flow shows">Apply Update &rarr;</button>
+      <button class="btn btn--primary" id="ucv2ApplyUpdateBtn">Apply Update &rarr;</button>
+    </div>
+  </div>
+
+  <!-- Real Apply confirmation (2026-08-18, Phase 2) -- reuses the same modal shell the Instructions
+       popup above already established (.ucv2-modal-backdrop/.ucv2-modal), no new CSS needed. -->
+  <div class="ucv2-modal-backdrop" id="ucv2ApplyConfirmModal">
+    <div class="ucv2-modal">
+      <div class="ucv2-modal__head"><strong>Apply this update?</strong><button class="ucv2-modal__close" id="ucv2ApplyConfirmClose">&times;</button></div>
+      <div class="ucv2-modal__body" id="ucv2ApplyConfirmBody"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:0 18px 16px">
+        <button class="btn btn--ghost" id="ucv2ApplyConfirmCancel">Cancel</button>
+        <button class="btn btn--primary" id="ucv2ApplyConfirmOk">Apply Update</button>
+      </div>
     </div>
   </div>
 </main>
