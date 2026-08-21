@@ -161,7 +161,13 @@ function readPgpatcherSettings(cfgDir) {
     try {
         raw = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
     } catch (e) {
-        throw new Error(`Couldn't read PGPatcher's own settings.json at ${settingsPath}: ${e.message}`);
+        const err = new Error(`Couldn't read PGPatcher's own settings.json at ${settingsPath}: ${e.message}`);
+        // Preserve the original fs error code (ENOENT when the file simply doesn't exist yet -- the
+        // expected state before the real PGPatcher GUI has ever been run/saved; undefined for a
+        // JSON.parse SyntaxError, since that only happens when the file DOES exist but is corrupted)
+        // so requirePgpatcherSettings below can tell those two genuinely different problems apart.
+        err.code = e.code;
+        throw err;
     }
     const params = raw.params || {};
     const shaderPatcher = params.shaderpatcher || {};
@@ -245,6 +251,43 @@ function requirePgtoolsInstalled(res) {
     return false;
 }
 
+// Same shape as requireConfigured/requirePgtoolsInstalled above -- writes the response itself and
+// returns falsy on failure, so a caller just does
+// `const settings = requirePgpatcherSettings(cfg, res); if (!settings) return;` instead of its own
+// try/catch. Distinguishes two genuinely different problems that readPgpatcherSettings' own
+// preserved e.code lets us tell apart, rather than collapsing both into one raw error message:
+// - settings.json genuinely doesn't exist yet (ENOENT) -- the expected state for anyone who hasn't
+//   installed and run the real PGPatcher GUI at least once (see requirePgtoolsInstalled's own comment
+//   above for the full citation on why bundling pgtools.exe doesn't remove this requirement). Fix is
+//   "go run PGPatcher," so this gets the same downloadLinks treatment as requirePgtoolsInstalled.
+// - settings.json EXISTS but couldn't be read/parsed (corrupted, or some other fs error) -- a real,
+//   different problem. "Go install PGPatcher" would be actively wrong advice here; the fix is
+//   re-saving from PGPatcher's own Settings dialog, so this gets its own distinct message and no
+//   download links.
+function requirePgpatcherSettings(cfg, res) {
+    try {
+        return readPgpatcherSettings(cfg.cfgDir);
+    } catch (e) {
+        if (e.code === 'ENOENT') {
+            res.status(400).json({
+                error: 'pgpatcher-not-configured',
+                message: "PGPatcher hasn't been set up yet — open the real PGPatcher app, configure it, then click Save (or run a patch) once. Don't have it installed? Download PGPatcher below:",
+                downloadLinks: [
+                    { label: 'NEXUSMODS', url: 'https://www.nexusmods.com/skyrimspecialedition/mods/120946' },
+                    { label: 'GitHub', url: 'https://github.com/hakasapl/PGPatcher' },
+                ],
+            });
+            return null;
+        }
+        console.error(e.message);
+        res.status(400).json({
+            error: 'pgpatcher-settings-invalid',
+            message: "PGPatcher's own settings file couldn't be read — it may be corrupted. Open PGPatcher and save your settings again from its Settings dialog to fix this.",
+        });
+        return null;
+    }
+}
+
 // DynDOLOD gate -- pgtools.exe itself has NO equivalent check (confirmed: PGTools/src/main.cpp never
 // calls getActivePlugins), but PGPatcher's own real GUI refuses to run at all while dyndolod.esp is
 // active (PGPatcher/src/main.cpp, pgpatcher-fork): "DynDoLOD and TexGen outputs must be disabled
@@ -283,11 +326,20 @@ function isDynDoLODActive(skyrimDataDir) {
     return false;
 }
 
+// Plain, static hard block -- reverted back to this (2026-08-21) after the real disable -> build ->
+// re-enable -> deploy automation that used to live here (resolveDynDoLODModId, runFullDeployWithProgress,
+// disableDyndolodForRequest, reenableDyndolod, blockUntilDyndolodConfirmed -- see git history, commits
+// 652f018/5b3b15a/90cf4b9, for the full versions). Director's own live report: the automated flow
+// didn't work correctly, and its own disable step runs a real, long, un-cancellable Vortex deploy --
+// there's no way to back out once it starts. A silent multi-minute write against the director's live
+// install with no escape hatch is a real problem, not a rough edge worth iterating on -- reverted
+// outright rather than patched. Shared verbatim by /load and /build, same as the automated version
+// was, so neither route forks its own wording.
 function blockIfDynDoLODActive(cfg, res) {
     if (!isDynDoLODActive(cfg.source)) return false;
     res.status(400).json({
         error: 'dyndolod-active',
-        message: "🛑 DynDOLOD is active in your load order. Disable it (and redeploy) before running PGPatcher, then re-enable it afterward to generate LODs against PGPatcher's own output.",
+        message: "🛑 DynDoLOD.esp is active in your load order. Disable it (and redeploy) in Vortex before you can Start or Build — you can re-enable it again afterward to generate LODs against PGPatcher's own output.",
     });
     return true;
 }
@@ -381,16 +433,17 @@ function createPgpatcherRouter(config) {
         if (!requirePgtoolsInstalled(res)) return;
         const cfg = requireConfigured(config, res);
         if (!cfg) return;
+
+        // Hard blocks outright if DynDoLOD.esp is active -- see blockIfDynDoLODActive's own comment
+        // for why this isn't automated (a real, interactive disable/re-enable/deploy flow used to
+        // live here; reverted 2026-08-21).
         if (blockIfDynDoLODActive(cfg, res)) return;
+
         if (loadSession.isActive()) {
             return res.status(409).json({ error: 'A load is already in progress.' });
         }
-        let settings;
-        try {
-            settings = readPgpatcherSettings(cfg.cfgDir);
-        } catch (e) {
-            return res.status(500).json({ error: e.message });
-        }
+        const settings = requirePgpatcherSettings(cfg, res);
+        if (!settings) return;
         if (settings.patchers.length === 0) {
             return res.status(400).json({
                 error: 'no-patchers-active',
@@ -564,16 +617,17 @@ function createPgpatcherRouter(config) {
         if (!requirePgtoolsInstalled(res)) return;
         const cfg = requireConfigured(config, res);
         if (!cfg) return;
+
+        // Hard blocks outright if DynDoLOD.esp is active -- see blockIfDynDoLODActive's own comment
+        // for why this isn't automated (a real, interactive disable/re-enable/deploy flow used to
+        // live here; reverted 2026-08-21).
         if (blockIfDynDoLODActive(cfg, res)) return;
+
         if (buildSession.isActive()) {
             return res.status(409).json({ error: 'A build is already in progress.' });
         }
-        let settings;
-        try {
-            settings = readPgpatcherSettings(cfg.cfgDir);
-        } catch (e) {
-            return res.status(500).json({ error: e.message });
-        }
+        const settings = requirePgpatcherSettings(cfg, res);
+        if (!settings) return;
         if (settings.patchers.length === 0) {
             return res.status(400).json({
                 error: 'no-patchers-active',

@@ -191,10 +191,43 @@ function pgpFinishLoading() {
   pgpStopLoadingTimer();
   if (pgpLoadEventSource) { pgpLoadEventSource.close(); pgpLoadEventSource = null; }
   $g('pgpatcherLoading').classList.add('hidden');
+  pgpResetCancelBtn('pgpatcherCancelLoadBtn');
+}
+
+// The real cancel request can resolve instantly or take a genuine while depending on what pgtools is
+// mid-doing when it's asked to stop -- confirmed inconsistent live (director's own report, 2026-08-21).
+// Swapping the label to "Cancelling…" the moment it's clicked (and disabling it, so a second click
+// can't fire a redundant request) is the only honest way to cover that gap without either lying about
+// instant completion or adding a fake minimum delay. Reset back to "Cancel" happens in
+// pgpFinishLoading/pgpFinishBuildingStream, the same place that already handles every real exit path
+// (done/error/cancelled) for each stream, so this never needs its own separate reset logic.
+function pgpSetCancelling(btnId) {
+  const btn = $g(btnId);
+  btn.textContent = 'Cancelling…';
+  btn.disabled = true;
+}
+function pgpResetCancelBtn(btnId) {
+  const btn = $g(btnId);
+  btn.textContent = 'Cancel';
+  btn.disabled = false;
 }
 
 async function pgpatcherLoad() {
   pgpHideError();
+
+  try {
+    await pgpatcherApi('POST', '/api/pgpatcher/load', {});
+  } catch (e) {
+    if (e.body && e.body.error === 'not-configured') {
+      $g('pgpatcherIdle').classList.add('hidden');
+      $g('pgpatcherNotConfigured').classList.remove('hidden');
+    } else {
+      pgpShowError(e);
+    }
+    return;
+  }
+
+  // A real load is now genuinely running server-side -- only now switch to the Loading screen.
   $g('pgpatcherNotConfigured').classList.add('hidden');
   $g('pgpatcherIdle').classList.add('hidden');
   $g('pgpatcherEditor').classList.add('hidden');
@@ -202,19 +235,6 @@ async function pgpatcherLoad() {
   $g('pgpatcherLoadingPhase').textContent = 'Starting…';
   $g('pgpatcherLoadingBar').style.width = '0%';
   pgpStartLoadingTimer();
-
-  try {
-    await pgpatcherApi('POST', '/api/pgpatcher/load', {});
-  } catch (e) {
-    pgpFinishLoading();
-    if (e.body && e.body.error === 'not-configured') {
-      $g('pgpatcherNotConfigured').classList.remove('hidden');
-    } else {
-      $g('pgpatcherIdle').classList.remove('hidden');
-      pgpShowError(e);
-    }
-    return;
-  }
 
   if (pgpLoadEventSource) pgpLoadEventSource.close();
   const es = new EventSource('/api/pgpatcher/load/events');
@@ -283,6 +303,7 @@ function pgpHandleLoadEvent(frame) {
 }
 
 async function pgpatcherCancelLoad() {
+  pgpSetCancelling('pgpatcherCancelLoadBtn');
   try {
     await pgpatcherApi('POST', '/api/pgpatcher/load/cancel', {});
   } catch (e) {
@@ -334,10 +355,24 @@ function pgpSetBuildingPhase(message, current, total) {
 function pgpFinishBuildingStream() {
   pgpStopBuildingTimer();
   if (pgpBuildEventSource) { pgpBuildEventSource.close(); pgpBuildEventSource = null; }
+  pgpResetCancelBtn('pgpatcherCancelBuildBtn');
 }
 
 async function pgpatcherBuild() {
   pgpHideError();
+
+  try {
+    await pgpatcherApi('POST', '/api/pgpatcher/build', {
+      considerAllMeshes: $g('pgpatcherConsiderAllMeshesInput').checked,
+      relaxWeightValidation: $g('pgpatcherRelaxWeightValidationInput').checked,
+    });
+  } catch (e) {
+    pgpShowError(e);
+    return;
+  }
+
+  // A real build is now genuinely running server-side -- only now switch to the Building screen and
+  // start streaming its progress.
   $g('pgpatcherEditor').classList.add('hidden');
   $g('pgpatcherBuilding').classList.remove('hidden');
   $g('pgpatcherBuildingProgress').classList.remove('hidden');
@@ -345,18 +380,6 @@ async function pgpatcherBuild() {
   $g('pgpatcherBuildingPhase').textContent = 'Starting…';
   $g('pgpatcherBuildingBar').style.width = '0%';
   pgpStartBuildingTimer();
-
-  try {
-    const considerAllMeshes = $g('pgpatcherConsiderAllMeshesInput').checked;
-    const relaxWeightValidation = $g('pgpatcherRelaxWeightValidationInput').checked;
-    await pgpatcherApi('POST', '/api/pgpatcher/build', { considerAllMeshes, relaxWeightValidation });
-  } catch (e) {
-    pgpFinishBuildingStream();
-    $g('pgpatcherBuilding').classList.add('hidden');
-    $g('pgpatcherEditor').classList.remove('hidden');
-    pgpShowError(e);
-    return;
-  }
 
   if (pgpBuildEventSource) pgpBuildEventSource.close();
   const es = new EventSource('/api/pgpatcher/build/events');
@@ -390,6 +413,7 @@ function pgpHandleBuildEvent(frame) {
 }
 
 async function pgpatcherCancelBuild() {
+  pgpSetCancelling('pgpatcherCancelBuildBtn');
   try {
     await pgpatcherApi('POST', '/api/pgpatcher/build/cancel', {});
   } catch (e) {

@@ -128,7 +128,7 @@
       "heroTitle": "Set Your Load Order With Drag-and-Drop",
       "heroBody": "When two mods modify the same mesh or shader, your load order decides which one wins! This tool makes it easy to set that order exactly how you want it&mdash;drag mods around, multi-select to move batches together, or sort everything A–Z in one click. It works directly with your real PGPatcher setup and runs the authentic PGPatcher build engine underneath, so you get the same output files, logs, and modrules.json you'd get any other way&mdash;just with live progress tracking and instant reordering.",
       "cardDesc": "Set your load order with drag-and-drop, multi-select, and A–Z sorting.",
-      "landingHint": "Click Start to load your mods from PGPatcher (can take a few minutes on large mod lists)."
+      "landingHint": "Click Start to begin."
     },
     "scrub": {
       "name": "Mod Scrub",

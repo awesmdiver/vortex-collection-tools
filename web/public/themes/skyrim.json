@@ -137,7 +137,7 @@
       "heroTitle": "Order of Succession",
       "heroBody": "When two competing smiths craft enchantments for the exact same armor or blade, only the higher decree determines which design governs your realm. Order of Succession replaces PGPatcher's bare list with full drag-to-reorder, multi-select shifting, and instant A–Z sorting so you can easily establish which mods win your shader conflicts. It reads directly from your existing PGPatcher setup and executes the official PGPatcher engine underneath&mdash;generating the identical modrules.json, build files, and logs you rely on, accompanied by real-time build progress every step of the way.<p>Everything runs on your actual PGPatcher installation. Your existing settings load automatically, and building here runs the genuine PGPatcher engine to produce the exact same final patch and logs&mdash;just with a smoother interface and live progress tracking.</p>",
       "cardDesc": "Dictate the chain of command and arbitrate visual precedence across your load order.",
-      "landingHint": "Click Start to load your mods and conflicts from PGPatcher (this initial read can take a few minutes on large mod lists)."
+      "landingHint": "Click Start to begin."
     },
     "scrub": {
       "name": "The Cleansing",

@@ -149,9 +149,9 @@
       "emoji": "🎚️",
       "function": "PGPatcher Load Order",
       "heroTitle": "Vault-Tec Priority Protocol",
-      "heroBody": "When two subroutines fight over the same power manifold, Vault-Tec mainframe logic dictates that the highest-ranked directive immediately overrides the rest. Vault-Tec Priority Protocol brings that deliberate hierarchy to your visual setup, replacing PGPatcher's minimal list with drag-and-drop ordering, multi-select batch movement, and one-click A–Z sorting. It plugs directly into your real PGPatcher configuration and runs the authentic PGPatcher command-line build in the background&mdash;delivering the exact same output files, logs, and modrules.json alongside live build progress.<p>This tool works directly with your real PGPatcher configuration. When you build the output, it runs the authentic PGPatcher tool underneath to produce the identical patch and logs&mdash;giving you full drag-and-drop control and live feedback without hopping between separate windows.</p>",
+      "heroBody": "When two subroutines fight over the same power manifold, Vault-Tec mainframe logic dictates that the highest-ranked directive immediately overrides the rest. Vault-Tec Priority Protocol brings that deliberate hierarchy to your visual setup, replacing PGPatcher's minimal list with drag-and-drop ordering, multi-select batch movement, and one-click A–Z sorting. It plugs directly into your real PGPatcher configuration and runs the authentic PGPatcher command-line build in the background&mdash;delivering the exact same output files, logs, and modrules.json alongside live build progress.<p>This tool works alongside PGPatcher, using your existing settings while making load order management much easier. Quickly identify new mods, drag and drop to reorganize priorities, and fine-tune your sort order with ease. Once you're finished, the patch builds directly into your configured PGPatcher output folder with the option to deploy your mods.</p>",
       "cardDesc": "Ranks every competing directive in advance, so the right mod always overrides the rest.",
-      "landingHint": "Click Start to read your mod list and conflict data from PGPatcher (initial scan may take a few minutes on larger collections)."
+      "landingHint": "Click Start to begin."
     },
     "scrub": {
       "name": "Greygarden Maintenance Protocol",
