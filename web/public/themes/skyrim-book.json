@@ -26,6 +26,12 @@
       "whatItDoes": "Updating a collection in Vortex often resets your carefully-set Ignored and Disabled mods back to their defaults. This tool remembers exactly how you had things set and restores it right after the update, so that cleanup work never has to happen twice. Walks you through the steps in order &mdash; you'll hop over to Vortex between some of them, and your place here is saved while you do."
     },
     {
+      "toolId": "update-collection-v2",
+      "banner": "theme-assets/skyrim/book/book-banner-the-herald.png",
+      "lore": "A true herald does not merely shout the news from the battlements and walk away; they announce what is coming before it arrives, then see the work carried out safely. When fresh decrees and new supplies reach the city gates, the herald steps forward to unpack the wagons, turn away what was removed, and ensure every custom rule and sealed order you established remains untouched by the commotion.",
+      "whatItDoes": "Checks your installed collections for updates and preserves your custom setup so your personal choices never get reset. With the optional Helper extension installed, you get the full automated experience: preview every addition, update, or removal before applying changes directly in real time while Vortex stays open. Without the Helper, it runs a guided, semi-manual process&mdash;walking you through a few back-and-forth steps between the app and Vortex to safely restore your Ignored and Disabled mod settings while Vortex handles the rest of the update."
+    },
+    {
       "toolId": "rules-generator",
       "banner": "theme-assets/skyrim/book/book-banner-the-scribe.png",
       "lore": "When an ancient parchment crumbles, the Court Scribe does not rewrite history from memory&mdash;they meticulously copy each glyph and margin note onto fresh vellum with exact fidelity. Every hard-won truth and hard-fought boundary recorded in the old text is preserved without change. The ink may be fresh, but the wisdom guiding the words remains unbroken.",
@@ -92,10 +98,22 @@
       "whatItDoes": "Sometimes a mod's files quietly go missing from your staging folder, and mending the whole collection to fix it feels like overkill. Checks the collections you pick and shows you exactly which files are gone, then restores just those, straight from the archive."
     },
     {
+      "toolId": "remove-collection",
+      "banner": "theme-assets/skyrim/book/book-banner-the-quartermaster.png",
+      "lore": "A quartermaster does not toss the whole garrison's stores onto a bonfire simply because one company is marching out. They walk the shelves first, checking each crate against every banner still quartered within the walls &mdash; what belongs solely to the departing company goes onto the wagons, and what still feeds three other companies stays exactly where it stands. The camp empties by one tent, not by one storehouse.",
+      "whatItDoes": "Removing a collection in Vortex can quietly take mods your OTHER collections are still using down with it. This tool checks your entire setup first, shows you exactly which mods are shared, and lets you decide piece by piece what actually goes &mdash; so clearing out an old collection never breaks a different one you're keeping."
+    },
+    {
       "toolId": "cycle-helper",
       "banner": "theme-assets/skyrim/book/book-banner-the-webweaver.png",
       "lore": "Even the most intricate web spun in the depths of a Nordic ruin can be ruined by a single crossed strand pulling against itself. A Frostbite Spider does not tear down its entire canopy to fix a snag; it tracks the tension, finds the one knotted thread binding the rest, and deftly reweaves it. This tool brings that same precision to your load order&mdash;plucking the single conflicting rule from the tangle so the rest of your structure holds firm.",
       "whatItDoes": "When Vortex says your load-order rules have a cycle, it dumps every mod caught in the tangle at once, leaving you to guess which one's actually wrong. Snapshot your rules, go set them in Vortex, then scan here to find the specific rule responsible, fix it, and confirm the cycle's actually gone."
+    },
+    {
+      "toolId": "pgpatcher",
+      "banner": "theme-assets/skyrim/book/book-banner-order-of-succession.png",
+      "lore": "When rival claimants or disputed bloodlines lay claim to the same high seat, the realm cannot abide two crowns atop a single head. Order is preserved only through the unyielding law of succession, where every title and decree is weighed in deliberate rank so the greater authority instantly supplants the lesser. In the same manner, when competing craftworks and visual enchantments vie to reshape the very same stone or steel, an undisputed hierarchy must be proclaimed. Setting the line of precedence ensures every subordinate claim yields without bloodshed, leaving your world governed solely by the craft of the master whose decree holds ultimate dominion.",
+      "whatItDoes": "Sets which mod wins when two of them change the same mesh or shader. Drag to reorder, select several and move them together, or sort the whole list A&ndash;Z and fine-tune from there. PGPatcher then runs to exactly that order, instead of the one it happened to have."
     },
     {
       "toolId": "settings",

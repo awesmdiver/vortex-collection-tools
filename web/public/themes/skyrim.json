@@ -3,6 +3,8 @@
   "label": "Skyrim",
   "appName": "The Arcaneum",
   "accent": "#9b72d1",
+  "hasHomeBackgroundWash": true,
+  "hasBook": true,
   "palette": {},
   "fontStylesheet": "theme-assets/skyrim/fonts/skyrim-fonts.css",
   "defaultFont": "cinzel",
@@ -41,11 +43,11 @@
       "cardDesc": "Mends broken and corrupted files in seconds&mdash;skip the slow journey of a full reinstall."
     },
     "sync": {
-      "name": "The Ward (Classic)",
-      "emoji": "🛡️",
+      "name": "The Herald",
+      "emoji": "📯",
       "function": "Update Collection",
-      "heroTitle": "The Ward (Classic)",
-      "heroBody": "A Ward holds against whatever comes through it, so nothing you've already chosen gets undone. Updating a collection in Vortex often resets your carefully-set <strong>Ignored</strong> and <strong>Disabled</strong> mods back to their defaults&mdash;this tool remembers exactly how you had things set and restores it once the update lands, so that cleanup work never has to happen twice. Work through the steps below in order; you'll hop over to Vortex between some of them, and your place here is saved while you do.",
+      "heroTitle": "The Herald",
+      "heroBody": "A Herald announces what's coming before it arrives &mdash; and makes sure nothing you've already chosen gets undone along the way. Updating a collection in Vortex often resets your carefully-set <strong>Ignored</strong> and <strong>Disabled</strong> mods back to their defaults&mdash;this tool remembers exactly how you had things set and restores it once the update lands, so that cleanup work never has to happen twice. Work through the steps below in order; you'll hop over to Vortex between some of them, and your place here is saved while you do.",
       "cardDesc": "Shields your Ignored and Disabled choices so an update can't wipe out your setup."
     },
     "rules-generator": {
@@ -57,12 +59,20 @@
       "cardDesc": "Transcribes your proven load-order rules into the updated collection, so you never resolve the same conflicts twice."
     },
     "update-collection-v2": {
-      "name": "The Herald (Preview)",
+      "name": "The Herald",
       "emoji": "📯",
-      "function": "Update Collection (Preview)",
-      "heroTitle": "The Herald (Preview)",
-      "heroBody": "A Herald announces what's coming before it arrives. Check your installed collections for news of an update, and hear exactly what it changes &mdash; removed, updated, and added &mdash; before anything touches Vortex. This preview only carries the news; acting on it is a later phase, not built yet.",
-      "cardDesc": "Hear exactly what a collection update changes, before anything touches Vortex."
+      "function": "Update Collection",
+      "heroTitle": "The Herald",
+      "heroBody": "A Herald announces what's coming before it arrives &mdash; and carries out what it can. Check your installed collections for news of an update, hear exactly what it changes &mdash; removed, updated, and added &mdash; and act on the removals and updates for real: real extraction, real deployment, your Ignored and Disabled mods and collection rules carried across untouched.",
+      "cardDesc": "Hear exactly what a collection update changes, then carry out the removals and updates for real."
+    },
+    "remove-collection": {
+      "name": "The Quartermaster",
+      "emoji": "📦",
+      "function": "Safe Collection Removal",
+      "heroTitle": "The Quartermaster",
+      "heroBody": "When a guild or garrison packs up camp, a careless hand might strip the armory bare and leave the rest of the hold defenseless. The Quartermaster inspects every crate before it leaves the gates, checking which provisions are still sworn to your other banners. You decide piece by piece what gets cast aside and what stays behind in the stores, keeping your remaining strongholds completely intact.",
+      "cardDesc": "Inspects every crate before it leaves &mdash; nothing sworn to your other banners goes with it."
     },
     "report-stats": {
       "name": "The Ledger",
@@ -120,6 +130,15 @@
       "heroBody": "An Augur foresees the danger before it arrives, not after. Pinpoint missing master files and instantly see every mod relying on them, all in one clear view&mdash;so instead of a sudden crash to desktop, you see the problem coming and can jump straight into Vortex to fix it with confidence.",
       "cardDesc": "Reveals a missing master before you launch&mdash;no more sudden crash to desktop."
     },
+    "pgpatcher": {
+      "name": "Order of Succession",
+      "emoji": "👑",
+      "function": "PGPatcher Load Order",
+      "heroTitle": "Order of Succession",
+      "heroBody": "When two competing smiths craft enchantments for the exact same armor or blade, only the higher decree determines which design governs your realm. Order of Succession replaces PGPatcher's bare list with full drag-to-reorder, multi-select shifting, and instant A–Z sorting so you can easily establish which mods win your shader conflicts. It reads directly from your existing PGPatcher setup and executes the official PGPatcher engine underneath&mdash;generating the identical modrules.json, build files, and logs you rely on, accompanied by real-time build progress every step of the way.<p>Everything runs on your actual PGPatcher installation. Your existing settings load automatically, and building here runs the genuine PGPatcher engine to produce the exact same final patch and logs&mdash;just with a smoother interface and live progress tracking.</p>",
+      "cardDesc": "Dictate the chain of command and arbitrate visual precedence across your load order.",
+      "landingHint": "Click Start to load your mods and conflicts from PGPatcher (this initial read can take a few minutes on large mod lists)."
+    },
     "scrub": {
       "name": "The Cleansing",
       "emoji": "🔥",
@@ -149,7 +168,7 @@
       "emoji": "🗝️",
       "function": "Rebuild Missing Files",
       "heroTitle": "The Vault-Keeper",
-      "heroBody": "A vault-keeper fetches the one relic you're missing, not the whole hoard. Sometimes a mod's files quietly go missing from your staging folder, and mending the whole collection to fix it feels like overkill&mdash;this checks the collections you pick and shows you exactly which files are gone, then restores just those, straight from the archive.",
+      "heroBody": "A vault-keeper fetches the one relic you're missing, not the whole hoard. Whether a collection struck down without the Quartermaster's own inspection cleared out shared relics, a few quietly vanished from your staging folder, or mending the whole collection feels like overkill&mdash;this has you covered. It checks the collections you pick, shows exactly what's gone, and restores only what's needed, straight from the archive.",
       "cardDesc": "Only what's missing, restored&mdash;no need to empty the whole vault to replace one relic."
     },
     "settings": {

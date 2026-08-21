@@ -1,0 +1,211 @@
+{
+  "id": "fallout4",
+  "label": "Fallout 4",
+  "appName": "The Pip-Boy",
+  "accent": "#00D400",
+  "hasHomeBackgroundWash": true,
+  "hasBook": true,
+  "palette": {},
+  "fontStylesheet": "theme-assets/fallout4/fonts/fallout4-fonts.css",
+  "defaultFont": "interstellar",
+  "fonts": {
+    "interstellar": {
+      "label": "Interstellar (default)",
+      "cssFamily": "'Interstellar', monospace"
+    },
+    "audiowide": {
+      "label": "Audiowide",
+      "cssFamily": "'Audiowide', sans-serif"
+    },
+    "orbitron": {
+      "label": "Orbitron",
+      "cssFamily": "'Orbitron', sans-serif"
+    },
+    "electrolize": {
+      "label": "Electrolize",
+      "cssFamily": "'Electrolize', sans-serif"
+    },
+    "rajdhani": {
+      "label": "Rajdhani",
+      "cssFamily": "'Rajdhani', sans-serif"
+    }
+  },
+  "tools": {
+    "home": {
+      "name": "The Pip-Boy",
+      "emoji": "📟",
+      "function": "Home",
+      "heroTitle": "The Pip-Boy",
+      "heroBody": "Every Vault dweller gets one, and it never comes off — a single wrist-mounted terminal that holds your status, your inventory, your map, everything you need to know about where you stand right now. That's exactly what this page is: not a tool itself, just the one screen that shows you every tool you've got and gets you to whichever one you actually came for.",
+      "cardDesc": "Your Commonwealth command center — tune your load order, salvage your staging folder, and keep your collection running smooth.",
+      "bannerImage": "theme-assets/fallout4/home-banner-pip-boy.png"
+    },
+    "merge": {
+      "name": "Institute Sub-Assembly",
+      "emoji": "⚙️",
+      "function": "Merge Plugins",
+      "heroTitle": "Institute Sub-Assembly",
+      "heroBody": "The Institute doesn't build a synth from one giant piece — dozens of separate, purpose-built components get compressed, synthesized, and integrated into a single unified frame, indistinguishable from something that was always whole. Your plugin count works the same way: a pile of small, individually-necessary mods, each taking up its own load-order slot. This tool does what the Institute does with raw components — folds several into one clean, finished unit, at a fraction of the original footprint.",
+      "cardDesc": "Synthesize many plugins into one unified file — reclaim load-order slots without touching xEdit."
+    },
+    "rebuild": {
+      "name": "Project Purity",
+      "emoji": "💧",
+      "function": "Rebuild Collection",
+      "heroTitle": "Project Purity",
+      "heroBody": "The Jefferson Memorial's whole promise was never \"some clean water eventually\" — it was clean water for the entire Wasteland, delivered at a scale nobody else could manage, bypassing every tainted, slow, contaminated source standing in the way. That's the exact same bet this tool makes with your collection: Vortex's own install path works, technically, but it's the slow, bottlenecked route. This one reconstructs the same files a different way — faster, at full scale, with nothing tainted skipped.",
+      "cardDesc": "Delivers a collection rebuild at full scale — skip Vortex's slow, bottlenecked install path."
+    },
+    "sync": {
+      "name": "Memory Den",
+      "emoji": "🧠",
+      "function": "Update Collection",
+      "heroTitle": "Memory Den",
+      "heroBody": "Dr. Amari's whole practice runs on one rule: you can pull a memory out, look at it closely, even work on it — but the person it belongs to walks out exactly who they walked in as, nothing about their real identity lost in the process. An update to your collection works the same risky-sounding way. Things get touched, rearranged, refreshed — but the choices that make your setup *yours*, which mods you'd quietly Ignored or Disabled, come back out intact, exactly as you left them.",
+      "cardDesc": "Update your collection without losing yourself — your Ignored and Disabled choices come back out intact."
+    },
+    "rules-generator": {
+      "name": "Relay Tower Network",
+      "emoji": "📡",
+      "function": "Rules Generator",
+      "heroTitle": "Relay Tower Network",
+      "heroBody": "Pre-war relay towers didn't care that the original operator moved on, retired, or got replaced — the network just kept re-establishing the link, automatically finding whoever was on the other end now and routing the signal there instead. Your load-order rules work the same way once a collection updates: the mod you pointed a rule at still exists, it's just wearing a new name and version now. This tool doesn't ask you to re-learn the whole network from scratch — it just re-finds the connection and relinks it.",
+      "cardDesc": "Re-establishes your load-order rules on the updated collection, so you never resolve the same conflicts twice."
+    },
+    "update-collection-v2": {
+      "name": "Memory Den",
+      "emoji": "🧠",
+      "function": "Update Collection",
+      "heroTitle": "Memory Den",
+      "heroBody": "Dr. Amari's whole practice runs on one rule: you can pull a memory out, look at it closely, even work on it — but the person it belongs to walks out exactly who they walked in as, nothing about their real identity lost in the process. An update to your collection works the same risky-sounding way. Things get touched, rearranged, refreshed — but the choices that make your setup *yours*, which mods you'd quietly Ignored or Disabled, come back out intact, exactly as you left them.",
+      "cardDesc": "See exactly what a collection update changes, then carry out the removals and updates for real."
+    },
+    "remove-collection": {
+      "name": "Overseer's Inventory Quarantine",
+      "emoji": "📦",
+      "function": "Safe Collection Removal",
+      "heroTitle": "Overseer's Inventory Quarantine",
+      "heroBody": "An Overseer never pulls a crate off the shelf just because one requisition slip says it's spare — the manifest gets checked first, because half the Vault might be drawing on that crate without anyone having mentioned it. Removing a collection in Vortex is the same gamble: it can quietly take mods your other collections are still using down with it. This checks the whole inventory first, flags every mod that's shared, and lets you decide one by one what stays and what goes.",
+      "cardDesc": "Checks the manifest before anything gets pulled — nothing another collection still needs goes missing."
+    },
+    "report-stats": {
+      "name": "Overseer Performance Log",
+      "emoji": "📊",
+      "function": "Stats",
+      "heroTitle": "Overseer Performance Log",
+      "heroBody": "Every Vault keeps a performance log, and not so the Overseer can admire the numbers — it's so one glance answers both questions at once: how is it running right now, and how has it been trending. Your rebuilds produce exactly that kind of record, except it normally sits scattered across one run log at a time. This gathers it into a single readout: how every collection has performed, and which mods still want your attention today.",
+      "cardDesc": "One readout for every rebuild — how each one performed, and what still needs a look."
+    },
+    "report-workthrough": {
+      "name": "Automated Correction Ledger",
+      "emoji": "✅",
+      "function": "Work Through",
+      "heroTitle": "Automated Correction Ledger",
+      "heroBody": "A maintenance crew doesn't work off a dozen scraps of paper pinned up in a dozen different sectors — everything that needs fixing goes on one ledger, and it stays there until somebody actually signs it off. Your problem mods are scattered exactly that way, one run log at a time. This pulls every one of them onto a single punch list: fix the resolvable mismatches and missing archives right here, tick off whatever you handle in Vortex yourself, and your progress stays put until a fresh run clears it.",
+      "cardDesc": "One ledger for every problem mod across every collection, with your progress kept."
+    },
+    "report-updatecompare": {
+      "name": "Terminal Delta Log",
+      "emoji": "🔍",
+      "function": "Update Compare",
+      "heroTitle": "Terminal Delta Log",
+      "heroBody": "A delta log exists for one reason: something changed while nobody was watching, and knowing only that it's different now doesn't help anyone. An update to your collection lands the same way — files move, versions shift, and nothing sits you down afterwards to explain itself. This reads the two cycles side by side and tells you plainly what stayed, what arrived, and what's gone.",
+      "cardDesc": "Reads both cycles side by side — what an update added, kept, and removed."
+    },
+    "report-rulesgen": {
+      "name": "Relay Synchronization Status",
+      "emoji": "📋",
+      "function": "Rules Generator Report",
+      "heroTitle": "Relay Synchronization Status",
+      "heroBody": "Checking a relay network never meant powering the whole thing down and bringing it back up — you read the status board, see which links handshook cleanly, and go look at the few that didn't. Your copied-over conflict rules work the same way: most of them land perfectly, a handful need you to make the call yourself. This shows you which is which, without re-running the matching all over again.",
+      "cardDesc": "See which rules linked up cleanly, and which still need your call."
+    },
+    "report-workshop": {
+      "name": "Terminal Revision Timestamp",
+      "emoji": "🕒",
+      "function": "Workshop Report",
+      "heroTitle": "Terminal Revision Timestamp",
+      "heroBody": "A terminal's front screen will happily show you a date that stopped meaning anything years ago — the real timestamp is sitting in the backend, and you only get it by reading past what the interface hands you. Nexus does exactly that with a private collection: the date on the page simply never moves. This pulls the real one out of each collection's own revision history, so you can tell at a glance which ones you've actually worked on lately.",
+      "cardDesc": "The real last-touched date for every Workshop collection, read straight from its revision history."
+    },
+    "report-exceptions": {
+      "name": "Override Exemption Protocol",
+      "emoji": "🙅",
+      "function": "Mod Exceptions",
+      "heroTitle": "Override Exemption Protocol",
+      "heroBody": "Some things get marked exempt deliberately, and the whole point of the marking is that it holds — nobody has to re-argue the case every time an automated system sweeps through. A hand-picked installer is exactly that kind of case: you chose a subset of what's in the archive on purpose, so restoring the rest doesn't fix anything, it installs content you never wanted and can hand you missing masters or a crash. Add a mod here once and both Project Purity and Auto-Doc Diagnostic &amp; Repair will leave it alone from then on, wherever it turns up.",
+      "cardDesc": "Mark a hand-picked installer exempt once, and the rebuild tools leave it alone for good."
+    },
+    "missing-masters": {
+      "name": "Vault-Tec Diagnostic Prompt",
+      "emoji": "⚠️",
+      "function": "Missing Masters",
+      "heroTitle": "Vault-Tec Diagnostic Prompt",
+      "heroBody": "Vault-Tec terminals don't wait for a system to actually fail before they say something — the second a required component goes missing, the screen flashes red and says so, loud and immediate, before whatever depends on that component ever gets the chance to lock up. A plugin missing its master file is the exact same failure waiting to happen — quiet, invisible, right up until the game crashes to desktop. This tool is the terminal that catches it first.",
+      "cardDesc": "Flags a missing master the second it's found — no more sudden crash to desktop."
+    },
+    "pgpatcher": {
+      "name": "Vault-Tec Priority Protocol",
+      "emoji": "🎚️",
+      "function": "PGPatcher Load Order",
+      "heroTitle": "Vault-Tec Priority Protocol",
+      "heroBody": "When two subroutines fight over the same power manifold, Vault-Tec mainframe logic dictates that the highest-ranked directive immediately overrides the rest. Vault-Tec Priority Protocol brings that deliberate hierarchy to your visual setup, replacing PGPatcher's minimal list with drag-and-drop ordering, multi-select batch movement, and one-click A–Z sorting. It plugs directly into your real PGPatcher configuration and runs the authentic PGPatcher command-line build in the background&mdash;delivering the exact same output files, logs, and modrules.json alongside live build progress.<p>This tool works directly with your real PGPatcher configuration. When you build the output, it runs the authentic PGPatcher tool underneath to produce the identical patch and logs&mdash;giving you full drag-and-drop control and live feedback without hopping between separate windows.</p>",
+      "cardDesc": "Ranks every competing directive in advance, so the right mod always overrides the rest.",
+      "landingHint": "Click Start to read your mod list and conflict data from PGPatcher (initial scan may take a few minutes on larger collections)."
+    },
+    "scrub": {
+      "name": "Greygarden Maintenance Protocol",
+      "emoji": "🤖",
+      "function": "Mod Scrub",
+      "heroTitle": "Greygarden Maintenance Protocol",
+      "heroBody": "A Greygarden's whole existence is upkeep — tireless robotic gardeners that never get tired of clearing dead growth and hauling off junk nobody's coming back for, quietly, in the background, without ever being asked twice. Your staging folder collects exactly that kind of dead growth: leftover folders from a mod you uninstalled months ago, an old duplicate download nobody remembers downloading. This tool runs the same protocol — sweep it, review it, clear it out.",
+      "cardDesc": "Clears out the orphaned downloads and abandoned staging folders Vortex left behind, and reclaims the space."
+    },
+    "archive-finder": {
+      "name": "Boston Library Terminal",
+      "emoji": "📚",
+      "function": "Archive Finder",
+      "heroTitle": "Boston Library Terminal",
+      "heroBody": "The Boston Public Library's own card-catalog terminals never made anyone dig through boxes of loose pages to find one document — you queried the system, and it told you exactly where the thing you wanted actually was, without you ever having to open a single box you didn't need. Your downloads folder is that same room full of boxes, except every box is a packed archive. This tool is the terminal: search once, across everything, and it points straight at the file — no unpacking required.",
+      "cardDesc": "Queries every archive at once and points straight to the file you need — no unpacking required."
+    },
+    "cycle-helper": {
+      "name": "Circuit Breaker Diagnostics",
+      "emoji": "🔌",
+      "function": "Cycle Helper",
+      "heroTitle": "Circuit Breaker Diagnostics",
+      "heroBody": "When a grid short-circuits, every panel downstream lights up red at once — the whole system screaming that something's wrong, with zero indication of which single crossed wire is actually responsible. A real electrician doesn't rewire the whole building; they trace the fault back to the one bad connection and fix that. Vortex's own cycle warning is the panel full of red lights. This tool is the trace: find the one rule actually causing the short, and cut it.",
+      "cardDesc": "Traces a rule cycle back to the one bad connection and cuts it — not the whole grid."
+    },
+    "missing-files": {
+      "name": "Auto-Doc Diagnostic & Repair",
+      "emoji": "🩹",
+      "function": "Rebuild Missing Files",
+      "heroTitle": "Auto-Doc Diagnostic & Repair",
+      "heroBody": "An Auto-Doc doesn't rebuild a patient from scratch — it scans, finds exactly what's actually damaged or missing, and repairs just that, leaving everything already healthy completely alone. A collection that's \"not working\" almost never means the whole thing is broken; it usually means a handful of files quietly went missing somewhere in staging. This tool runs the same diagnostic: find precisely what's gone, mod by mod, and put back only that.",
+      "cardDesc": "Scans for exactly what's damaged or missing, and repairs just that — nothing else touched."
+    },
+    "settings": {
+      "name": "Settings",
+      "emoji": "⚙️",
+      "function": "Settings",
+      "heroTitle": "Set It Up Once, Use It Everywhere",
+      "heroBody": "Set your Vortex paths and preferences here just once, and every tool picks them up automatically! Designed to keep all your setup in one place, this saves you from entering the same folders and options over and over&mdash;so you can spend your time on the actual work, not the configuration.",
+      "cardDesc": "Set your paths and preferences once, and every tool picks them up automatically."
+    }
+  },
+  "sections": {
+    "mainTools": {
+      "name": "Red Rocket Service Bays",
+      "bannerImage": "theme-assets/fallout4/home-banner-service-bays.png"
+    },
+    "reports": {
+      "name": "Vault-Tec Diagnostics",
+      "bannerImage": "theme-assets/fallout4/home-banner-diagnostics.png"
+    },
+    "utilities": {
+      "name": "Wasteland Field Kits",
+      "bannerImage": "theme-assets/fallout4/home-banner-field-kits.png"
+    }
+  }
+}

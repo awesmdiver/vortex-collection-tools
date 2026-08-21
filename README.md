@@ -143,18 +143,29 @@ just clicking that window's **X** button — all three shut it down the same cle
 
 ---
 
-## 🧩 Install the Helper (optional, but recommended)
+## 🧩 Install the Helper (highly recommended, but optional)
 
 Skip this if you'd rather just close Vortex when a tool asks — everything still works exactly as
 before without it. With the Helper installed, though, **Cycle Helper's Scan and fix-and-apply
-steps** and **Rules Generator's Find Matching Rules and Apply/Clear/Switch steps** all work with
-Vortex left open. We're extending this to more tools over time.
+steps**, **Rules Generator's Find Matching Rules and Apply/Clear/Switch steps**, **Missing
+Masters' Rebuild This Mod**, and **Mod Scrub's scan** all work with Vortex left open. We're
+extending this to more tools over time.
 
-1. Copy the `vortex-collection-helper` folder from the release zip into
-   `%APPDATA%\Vortex\plugins\`.
-2. Restart Vortex.
-3. That's it — the affected tools pick it up automatically the next time you use them, no
-   restart of this app needed.
+**Through Vortex (easiest):**
+
+1. Open Vortex, go to **Settings** > **Extensions**.
+2. Click **Install from File** and pick `vortex-collection-helper.zip` from the release zip.
+3. Restart Vortex.
+
+**Or manually:**
+
+1. Extract `vortex-collection-helper.zip` (from the release zip) — it makes its own
+   `vortex-collection-helper` folder.
+2. Copy that folder into `%APPDATA%\Vortex\plugins\`.
+3. Restart Vortex.
+
+Either way, that's it — the affected tools pick it up automatically the next time you use them,
+no restart of this app needed.
 
 > [!NOTE]
 > The Helper only ever reads Vortex's own live data, and its one write path dispatches through
@@ -185,6 +196,13 @@ Vortex left open. We're extending this to more tools over time.
 > Update Collection and Rules Generator's **Apply to Vortex** step both write directly to Vortex's
 > live database. Each takes a full backup automatically before every write, but keeping a second,
 > independent backup of your own never hurts.
+
+> [!WARNING]
+> **PGPatcher Load Order needs the real PGPatcher app set up first.** This tool reads PGPatcher's own
+> settings and drives its command-line build behind the scenes, so install PGPatcher and run it at
+> least once (configure it, then hit Save or run a real patch) before using this tool — that's what
+> creates the settings file this tool reads. If that setup hasn't happened yet, the tool tells you
+> up front instead of failing partway through.
 
 ---
 
@@ -236,6 +254,10 @@ internals all live in [`TECHNICAL.md`](TECHNICAL.md).
 
 * **Vortex** ([Nexus Mods](https://www.nexusmods.com/about/vortex/)) — the mod manager this tool
   reads and writes alongside.
+* **[PGPatcher](https://github.com/hakasapl/PGPatcher)** (hakasapl) — the PBR texture-patching tool
+  PGPatcher Load Order Editor drives behind the scenes. It reads PGPatcher's own real settings and
+  produces PGPatcher's own real build output — this tool replaces only PGPatcher's bare-bones
+  ordering screen, not PGPatcher itself.
 * **Nexus Mods API** — used for automatic missing-archive downloads (Premium accounts only).
 * **[xEdit](https://github.com/TES5Edit/TES5Edit)** and **[xedit-lib](https://github.com/matortheeternal/xedit-lib)**
   (Mator) — the plugin-editing engine behind Merge Plugins, via the bundled `XEditLib.dll`.
@@ -248,6 +270,9 @@ internals all live in [`TECHNICAL.md`](TECHNICAL.md).
   sits on top (see `skyrim-modding/bsa-browser-revised`) — the original author and project stay the
   credit.
 * **[7-Zip](https://www.7-zip.org/)** — bundled for archive extraction.
+* **[sharp](https://github.com/lovell/sharp)** and **[oxipng](https://github.com/oxipng/oxipng)** —
+  resize + lossless compression for release banner art (`scripts/compress-image.js`); oxipng is
+  auto-downloaded on first use, not vendored in the repo.
 * **[Node.js](https://nodejs.org/)** — the runtime this whole app (and its bundled release package)
   runs on.
 

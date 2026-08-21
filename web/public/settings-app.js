@@ -139,13 +139,18 @@ function renderColorPickers() {
   $g('settingsAccentColorHex').textContent = accentInput.value;
 
   // Background tint only has anything visible to affect under a theme that actually has a Home
-  // background rule (styles.css's own [data-brand="skyrim"] #area-home) -- Standard has none, so
-  // the picker would be a no-op with nothing to show for it. Hardcoded to 'skyrim' for now (the
-  // only theme with that rule); if a future theme adds its own background wash, this check should
-  // grow into something the theme itself declares rather than another hardcoded id.
+  // background rule (styles.css's own [data-brand="..."] #area-home selector list) -- Standard has
+  // none, so the picker would be a no-op with nothing to show for it.
+  //
+  // The theme DECLARES this now, rather than the check naming one theme by id (2026-08-19). The old
+  // `theme.id === 'skyrim'` literal was the reason Fallout 4's picker stayed hidden even once it had
+  // a real wash of its own to tint -- exactly the growth this code's own earlier comment predicted.
+  // A new theme opts in by setting "hasHomeBackgroundWash": true AND adding its own selector to that
+  // CSS rule; both halves are needed, or the picker hides a real control or offers a no-op one.
+  const hasHomeBackgroundWash = !!theme.hasHomeBackgroundWash;
   const bgGroup = $g('settingsBgTintFieldGroup');
-  bgGroup.style.display = theme.id === 'skyrim' ? '' : 'none';
-  if (theme.id === 'skyrim') {
+  bgGroup.style.display = hasHomeBackgroundWash ? '' : 'none';
+  if (hasHomeBackgroundWash) {
     const bgOverride = window.getThemeColorOverride ? window.getThemeColorOverride(theme.id, 'bg') : null;
     const bgInput = $g('settingsBgTintColorInput');
     bgInput.value = bgOverride || computedAccent || theme.accent || '#000000';
@@ -189,7 +194,7 @@ $g('settingsBgTintColorReset').addEventListener('click', () => {
 // 'merge' is a real, pre-existing gap in this list (its rail row/pane exist, but it was never added
 // here) -- out of scope to fix as part of this change, flagged separately. 'cyclehelper' is added
 // correctly below so it doesn't repeat that gap.
-const SETTINGS_CATEGORY_ORDER = ['rebuild', 'update', 'missing', 'scrub', 'archive', 'cyclehelper', 'paths', 'general'];
+const SETTINGS_CATEGORY_ORDER = ['rebuild', 'update', 'missing', 'scrub', 'archive', 'cyclehelper', 'pgpatcher', 'paths', 'general'];
 const SETTINGS_LAST_CATEGORY_KEY = 'settingsLastCategory';
 const SETTINGS_PINNED_KEY = 'settingsPinnedCategories';
 
@@ -314,6 +319,8 @@ async function loadSettings() {
   $g('settingsEslifierOutputDirInput').value = cfg.eslifierOutputDir || '';
   $g('settingsMergeOutputDirInput').value = cfg.mergeOutputDir || '';
   $g('settingsCycleHelperHistoryDirInput').value = cfg.cycleHelperHistoryDir || '';
+  $g('settingsPgpatcherCfgDirInput').value = cfg.pgpatcherCfgDir || '';
+  $g('settingsPgpatcherOutputBackupDirInput').value = cfg.pgpatcherOutputBackupDir || '';
   const mergeAction = cfg.mergePostMergeAction || 'disable';
   document.querySelectorAll('input[name="settingsMergePostMergeAction"]').forEach((el) => {
     el.checked = el.value === mergeAction;
@@ -517,6 +524,8 @@ async function saveSettings() {
       mergeOutputDir: $g('settingsMergeOutputDirInput').value,
       mergePostMergeAction: document.querySelector('input[name="settingsMergePostMergeAction"]:checked')?.value || 'disable',
       cycleHelperHistoryDir: $g('settingsCycleHelperHistoryDirInput').value,
+      pgpatcherCfgDir: $g('settingsPgpatcherCfgDirInput').value,
+      pgpatcherOutputBackupDir: $g('settingsPgpatcherOutputBackupDirInput').value,
       modExceptionListDir: $g('settingsModExceptionListDirInput').value,
       maxBackupsToKeep: $g('settingsMaxBackupsInput').value === '' ? null : Number($g('settingsMaxBackupsInput').value),
       maxStateBackupsToKeep: $g('settingsMaxStateBackupsInput').value === '' ? null : Number($g('settingsMaxStateBackupsInput').value),

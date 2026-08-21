@@ -117,6 +117,27 @@ document.querySelector('[data-action="close-error-modal"]').addEventListener('cl
 $('errorModal').addEventListener('click', (e) => {
   if (e.target.id === 'errorModal') $('errorModal').classList.add('hidden');
 });
+
+// Confirm (yes/no) replacement for the native confirm() -- reuses the SAME #wtConfirmModal markup
+// (deliberately positioned outside every .tool-area, see index.html's own comment there, so it
+// renders correctly regardless of which tool page is currently active). work-through-app.js has its
+// OWN private version of this exact function for its own internal use, IIFE-scoped on purpose so it
+// can't leak onto `window` -- but that left no REAL shared version for any other page to call. Real
+// bug this fixes, not a hypothetical: pgpatcher-app.js's Start Over/Reset buttons call a bare
+// `showConfirmModal(...)` on the assumption a shared one already existed (its own comment says so) --
+// it never did, so every click threw `showConfirmModal is not defined` and silently did nothing.
+// Defined here for the same reason showErrorModal above is: first page script loaded, nothing before
+// it to clobber.
+function showConfirmModal(message) {
+  const overlay = $('wtConfirmModal');
+  $('wtConfirmModalText').textContent = message;
+  overlay.classList.remove('hidden');
+  return new Promise((resolve) => {
+    const cleanup = (result) => { overlay.classList.add('hidden'); resolve(result); };
+    $('wtConfirmModalOk').onclick = () => cleanup(true);
+    $('wtConfirmModalCancel').onclick = () => cleanup(false);
+  });
+}
 // NOT wrapped in an IIFE, unlike stats-app.js/work-through-app.js -- this is the FIRST page script
 // loaded (after shell.js), so its declarations are the ones every later same-named collision used
 // to clobber (api/el/baseName/showErrorModal). Those two later files are now IIFE-wrapped instead,

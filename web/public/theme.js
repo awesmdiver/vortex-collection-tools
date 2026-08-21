@@ -156,6 +156,19 @@
     document.documentElement.setAttribute('data-brand', theme.id);
   }
 
+  // Get Started book, opt-in per theme (2026-08-20) -- the same theme-DECLARED pattern
+  // hasHomeBackgroundWash established, adapted for something a STYLESHEET has to see. #nav-book's
+  // default-hidden state is pure CSS, so a JS-side check (the way settings-app.js reads
+  // hasHomeBackgroundWash) isn't enough on its own -- the flag has to reach a selector. This is
+  // that bridge: a bare boolean attribute on <html>, which styles.css keys off as [data-has-book].
+  //
+  // Replaces three separate [data-brand="skyrim"] rules that each assumed Skyrim was the only theme
+  // that would ever have a book. A theme opts in with "hasBook": true AND a real
+  // themes/<id>-book.json beside it -- the flag alone would show a button that 404s.
+  function applyBookAttribute(theme) {
+    document.documentElement.toggleAttribute('data-has-book', !!theme.hasBook);
+  }
+
   // Themed display font (Theming: visual flourishes) -- Plain has no `fonts` map at all, so this is
   // a no-op for it (styles.css's var(--font-display, inherit) fallback already covers "no theme
   // font set" -- nothing here needs to explicitly unset anything). A theme WITH a fonts map picks
@@ -184,6 +197,7 @@
     applyAccentStylesheet(theme);
     applyBackgroundTint(theme);
     applyBrandAttribute(theme);
+    applyBookAttribute(theme);
     applyFont(theme);
 
     if (theme.appName) {
@@ -227,6 +241,7 @@
         el.textContent = t.emoji ? `${t.emoji} ${t.heroTitle}` : t.heroTitle;
       }
       else if (slot === 'heroBody' && t.heroBody != null) el.innerHTML = t.heroBody;
+      else if (slot === 'landingHint' && t.landingHint != null) el.textContent = t.landingHint;
       else if (slot === 'bannerImage') applyBannerImage(el, t.bannerImage);
     });
 

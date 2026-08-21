@@ -54,12 +54,60 @@ this project's own code, so GPLv3's copyleft obligations apply to BSA Browser it
 project. This project's copy is a local fork under active modernization
 (`skyrim-modding/bsa-browser-revised`) -- credit stays with the original author regardless.
 
+## PGPatcher (pgtools.exe)
+
+**License: GNU GPLv3.**
+
+`pgtools.exe` (the headless CLI backend for the PGPatcher Load Order Editor) is compiled from
+[`hakasapl/PGPatcher`](https://github.com/hakasapl/PGPatcher) via this project's own fork,
+[`awesmdiver/PGPatcher`](https://github.com/awesmdiver/PGPatcher) (source lives alongside this
+project's workspace at `skyrim-modding/pgpatcher-fork`). Unlike BSA Browser above, this is invoked as
+a separate process too, but the compiled binary is bundled DIRECTLY inside this project's own release
+zip (`tools/pgtools/`) rather than downloaded fresh from the original author's own releases at
+runtime -- a heavier distribution event than BSA Browser's, and specifically what triggers this
+entry.
+
+- **Full GPLv3 text** is bundled alongside the binary itself at `tools/pgtools/LICENSE`, mirroring
+  this project's existing practice for 7-Zip's own License.txt below.
+- **Credit**: hakasapl, original author, regardless of how much local modification sits on top --
+  same standing rule this project already applies to BSA Browser.
+- **Corresponding Source**: the fork is public, satisfying GPLv3's source-availability requirement,
+  ***provided the exact commit each shipped binary was built from is actually pushed there before
+  that release goes out*** -- flagged explicitly in this change's own handoff as a real, unresolved
+  compliance gap as of this writing (the fork's `main` was 2 commits ahead of its own public
+  `origin/main` when this entry was written), not something to assume is already true.
+- **Modifications**: this fork DOES modify the original (a shared patcher-registration refactor, a
+  `--relax-weight-validation` CLI flag, a rotating file-sink logger, and this project's own
+  `initLogger()`/CLI additions to the `PGTools` subproject specifically) -- GPLv3 Section 5's
+  "carry prominent notices stating that you modified it" requirement applies here, not just Section
+  6's object-code-conveyance requirements for an unmodified binary. Not resolved by this entry alone
+  -- flagged in the handoff for real legal-language review rather than guessed at here.
+
 ## 7-Zip
 
 **License: GNU LGPL (the 7-Zip source/executables); the unRAR restriction in 7-Zip's own license
 does not apply here -- this project only bundles the LGPL-covered parts.**
 
 The `7z.exe` console binary is bundled for archive extraction. See [7-zip.org](https://www.7-zip.org/).
+
+## sharp
+
+**License: Apache-2.0.**
+
+[`lovell/sharp`](https://github.com/lovell/sharp) (npm `sharp`, currently `^0.35.3`) resizes and
+re-saves the release banner art in `scripts/compress-image.js` -- resize to a max width (never
+upscaling) + a lossless PNG re-save at max compression, palette-forcing off so full color depth is
+kept.
+
+## oxipng
+
+**License: MIT.**
+
+[`oxipng/oxipng`](https://github.com/oxipng/oxipng) re-encodes those same pixels (genuinely
+lossless -- not one pixel changes) with a slower/better DEFLATE strategy for extra size reduction,
+also in `scripts/compress-image.js`. The Windows binary is auto-downloaded from oxipng's GitHub
+releases on first use and lives at `tools/oxipng/oxipng.exe`, gitignored -- not vendored in the repo,
+same pattern this project already uses for `tools/7-Zip/7z.exe`.
 
 ## Node.js
 

@@ -282,7 +282,8 @@ const REPORTS_SUB_TAB_LABELS = {
   workshop: { fallback: 'Workshop Report', toolId: 'report-workshop' },
   exceptions: { fallback: 'Mod Exceptions', toolId: 'report-exceptions' },
 };
-function showReportsSubTab(id) {
+let currentReportsSubTabId = null;
+function updateReportsSubTabLabel(id) {
   const entry = REPORTS_SUB_TAB_LABELS[id];
   let label = 'Reports';
   if (entry) {
@@ -290,6 +291,10 @@ function showReportsSubTab(id) {
     label = `Reports > ${name}`;
   }
   if (typeof setPageLabel === 'function') setPageLabel(label);
+}
+function showReportsSubTab(id) {
+  currentReportsSubTabId = id;
+  updateReportsSubTabLabel(id);
   for (const tab of REPORTS_SUB_TABS) {
     $g(`reports-sub-area-${tab}`).classList.toggle('hidden', tab !== id);
     $g(`reports-sub-${tab}`).classList.toggle('btn--primary', tab === id);
@@ -338,5 +343,15 @@ window.showUpdateCompareReport = showUpdateCompareReport;
 // The one deliberate seam: shell.js (loaded BEFORE this file) calls this by name on a deep-link
 // (?reports=... / clicking the Reports nav tab), and it can't see inside this IIFE otherwise.
 window.showReportsSubTab = showReportsSubTab;
+
+// When the theme loads after a deep-link, re-update the label so it shows the themed tool name
+// instead of the English fallback (see theme.js's themeready event). Only update if a Reports
+// sub-tab is actually the active view -- don't fire if the user navigated elsewhere by the time
+// the theme fetch resolved.
+window.addEventListener('themeready', () => {
+  if (currentReportsSubTabId !== null) {
+    updateReportsSubTabLabel(currentReportsSubTabId);
+  }
+});
 
 })();

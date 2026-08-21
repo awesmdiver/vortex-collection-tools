@@ -1,0 +1,119 @@
+{
+  "title": "The Pip-Boy — A Survivor's Manual",
+  "chapters": [
+    {
+      "toolId": "home",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-the-pip-boy.png",
+      "lore": "Every Vault dweller gets one, and it never comes off — a single wrist-mounted terminal that holds your status, your inventory, your map, everything you need to know about where you stand right now. You don't dig through a bag for it; you glance down and it's already showing you what matters. That's exactly what this page is: not a tool itself, just the one screen that shows you every tool you've got and gets you to whichever one you actually came for.",
+      "whatItDoes": "Pick a tool to get started. Everything here works on collections you've already installed in Vortex&mdash;rebuild them faster, keep your Ignored and Disabled mods through an update, sort out conflict rules, and see how it all went."
+    },
+    {
+      "toolId": "rebuild",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-project-purity.png",
+      "lore": "The Jefferson Memorial's whole promise wasn't some trickle of clean water eventually — it was fresh water for the entire Wasteland, delivered at a scale nobody else could manage, bypassing every rusted, irradiated pipe standing in the way. That's the exact same bet this tool makes with your collection: Vortex's own install path works, technically, but it's the slow, bottlenecked route. This one reconstructs the same files a different way — faster, at full scale, with nothing contaminated skipped.",
+      "whatItDoes": "Skip Vortex's slow archive-install process entirely! This tool re-extracts an already-installed collection's mods directly into your staging folder&mdash;same result, dramatically faster. Review exactly what would change before anything happens, then let it run while you do something else."
+    },
+    {
+      "toolId": "sync",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-memory-den.png",
+      "lore": "Dr. Amari's whole practice runs on one rule: you can plug someone into a recliner, pull a memory out, look at it closely, even work on it — but the person sitting in the chair walks out exactly who they walked in as, nothing about their real identity lost in the process. An update to your collection works the same risky-sounding way. Things get touched, rearranged, refreshed — but the choices that make your setup *yours*, which mods you'd quietly Ignored or Disabled, come back out intact, exactly as you left them.",
+      "whatItDoes": "Updating a collection in Vortex often resets your carefully-set <strong>Ignored</strong> and <strong>Disabled</strong> mods back to their defaults. This tool remembers exactly how you had things set and restores it after the update, so that cleanup work never has to happen twice. Work through the steps below in order &mdash; you'll hop over to Vortex between some of them, and your place here is saved while you do."
+    },
+    {
+      "toolId": "update-collection-v2",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-memory-den.png",
+      "lore": "Dr. Amari's whole practice runs on one rule: you can plug someone into a recliner, pull a memory out, look at it closely, even work on it — but the person sitting in the chair walks out exactly who they walked in as, nothing about their real identity lost in the process. An update to your collection works the same risky-sounding way. Things get touched, rearranged, refreshed — but the choices that make your setup *yours*, which mods you'd quietly Ignored or Disabled, come back out intact, exactly as you left them.",
+      "whatItDoes": "Check your installed collections for updates and review exactly what a new revision changes &mdash; mods removed, updated, and added &mdash; then apply the removals and updates for real: real extraction, real deployment, your Ignored and Disabled mods and collection rules carried across untouched."
+    },
+    {
+      "toolId": "rules-generator",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-relay-tower-network.png",
+      "lore": "Pre-war relay towers out in the Commonwealth didn't care that the original operator packed up, got turned to ash, or joined the Gunners — the automation just kept re-establishing the broadcast, automatically finding whoever was on the other end now and routing the signal there instead. Your load-order rules work the same way once a collection updates: the mod you pointed a rule at still exists, it's just wearing a new name and version now. This tool doesn't ask you to re-learn the whole network from scratch — it just re-finds the connection and relinks it.",
+      "whatItDoes": "Updated to a new collection? Chances are you already spent time getting load-order rules just right in the old one. This tool matches mods between both collections and copies those rules straight across, so you're not stuck resolving the exact same conflicts twice. Review every match below before applying anything to Vortex."
+    },
+    {
+      "toolId": "merge",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-institute-sub-assembly.png",
+      "lore": "The Institute doesn't build a courser from one giant piece of molded plastic — dozens of separate, purpose-built components get compressed, synthesized, and integrated into a single unified frame, indistinguishable from something that was always whole. Your plugin count works the same way: a pile of small, individually-necessary mods, each taking up its own load-order slot. This tool does what the Institute does with raw components — folds several into one clean, finished unit, at a fraction of the original footprint.",
+      "whatItDoes": "Skyrim's plugin slots fill up fast. Pick plugins from one or more collections and this tool bundles them into a single file&mdash;freeing up slots without touching xEdit. Review exactly what's going in first, and it'll flag the result as ESL automatically when it fits."
+    },
+    {
+      "toolId": "missing-masters",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-vault-tec-diagnostic-prompt.png",
+      "lore": "Vault-Tec terminals down in the sub-basement don't wait for a life-support system to actually fail before they sound off — the second a required component goes missing, the screen flashes red and says so, loud and immediate, before whatever depends on that component ever gets the chance to lock up. A plugin missing its master file is the exact same failure waiting to happen — quiet, invisible, right up until the game crashes straight to desktop. This tool is the terminal that catches it first.",
+      "whatItDoes": "Easily pinpoint missing master files and instantly see every mod relying on them&mdash;all in one clear view! Designed to streamline your troubleshooting, this tool takes the hassle out of tracking down broken dependencies so you can jump straight into Vortex and fix them with confidence."
+    },
+    {
+      "toolId": "scrub",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-greygarden-maintenance-protocol.png",
+      "lore": "A Mister Handy's whole existence in those automated greenhouses is upkeep — tireless robotic gardeners that never get tired of clearing dead growth and hauling off junk nobody's coming back for, quietly, in the background, without ever being asked twice. Your staging folder collects exactly that kind of dead growth: leftover folders from a mod you uninstalled months ago, an old duplicate archive nobody remembers downloading. This tool runs the same protocol — sweep it, review it, clear it out.",
+      "whatItDoes": "Easily spot staging folders and archives that Vortex has quietly stopped tracking&mdash;no digging through anything by hand! Designed to take the guesswork out of cleanup, this tool shows you exactly what's safe to remove so you can reclaim disk space with confidence."
+    },
+    {
+      "toolId": "archive-finder",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-boston-library-terminal.png",
+      "lore": "The Boston Public Library's own card-catalog terminals never made anyone dig through dusty boxes of loose paper to find one specific document — you queried the system, and it told you exactly where the thing you wanted actually was, without you ever having to open a single crate you didn't need. Your downloads folder is that same room full of crates, except every crate is a packed archive. This tool is the terminal: search once, across everything, and it points straight at the file — no unpacking required.",
+      "whatItDoes": "Stop extracting archives just to see what's inside! This tool indexes every zipped mod archive's contents up front&mdash;no unpacking needed&mdash;so you can instantly search across all of them by file or mod name, and pull out exactly the patch you need."
+    },
+    {
+      "toolId": "missing-files",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-auto-doc-diagnostic-repair.png",
+      "lore": "A properly stocked Auto-Doc doesn't rebuild a patient from scratch with new skin and bones — it scans, finds exactly what's actually damaged or missing, and repairs just that, leaving everything already healthy completely alone. A collection that's \"not working\" almost never means the whole thing is broken; it usually means a handful of files quietly went missing somewhere in staging. This tool runs the same diagnostic: find precisely what's gone, mod by mod, and put back only that.",
+      "whatItDoes": "Whether a collection removed straight in Vortex (skipping Safe Collection Removal) wiped out shared files, a few mods quietly went missing from your staging folder, or rebuilding the entire collection feels like overkill&mdash;this tool has you covered. It scans your chosen collections, highlights exactly which files are missing, and restores only what's needed directly from the archive."
+    },
+    {
+      "toolId": "cycle-helper",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-circuit-breaker-diagnostics.png",
+      "lore": "When a power grid shorts out in a basement somewhere, every panel downstream lights up red at once — the whole system screaming that something's wrong, with zero indication of which single crossed wire is actually responsible. A real electrician doesn't rip out the whole building's wiring; they trace the fault back to the one bad connection and pop the switch. Vortex's own cycle warning is the panel full of red lights. This tool is the trace: find the one rule actually causing the short, and cut it.",
+      "whatItDoes": "When Vortex reports a rule cycle after you've hand-edited your load-order rules, this points at the rule(s) actually responsible instead of dumping every mod caught in the tangle&mdash;fix it, apply it, and confirm the cycle's really gone, all in one place."
+    },
+    {
+      "toolId": "remove-collection",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-remove-collection.png",
+      "lore": "When a Vault clearing crew abandons an old storage cache, they don't just detonate the wing and hope the vital medical supplies weren't still being shared by the functional labs down the hall. Ripping out a collection without checking the inventory first is a fast track to stripping essential components right out from under your other running builds. This quarantine protocol inspects the shared manifest before any container gets purged, letting the Overseer hand-pick what stays on the shelves and what goes out with the slag. It ensures an old deployment gets gutted cleanly without leaving your other active systems hanging by a thread.",
+      "whatItDoes": "Removing a collection in Vortex can easily wipe out mods that your other collections are still using behind the scenes. This tool checks your entire setup first, highlights every shared mod, and lets you choose individually what to keep or delete. You can safely clear out old collections without worrying about breaking anything else."
+    },
+    {
+      "toolId": "report-stats",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-report-stats.png",
+      "lore": "A functional terminal in the overseer's private office doesn't make you walk the whole floor to check if the water purifiers are failing — it aggregates the run data and throws up a red flag the second a bottleneck starts choking the output. Sifting through raw system dumps from past rebuilding runs one by one is a waste of precious pre-war battery life. This log tracks every historical cycle in one place, instantly highlighting which mods are dragging down the processing speed and demanding immediate maintenance. It keeps the whole settlement running at peak efficiency without requiring a manual sweep of every terminal in the sector.",
+      "whatItDoes": "Track how every collection you've rebuilt has performed over time, and instantly spot which mods still need attention right now. No more digging through individual run logs one at a time to piece together the full picture."
+    },
+    {
+      "toolId": "report-workthrough",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-report-workthrough.png",
+      "lore": "When a localized structural collapse takes out half the precinct, a competent quartermaster compiles every broken hinge and shattered terminal onto a single priority manifest instead of running around blindly in the dust. Chasing down fragmented error alerts across a dozen separate collection folders is a great way to miss a critical missing archive while the whole operation slowly falls apart. This ledger pulls every mismatched asset and dropped file across all deployed builds into one clean checklist for immediate triage. Fix what can be patched right from the desk, check off the manual overrides, and watch the roster clear out before the next structural test.",
+      "whatItDoes": "Instead of hunting through separate run logs for what still needs fixing, this report gathers every problem mod across every collection into one checklist. Fix resolvable mismatches and missing archives right here; check off anything else as you handle it in Vortex yourself&mdash;your progress sticks around until a fresh rerun clears it."
+    },
+    {
+      "toolId": "report-updatecompare",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-report-updatecompare.png",
+      "lore": "Before-and-after schematics are the only way to know if the Institute replaced a terminal module with a listening device or just upgraded the copper wiring. Blindly pulling a collection update straight into the mainframe without checking what got swapped out leaves the Overseer guessing whether a new batch of files improved the settlement or introduced a fatal logic loop. This log runs a direct differential scan the moment an update drops, laying out exactly what stayed on the rack, what got brought in fresh, and what got permanently spaced. It guarantees you always know the exact state of your systems before the dust settles.",
+      "whatItDoes": "After running Update Collection, get a clear before-and-after comparison of your mods&mdash;what stayed, what got added, and what got removed&mdash;so you're never left guessing what an update actually did."
+    },
+    {
+      "toolId": "report-rulesgen",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-report-rulesgen.png",
+      "lore": "When a network of relay towers goes live across the Commonwealth, an engineer needs to look at the master board to see which transmission repeaters are broadcasting the correct frequencies and which ones are still throwing static. Wandering out to every individual antenna just to verify the conflict rules were properly paired is a massive waste of fusion cores. This status report gives the Overseer an instant read on which mod conflicts have already been synchronized by the generator and which ones still demand a manual override. It cuts out the redundant legwork and tells you right away where the signal is dropping.",
+      "whatItDoes": "See at a glance which mods already have their conflict rules copied over correctly, and which ones still need a decision or a second look in Vortex&mdash;all without re-running the matching process itself."
+    },
+    {
+      "toolId": "report-workshop",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-report-workshop.png",
+      "lore": "Standard Commonwealth database tags are about as reliable as a pre-war pocket watch dropped in an irradiated puddle — showing the same stale manufacture date even after the internal gears have been completely overhauled. Relying on a static public timestamp to tell you when a private workshop collection was actually modified leaves you entirely in the dark. This query tool pulls the true last-touched operational date straight from the revision history logs hidden deep in the local files. It lets the Overseer glance at the ledger and instantly know which experimental builds have actually seen recent workbench time.",
+      "whatItDoes": "Nexus's own collection page shows a date that never moves for a private collection&mdash;this pulls the real one, straight from each collection's revision history, so you can tell at a glance which ones you've actually worked on recently."
+    },
+    {
+      "toolId": "report-exceptions",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-report-exceptions.png",
+      "lore": "Some custom-rigged gear brought back from the Glowing Sea requires a delicate touch, where the scavver deliberately left half the internal components out of the chassis to prevent a catastrophic power surge. Letting an automated repair routine force-install the full archival contents of one of these hand-picked setups will flood the system with uncalibrated garbage and brick the whole rig. Registering a mod with this protocol tells the automated rebuild sweepers to walk right past it and leave its delicate custom wiring completely undisturbed. It keeps your specialized gear safely isolated from automated \"fixes\" that would otherwise cause an immediate system crash.",
+      "whatItDoes": "Some mods are hand-pick-only installers where you deliberately chose a subset of what the archive contains. Auto-extracting or auto-rebuilding the full archive for one of these doesn't restore what's \"missing\" -- it installs content you never chose, which can cause missing masters or crashes. Add a mod here once, and both Rebuild Collection and Rebuild Missing Files will leave it alone from then on, wherever it shows up."
+    },
+    {
+      "toolId": "pgpatcher",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-vault-tec-priority-protocol.jpg",
+      "lore": "When two competing subroutines attempt to route auxiliary power to the same life-support manifold, the mainframe cannot afford an administrative dead-heat. Vault-Tec automation resolves contention through a rigid hierarchy of execution protocols, allowing the highest-ranked directive to immediately override and suppress all subordinate signals below it. Without a deliberate sequence governing the sub-level logic gates, conflicting commands inevitably spiral into erratic sensor readouts, subsystem brownouts, and terminal crashes. Calibrating the protocol hierarchy in advance ensures that every conflicting directive is resolved with precision, leaving the primary system operating exactly to overseer specifications.",
+      "whatItDoes": "Decide which mod takes priority when two of them rewrite the same mesh or shader. Drag to reorder, grab a whole group and move it at once, or sort the list A&ndash;Z and adjust from there&mdash;then PGPatcher runs to exactly that order, no guesswork."
+    }
+  ]
+}

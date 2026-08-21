@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Vortex Collection Tools</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <!-- Applies a stored dark/light override, if any, before the stylesheet below is even parsed --
      avoids a flash of the wrong theme on load. No override stored (the default) means "system":
      styles.css's own prefers-color-scheme media query handles it, nothing to do here. -->
@@ -24,12 +27,16 @@
   </div>
   <div></div>
   <div class="app-header__right">
-    <!-- Get Started book -- Skyrim-only (styles.css hides it entirely unless [data-brand="skyrim"];
-         Plain has no lore content to show a book for). Sits to the LEFT of the tool-title text
+    <!-- Get Started book -- shown only for a theme that declares one (styles.css hides it entirely
+         unless [data-has-book], which theme.js sets from the theme's own hasBook flag; a theme with
+         no lore content simply doesn't set it). Sits to the LEFT of the tool-title text
          (#headerMeta), not grouped with Settings' small utility icon -- it's the one header element
          meant to catch the eye and get clicked, not blend in as a peer of the gear icon (confirmed
          2026-08-15: previous far-right placement next to Settings read as too small/easy to miss). -->
-    <button id="nav-book" class="nav-tab" title="Get Started -- browse every tool in The Arcaneum" hidden>&#128214;</button>
+    <!-- Generic on purpose: every theme shares this markup, and the button now appears for any
+         theme declaring "hasBook" (2026-08-20 -- it used to hard-code Skyrim's own book name, "The
+         Arcaneum"). book-app.js swaps in the real book's title once its data loads. -->
+    <button id="nav-book" class="nav-tab" title="Get Started -- browse every tool" hidden>&#128214;</button>
     <div id="headerMeta" class="app-header__meta"></div>
     <button id="nav-settings" class="settings-gear-btn nav-tab" title="Settings">&#9881;</button>
   </div>
@@ -68,6 +75,27 @@
   </div>
 </div>
 
+<!-- Shown by shell.js's showHelperUnavailableModal() whenever the Helper extension was reachable
+     when a v2 flow started but stops responding partway through (a real, distinct case from Update
+     Collection's own upfront Helper check -- that one silently routes to Classic before v2 ever
+     opens; this one interrupts a flow already in progress). Copy deliberately stays this simple
+     (director's own exact wording) -- it does NOT hedge with "might be mid-deploy" language, because
+     this project's OWN actions that trigger a real Vortex deploy already show their own visible
+     progress (DESIGN.md's "never run a real action silently" rule) -- a user watching that progress
+     never hits this modal during it. This modal is specifically for the other two real causes
+     (Vortex was closed, or the Helper extension itself crashed), which share the same remedy. -->
+<div id="helperUnavailableModal" class="modal-overlay hidden">
+  <div class="modal modal--warning">
+    <h2>⚠️ Can't reach Vortex right now</h2>
+    <p>Close Vortex. If already closed, restart Vortex.</p>
+    <div class="modal-actions">
+      <button id="helperUnavailableCloseBtn" class="btn btn--ghost">Close</button>
+      <button id="helperUnavailableClassicBtn" class="btn btn--ghost">Switch to Classic instead</button>
+      <button id="helperUnavailableRetryBtn" class="btn btn--primary">Try Again</button>
+    </div>
+  </div>
+</div>
+
 <!-- Shown once by shell.js at app startup (GET /api/sync/vortex-version-check), NOT tied to Apply
      Ignores' Preview flow -- this is a whole-app "is your installed Vortex one this tool has
      actually been tested against" question, not specific to any one step. Skipped entirely if
@@ -98,6 +126,18 @@
     <p class="tool-hero__body" data-brand-slot="heroBody">Pick a tool to get started. Everything here works on collections you've already installed in Vortex&mdash;rebuild them faster, keep your Ignored and Disabled mods through an update, sort out conflict rules, and see how it all went.</p>
   </div>
 
+  <!-- Whole-app standing caution (2026-08-18), not scoped to Update Collection v2 specifically --
+       any tool here that writes through the Helper extension while Vortex is open carries the same
+       concurrent-write risk. Serious register (plain-language-writer skill) since this is a genuine
+       "don't do this" caution, not a casual tip -- warning severity (amber), not critical: nothing
+       here is refused or blocked, this is a real risk to avoid, not a hard stop. -->
+  <div class="callout callout--warning" id="homeConcurrentUseWarning" style="margin-bottom:20px">
+    <div class="callout__title">⚠️ Don't change things in Vortex while this tool is working</div>
+    <p>Some tools here (like applying an update or fixing a rule cycle) write changes directly to Vortex in real time. If you also click something like Deploy Mods inside Vortex at the exact same moment, both programs will try to edit your files at once&mdash;which can corrupt your load order.</p>
+    <p><strong style="color:var(--warning)">The golden rule:</strong> wait for this tool to finish completely before clicking anything inside Vortex, and vice versa.</p>
+    <p style="margin:8px 0 0"><button type="button" class="af-inline-link-btn" id="homeConcurrentUseWarningDismiss">Don't show this again</button></p>
+  </div>
+
   <div id="homePinnedRow"></div>
 
   <div id="homeCategorySections">
@@ -123,11 +163,19 @@
       </button>
       <button class="home-card__star" data-pin-key="rebuild" title="Pin to top">☆</button>
     </div>
+    <!-- One "Update Collection" entry point, not two (2026-08-18) -- this single card replaces what
+         used to be two separate home cards (Classic + the v2 Preview). data-area is the new
+         "update-collection" sentinel shell.js's navigateToArea() special-cases: it checks the Helper
+         extension LIVE on every click and opens v2 if reachable, Classic otherwise -- the user never
+         sees or picks between the two. data-tool-id themed as "update-collection-v2" ("The Herald",
+         director's own call 2026-08-18: v2 is what most people land in once Helper's the common
+         case, Classic is increasingly the fallback exception) -- data-pin-key stays "sync" (unchanged)
+         so an existing pin from before this change keeps working. -->
     <div class="home-card-wrap" data-section="homeSectionMainTools">
-      <button class="home-card" data-area="sync" data-tool-id="sync">
-        <div class="home-card__icon" data-brand-slot="emoji">🔄</div>
+      <button class="home-card" data-area="update-collection" data-tool-id="update-collection-v2">
+        <div class="home-card__icon" data-brand-slot="emoji">🔄️</div>
         <div class="home-card__name" data-brand-slot="name">Update Collection</div>
-        <div class="home-card__desc" data-brand-slot="cardDesc">Keep your Ignored and Disabled mods exactly as you set them after an update.</div>
+        <div class="home-card__desc" data-brand-slot="cardDesc">Check for updates, review exactly what changes, and apply removals/updates for real &mdash; your Ignored/Disabled mods and rules stay put.</div>
         <div class="home-card__open">Open <span>→</span></div>
       </button>
       <button class="home-card__star" data-pin-key="sync" title="Pin to top">☆</button>
@@ -142,13 +190,13 @@
       <button class="home-card__star" data-pin-key="rules-generator" title="Pin to top">☆</button>
     </div>
     <div class="home-card-wrap" data-section="homeSectionMainTools">
-      <button class="home-card" data-area="update-collection-v2" data-tool-id="update-collection-v2">
-        <div class="home-card__icon" data-brand-slot="emoji">🔄️</div>
-        <div class="home-card__name" data-brand-slot="name">Update Collection (Preview)</div>
-        <div class="home-card__desc" data-brand-slot="cardDesc">Check for updates and see exactly what a new revision changes, before anything touches Vortex.</div>
+      <button class="home-card" data-area="remove-collection" data-tool-id="remove-collection">
+        <div class="home-card__icon" data-brand-slot="emoji">📦</div>
+        <div class="home-card__name" data-brand-slot="name">Safe Collection Removal</div>
+        <div class="home-card__desc" data-brand-slot="cardDesc">Checks for mods shared with your other collections before removing anything, so nothing else breaks.</div>
         <div class="home-card__open">Open <span>→</span></div>
       </button>
-      <button class="home-card__star" data-pin-key="update-collection-v2" title="Pin to top">☆</button>
+      <button class="home-card__star" data-pin-key="removecollection" title="Pin to top">☆</button>
     </div>
   </div>
   </div>
@@ -266,6 +314,15 @@
         <div class="home-card__open">Open <span>→</span></div>
       </button>
       <button class="home-card__star" data-pin-key="cyclehelper" title="Pin to top">☆</button>
+    </div>
+    <div class="home-card-wrap" data-section="homeSectionUtilities">
+      <button class="home-card" data-area="pgpatcher" data-tool-id="pgpatcher">
+        <div class="home-card__icon" data-brand-slot="emoji">⚔️</div>
+        <div class="home-card__name" data-brand-slot="name">PGPatcher Load Order</div>
+        <div class="home-card__desc" data-brand-slot="cardDesc">Drag mods into priority order and resolve PBR conflicts, without opening PGPatcher itself.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="pgpatcher" title="Pin to top">☆</button>
     </div>
   </div>
   </div>
@@ -866,6 +923,10 @@
         <button class="settings-rail__item" data-cat="cyclehelper"><span class="settings-rail__icon" data-brand-slot="emoji">🔀</span><span data-brand-slot="name">Cycle Helper</span></button>
         <button class="settings-rail__pin" data-pin-key="cyclehelper" title="Pin to top">☆</button>
       </div>
+      <div class="settings-rail__row" data-tool-id="pgpatcher">
+        <button class="settings-rail__item" data-cat="pgpatcher"><span class="settings-rail__icon" data-brand-slot="emoji">⚔️</span><span data-brand-slot="name">PGPatcher Load Order</span></button>
+        <button class="settings-rail__pin" data-pin-key="pgpatcher" title="Pin to top">☆</button>
+      </div>
       <div class="settings-rail__row">
         <button class="settings-rail__item" data-cat="paths"><span class="settings-rail__icon">📁</span>Paths &amp; Backups</button>
         <button class="settings-rail__pin" data-pin-key="paths" title="Pin to top">☆</button>
@@ -1165,6 +1226,38 @@
     </div>
     </section>
 
+    <!-- PGPatcher Load Order Editor -- docs/plans/2026-08-19-pgpatcher-load-order-tool.md. Deliberately
+         optional (see lib/app-config.js's own pgpatcherCfgDir comment for why this isn't a required
+         field like Skyrim Data folder). Reuses skyrimDataDir (already set for Missing Masters) as its
+         own source folder, so only the PGPatcher cfg folder needs configuring here. -->
+    <section class="settings-pane" id="pane-pgpatcher" data-tool-id="pgpatcher">
+    <div class="settings-group">
+      <div class="settings-group__header">
+        <h2 data-brand-slot="name">PGPatcher Load Order</h2>
+        <p class="muted">Reads and writes modrules.json straight from PGPatcher's own cfg folder. Your Skyrim Data folder is already configured above (Missing Masters) -- this tool reuses that same setting as its source.</p>
+      </div>
+
+      <h3 class="settings-section-title">PGPatcher cfg folder</h3>
+      <div class="field-group">
+        <label class="field-label" for="settingsPgpatcherCfgDirInput">Folder containing modrules.json and settings.json <span class="muted">(e.g. PGPatcher's own install folder \ cfg)</span></label>
+        <div class="path-input-row">
+          <input id="settingsPgpatcherCfgDirInput" class="input input--wide" type="text" placeholder="e.g. D:\Games\Skyrim SE\PGPatcher\cfg" autocomplete="off">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsPgpatcherCfgDirInput">Browse&hellip;</button>
+        </div>
+      </div>
+
+      <h3 class="settings-section-title">Output backup folder <span class="muted">(optional)</span></h3>
+      <div class="field-group">
+        <label class="field-label" for="settingsPgpatcherOutputBackupDirInput">Where to back up your existing PGPatcher output before a new build overwrites it <span class="muted">(leave blank for no backup)</span></label>
+        <p class="muted">Building real output deletes what's already there first. Set a folder here and this tool moves your existing output into a dated subfolder before every build, so you're never left without a working copy if a build fails partway through.</p>
+        <div class="path-input-row">
+          <input id="settingsPgpatcherOutputBackupDirInput" class="input input--wide" type="text" placeholder="e.g. D:\Games\Skyrim SE\PGPatcher\output-backups" autocomplete="off">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsPgpatcherOutputBackupDirInput">Browse&hellip;</button>
+        </div>
+      </div>
+    </div>
+    </section>
+
     <!-- Paths & Backups -- where files live (split from the old single General block 2026-07-28). -->
     <section class="settings-pane" id="pane-paths">
     <div class="settings-group">
@@ -1259,6 +1352,7 @@
         <label class="field-label" for="settingsBrandThemeSelect">App style</label>
         <select id="settingsBrandThemeSelect" class="select select--small">
           <option value="skyrim">Skyrim</option>
+          <option value="fallout4">Fallout 4</option>
           <option value="plain">Standard (no theme)</option>
         </select>
         <p class="muted" style="margin-top: 6px;">Renames and re-colors the app around a Skyrim theme -- every button still does exactly the same thing. Pick "Standard" for the plain, unthemed original.</p>
@@ -1359,6 +1453,16 @@
         downloads for free accounts by design, the same way Vortex's own client does. If your
         account isn't Premium, download the archive yourself from either within Vortex or on
         Nexus's website to reinstall it.
+      </div>
+
+      <h3 class="settings-section-title">Support this project</h3>
+      <div class="field-group">
+        <p class="muted">If this tool saved you time and you'd like to say thanks, donations help keep it going — here's how: <a href="https://paypal.me/awesmdiver" target="_blank" rel="noreferrer">PayPal</a> • <a href="https://www.venmo.com/u/awesmdiver" target="_blank" rel="noreferrer">Venmo</a></p>
+      </div>
+
+      <h3 class="settings-section-title">Give feedback</h3>
+      <div class="field-group">
+        <p class="muted">Found a bug or have a feature idea? <a href="https://github.com/awesmdiver/vortex-collection-tools/issues/new" target="_blank" rel="noreferrer">Let us know on GitHub</a>.</p>
       </div>
     </div>
     </section>
@@ -2162,7 +2266,7 @@
   <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span>Utilities</div>
   <div class="tool-hero" data-tool-id="missing-files">
     <h2 class="tool-hero__title" data-brand-slot="heroTitle">🩹 Fix Just the Files That Are Actually Missing</h2>
-    <p class="tool-hero__body" data-brand-slot="heroBody">Sometimes a mod's files quietly go missing from your staging folder, and rebuilding the whole collection to fix it feels like overkill. This tool checks the collections you pick and shows you exactly which files are gone&mdash;then restores just those, straight from the archive.</p>
+    <p class="tool-hero__body" data-brand-slot="heroBody">Whether a collection removed straight in Vortex (skipping <span data-tool-id="remove-collection"><span data-brand-slot="name">Safe Collection Removal</span></span>) wiped out shared files, a few mods quietly went missing from your staging folder, or rebuilding the entire collection feels like overkill&mdash;this tool has you covered. It scans your chosen collections, highlights exactly which files are missing, and restores only what's needed directly from the archive.</p>
   </div>
 
   <div id="rmfNotConfigured" class="empty-row hidden"></div>
@@ -2437,7 +2541,14 @@
       <div class="callout__title">⚠️ Rule cycles found</div>
       <p>This is the same problem Vortex's own "Cycles" error describes: two or more rules disagree about load order in a way that can't be resolved. We've ranked the rules most likely responsible below &mdash; you don't need to dig through the whole tangle yourself.</p>
     </div>
-    <div class="summary-badges" id="chSummaryStats"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div class="summary-badges" id="chSummaryStats"></div>
+      <button class="btn btn--ghost" id="chViewGraphBtn">🕸️ View Graph</button>
+    </div>
+    <div class="callout callout--info">
+      <div class="callout__title">💡 Ranked, not guaranteed</div>
+      <p>These candidates are ranked using real evidence from your rules and load order, so the top pick is usually a great place to start. But it's still our best guess, not a certainty — if it doesn't look right once you dig in, checking it yourself in Vortex is a normal part of using this tool, not a sign something's broken.</p>
+    </div>
     <div id="chCyclesList"></div>
   </div>
 
@@ -2493,6 +2604,57 @@
         <button class="btn btn--primary" id="chFixContinueBtn">Continue →</button>
       </div>
     </div>
+  </div>
+
+  <!-- Graph View (2026-08-18) -- a spider-web visualization of the scan's own cycle(s), matching
+       Vortex's own real conflict graph (mod-dependency-manager/src/views/{GraphView,ConflictGraph}.tsx,
+       confirmed against real source -- near-fullscreen dialog, right-click a mod to highlight the
+       cycle running through it, scroll/pan/drag-to-reposition all real cytoscape defaults). The
+       left-hand cycle-card column is this project's OWN addition on top of Vortex's real shape
+       (director's own explicit ask) -- built directly against the approved
+       design/cycle-helper-graph-mockup.html, see its own inline comments for what's real-Vortex vs.
+       our own addition. -->
+  <div id="chGraphModal" class="modal-overlay hidden">
+    <div class="modal modal--graph">
+      <div class="ch-graph-modal__head">
+        <span class="ch-graph-modal__title">Cycle</span>
+        <button class="ch-graph-modal__close" id="chGraphCloseX">&times;</button>
+      </div>
+      <div class="ch-graph-modal__body">
+        <div class="ch-graph-cycles-col">
+          <div class="callout" id="chGraphCyclesCallout"></div>
+          <div id="chGraphCycleCards"></div>
+        </div>
+        <div class="ch-graph-col">
+          <div class="ch-graph-toolbar">
+            <span class="ch-graph-toolbar__label" id="chGraphToolbarLabel"></span>
+            <button class="ch-graph-reset-btn" id="chGraphResetBtn">Show whole graph</button>
+          </div>
+          <div id="chGraphCanvas"></div>
+          <div class="ch-graph-legend">
+            <div class="ch-graph-legend__item"><span class="ch-graph-legend__swatch" style="background:var(--accent)"></span> Highlighted cycle</div>
+            <div class="ch-graph-legend__item"><span class="ch-graph-legend__swatch" style="background:var(--border-strong)"></span> Other rules (dimmed)</div>
+            <div class="ch-graph-legend__item">Scroll to zoom, drag the background to pan, drag a mod to move it</div>
+          </div>
+        </div>
+      </div>
+      <div class="ch-graph-modal__foot">
+        <div>
+          <span class="ch-graph-usage-toggle" id="chGraphUsageToggle">Show Usage Instructions</span>
+          <div class="ch-graph-usage-panel" id="chGraphUsagePanel">
+            This shows a cluster of mods that form one or more rule cycles. Arrows read as "then"
+            &mdash; a mod the arrow points to loads after the one it starts from. Right-click any
+            mod to highlight the specific cycle running through it, same as pushing one of the
+            buttons on the left.
+          </div>
+        </div>
+        <button class="btn btn--primary" id="chGraphCloseBtn">Close</button>
+      </div>
+    </div>
+  </div>
+  <div class="ch-graph-ctx-menu" id="chGraphCtxMenu">
+    <div class="ch-graph-ctx-menu__item" id="chGraphCtxHighlight">Highlight cycle from here</div>
+    <div class="ch-graph-ctx-menu__item disabled" id="chGraphCtxNoCycle">Not part of a cycle</div>
   </div>
 
 </main>
@@ -2705,16 +2867,18 @@
 <!-- ============================================================ -->
 <section id="area-update-collection-v2" class="tool-area hidden">
 <main class="app-main" data-tool-id="update-collection-v2">
-  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><span data-brand-slot="name">Update Collection (Preview)</span></div>
+  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><span data-brand-slot="name">Update Collection</span></div>
   <div class="tool-hero" data-tool-id="update-collection-v2">
     <h2 class="tool-hero__title" data-brand-slot="heroTitle">🔄️ See Exactly What a Collection Update Changes</h2>
-    <p class="tool-hero__body" data-brand-slot="heroBody">Check your installed collections for updates and review exactly what a new revision changes &mdash; mods removed, updated, and added &mdash; before anything touches Vortex. This preview covers the review step only; applying the update (extraction, rules, deployment) is a later phase, not built yet.</p>
+    <p class="tool-hero__body" data-brand-slot="heroBody">Check your installed collections for updates and review exactly what a new revision changes &mdash; mods removed, updated, and added &mdash; then apply the removals and updates for real: real extraction, real deployment, your Ignored/Disabled choices and collection rules preserved.</p>
   </div>
 
   <div class="callout callout--warning" style="margin-bottom:16px">
-    <div class="callout__title">⚠️ Preview -- review only, nothing applies yet</div>
-    <p style="margin:0">This tool can check for updates and show you exactly what changed. It cannot apply an update yet &mdash; use <a href="#" id="ucv2ClassicLink">Update Collection (Classic)</a> for that in the meantime.</p>
+    <div class="callout__title">⚠️ New mods aren't installed here yet</div>
+    <p style="margin:0">Removing and updating mods works for real here. A mod the update newly adds is shown below so you know it's coming, but installing it doesn't happen automatically yet &mdash; you'll need to add it yourself in Vortex.</p>
   </div>
+
+  <div class="merge-stepper" id="ucv2Stepper"></div>
 
   <!-- ============================================================ -->
   <!-- SCREEN 1 -- Collections overview -->
@@ -2722,7 +2886,7 @@
   <div id="ucv2Screen1">
     <div class="toolbar" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
       <div></div>
-      <button id="ucv2CheckUpdatesBtn" class="btn btn--primary">🔄 Check for Updates</button>
+      <button id="ucv2CheckUpdatesBtn" class="btn btn--primary">🔄 Refresh</button>
     </div>
 
     <div id="ucv2Empty" class="empty-row hidden"></div>
@@ -2743,16 +2907,28 @@
   <!-- ============================================================ -->
   <div id="ucv2ScreenRemoved" class="hidden">
     <p class="eyebrow" style="margin:0 0 4px"><a href="#" id="ucv2RemovedBackLink">&larr; Back to Collections</a></p>
-    <h1 style="font-size:19px" id="ucv2RemovedTitle"></h1>
+    <div class="screen-head">
+      <img class="screen-head__thumb hidden" id="ucv2RemovedThumb" alt="">
+      <h1 style="font-size:19px" id="ucv2RemovedTitle"></h1>
+    </div>
     <p class="lead" id="ucv2RemovedLead"></p>
 
     <div class="ucv2-op-section" id="ucv2RemovedList"></div>
 
-    <div style="display:flex;gap:12px;margin-top:22px">
-      <button class="btn btn--primary" style="flex:1;padding:16px" id="ucv2RemoveAllBtn">Remove All</button>
-      <button class="btn" style="flex:1;padding:16px" id="ucv2KeepAllBtn">
-        Keep All<br><span style="font-weight:400;font-size:11.5px;color:var(--text-muted)">They stay installed, but are no longer part of this collection (orphaned).</span>
-      </button>
+    <!-- "Also delete the archive" (2026-08-18) -- default OFF. Vortex's own native Remove never
+         touches the downloaded archive either; this is a genuinely new capability, not restoring
+         default behavior, so it stays opt-in. Deliberately near Remove All, not a separate step --
+         the "no surprises" count/list itself is shown on the Apply confirm step right before the
+         real delete happens (same bar Mod Scrub's own delete confirmation sets). -->
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
+      <input type="checkbox" id="ucv2DeleteArchivesCheckbox">
+      <span style="font-size:13px">Also permanently delete the downloaded archive file(s) for these mods</span>
+    </label>
+
+    <div style="display:flex;gap:12px;margin-top:12px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn--primary" id="ucv2RemoveAllBtn">Remove all</button>
+      <button class="btn btn--ghost" id="ucv2KeepAllBtn">Keep all</button>
+      <span style="font-size:11.5px;color:var(--text-muted)">Kept mods stay installed, but are no longer part of this collection (orphaned).</span>
     </div>
   </div>
 
@@ -2761,16 +2937,28 @@
   <!-- ============================================================ -->
   <div id="ucv2Screen2" class="hidden">
     <p class="eyebrow" style="margin:0 0 4px"><a href="#" id="ucv2ReviewBackLink">&larr; Back to Collections</a></p>
-    <h1 style="font-size:19px" id="ucv2ReviewTitle"></h1>
+    <div class="screen-head">
+      <img class="screen-head__thumb hidden" id="ucv2ReviewThumb" alt="">
+      <h1 style="font-size:19px" id="ucv2ReviewTitle"></h1>
+    </div>
     <p class="lead" id="ucv2ReviewLead"></p>
-
-    <div class="callout" id="ucv2RemovedChoiceRecap" style="display:none"></div>
 
     <div id="ucv2ReviewEmpty" class="empty-row hidden"></div>
 
+    <!-- Keep-installed-version choice (2026-08-18) -- Updated bucket only. Same Select All/Invert
+         Selection/Clear Selection convention Archive Finder's own real selection bar already
+         established (#afSelectAllBtn etc.), adapted to this tool area's own inline-style
+         convention rather than that tool's #af-selection-bar CSS class. -->
+    <div id="ucv2KeepSelectionBar" class="hidden" style="display:flex;align-items:center;gap:10px;margin:0 0 10px">
+      <button id="ucv2KeepSelectAllBtn" class="btn btn--ghost btn--small">Select all</button>
+      <button id="ucv2KeepInvertBtn" class="btn btn--ghost btn--small">Invert selection</button>
+      <button id="ucv2KeepClearBtn" class="btn btn--ghost btn--small">Clear selection</button>
+      <span id="ucv2KeepCount" class="muted"></span>
+    </div>
+
     <div class="plan-table-wrap plan-table-wrap--scrollable" id="ucv2ReviewTableWrap">
       <table class="plan-table">
-        <thead><tr><th>Status</th><th>Mod</th><th>Version</th><th>Uploader</th><th>Instructions</th></tr></thead>
+        <thead><tr><th>Status</th><th>Mod</th><th>Version</th><th class="ucv2-keep-col">Keep installed?</th><th>Uploader</th><th>Instructions</th></tr></thead>
         <tbody id="ucv2ReviewTableBody"></tbody>
       </table>
     </div>
@@ -2792,7 +2980,15 @@
 
     <div style="display:flex;justify-content:space-between;margin-top:24px" id="ucv2ReviewActions">
       <button class="btn btn--ghost" id="ucv2CancelReviewBtn">Cancel</button>
-      <button class="btn btn--primary" id="ucv2ApplyUpdateBtn">Apply Update &rarr;</button>
+      <button class="btn btn--primary" id="ucv2ApplyUpdateBtn">Apply update &rarr;</button>
+    </div>
+    <!-- Live status for the full Vortex redeploy step (2026-08-18) -- only ever shown for the
+         real deploy-mods sub-step (a plugin file was added/removed/renamed), which can genuinely
+         take a while (LOOT plugin sorting alone can run 20s+). Polled via ucv2PollApplyProgress
+         while the main Apply request is in flight -- see that function's own comment for why a
+         missed poll is expected sometimes on a large deploy, not treated as a failure. -->
+    <div class="loading-row hidden" id="ucv2ApplyProgress" style="margin-top:12px">
+      <span class="spinner"></span> <span id="ucv2ApplyProgressText"></span>
     </div>
   </div>
 
@@ -2804,7 +3000,148 @@
       <div class="ucv2-modal__body" id="ucv2ApplyConfirmBody"></div>
       <div style="display:flex;justify-content:flex-end;gap:8px;padding:0 18px 16px">
         <button class="btn btn--ghost" id="ucv2ApplyConfirmCancel">Cancel</button>
-        <button class="btn btn--primary" id="ucv2ApplyConfirmOk">Apply Update</button>
+        <button class="btn btn--primary" id="ucv2ApplyConfirmOk">Apply update</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dependency-break warning (2026-08-18) -- same shell/pattern as ucv2ApplyConfirmModal above,
+       same Cancel/Ignore framing as Vortex's own real "Updating may break dependencies" modal, but
+       with the actual detail (which mod, which mod, old/new version, the failing constraint) that
+       modal deliberately never gives you. -->
+  <div class="ucv2-modal-backdrop" id="ucv2DependencyBreakModal">
+    <div class="ucv2-modal">
+      <div class="ucv2-modal__head"><strong>⚠️ Updating may break dependencies</strong><button class="ucv2-modal__close" id="ucv2DependencyBreakClose">&times;</button></div>
+      <div class="ucv2-modal__body" id="ucv2DependencyBreakBody"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:0 18px 16px;flex-wrap:wrap">
+        <button class="btn btn--ghost" id="ucv2DependencyBreakCancel">Cancel</button>
+        <button class="btn btn--ghost" id="ucv2DependencyBreakKeepInstalled">Keep my installed version</button>
+        <button class="btn btn--primary" id="ucv2DependencyBreakIgnore">Ignore</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOMOD picker (2026-08-18, rebuilt same day to match Vortex's real wizard -- see
+       design/vortex-update-collection-v2-fomod-picker-mockup.html, the approved reference this was
+       built against) -- pages through one real install step at a time (left: that step's own
+       groups; right: a fixed-size, independently-scrolling image+description panel), with real
+       Back/Next buttons labeled with the adjacent VISIBLE step's own name (not a generic label or a
+       synthesized page number) and a real progress bar -- confirmed against Vortex's own real
+       source (installer_fomod_shared/views/InstallerDialog.tsx + dialog-fomod.scss: a TRUE FIXED
+       60vw x 60vh dialog, not a max/min-height pair that flexes with content). Deliberately
+       reusable (Phase 3's own Added-mod FOMOD needs can drive the same component) -- kept as its
+       own self-contained modal, not entangled with the Apply flow's own state beyond the callback
+       it's given. -->
+  <div class="ucv2-modal-backdrop" id="ucv2FomodPickerModal">
+    <div class="ucv2-modal ucv2-modal--fomod">
+      <div class="ucv2-fomod-modal__head">
+        <button class="ucv2-modal__close ucv2-fomod-modal__close" id="ucv2FomodPickerClose">&times;</button>
+        <div class="ucv2-fomod-modal__title" id="ucv2FomodPickerTitle">FOMOD install options</div>
+        <p class="ucv2-fomod-modal__step" id="ucv2FomodPickerStepName"></p>
+        <p class="ucv2-fomod-modal__intro" id="ucv2FomodPickerIntro"></p>
+        <p class="muted" id="ucv2FomodPickerCounter" style="margin:6px 0 0;font-size:12px"></p>
+      </div>
+      <div class="ucv2-fomod-modal__body">
+        <div class="ucv2-fomod-options" id="ucv2FomodPickerOptions"></div>
+        <div class="ucv2-fomod-preview" id="ucv2FomodPickerPreview">
+          <div class="ucv2-fomod-preview__empty">Hover over an option to see its image and description.</div>
+        </div>
+      </div>
+      <p id="ucv2FomodPickerError" class="callout callout--warning hidden" style="margin:0 24px 12px"></p>
+      <div class="ucv2-fomod-modal__foot">
+        <button class="btn btn--ghost" id="ucv2FomodPickerCancel">Cancel</button>
+        <button class="btn" id="ucv2FomodPickerBack">Back</button>
+        <div class="ucv2-fomod-progress"><div class="ucv2-fomod-progress__fill" id="ucv2FomodPickerProgressFill"></div></div>
+        <button class="btn btn--primary" id="ucv2FomodPickerNext">Next</button>
+      </div>
+    </div>
+  </div>
+</main>
+</section>
+
+<!-- ============================================================ -->
+<!-- Safe Collection Removal ("The Quartermaster") -- checks every OTHER installed collection's own -->
+<!-- collection.json first, so a mod shared with another collection defaults to kept (unchecked) -->
+<!-- instead of Vortex's own real dialog, which removes every mod regardless with no way to see -->
+<!-- which ones are shared. Reference mockup: design/vortex-remove-collection-mockup.html. -->
+<!-- ============================================================ -->
+<section id="area-remove-collection" class="tool-area hidden">
+<main class="app-main" data-tool-id="remove-collection">
+  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><span data-brand-slot="name">Safe Collection Removal</span></div>
+  <div class="tool-hero" data-tool-id="remove-collection">
+    <h2 class="tool-hero__title" data-brand-slot="heroTitle">📦 Remove a Collection Without Breaking What Else Uses It</h2>
+    <p class="tool-hero__body" data-brand-slot="heroBody">Removing a collection in Vortex can easily wipe out mods that your other collections are still using behind the scenes. This tool checks your entire setup first, highlights every shared mod, and lets you choose individually what to keep or delete. You can safely clear out old collections without worrying about breaking anything else.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 1 -- pick a collection to remove -->
+  <!-- ============================================================ -->
+  <div id="rcScreen1">
+    <span class="stepnote">Step 1 of 2 — pick a collection to remove</span>
+
+    <div id="rcEmpty" class="empty-row hidden"></div>
+    <div id="rcCriticalError" class="callout callout--critical hidden"></div>
+    <div id="rcLoading" class="loading-row hidden"><span class="spinner"></span> Loading your installed collections&hellip;</div>
+
+    <div class="ucv2-grid" id="rcCollectionGrid" style="margin-top:16px"></div>
+
+    <p class="lead" style="margin-top:20px;font-size:12.5px">Workshop collections aren't handled by this tool &mdash; manage those in Vortex's own Workshop tab directly.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 2 -- review shared mods, then remove -->
+  <!-- ============================================================ -->
+  <div id="rcScreen2" class="hidden">
+    <p class="eyebrow" style="margin:0 0 4px"><a href="#" id="rcBackLink">&larr; Back to collections</a></p>
+    <span class="stepnote">Step 2 of 2 — review and remove</span>
+    <h1 id="rcReviewTitle" style="font-size:19px;margin:12px 0 6px"></h1>
+    <p class="lead" id="rcReviewLead"></p>
+
+    <div id="rcCriticalError2" class="callout callout--critical hidden"></div>
+    <div id="rcLoading2" class="loading-row hidden"><span class="spinner"></span> Checking your other collections for shared mods&hellip;</div>
+
+    <div id="rcReviewBody" class="hidden">
+      <div id="rcSharedWarning" class="callout callout--warning hidden">
+        <div class="callout__title" id="rcSharedWarningTitle"></div>
+        <p>Removing one of these will break the other collection(s) that need it too &mdash; Vortex's own warning says this can happen, but doesn't say which mods or let you choose. Here, you can, mod by mod.</p>
+      </div>
+
+      <div id="rcSharedSection" class="hidden">
+        <div class="group-head"><h2>Shared with other collections &mdash; unchecked by default, kept safe</h2><span class="n" id="rcSharedCount"></span></div>
+        <div class="rc-selection-bar">
+          <div class="rc-selection-bar__left">
+            <button class="rc-link-btn" id="rcSharedSelectAll">Select all</button>
+            <button class="rc-link-btn" id="rcSharedInvert">Invert selection</button>
+            <button class="rc-link-btn" id="rcSharedClear">Clear selection</button>
+          </div>
+        </div>
+        <div id="rcSharedList"></div>
+      </div>
+
+      <div id="rcOnlySection" class="hidden">
+        <div class="group-head"><h2>Only required by this collection &mdash; safe to remove, checked by default</h2><span class="n" id="rcOnlyCount"></span></div>
+        <div class="rc-selection-bar">
+          <div class="rc-selection-bar__left">
+            <button class="rc-link-btn" id="rcOnlySelectAll">Select all</button>
+            <button class="rc-link-btn" id="rcOnlyInvert">Invert selection</button>
+            <button class="rc-link-btn" id="rcOnlyClear">Clear selection</button>
+          </div>
+        </div>
+        <div id="rcOnlyList"></div>
+      </div>
+
+      <label style="display:flex;align-items:center;gap:8px;margin-top:16px;cursor:pointer">
+        <input type="checkbox" id="rcDeleteArchivesCheckbox">
+        <span style="font-size:13px">Also permanently delete the downloaded archive file(s) for these mods</span>
+      </label>
+
+      <div id="rcApplyResult" class="hidden" style="margin-top:16px"></div>
+
+      <p class="lead" style="margin-top:12px;font-size:12.5px">Removed something you actually needed? <span data-tool-id="missing-files"><span data-brand-slot="name">Rebuild Missing Files</span></span> can restore it straight from its archive.</p>
+
+      <div class="actions" id="rcReviewActions" style="display:flex;gap:12px;margin-top:20px;align-items:center">
+        <button class="btn btn--ghost" id="rcCancelBtn">Cancel</button>
+        <button class="btn btn--danger" id="rcRemoveBtn">Remove collection &rarr;</button>
       </div>
     </div>
   </div>
@@ -3032,10 +3369,12 @@
 </main>
 </section>
 
-<!-- Get Started book (Skyrim-only) -- book-app.js drives everything here; no static Plain-theme
-     fallback content the way tool pages have, since Plain has no lore to show at all. Fetches
-     themes/skyrim-book.json itself (a theme.js concern would be a layering violation -- theme.js
-     only ever fills brand-slot markup already in the DOM, it doesn't own whole new page content).
+<!-- Get Started book (any theme declaring hasBook) -- book-app.js drives everything here; no static
+     fallback content the way tool pages have, since a theme without a book has no lore to show at
+     all. Fetches themes/<themeId>-book.json itself (a theme.js concern would be a layering violation
+     -- theme.js only ever fills brand-slot markup already in the DOM, it doesn't own whole new page
+     content). The heading below is Skyrim's own book title as a static fallback; book-app.js
+     replaces it with whichever book actually loaded.
      Two views: a table of contents (#bookToc) and one chapter at a time (#bookChapter) -- toggled by
      book-app.js, never both visible together. -->
 <section id="area-book" class="tool-area hidden">
@@ -3087,6 +3426,177 @@
         <thead><tr><th>Standard name</th><th>Themed name</th></tr></thead>
         <tbody id="bookRefRows"></tbody>
       </table>
+    </div>
+  </div>
+</main>
+</section>
+
+<!-- PGPatcher Load Order Editor -- docs/plans/2026-08-19-pgpatcher-load-order-tool.md. Skips the
+     mockup's own Import screen entirely (director's own correction, 2026-08-19): the new `pgtools
+     conflicts` subcommand already reads modrules.json + the live Vortex mod list internally, so
+     there's no file to pick -- opening this tool goes straight to loading real data, then the
+     editor screen (design/load-order-editor-mockup.html in skyrim-modding/pgpatcher-modrules-
+     trimmer, approved). -->
+<section id="area-pgpatcher" class="tool-area hidden">
+<main class="app-main" data-tool-id="pgpatcher">
+  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><span data-brand-slot="name">PGPatcher Load Order</span></div>
+  <div class="tool-hero" data-tool-id="pgpatcher">
+    <h2 class="tool-hero__title" data-brand-slot="heroTitle">⚔️ PGPatcher Load Order Editor</h2>
+    <p class="tool-hero__body" data-brand-slot="heroBody">Drag to reorder, click (or shift/ctrl-click) to select several at once and move them together, or just sort A&ndash;Z and fine-tune from there &mdash; a real replacement for PGPatcher's own bare-bones ordering screen.</p>
+  </div>
+
+  <div id="pgpatcherNotConfigured" class="callout callout--warning hidden">
+    <div class="callout__title">Not set up yet</div>
+    <p>Set your Skyrim Data folder and PGPatcher cfg folder under <a href="#" id="pgpatcherGoToSettings">Settings</a> first.</p>
+  </div>
+  <div id="pgpatcherError" class="callout callout--critical hidden"></div>
+
+  <!-- Idle -- landing state before the (slow, real) first load kicks off. -->
+  <div id="pgpatcherIdle" class="hidden" data-tool-id="pgpatcher">
+    <button class="btn btn--primary" id="pgpatcherLoadBtn">Start</button>
+    <p class="muted" data-brand-slot="landingHint">Reads mod data straight from PGPatcher &mdash; can take a few minutes on a large mod list.</p>
+    <p class="pgp-idle__credits">
+      Built alongside <a href="https://github.com/hakasapl/PGPatcher" target="_blank" rel="noopener">PGPatcher</a>
+      and <a href="https://www.nexusmods.com/about/vortex/" target="_blank" rel="noopener">Vortex</a>.
+    </p>
+  </div>
+
+  <!-- Loading -- the real dry-run pass, can genuinely take minutes on a large install. pgtools
+       logs real phase names as each stage starts, plus real "N/M" counts for the two heaviest
+       stages -- pgpatcher-routes.js parses those and streams them here (pgpatcher-app.js's
+       pgpHandleLoadEvent), so pgpatcherLoadingPhase/pgpatcherLoadingBar show real "where am I"
+       progress, not a generic spinner standing in for it. Elapsed time stays alongside it for the
+       stretches with no count. Cancel actually stops the multi-minute wait, not just hides it. -->
+  <div id="pgpatcherLoading" class="hidden">
+    <div class="callout callout--info">
+      <div class="callout__title">Reading your mod list&hellip;</div>
+      <p>Reading data &mdash; this can take a few minutes on a large mod list.</p>
+      <div class="progress-bar-wrap"><div id="pgpatcherLoadingBar" class="progress-bar"></div></div>
+      <p class="muted" id="pgpatcherLoadingPhase">Starting&hellip;</p>
+      <div class="loading-row">
+        <span class="spinner"></span>
+        <span>Elapsed <span id="pgpatcherLoadingElapsed">0:00</span></span>
+        <button class="btn btn--ghost" id="pgpatcherCancelLoadBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Building -- step 4, the real output pipeline (backup move + the real pgtools patch run), both
+       streamed live via /build/events -- same POST-then-EventSource pattern as Loading above.
+       Navigates here the instant Build is clicked (director's own explicit call, 2026-08-20: a real
+       ~9-minute build with the sort page just sitting there read as frozen in real live testing).
+       Two states inside this one view, not two separate pages: pgpatcherBuildingProgress while the
+       backup/build is running, then pgpatcherBuildingSuccess once it's genuinely done -- a large,
+       unmissable payoff (director's own words: "a big green Ya, it's build. Happy Gaming.") replacing
+       what used to be a tiny status line at the bottom of the sort page. -->
+  <div id="pgpatcherBuilding" class="hidden">
+    <div id="pgpatcherBuildingProgress" class="callout callout--info">
+      <div class="callout__title">Building your real output&hellip;</div>
+      <p>This runs the real PGPatcher build &mdash; mesh and texture patching &mdash; so it can take a while on a large mod list.</p>
+      <div class="progress-bar-wrap"><div id="pgpatcherBuildingBar" class="progress-bar"></div></div>
+      <p class="muted" id="pgpatcherBuildingPhase">Starting&hellip;</p>
+      <div class="loading-row">
+        <span class="spinner"></span>
+        <span>Elapsed <span id="pgpatcherBuildingElapsed">0:00</span></span>
+        <button class="btn btn--ghost" id="pgpatcherCancelBuildBtn">Cancel</button>
+      </div>
+    </div>
+
+    <div id="pgpatcherBuildingSuccess" class="hidden">
+      <div class="pgp-build-success__banner">&#9989; Yep, it's built &mdash; happy gaming!</div>
+      <p class="pgp-build-success__path">Real output written to <code id="pgpatcherBuildingOutputPath"></code></p>
+      <p class="pgp-build-success__path hidden" id="pgpatcherBuildingBackupRow">Your previous output was backed up to <code id="pgpatcherBuildingBackupPath"></code></p>
+      <div class="callout callout--warning">
+        <div class="callout__title">One more step in Vortex</div>
+        <p>This output isn't live in-game yet. Re-enable any mods you disabled for this build, then <strong>Deploy</strong> in Vortex to actually apply it.</p>
+      </div>
+      <div class="pgp-build-success__actions">
+        <button class="btn btn--primary" id="pgpatcherBuildingBackToEditorBtn">Restart</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Editor screen -->
+  <div id="pgpatcherEditor" class="hidden">
+    <!-- Each panel gets its OWN toolbar (search/Sort A-Z/Select all/Invert/Clear), scoped to only
+         that panel's own list and selection -- previously ONE shared toolbar above both panels drove
+         both at once (confirmed live: typing in the single search box highlighted matches in BOTH
+         panels simultaneously). Kept as a matched pair of markup blocks (same ids, panel-prefixed,
+         wired by one shared pgpWireToolbar() in pgpatcher-app.js) rather than one-off snowflakes, so
+         a possible future third panel (director's own note) only needs a matching block + one more
+         wiring call, not a redesign. -->
+    <div class="pgp-panels">
+      <div class="pgp-panel pgp-panel--ranked">
+        <div class="pgp-panel__head">
+          <span>Ranked (priority order)</span>
+          <span id="pgpatcherRankedCount"></span>
+        </div>
+        <div class="pgp-toolbar pgp-toolbar--panel">
+          <input class="input pgp-search" id="pgpatcherRankedSearchInput" type="text" placeholder="Filter by mod name&hellip;">
+          <div class="pgp-toolbar__sep"></div>
+          <button class="pgp-link-btn" id="pgpatcherRankedSortAzBtn">Sort A&ndash;Z</button>
+          <button class="pgp-link-btn" id="pgpatcherRankedPriorityOrderBtn" title="Restore this panel's real load-order priority (undoes Sort A&ndash;Z; keeps anything dragged in since)">Priority order</button>
+          <button class="pgp-link-btn" id="pgpatcherRankedSelectAllBtn">Select all</button>
+          <button class="pgp-link-btn" id="pgpatcherRankedInvertBtn">Invert selection</button>
+          <button class="pgp-link-btn" id="pgpatcherRankedClearSelBtn">Clear selection</button>
+          <span class="pgp-selcount" id="pgpatcherRankedSelectionCount"></span>
+          <div class="pgp-toolbar__sep"></div>
+          <button class="pgp-link-btn" id="pgpatcherRankedCutBtn" title="Cut the selected mod(s) -- search for where you want them, select a mod, then Paste before it">&#9986; Cut</button>
+          <button class="pgp-link-btn" id="pgpatcherRankedPasteBtn" title="Select a mod first, then Paste inserts here, right before it" disabled>&#128203; Paste</button>
+          <div class="pgp-toolbar__sep"></div>
+          <button class="pgp-link-btn" id="pgpatcherRankedExportBtn" title="Download this list as a CSV -- rank, mod name, shader">&#11015; Export CSV</button>
+          <label class="pgp-conflict-toggle" for="pgpatcherConflictHighlightToggle" title="Select a mod to inspect its conflicts. Conflicting mods glow green if the selected mod wins the overwrite, or red if it loses. Use this to quickly sanity-check your load order before building.">
+            <input type="checkbox" id="pgpatcherConflictHighlightToggle">
+            Conflict highlights
+          </label>
+        </div>
+        <div class="pgp-col-header">
+          <span class="pgp-row__handle" aria-hidden="true"></span>
+          <span class="pgp-row__toggle" aria-hidden="true" style="visibility:hidden"></span>
+          <span class="pgp-row__rank">#</span>
+          <span class="pgp-row__name">Mod</span>
+          <span class="pgp-row__shader">Shader</span>
+        </div>
+        <div class="pgp-panel__body" id="pgpatcherRankedList"></div>
+      </div>
+      <div class="pgp-panel">
+        <div class="pgp-panel__head">
+          <span>New mods</span>
+          <span id="pgpatcherUnrankedCount"></span>
+        </div>
+        <div class="pgp-toolbar pgp-toolbar--panel">
+          <input class="input pgp-search" id="pgpatcherUnrankedSearchInput" type="text" placeholder="Filter by mod name&hellip;">
+          <div class="pgp-toolbar__sep"></div>
+          <button class="pgp-link-btn" id="pgpatcherUnrankedSortAzBtn">Sort A&ndash;Z</button>
+          <button class="pgp-link-btn" id="pgpatcherUnrankedSelectAllBtn">Select all</button>
+          <button class="pgp-link-btn" id="pgpatcherUnrankedInvertBtn">Invert selection</button>
+          <button class="pgp-link-btn" id="pgpatcherUnrankedClearSelBtn">Clear selection</button>
+          <span class="pgp-selcount" id="pgpatcherUnrankedSelectionCount"></span>
+        </div>
+        <div class="pgp-unranked-hint">Drag any of these into the ranked list to give it a real priority.</div>
+        <div class="pgp-col-header">
+          <span class="pgp-row__handle" aria-hidden="true"></span>
+          <span class="pgp-row__name">Mod</span>
+          <span class="pgp-row__shader">Shader</span>
+        </div>
+        <div class="pgp-panel__body" id="pgpatcherUnrankedList"></div>
+      </div>
+    </div>
+
+    <div class="pgp-footer">
+      <span class="pgp-footer__status">Loaded <strong id="pgpatcherLoadedCount"></strong> mods &mdash; <span id="pgpatcherDirtyStatus">no changes yet</span></span>
+      <label class="checkbox pgp-footer__option" title="Controls whether unlinked meshes (models not referenced by any plugin, armor, or weapon record) get patched.&#10;&#10;Off (Default): Skips unlinked meshes completely. Recommended, as it prevents crashes or invisible textures caused by missing files.&#10;On: Patches unlinked meshes anyway using their internal textures. Useful for rare mods that bypass standard plugin records, but risks visual glitches or crashes if textures are missing.&#10;&#10;Leave this off unless you know a specific mod requires it.">
+        <input type="checkbox" id="pgpatcherConsiderAllMeshesInput">
+        Patch meshes with no plugin reference
+      </label>
+      <label class="checkbox pgp-footer__option" title="Checks that an outfit's body-weight variations match up properly after patching. Because this check sometimes raises false alarms on working mods, you can toggle how it reports them. Turning this On logs weight mismatches as mild Warnings instead of hard Errors, keeping your build log clean without changing how your mods are actually patched.">
+        <input type="checkbox" id="pgpatcherRelaxWeightValidationInput">
+        Log weight-variant mesh mismatches as warnings
+      </label>
+      <button class="btn btn--ghost" id="pgpatcherStartOverBtn">&#10005; Start over</button>
+      <button class="btn btn--ghost" id="pgpatcherReloadBtn" title="Starts over from scratch -- re-reads everything fresh from PGPatcher (a real reload, not just a display refresh). Use this if you changed mods in Vortex or settings in PGPatcher since opening this list.">&#8635; Reset</button>
+      <button class="btn btn--ghost" id="pgpatcherSaveBtn" title="Writes your order to modrules.json -- backs up the original first">&#128190; Save (Apply)</button>
+      <button class="btn btn--primary" id="pgpatcherBuildBtn" title="Saves your order, then runs the real PGPatcher build -- generates the actual output">&#128295; Build (Okay)</button>
     </div>
   </div>
 </main>
@@ -3149,10 +3659,23 @@
 <script src="archive-finder-app.js"></script>
 <script src="merge-app.js"></script>
 <script src="rebuild-missing-app.js"></script>
+<!-- Cycle Helper's Graph View (2026-08-18) -- the first third-party frontend library this project
+     uses. Vendored locally (scripts/vendor-cytoscape.js, run automatically by `npm install`), not
+     loaded from a CDN -- this app doesn't build against a CDN for anything else, and a local tool
+     shouldn't need network access to draw a graph. Loading order matters (internal UMD deps):
+     cytoscape itself, then layout-base, then cose-base (needs layout-base already global), then
+     cytoscape-cose-bilkent (needs cose-base already global) -- same order the approved mockup
+     verified working. -->
+<script src="vendor/cytoscape/cytoscape.min.js"></script>
+<script src="vendor/cytoscape/layout-base.js"></script>
+<script src="vendor/cytoscape/cose-base.js"></script>
+<script src="vendor/cytoscape/cytoscape-cose-bilkent.js"></script>
 <script src="cycle-helper-app.js"></script>
 <script src="workshop-report-app.js"></script>
 <script src="update-collection-v2-app.js"></script>
+<script src="remove-collection-app.js"></script>
 <script src="mod-exceptions-report-app.js"></script>
 <script src="book-app.js"></script>
+<script src="pgpatcher-app.js"></script>
 </body>
 </html>

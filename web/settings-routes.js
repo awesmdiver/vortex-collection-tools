@@ -46,7 +46,7 @@ function listBackupRunDirs(backupRoot) {
     return entries.filter((e) => e.isDirectory() && BACKUP_RUN_DIR_PATTERN.test(e.name)).map((e) => e.name);
 }
 
-const PATH_FIELDS = ['staging', 'downloads', 'backupRoot', 'syncBackupRoot', 'state', 'logsDir', 'cleanupExcludeListDir', 'skyrimDataDir', 'pluginsListDir', 'dummyMastersOutputDir', 'archiveFinderDbDir', 'archiveFinderOutputDir', 'eslifierOutputDir', 'mergeOutputDir', 'modExceptionListDir', 'cycleHelperHistoryDir'];
+const PATH_FIELDS = ['staging', 'downloads', 'backupRoot', 'syncBackupRoot', 'state', 'logsDir', 'cleanupExcludeListDir', 'skyrimDataDir', 'pluginsListDir', 'dummyMastersOutputDir', 'archiveFinderDbDir', 'archiveFinderOutputDir', 'eslifierOutputDir', 'mergeOutputDir', 'modExceptionListDir', 'cycleHelperHistoryDir', 'pgpatcherCfgDir', 'pgpatcherOutputBackupDir'];
 // No sensible blank/default state for these eight -- Rebuild Collection can't scan a collection
 // without staging/downloads, Update Collection can't save a backup without somewhere real (not
 // "wherever this project happens to think is a good place") to put it, and Clean Up's exclude list,
@@ -61,6 +61,16 @@ const PATH_FIELDS = ['staging', 'downloads', 'backupRoot', 'syncBackupRoot', 'st
 // downgrade applied) until the user actually sets it, same "blank is a normal, supported state" as
 // archiveFinderOutputDir.
 const REQUIRED_PATH_FIELDS = ['staging', 'downloads', 'syncBackupRoot', 'cleanupExcludeListDir', 'skyrimDataDir', 'pluginsListDir', 'dummyMastersOutputDir', 'archiveFinderDbDir', 'modExceptionListDir'];
+// pgpatcherCfgDir is deliberately NOT in REQUIRED_PATH_FIELDS above -- unlike skyrimDataDir/
+// modExceptionListDir (needed by tools most installs actually use), this is a single, brand-new,
+// one-workflow integration; requiring it would block saving ANY OTHER setting for every install
+// that never touches PGPatcher. Same "optional, blank is a supported state" treatment as
+// archiveFinderOutputDir/mergeOutputDir/eslifierOutputDir -- the PGPatcher tool itself reports
+// "not configured yet" and points at Settings when this is blank, rather than the whole page
+// refusing to save. pgpatcherOutputBackupDir gets the exact same treatment for the same reason --
+// backing up the existing PGPatcher output before a real build overwrites it is opt-in (blank =
+// today's exact behavior, no backup step at all), not something every PGPatcher user is required to
+// set up before saving any other setting on the page.
 // Server bind settings -- like the paths above, these are only read once at process startup
 // (web/server.js), so changing any of them needs the same restart-required treatment.
 const SERVER_FIELDS = ['serverPort', 'serverHost', 'autoOpenBrowser'];

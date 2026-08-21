@@ -597,6 +597,325 @@ function loadCycleHelperPageOnce() {
 }
 window.loadCycleHelperPageOnce = loadCycleHelperPageOnce;
 
+// ---- Graph View (2026-08-18) -- a spider-web visualization of the scan's own cycle(s), matching
+// real Vortex's own conflict graph (mod-dependency-manager/src/views/{GraphView,ConflictGraph}.tsx,
+// confirmed against real source): near-fullscreen dialog, right-click a mod to highlight the cycle
+// running through it (cytoscape's own real `cxttap` event, same trigger Vortex uses), scroll to
+// zoom / drag background to pan / drag a node to reposition it -- all real cytoscape defaults, no
+// extra wiring needed for any of those three. The left-hand cycle-card column (push a button, see
+// that cycle highlighted) is this project's OWN addition on top of Vortex's real shape, director's
+// own explicit ask. Built directly against the approved design/cycle-helper-graph-mockup.html --
+// reuses chLastResult (the same data chRenderScanResult already has) and chTopCandidateGraphEdge's
+// own owner/target -> from/to convention already established above for the culprit-path arrow.
+//
+// Built ENTIRELY from chLastResult.cycles -- no new backend route. Each cycle is one SCC (strongly
+// connected component, cycle-detector.js's own analyzeCycles), so cycles never share mods; the
+// combined graph is just the disjoint union of every cycle's own modsInvolved (nodes) + candidates
+// (real directional rules, deduped server-side already -- confirmed by reading cycle-detector.js's
+// own rankCulpritEdges/dedupedCandidates directly, not assumed).
+//
+// A highlight (right-click, or a cycle-card button) traces ONE minimal loop via cytoscape's own
+// aStar (chGraphTraceCycleFromNode below), ported directly from real Vortex's own GraphView.tsx --
+// NOT "highlight every mod/edge the scan flagged as part of this cycle's tangle", which is what an
+// earlier version of this feature did and is wrong (lights up the entire, possibly dozens-of-mods
+// strongly-connected component instead of the small loop real Vortex shows; confirmed wrong by the
+// director comparing side-by-side against real Vortex screenshots, 2026-08-18).
+cytoscape.use(cytoscapeCoseBilkent);
+
+let chGraph = null; // the live cytoscape instance -- created fresh on every open, destroyed on close
+let chGraphCycles = []; // [{ modCount, culprit, culpritStartNodeId }], index-aligned with chLastResult.cycles
+let chGraphNodeToCycle = new Map(); // modKey -> cycle index, for the right-click handler
+let chGraphCtxNodeId = null; // raw modKey right-clicked -- what "Highlight cycle from here" traces from
+
+// A candidate is {ownerModKey, targetModKey, ruleType}. Real edge direction, confirmed against
+// Vortex's own sort.ts (cycle-detector.js's buildGraph, re-verified line-by-line against source):
+// 'before' on owner referencing target -> edge owner->target (owner sorts before target); 'after'
+// -> edge target->owner. Same mapping chTopCandidateGraphEdge above already uses for the single
+// top-ranked candidate -- this just applies it to every candidate, not just the top one.
+function chGraphEdgeDirection(c) {
+  return c.ruleType === 'before'
+    ? { from: c.ownerModKey, to: c.targetModKey }
+    : { from: c.targetModKey, to: c.ownerModKey };
+}
+
+// Also returns the top candidate's own real "from" modKey (see chGraphEdgeDirection) -- the natural
+// starting node for this cycle's own trace when a card button is pushed (2026-08-18, see
+// chGraphTraceCycleFromNode below): pushing the button and right-clicking that same mod now produce
+// the identical traced loop.
+function chGraphCulpritInfo(cycle) {
+  const top = cycle.candidates[0];
+  if (!top) return { html: '', startNodeId: null };
+  const { from, to } = chGraphEdgeDirection(top);
+  const fromName = from === top.ownerModKey ? top.ownerName : top.targetName;
+  const toName = to === top.ownerModKey ? top.ownerName : top.targetName;
+  const html = `Likely cause: <b>${escHtmlCh(fromName)}</b> &rarr; <b>${escHtmlCh(toName)}</b> ("load ${top.ruleType}" rule)`;
+  return { html, startNodeId: from };
+}
+
+// Builds cytoscape elements straight from the scan result -- node ids are raw modKeys (never run
+// through a CSS-selector string), always looked up via cy.getElementById() (a hash-map lookup, not
+// a selector parse), so no sanitizing is needed regardless of what characters a modKey contains.
+// Edge ids include the owning modKey (mirrors cycle-detector.js's own edgeKey() convention) because
+// two DIFFERENT rule objects -- one "before" on mod A, one "after" on mod B -- can resolve to the
+// exact SAME directed edge A->B; deduping only collapses truly identical (owner, type, target)
+// triples, so both can legitimately reach the graph as parallel edges (cytoscape auto-offsets them
+// visually when this happens -- real data, not a bug).
+function chBuildGraphData(cycles) {
+  const elements = [];
+  const cycleInfo = [];
+  const nodeToCycle = new Map();
+  cycles.forEach((cycle, idx) => {
+    cycle.modsInvolved.forEach((m) => {
+      nodeToCycle.set(m.modKey, idx);
+      elements.push({ data: { id: m.modKey, title: m.name } });
+    });
+    const seenEdgeIds = new Set();
+    cycle.candidates.forEach((c) => {
+      const { from, to } = chGraphEdgeDirection(c);
+      const edgeId = `${from}->${to}::${c.ownerModKey}`;
+      if (seenEdgeIds.has(edgeId)) return;
+      seenEdgeIds.add(edgeId);
+      elements.push({ data: { id: edgeId, source: from, target: to } });
+    });
+    const culpritInfo = chGraphCulpritInfo(cycle);
+    cycleInfo.push({ modCount: cycle.modCount, culprit: culpritInfo.html, culpritStartNodeId: culpritInfo.startNodeId });
+  });
+  return { elements, cycleInfo, nodeToCycle };
+}
+
+function chGraphCycleCardHtml(c, idx) {
+  return `<div class="ch-graph-cycle-card${idx === 0 ? ' active' : ''}" data-cycle-idx="${idx}">
+    <div class="ch-graph-cycle-card__head">
+      <span class="ch-graph-cycle-card__title">Cycle ${idx + 1}</span>
+      <span class="ch-graph-cycle-card__count">${c.modCount} mods</span>
+    </div>
+    <div class="ch-graph-cycle-card__culprit">${c.culprit}</div>
+    <button class="ch-graph-cycle-card__btn">${idx === 0 ? 'Showing in graph' : 'Show in graph'}</button>
+  </div>`;
+}
+
+// Reads this app's OWN real theme CSS custom properties (not Vortex's) -- getComputedStyle picks up
+// whatever theme.js has already applied (an inline --accent/etc. override on <html>, see theme.js's
+// own applyTheme), so the graph's node/edge colors stay correct across every theme this app ships
+// (dark/light/Skyrim), unlike the approved mockup's own hardcoded hex values (never exercised
+// against a theme switch there).
+function chGraphThemeColor(varName) {
+  return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+}
+
+// Darkens a `#rrggbb` theme color toward black by `amount` (0-1) -- used so a mod's dot reads as a
+// darker shade of its own outline/edge color instead of an unrelated neutral panel fill.
+function chGraphDarken(hex, amount) {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const r = Math.round(((n >> 16) & 255) * (1 - amount));
+  const g = Math.round(((n >> 8) & 255) * (1 - amount));
+  const b = Math.round((n & 255) * (1 - amount));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+function chGraphBuildStyle() {
+  const accent = chGraphThemeColor('--accent');
+  const border = chGraphThemeColor('--border-strong');
+  const surface = chGraphThemeColor('--surface');
+  const text = chGraphThemeColor('--text');
+  return [
+    {
+      selector: 'node',
+      style: {
+        'background-color': chGraphDarken(border, 0.4),
+        label: 'data(title)',
+        color: text,
+        'text-background-color': surface,
+        'text-background-opacity': 1,
+        'text-background-padding': 4,
+        'text-margin-y': -18,
+        'text-border-width': 1,
+        'text-border-color': border,
+        'text-border-opacity': 1,
+        'text-border-style': 'solid',
+        'font-size': 11,
+        width: 24,
+        height: 24,
+        'border-width': 2,
+        'border-color': border,
+      },
+    },
+    {
+      selector: 'edge',
+      style: {
+        width: 1,
+        'curve-style': 'bezier',
+        // Real Vortex puts the arrowhead at the edge's MIDPOINT, not its end
+        // (genGraphStyle.ts: mid-target-arrow-shape, not target-arrow-shape) --
+        // matches, since a dense graph's edge ends get crowded right at the node.
+        'mid-target-arrow-shape': 'triangle',
+        'arrow-scale': 1.1,
+        'line-color': border,
+        'mid-target-arrow-color': border,
+      },
+    },
+    { selector: 'edge.cycle-highlight', style: { 'line-color': accent, 'mid-target-arrow-color': accent, width: 2 } },
+    { selector: '.cycle-dim', style: { opacity: 0.25 } },
+    { selector: 'node.cycle-node', style: { 'border-color': accent, 'background-color': chGraphDarken(accent, 0.4) } },
+  ];
+}
+
+// Traces the SINGLE minimal loop through startNodeId -- ported directly from real Vortex's own
+// GraphView.tsx#highlightCycle (confirmed against source 2026-08-18, re-fetched fresh first): look
+// at startNodeId's direct outgoing neighbor NODES, then run cytoscape's own built-in aStar from each
+// neighbor back to startNodeId in turn; the FIRST neighbor that has a real directed path back (in
+// cytoscape's own outgoer iteration order -- same as Vortex, not "try all and pick shortest") IS the
+// traced loop. This is why real Vortex lights up a small handful of edges on a dense 28-mod tangle,
+// not the whole strongly-connected component -- the earlier version of this feature highlighted the
+// SCC directly (everything Cycle Helper's own scan flagged as part of the tangle) instead of tracing
+// one actual loop through it, confirmed wrong by the director comparing side-by-side against real
+// Vortex screenshots. Returns null if no path back exists (shouldn't happen for a node this project
+// already knows is cycle-flagged, but real Vortex's own algorithm can fail to find one too -- same
+// graceful no-highlight-change response, no error surfaced).
+function chGraphTraceCycleFromNode(startNodeId) {
+  if (!chGraph) return null;
+  const startNode = chGraph.getElementById(startNodeId);
+  if (startNode.empty()) return null;
+
+  const followers = startNode.outgoers().filter((ele) => ele.isNode());
+  let path = null;
+  let rootNode = null;
+  followers.forEach((followerNode) => {
+    if (path) return; // first successful follower wins -- matches real Vortex's own iteration order
+    const result = chGraph.elements().aStar({ root: followerNode, goal: startNode, directed: true });
+    if (result.found) { path = result.path; rootNode = followerNode; }
+  });
+  if (!path) return null;
+
+  // aStar's own path runs root -> ... -> goal(=startNode) -- it never includes the edge that got us
+  // TO root in the first place (startNode -> root), so that closing edge is added back explicitly,
+  // same as real Vortex's own highlightCycle does.
+  return {
+    closingEdges: startNode.edgesTo(rootNode),
+    pathEdges: path.filter((ele) => ele.isEdge()),
+    pathNodes: path.filter((ele) => ele.isNode()),
+  };
+}
+
+// Applies the traced-loop highlight. The SET being highlighted had to match real Vortex exactly (a
+// single minimal loop via aStar, confirmed above) -- dimming everything else is this project's own
+// addition on top, kept after director review 2026-08-18 ("I'm ok with dimming what is really not
+// part of the cycle"), even though real Vortex itself never dims the rest of the graph.
+function chGraphHighlightLoop(startNodeId) {
+  const trace = chGraphTraceCycleFromNode(startNodeId);
+  if (!trace) return false;
+  chGraph.elements().removeClass('cycle-dim cycle-highlight cycle-node');
+  chGraph.elements().addClass('cycle-dim');
+  trace.pathNodes.removeClass('cycle-dim').addClass('cycle-node');
+  trace.pathEdges.union(trace.closingEdges).removeClass('cycle-dim').addClass('cycle-highlight');
+  return true;
+}
+
+function chGraphSetActiveCard(idx) {
+  document.querySelectorAll('#chGraphCycleCards .ch-graph-cycle-card').forEach((card) => {
+    const active = idx !== null && Number(card.dataset.cycleIdx) === idx;
+    card.classList.toggle('active', active);
+    card.querySelector('.ch-graph-cycle-card__btn').textContent = active ? 'Showing in graph' : 'Show in graph';
+  });
+}
+
+// Cycle-card button -- traces from that cycle's own culprit "from" mod (the same one shown in the
+// card's "Likely cause" line), so pushing the button and right-clicking that exact mod produce the
+// identical highlighted loop.
+function chGraphShowCycleCard(idx) {
+  if (!chGraph) return;
+  const info = chGraphCycles[idx];
+  if (!info || !info.culpritStartNodeId) return;
+  if (!chGraphHighlightLoop(info.culpritStartNodeId)) return;
+  chGraphSetActiveCard(idx);
+  $ch('chGraphToolbarLabel').innerHTML = `Showing <b>Cycle ${idx + 1}</b>'s traced loop — everything else is dimmed`;
+}
+
+function chShowGraphAll() {
+  if (!chGraph) return;
+  chGraph.elements().removeClass('cycle-dim cycle-highlight cycle-node');
+  chGraphSetActiveCard(null);
+  $ch('chGraphToolbarLabel').textContent = 'Showing the whole rule graph';
+}
+
+// Real trigger Vortex itself uses (cxttap = right-click/long-press). A node not in any cycle is
+// only theoretically possible here (every node in this graph comes from a real cycle by
+// construction, since the graph is built purely from chLastResult.cycles) -- kept anyway so the
+// context menu's shape matches real Vortex's own (which DOES have non-cycle-eligible nodes in its
+// general graph) and stays correct if a future change ever adds non-cycle context to this graph.
+function chGraphHandleContext(evt) {
+  const nodeId = evt.target.id();
+  const inCycle = chGraphNodeToCycle.has(nodeId);
+  $ch('chGraphCtxHighlight').style.display = inCycle ? 'block' : 'none';
+  $ch('chGraphCtxNoCycle').style.display = inCycle ? 'none' : 'block';
+  chGraphCtxNodeId = inCycle ? nodeId : null;
+  const menu = $ch('chGraphCtxMenu');
+  const pos = evt.originalEvent;
+  menu.style.left = `${pos.clientX}px`;
+  menu.style.top = `${pos.clientY}px`;
+  menu.style.display = 'block';
+}
+
+// Right-click "Highlight cycle from here" -- traces from the actual node that was right-clicked
+// (not necessarily any cycle card's own culprit mod), same real Vortex trigger and algorithm. Clears
+// any active card state since this loop may not match what a specific card button would trace.
+function chGraphHighlightFromContextNode() {
+  if (chGraphCtxNodeId === null) return;
+  if (!chGraphHighlightLoop(chGraphCtxNodeId)) return;
+  chGraphSetActiveCard(null);
+  $ch('chGraphToolbarLabel').textContent = 'Showing a traced loop — everything else is dimmed';
+}
+
+function chOpenGraphModal() {
+  if (!chLastResult || !chLastResult.hasCycles) return;
+  const { elements, cycleInfo, nodeToCycle } = chBuildGraphData(chLastResult.cycles);
+  chGraphCycles = cycleInfo;
+  chGraphNodeToCycle = nodeToCycle;
+
+  $ch('chGraphCyclesCallout').innerHTML = `<span class="callout__title">${cycleInfo.length} cycle${cycleInfo.length === 1 ? '' : 's'} found</span>What you're seeing here is our best guess of the rule most likely causing each cycle, ranked by real evidence — not a certainty. If a fix doesn't look right, a little manual digging in Vortex is a normal part of sorting this out.`;
+  $ch('chGraphCycleCards').innerHTML = cycleInfo.map((c, i) => chGraphCycleCardHtml(c, i)).join('');
+  $ch('chGraphCtxMenu').style.display = 'none';
+
+  $ch('chGraphModal').classList.remove('hidden');
+
+  // The modal was just un-hidden this same tick -- cytoscape needs its container to already have a
+  // real, non-zero size to lay out sanely, so defer one frame until the browser's actually painted it.
+  requestAnimationFrame(() => {
+    if (chGraph) { chGraph.destroy(); chGraph = null; }
+    chGraph = cytoscape({
+      container: $ch('chGraphCanvas'),
+      elements,
+      style: chGraphBuildStyle(),
+      minZoom: 0.3,
+      maxZoom: 2.5,
+      wheelSensitivity: 0.2,
+      boxSelectionEnabled: false,
+    });
+    chGraph.layout({
+      name: 'cose-bilkent', nodeDimensionsIncludeLabels: true, randomize: false,
+      nodeRepulsion: 8000, idealEdgeLength: 160,
+    }).run();
+    chGraph.on('cxttap', 'node', chGraphHandleContext);
+    // Opens already showing Cycle 1's own traced loop, same as the approved mockup -- if there's
+    // only one cycle this also means "just show me the thing" with zero extra clicks.
+    chGraphShowCycleCard(0);
+  });
+}
+
+function chCloseGraphModal() {
+  $ch('chGraphModal').classList.add('hidden');
+  $ch('chGraphCtxMenu').style.display = 'none';
+  if (chGraph) { chGraph.destroy(); chGraph = null; }
+}
+
+// The dialog is a fixed vw/vh box, so it scales if the browser window itself resizes -- keep
+// cytoscape's own internal canvas in sync (matches the approved mockup's own ResizeObserver use).
+// Safe to observe unconditionally at load time: while the modal is hidden the canvas has zero size,
+// so this fires harmlessly with chGraph still null (guarded below) until the modal actually opens.
+new ResizeObserver(() => { if (chGraph) chGraph.resize(); }).observe($ch('chGraphCanvas'));
+
 document.addEventListener('DOMContentLoaded', () => {
   chGoScreen('chScreenPrep');
   $ch('chSnapBtn').addEventListener('click', chTakeSnapshot);
@@ -631,6 +950,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const btn = e.target.closest('button[data-fix-idx]');
     if (!btn) return;
     chRevertSessionFix(Number(btn.dataset.fixIdx));
+  });
+
+  // ---- Graph View ----
+  $ch('chViewGraphBtn').addEventListener('click', chOpenGraphModal);
+  $ch('chGraphCloseX').addEventListener('click', chCloseGraphModal);
+  $ch('chGraphCloseBtn').addEventListener('click', chCloseGraphModal);
+  $ch('chGraphResetBtn').addEventListener('click', chShowGraphAll);
+  $ch('chGraphCycleCards').addEventListener('click', (e) => {
+    const card = e.target.closest('.ch-graph-cycle-card');
+    if (!card) return;
+    chGraphShowCycleCard(Number(card.dataset.cycleIdx));
+  });
+  $ch('chGraphUsageToggle').addEventListener('click', () => {
+    const panel = $ch('chGraphUsagePanel');
+    const open = panel.classList.toggle('open');
+    $ch('chGraphUsageToggle').textContent = open ? 'Hide Usage Instructions' : 'Show Usage Instructions';
+  });
+  $ch('chGraphCanvas').addEventListener('contextmenu', (e) => e.preventDefault());
+  $ch('chGraphCtxHighlight').addEventListener('click', () => {
+    chGraphHighlightFromContextNode();
+    $ch('chGraphCtxMenu').style.display = 'none';
+  });
+  document.addEventListener('click', (e) => {
+    const menu = $ch('chGraphCtxMenu');
+    if (menu.style.display === 'block' && !menu.contains(e.target)) menu.style.display = 'none';
   });
 
   // ---- Change History + Revert ----

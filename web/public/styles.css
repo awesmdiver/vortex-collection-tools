@@ -208,8 +208,12 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    the UA stylesheet's [hidden] default regardless of selector specificity, so #nav-book would stay
    visible under Plain too without an explicit override (confirmed live 2026-08-15: it did).
    #nav-book { display: none } here (an ID selector, so it beats .nav-tab's class selector) restores
-   the default-hidden state; the [data-brand="skyrim"] rule below then re-enables it, same generic
-   per-brand CSS hook the Home background gradient already uses. */
+   the default-hidden state; the [data-has-book] rule below then re-enables it.
+
+   [data-has-book] (2026-08-20), NOT [data-brand="skyrim"] -- theme.js sets that bare attribute on
+   <html> from the theme's own "hasBook" flag, the same theme-declared pattern hasHomeBackgroundWash
+   established for the Home wash. A stylesheet can't read theme JSON, so the flag needs a DOM signal
+   to key off; this is it. Every book-related rule in this file uses it. */
 #nav-book {
   font-size: 26px;
   line-height: 1;
@@ -221,12 +225,12 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 #nav-book:hover { background: var(--accent-bg); transform: scale(1.08); }
 #nav-book.nav-tab--active { background: var(--surface-2); }
 #nav-book { display: none; }
-[data-brand="skyrim"] #nav-book { display: inline-block; }
-/* Settings' first-run "meet the book" callout -- same Skyrim-only reasoning as #nav-book above,
-   since the book it points at doesn't exist under Plain. shell.js unhides it purely on the
-   first-run condition (no theme check of its own); this is the theme gate on top. */
+[data-has-book] #nav-book { display: inline-block; }
+/* Settings' first-run "meet the book" callout -- same has-a-book reasoning as #nav-book above,
+   since the book it points at doesn't exist for a theme that hasn't got one. shell.js unhides it
+   purely on the first-run condition (no theme check of its own); this is the theme gate on top. */
 #settingsFirstRunBookBanner { display: none !important; }
-[data-brand="skyrim"] #settingsFirstRunBookBanner:not(.hidden) { display: block !important; }
+[data-has-book] #settingsFirstRunBookBanner:not(.hidden) { display: block !important; }
 
 /* .nav-tab/.nav-tab--active are still used by the Settings gear button (the one nav-* element left
    after Home replaced the old five-tab .app-nav row -- see DESIGN.md's "Home / landing page"
@@ -318,17 +322,19 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    width:100%/height:auto respects whatever aspect ratio the actual banner asset is now, no
    CSS-side cropping needed. */
 .home-banner-img { display: block; width: 100%; height: auto; border-radius: var(--radius); margin: 0 0 var(--stack-gap); }
-/* Home's own banner image + title double as a second way into the Get Started book -- Skyrim-only
-   (shell.js's click handler already no-ops under any other brand; this is just the visual cue so
-   Skyrim users can tell it's clickable at all). Title only shifts color on hover, not underline --
-   an underlined <h2> would read as a broken heading rather than an intentional link. */
-[data-brand="skyrim"] #area-home .tool-hero[data-tool-id="home"] .home-banner-img,
-[data-brand="skyrim"] #area-home .tool-hero[data-tool-id="home"] .tool-hero__title {
+/* Home's own banner image + title double as a second way into the Get Started book -- only for a
+   theme that HAS one (shell.js's click handler checks the same [data-has-book] signal, so this is
+   just the visual cue that it's clickable at all). Was [data-brand="skyrim"] until 2026-08-20; it
+   gates the book, so it follows the book's own flag now rather than one theme's id. Title only
+   shifts color on hover, not underline -- an underlined <h2> would read as a broken heading rather
+   than an intentional link. */
+[data-has-book] #area-home .tool-hero[data-tool-id="home"] .home-banner-img,
+[data-has-book] #area-home .tool-hero[data-tool-id="home"] .tool-hero__title {
   cursor: pointer;
   transition: opacity 0.15s ease, color 0.15s ease;
 }
-[data-brand="skyrim"] #area-home .tool-hero[data-tool-id="home"] .home-banner-img:hover { opacity: 0.9; }
-[data-brand="skyrim"] #area-home .tool-hero[data-tool-id="home"] .tool-hero__title:hover { color: var(--accent); }
+[data-has-book] #area-home .tool-hero[data-tool-id="home"] .home-banner-img:hover { opacity: 0.9; }
+[data-has-book] #area-home .tool-hero[data-tool-id="home"] .tool-hero__title:hover { color: var(--accent); }
 
 /* Tool page breadcrumb eyebrow (see DESIGN.md's "Tool page breadcrumb" section) -- with the old
    five-tab nav gone (Home replaced it), the tool-hero title alone no longer names which tool a
@@ -365,8 +371,17 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    (theme.js's applyBackgroundTint), unset by default so the fallback resolves straight to --accent,
    same behavior as before the color picker existed. Kept CSS-only per the director's own call in
    the mockup review -- no new Gemini art needed for this piece, it just needs to stay quiet, not
-   decorative. */
-[data-brand="skyrim"] #area-home {
+   decorative.
+
+   ONE rule, one selector list per themed brand (2026-08-19) -- Fallout 4 shares it rather than
+   getting a copy, because the tint color already comes from the theme's own --accent (Pip-Boy green
+   #00D400 here, purple under Skyrim), so a duplicate rule would differ in nothing but its selector
+   and would be one more place to forget when the next theme lands. A theme that wants this wash
+   adds itself here AND sets "hasHomeBackgroundWash": true in its own JSON -- that flag is what makes
+   the background-tint color picker appear in Settings (settings-app.js's renderColorPickers), and
+   the two have to move together or the picker either hides a real control or offers a no-op one. */
+[data-brand="skyrim"] #area-home,
+[data-brand="fallout4"] #area-home {
   background-image:
     radial-gradient(ellipse at 15% 0%, color-mix(in srgb, var(--bg-tint, var(--accent)) 12%, transparent), transparent 45%),
     radial-gradient(ellipse at 85% 60%, color-mix(in srgb, var(--bg-tint, var(--accent)) 8%, transparent), transparent 50%);
@@ -482,6 +497,12 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   border-color: var(--border);
 }
 .btn--ghost:hover { background: var(--surface-2); border-color: var(--accent); }
+/* A real destructive action's own primary button (Safe Collection Removal's "Remove collection") --
+   same solid-fill weight as .btn--primary, danger-colored instead of accent-colored, so it reads as
+   the deliberate action it is rather than a default browser button. */
+.btn--danger { background: var(--danger); color: #1a0508; font-weight: 600; }
+.btn--danger:hover { background: #f6738a; }
+.btn--danger:disabled { background: var(--neutral); color: var(--bg); cursor: not-allowed; }
 /* A step's action button once its required action has actually completed (Apply -> "Applied ✓") --
    see DESIGN.md's "Gate 'Next' on a step's required action". Deliberately quiet/success, not the
    live accent -- .btn--primary is reserved for whatever the user's next real move is (Next, once
@@ -570,6 +591,12 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   display: inline-block;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* A .loading-row nested inside a .callout (e.g. PGPatcher's cancelable load) sits under the
+   callout's own explanatory text rather than as a standalone block, so it needs less padding than
+   the base rule above (24px, meant for a whole standalone row) -- and its own Cancel button gets
+   pushed to the row's far end rather than sitting flush against the elapsed-time text. */
+.callout .loading-row { padding: 10px 0 0; }
+.loading-row .btn { margin-left: auto; }
 
 /* Summary badges */
 .summary-badges { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 20px; }
@@ -737,7 +764,7 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    (.plan-table th), applied here to a new context rather than inventing another label style. */
 .settings-group .settings-section-title {
   font-size: 12px; margin: 18px 0 8px; text-transform: uppercase; letter-spacing: 0.04em;
-  color: var(--text-muted); font-weight: 600;
+  color: var(--accent); font-weight: 600;
 }
 .settings-group .settings-section-title:first-of-type { margin-top: 4px; }
 
@@ -1112,6 +1139,84 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .modal--critical { border-color: var(--danger); }
 .modal--critical h2 { color: var(--danger); }
 .error-modal-text { white-space: pre-line; line-height: 1.55; font-size: 14px; max-height: 55vh; overflow-y: auto; }
+
+/* Cycle Helper -- Graph View (2026-08-18), a near-fullscreen variant of the same .modal-overlay >
+   .modal base every other modal in this app uses. Real Vortex sets NO special size override for
+   its own conflict-graph dialog -- it just uses its own app-wide default (`max-width:60%` on a
+   large Electron window), which is why the real thing fills nearly the whole screen. This app runs
+   in an ordinary browser tab, not a controlled Electron window, so instead of computing a literal
+   percentage of an arbitrary tab size, this goes straight for the same real RESULT: a near-
+   fullscreen dialog. Built directly against the approved design/cycle-helper-graph-mockup.html --
+   class names below intentionally mirror its own (ch-graph- prefixed instead of bare, to match
+   this app's existing per-tool CSS scoping convention). */
+.modal--graph {
+  width: 94vw;
+  height: 92vh;
+  max-width: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ch-graph-modal__head { position: relative; flex: none; padding: 16px 44px 16px 20px; border-bottom: 1px solid var(--border); }
+.ch-graph-modal__title { font-size: 18px; font-weight: 600; }
+.ch-graph-modal__close { position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; line-height: 1; }
+.ch-graph-modal__close:hover { color: var(--text); }
+.ch-graph-modal__body { flex: 1 1 auto; min-height: 0; display: flex; gap: 16px; padding: 16px 20px; }
+.ch-graph-modal__foot { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 20px; border-top: 1px solid var(--border); }
+
+/* Left column: cycle cards, this project's own addition on top of Vortex's real dialog shape
+   (director's own explicit ask -- push a button, see that cycle highlighted in the graph). */
+.ch-graph-cycles-col { flex: none; width: 300px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+.ch-graph-cycle-card {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; cursor: pointer; transition: border-color .15s ease, background .15s ease;
+}
+.ch-graph-cycle-card:hover { border-color: var(--border-strong); }
+.ch-graph-cycle-card.active { border-color: var(--accent); background: var(--accent-bg); }
+.ch-graph-cycle-card__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.ch-graph-cycle-card__title { font-weight: 600; font-size: 13.5px; }
+.ch-graph-cycle-card__count { font-size: 11px; color: var(--text-muted); background: var(--surface); border-radius: 999px; padding: 1px 8px; }
+.ch-graph-cycle-card__culprit { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+.ch-graph-cycle-card__culprit b { color: var(--text); font-weight: 600; }
+.ch-graph-cycle-card__btn {
+  margin-top: 8px; width: 100%; padding: 6px 10px; border-radius: 5px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.ch-graph-cycle-card.active .ch-graph-cycle-card__btn { background: var(--accent); border-color: var(--accent); color: #0b1220; }
+.ch-graph-cycle-card__btn:hover { border-color: var(--accent-hover); }
+
+/* Right side: the graph itself, filling essentially all remaining space -- same as real Vortex. */
+.ch-graph-col { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.ch-graph-toolbar { flex: none; display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.ch-graph-toolbar__label { font-size: 13px; color: var(--text-muted); }
+.ch-graph-toolbar__label b { color: var(--text); }
+.ch-graph-reset-btn {
+  font-size: 12px; padding: 4px 10px; border-radius: 5px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text-muted); cursor: pointer;
+}
+.ch-graph-reset-btn:hover { color: var(--text); border-color: var(--border-strong); }
+#chGraphCanvas { flex: 1; min-height: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+.ch-graph-legend { flex: none; display: flex; gap: 18px; margin-top: 10px; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; }
+.ch-graph-legend__item { display: flex; align-items: center; gap: 6px; }
+.ch-graph-legend__swatch { width: 18px; height: 2px; border-radius: 2px; }
+
+/* Footer: matches Vortex's own real "Show Usage Instructions" + Close. */
+.ch-graph-usage-toggle { font-size: 12.5px; color: var(--accent); cursor: pointer; user-select: none; }
+.ch-graph-usage-toggle:hover { color: var(--accent-hover); }
+.ch-graph-usage-panel { display: none; font-size: 12px; color: var(--text-muted); line-height: 1.6; max-width: 640px; }
+.ch-graph-usage-panel.open { display: block; }
+
+/* Custom right-click context menu -- a real cytoscape `cxttap` on a node opens this, same trigger
+   Vortex itself uses, positioned at the actual click point. */
+.ch-graph-ctx-menu {
+  position: fixed; display: none; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 6px; box-shadow: var(--shadow); padding: 4px; z-index: 60; min-width: 180px;
+}
+.ch-graph-ctx-menu__item { padding: 7px 10px; font-size: 12.5px; color: var(--text); border-radius: 4px; cursor: pointer; }
+.ch-graph-ctx-menu__item:hover { background: var(--accent-bg); color: var(--accent-hover); }
+.ch-graph-ctx-menu__item.disabled { color: var(--text-muted); cursor: default; }
+.ch-graph-ctx-menu__item.disabled:hover { background: none; }
 
 /* Path rows */
 .path-rows { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 24px; }
@@ -1547,6 +1652,32 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    .coll-card's own cursor:pointer -- only the Fetch button inside is actually clickable. */
 .coll-card--unfetched { cursor: default; border-style: dashed; }
 
+/* Safe Collection Removal's Screen 2 mod list -- a multi-select, act-on-the-rest list (DESIGN.md's
+   "Selectable lists" pattern), not a single-pick list like .merge-chk-row/.coll-card above, so it
+   gets its own small classes rather than reusing either. Same visual language as .af-selection-bar's
+   own select-all/invert/clear row (Archive Finder), scoped here since no single shared component for
+   this pattern exists yet app-wide (see DESIGN.md's own note that this should eventually be one
+   reusable helper). */
+.rc-selection-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 0 0 8px; }
+.rc-selection-bar__left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.rc-link-btn { background: none; border: none; padding: 0; font: inherit; font-size: 12.5px; color: var(--accent); text-decoration: underline; cursor: pointer; }
+.rc-link-btn:hover { color: var(--accent-hover); }
+.rc-mod-row {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); margin-bottom: 6px;
+}
+.rc-mod-row:hover { background: var(--surface-2); }
+.rc-mod-row.checked { background: var(--accent-bg); border-color: var(--accent); }
+.rc-mod-row label { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; cursor: pointer; }
+.rc-mod-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); flex: none; }
+.rc-mod-row__name { font-size: 13.5px; font-weight: 600; }
+.rc-mod-row__meta { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+.rc-mod-row--shared { border-color: rgba(245, 185, 66, .35); }
+.rc-shared-tag {
+  font-size: 11px; color: var(--warning); background: var(--warning-bg);
+  border-radius: 999px; padding: 2px 8px; font-weight: 600; flex: none;
+}
+
 /* A mod row whose archive isn't on disk -- warning-colored (not danger; the row itself isn't a
    failure, it's a "here's what to do next" note), matching the small-note treatment .mismatch-note
    uses for a different (danger) case. */
@@ -1680,6 +1811,10 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .ucv2-card__actions .review-lock-note { display: none; font-size: 11px; color: var(--text-muted); margin: 6px 2px 0; text-align: center; }
 
 .ucv2-op-section { margin-bottom: 22px; }
+/* Small collection banner next to a review screen's own title -- matches the approved mockup
+   (design/vortex-update-collection-v2-mockup.html) this real build had dropped. */
+.screen-head { display: flex; align-items: center; gap: 10px; }
+.screen-head__thumb { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex: none; border: 1px solid var(--border); }
 .ucv2-op-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); margin-bottom: 8px; }
 .ucv2-op-row--remove { border-color: rgba(240, 84, 107, .3); }
 .ucv2-op-row__name { font-size: 13.5px; font-weight: 600; flex: 1; }
@@ -1696,3 +1831,154 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .ucv2-modal__head strong { font-size: 14px; }
 .ucv2-modal__close { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; line-height: 1; }
 .ucv2-modal__body { padding: 16px 18px; font-size: 13.5px; color: var(--text); line-height: 1.7; white-space: pre-line; }
+/* FOMOD picker (2026-08-18) -- deliberately wider and un-pre-lined: real install trees (a real
+   patch hub) can have a dozen groups and 100+ individual plugin checkboxes, structured HTML rather
+   than prose, so the text-modal's own white-space:pre-line would just add unwanted gaps. */
+.ucv2-modal--wide { width: min(720px, 92vw); }
+.ucv2-modal--wide .ucv2-modal__body { white-space: normal; }
+
+/* FOMOD picker (rebuilt 2026-08-18 to match Vortex's real wizard -- see
+   design/vortex-update-collection-v2-fomod-picker-mockup.html, the approved reference this was
+   built against). A TRUE FIXED size, not a max/min-height pair that flexes with content --
+   confirmed against real Vortex source (src/stylesheets/vortex/dialog-fomod.scss:
+   `.modal-dialog{width:60%;height:60%}`, relative to the viewport). This is why the dialog never
+   resizes hover-to-hover or page-to-page in real Vortex: content that doesn't fit scrolls inside
+   its own column instead (.ucv2-fomod-options/.ucv2-fomod-preview each get their own
+   overflow-y:auto below) -- real Vortex genuinely scrolls each column independently when needed,
+   it does not avoid scrolling via a bigger dialog. */
+.ucv2-modal--fomod { width: 60vw; height: 60vh; max-width: none; max-height: none; display: flex; flex-direction: column; overflow: hidden; }
+.ucv2-fomod-modal__head { position: relative; padding: 20px 44px 14px 24px; border-bottom: 1px solid var(--border); flex: none; background: linear-gradient(180deg, var(--accent-bg), transparent); }
+.ucv2-fomod-modal__close { position: absolute; top: 14px; right: 16px; }
+.ucv2-fomod-modal__title { font-size: 17px; font-weight: 700; margin: 0 0 4px; }
+.ucv2-fomod-modal__step { font-size: 13px; color: var(--text-muted); margin: 0; }
+.ucv2-fomod-modal__intro { font-size: 12.5px; color: var(--text-muted); margin: 8px 0 0; line-height: 1.6; }
+
+/* Two columns, confirmed against real Vortex source (installer_fomod_shared/views/
+   InstallerDialog.tsx): left = the current step's groups, a flex column that FILLS remaining
+   space; right = image+description, a FIXED column but with a real min/max RANGE (minWidth 40%,
+   maxWidth 60% of the row), not one fixed pixel value. */
+.ucv2-fomod-modal__body { flex: 1; display: flex; flex-direction: row; min-height: 0; overflow: hidden; }
+.ucv2-fomod-options { flex: 1; padding: 16px 24px; overflow-y: auto; }
+.ucv2-fomod-group { margin-bottom: 20px; }
+.ucv2-fomod-group:last-child { margin-bottom: 0; }
+.ucv2-fomod-group__name { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--accent-bg); }
+.ucv2-fomod-group__all { font-size: 13px; color: var(--text-muted); font-style: italic; margin: 0; }
+.ucv2-fomod-option { display: flex; align-items: center; gap: 9px; padding: 3px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; line-height: 1.3; }
+.ucv2-fomod-option:hover { background: rgba(255, 255, 255, .03); }
+.ucv2-fomod-option.is-active { background: var(--accent-bg); outline: 1px solid var(--accent); }
+.ucv2-fomod-option.is-disabled { opacity: .55; cursor: default; }
+.ucv2-fomod-option input { width: 15px; height: 15px; accent-color: var(--accent); flex: none; }
+.ucv2-fomod-option__preset { color: var(--accent); font-weight: 500; }
+
+.ucv2-fomod-preview { background: var(--bg); border-left: 1px solid var(--border); padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; flex: none; min-width: 40%; max-width: 60%; overflow-y: auto; }
+.ucv2-fomod-preview__image { width: 100%; aspect-ratio: 16 / 10; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 11.5px; padding: 8px; text-align: center; overflow-wrap: break-word; }
+.ucv2-fomod-preview__desc { font-size: 12.5px; color: var(--text); line-height: 1.6; white-space: normal; }
+.ucv2-fomod-preview__empty { color: var(--text-muted); font-size: 12.5px; font-style: italic; }
+
+/* Back/Next show the adjacent VISIBLE step's own real name, so length varies a lot -- wrap rather
+   than overflow, matching real Vortex's own .fomod-nav-buttons .btn rule. */
+.ucv2-fomod-modal__foot { flex: none; padding: 12px 24px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 12px; background: linear-gradient(0deg, var(--accent-bg), transparent); }
+.ucv2-fomod-modal__foot .btn { max-width: 220px; white-space: normal; overflow-wrap: break-word; text-align: center; }
+.ucv2-fomod-progress { flex: 1; height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.ucv2-fomod-progress__fill { height: 100%; background: var(--accent); transition: width .2s ease; }
+
+/* PGPatcher Load Order Editor (docs/plans/2026-08-19-pgpatcher-load-order-tool.md) -- the first
+   drag-and-drop reorderable list in this project (confirmed no existing precedent to crib), built
+   to the approved mockup (skyrim-modding/pgpatcher-modrules-trimmer/design/load-order-editor-
+   mockup.html) rather than reusing an existing component. Prefixed pgp- throughout, scoped to this
+   one tool, same convention as every other tool-specific block in this file (ucv2-/mm-/etc). */
+.pgp-link-btn { background: none; border: none; color: var(--accent); font-size: 12.5px; cursor: pointer; padding: 4px 2px; font-family: inherit; }
+.pgp-link-btn:hover { color: var(--accent-hover); text-decoration: underline; }
+.pgp-link-btn:disabled { color: var(--text-muted); cursor: default; }
+.pgp-link-btn:disabled:hover { text-decoration: none; }
+.pgp-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 18px 0 12px; }
+/* Split-per-panel toolbar (each .pgp-panel now owns its own copy, between its header and body)
+   trims the margin to fit inside a card instead of spanning the full width above both panels --
+   mechanical spacing tweak only, not a redesign; flag a follow-up visual pass if two toolbars reads
+   cramped in practice. */
+.pgp-toolbar--panel { margin: 10px 12px 8px; }
+.pgp-search { flex: 1; min-width: 200px; }
+.pgp-toolbar__sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+.pgp-selcount { font-size: 12.5px; color: var(--text-muted); margin-right: auto; }
+
+.pgp-panels { display: flex; gap: 16px; align-items: flex-start; }
+.pgp-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; flex: 1; min-width: 0; display: flex; flex-direction: column; max-height: 620px; }
+.pgp-panel--ranked { flex: 1.4; }
+.pgp-panel__head { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center; }
+.pgp-panel__body { overflow-y: auto; padding: 8px; flex: 1; }
+.pgp-unranked-hint { font-size: 12px; color: var(--text-muted); padding: 8px 10px 4px; }
+.pgp-conflict-toggle { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-muted); cursor: pointer; user-select: none; }
+.pgp-conflict-toggle input { cursor: pointer; }
+
+.pgp-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 7px; margin-bottom: 4px; border: 1px solid transparent; cursor: grab; user-select: none; background: var(--surface-2); }
+/* Column-label row, pinned above the scrolling list (same flex slots as .pgp-row itself, so "#" /
+   "Mod" / "Shader" land exactly above their real columns) -- lives outside .pgp-panel__body's own
+   scroll area, same as .pgp-panel__head/.pgp-toolbar--panel already do, so it never scrolls away. */
+.pgp-col-header { display: flex; align-items: center; gap: 10px; padding: 4px 10px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+.pgp-row:hover { border-color: var(--border); }
+.pgp-row.selected { background: var(--accent-bg); border-color: var(--accent); }
+.pgp-row.dragging { opacity: .4; }
+.pgp-row.search-match { border-color: var(--accent); }
+/* Win/lose highlight against whichever mod is currently selected -- confirmed from PGPatcher's own
+   ModSortDialog.cpp (highlightConflictingItems): a conflicting mod ABOVE the selected one in the
+   list order is LOSING to it (red), BELOW is WINNING over it (green). Pure list-position + conflict-
+   adjacency, computed client-side in pgpatcher-app.js -- never asks PGPatcher to compute this. */
+.pgp-row.conflict-losing { background: var(--danger-bg); border-color: var(--danger); }
+.pgp-row.conflict-winning { background: var(--success-bg); border-color: var(--success); }
+
+/* Real PGPatcher's own "will this mod actually be patched" checkbox (Set Mods dialog). A real
+   checkbox look (border + checkmark), NOT a solid color fill -- director's own correction,
+   2026-08-19: with ~200 rows on screen at once, a solid-filled pill on every row plus every row's
+   own selected-state purple border read as "too much color." A checkbox only draws attention to
+   the ONE thing that changed state (the checkmark itself), same as any native checkbox. Stays its
+   own small element rather than living on the row background/border, so it's legible even on a row
+   that's also selected or conflict-highlighted. This toggle is DELIBERATELY separate from row
+   selection (director-confirmed 2026-08-19) -- selection still happens by clicking the row itself,
+   for multi-select drag; this checkbox only ever means "will be patched." */
+.pgp-row__toggle { flex: none; width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid var(--border); cursor: pointer; background: transparent; position: relative; }
+.pgp-row__toggle:hover { border-color: var(--text-muted); }
+/* --nav (a distinct blue), not --accent -- director's own correction, 2026-08-19: both this
+   checkbox AND row selection (.pgp-row.selected below) used the same theme purple, and with ~200
+   rows on screen the two states became impossible to tell apart at a glance ("too much of the same
+   color"). --nav is unused anywhere else on this screen (--success/--danger are already spoken for
+   by conflict win/lose), so "will be patched" now reads as its own distinct color from "this row is
+   selected." The checkmark is drawn with a border-trick (no icon font/SVG needed) -- background
+   stays transparent even when enabled, only the border and the checkmark itself pick up the color. */
+.pgp-row__toggle.enabled { border-color: var(--nav); }
+.pgp-row__toggle.enabled::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--nav);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.pgp-row__handle { color: var(--text-muted); font-size: 14px; flex: none; letter-spacing: -2px; }
+.pgp-row__rank { flex: none; width: 34px; text-align: center; font-size: 11.5px; font-weight: 700; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.pgp-row.selected .pgp-row__rank { color: var(--accent); }
+.pgp-row__name { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Real PGPatcher's own Shader column (ModSortDialog.cpp's "Mod | Shader" list), reused here as a
+   trailing muted label rather than a strict table column -- matches this row's own loose flex
+   layout instead of forcing pixel-aligned columns across every row. */
+.pgp-row__shader { flex: none; font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
+.pgp-drop-line { height: 2px; background: var(--accent); border-radius: 2px; margin: -2px 0; }
+
+.pgp-footer { display: flex; align-items: center; justify-content: flex-start; gap: 10px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.pgp-footer__status { font-size: 12.5px; color: var(--text-muted); flex-basis: 100%; margin-bottom: 4px; }
+.pgp-idle__credits { font-size: 12.5px; color: var(--text-muted); }
+.pgp-idle__credits a { color: var(--text-muted); text-decoration: underline; }
+.pgp-idle__credits a:hover { color: var(--text); }
+.pgp-footer__status strong { color: var(--text); }
+
+/* Build completion -- the one genuine payoff moment in this tool (director's own explicit call,
+   2026-08-20: a real build finishing used to end in a tiny, easy-to-miss status line -- this is the
+   deliberately oversized, celebratory opposite of that). Built on top of the existing .callout--
+   success severity color (TECHNICAL.md's own convention), not a new color, just much larger. */
+.pgp-build-success__banner { background: var(--success-bg); border: 1px solid var(--success); border-radius: var(--radius); padding: 32px 24px; margin-bottom: 20px; text-align: center; font-size: 28px; font-weight: 700; }
+.pgp-build-success__path { text-align: center; font-size: 14px; color: var(--text-muted); margin: 0 0 10px; }
+.pgp-build-success__path code { color: var(--text); background: var(--surface-2); padding: 2px 6px; border-radius: 4px; }
+.pgp-build-success .callout { text-align: left; max-width: 640px; margin: 20px auto; }
+.pgp-build-success__actions { text-align: center; margin-top: 20px; }

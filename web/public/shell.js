@@ -5,7 +5,7 @@
 // index.html; this only toggles which one is visible. app.js and sync-app.js each own their own
 // internal view-state exactly as before -- this file knows nothing about either.
 
-const TOOL_AREAS = ['home', 'rebuild', 'sync', 'settings', 'reports', 'rules-generator', 'utilities', 'merge', 'book', 'update-collection-v2'];
+const TOOL_AREAS = ['home', 'rebuild', 'sync', 'settings', 'reports', 'rules-generator', 'utilities', 'merge', 'book', 'update-collection-v2', 'remove-collection', 'pgpatcher'];
 let currentArea = null;
 
 // "What page am I on" was genuinely hard to tell across several of this app's pages -- confirmed
@@ -82,6 +82,32 @@ document.getElementById('vortexRunningRetryBtn').addEventListener('click', () =>
   if (pendingVortexRunningRetry) pendingVortexRunningRetry();
 });
 
+// A real, distinct case from Update Collection's own upfront Helper check above (which silently
+// routes to Classic before v2 ever opens) -- this is for the Helper genuinely dying PARTWAY through
+// an already-open v2 flow (Vortex closed, or the extension crashed). Same shared-modal shape as
+// showVortexRunningModal, plus one more action: "Switch to Classic instead" always navigates
+// straight there, since Classic needs no Helper at all and someone hitting this mid-v2 shouldn't be
+// stuck with only "try again" as an option.
+let pendingHelperUnavailableRetry = null;
+function showHelperUnavailableModal(retryFn) {
+  pendingHelperUnavailableRetry = retryFn || null;
+  document.getElementById('helperUnavailableModal').classList.remove('hidden');
+}
+function hideHelperUnavailableModal() {
+  document.getElementById('helperUnavailableModal').classList.add('hidden');
+}
+window.showHelperUnavailableModal = showHelperUnavailableModal;
+window.hideHelperUnavailableModal = hideHelperUnavailableModal;
+document.getElementById('helperUnavailableCloseBtn').addEventListener('click', hideHelperUnavailableModal);
+document.getElementById('helperUnavailableRetryBtn').addEventListener('click', () => {
+  hideHelperUnavailableModal();
+  if (pendingHelperUnavailableRetry) pendingHelperUnavailableRetry();
+});
+document.getElementById('helperUnavailableClassicBtn').addEventListener('click', () => {
+  hideHelperUnavailableModal();
+  navigateToArea('sync');
+});
+
 // Startup-only "is your installed Vortex one this tool has actually been tested against" warning --
 // decoupled from Apply Ignores' Preview flow (where this used to live) since it's a whole-app
 // question, not specific to any one step. Runs on EVERY load, not just the default-landing routing
@@ -121,7 +147,7 @@ fetch('/api/settings')
 // "reports"/"utilities" are section GROUPS, not a real stable tool id (no themes/*.json entry for
 // them), so they stay a plain literal here even under a themed brand -- see DESIGN.md, group-level
 // naming is a known gap, not yet part of the schema.
-const AREA_LABELS = { home: 'Home', rebuild: 'Rebuild Collection', sync: 'Update Collection (Classic)', settings: 'Settings', reports: 'Reports', 'rules-generator': 'Rules Generator', utilities: 'Utilities', merge: 'Merge Plugins', book: 'Get Started', 'update-collection-v2': 'Update Collection (Preview)' };
+const AREA_LABELS = { home: 'Home', rebuild: 'Rebuild Collection', sync: 'Update Collection (Classic)', settings: 'Settings', reports: 'Reports', 'rules-generator': 'Rules Generator', utilities: 'Utilities', merge: 'Merge Plugins', book: 'Get Started', 'update-collection-v2': 'Update Collection', 'remove-collection': 'Safe Collection Removal' };
 
 function showToolArea(id) {
   currentArea = id;
@@ -190,6 +216,25 @@ function markBookOpened() {
 // deep-link (?area=) branch further below already does on page load: Update Collection needs its
 // profile dropdown loaded, Reports/Utilities cards land on a specific sub-tab rather than whatever
 // was last shown.
+// One "Update Collection" entry point, not two (2026-08-18) -- collapses the old separate "Update
+// Collection (Classic)"/"Update Collection (Preview)" home cards into a single button. Checked LIVE
+// on every click (never cached from page load -- Vortex/the Helper extension's own running state can
+// genuinely change between visits), same real checkHelperAvailable() every *-routes.js file already
+// uses internally, now exposed directly via GET /api/helper-status. Defaults to Classic (false) on
+// ANY failure to reach that route -- Classic needs no Helper at all, so degrading toward the option
+// that always works is the safe direction, never toward the one that might dead-end.
+async function checkHelperAvailableLive() {
+  try {
+    const res = await fetch('/api/helper-status');
+    if (!res.ok) return false;
+    const data = await res.json();
+    return !!(data && data.available);
+  } catch {
+    return false;
+  }
+}
+window.checkHelperAvailableLive = checkHelperAvailableLive;
+
 async function navigateToArea(id, subTab) {
   if (currentArea === 'settings' && id !== 'settings' && window.settingsIsDirty && window.settingsIsDirty()) {
     const choice = await showUnsavedChangesModal();
@@ -197,6 +242,13 @@ async function navigateToArea(id, subTab) {
       const ok = await window.settingsSave();
       if (!ok) return; // save failed -- stay on Settings so the error is visible and can be retried
     }
+  }
+  // The single "Update Collection" home card routes through here -- resolve to the real area (v2 if
+  // the Helper's reachable right now, Classic otherwise) and recurse once with that real id. The
+  // user never sees or picks between the two.
+  if (id === 'update-collection') {
+    const available = await checkHelperAvailableLive();
+    return navigateToArea(available ? 'update-collection-v2' : 'sync', subTab);
   }
   showToolArea(id);
   if (id === 'book') markBookOpened();
@@ -211,6 +263,9 @@ async function navigateToArea(id, subTab) {
   // Same "don't fetch what nobody's looking at yet" convention -- update-collection-v2-app.js's own
   // ucv2LoadCollections() only ever fires once this area is actually visited.
   if (id === 'update-collection-v2' && window.ucv2LoadCollections) window.ucv2LoadCollections();
+  // Same "don't fetch what nobody's looking at yet" convention -- remove-collection-app.js's own
+  // rcLoadCollections() only ever fires once this area is actually visited.
+  if (id === 'remove-collection' && window.rcLoadCollections) window.rcLoadCollections();
   // Book has no Vortex-gated data to worry about (it's static lore content), but still only loads
   // its own JSON the first time this area is actually visited, not eagerly on page load -- same
   // "don't fetch what nobody's looking at yet" convention as every other area's own lazy-load hook.
@@ -226,8 +281,11 @@ document.getElementById('nav-book').addEventListener('click', () => navigateToAr
 document.getElementById('settingsFirstRunBookBtn').addEventListener('click', () => navigateToArea('book'));
 
 // Home page's own banner image + title are ALSO a way into the book (besides the header icon) --
-// Skyrim-only, matching #nav-book's own visibility (styles.css hides the pointer/hover styling for
-// any other brand, so this is a harmless no-op click under Plain rather than a dead-looking one).
+// only for a theme that HAS a book, matching #nav-book's own visibility (styles.css hides the
+// pointer/hover styling without one, so this is a harmless no-op click rather than a dead-looking
+// one). Checks [data-has-book] -- the signal theme.js sets from the theme's own hasBook flag -- not
+// a hardcoded brand id (2026-08-20; was `=== 'skyrim'`, one of three places that assumed Skyrim was
+// the only theme that would ever have a book).
 // Jumps straight to the book's own "home" chapter (The Arcaneum) instead of the table of contents --
 // clicking a specific tool's own name/art should land you on that tool's own page, not one click
 // short of it.
@@ -236,8 +294,30 @@ if (homeHeroBanner) {
   const homeBannerImg = homeHeroBanner.querySelector('[data-brand-slot="bannerImage"]');
   const homeHeroTitle = homeHeroBanner.querySelector('[data-brand-slot="heroTitle"]');
   [homeBannerImg, homeHeroTitle].forEach((el) => {
-    if (el) el.addEventListener('click', () => { if (document.documentElement.getAttribute('data-brand') === 'skyrim') navigateToArea('book', 'home'); });
+    if (el) el.addEventListener('click', () => { if (document.documentElement.hasAttribute('data-has-book')) navigateToArea('book', 'home'); });
   });
+}
+
+// Home's "don't use this toolkit and Vortex at the same time" caution -- dismissible with a real
+// "don't show this again", same localStorage-preference convention settings-app.js already uses
+// (own dedicated key, checked before first paint so a returning user who already dismissed it never
+// sees a flash of the warning). This is a standing risk caution, not a one-time tip, so dismissal is
+// a deliberate "I understand" choice, not an auto-expiring nag -- no undo affordance is offered
+// (matches this app's other permanent localStorage preferences, e.g. the theme/font pickers).
+const HOME_CONCURRENT_USE_WARNING_KEY = 'vct-hide-concurrent-use-warning';
+const homeConcurrentUseWarningEl = document.getElementById('homeConcurrentUseWarning');
+if (homeConcurrentUseWarningEl) {
+  if (localStorage.getItem(HOME_CONCURRENT_USE_WARNING_KEY) === '1') {
+    homeConcurrentUseWarningEl.remove();
+  } else {
+    const dismissBtn = document.getElementById('homeConcurrentUseWarningDismiss');
+    if (dismissBtn) {
+      dismissBtn.addEventListener('click', () => {
+        localStorage.setItem(HOME_CONCURRENT_USE_WARNING_KEY, '1');
+        homeConcurrentUseWarningEl.remove();
+      });
+    }
+  }
 }
 
 // Tool page breadcrumb eyebrow's "Home" link (DESIGN.md's "Tool page breadcrumb" section) -- one
@@ -283,9 +363,9 @@ function setStarVisual(star, on) {
 // put. Reused for both directions (into Pinned, back into a section) since a section's own order is
 // already just a sub-sequence of this same list.
 const HOME_CANONICAL_ORDER = [
-  'merge', 'rebuild', 'sync', 'rules-generator', 'update-collection-v2',
+  'merge', 'rebuild', 'sync', 'rules-generator',
   'stats', 'workthrough', 'updatecompare', 'rulesgen', 'workshopreport',
-  'missingmasters', 'scrub', 'archivefinder', 'missingfiles', 'cyclehelper',
+  'missingmasters', 'scrub', 'archivefinder', 'missingfiles', 'cyclehelper', 'removecollection', 'pgpatcher',
 ];
 function pinKeyOf(wrap) {
   return wrap.querySelector('.home-card__star').dataset.pinKey;
@@ -434,6 +514,9 @@ if (reportsSubTab) {
     // Same reasoning as the 'sync'/'rules-generator' cases above -- a direct
     // "?area=update-collection-v2" link/refresh needs this too.
     if (jumpArea === 'update-collection-v2') window.ucv2LoadCollections?.();
+    // Same reasoning as the cases above -- a direct "?area=remove-collection" link/refresh needs
+    // this too.
+    if (jumpArea === 'remove-collection') window.rcLoadCollections?.();
     // ?area=book&chapter=<toolId> jumps straight to one chapter instead of the table of contents --
     // book-app.js's own bookLoadOnce() reads params.get('chapter') itself once its data is ready.
     if (jumpArea === 'book') { markBookOpened(); window.bookLoadOnce?.(); }

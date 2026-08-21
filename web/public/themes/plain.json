@@ -34,7 +34,7 @@
       "cardDesc": "Re-extract an installed collection straight into staging&mdash;same result, dramatically faster."
     },
     "sync": {
-      "name": "Update Collection (Classic)",
+      "name": "Update Collection",
       "emoji": "🔄",
       "function": "Update Collection",
       "heroTitle": "Update Without Redoing Your Mod Cleanup",
@@ -50,12 +50,20 @@
       "cardDesc": "Copy the conflict rules you already fixed from an old collection to its update."
     },
     "update-collection-v2": {
-      "name": "Update Collection (Preview)",
+      "name": "Update Collection",
       "emoji": "🔄️",
-      "function": "Update Collection (Preview)",
+      "function": "Update Collection",
       "heroTitle": "See Exactly What a Collection Update Changes",
-      "heroBody": "Check your installed collections for updates and review exactly what a new revision changes &mdash; mods removed, updated, and added &mdash; before anything touches Vortex. This preview covers the review step only; applying the update is a later phase, not built yet.",
-      "cardDesc": "Check for updates and see exactly what a new revision changes, before anything touches Vortex."
+      "heroBody": "Check your installed collections for updates and review exactly what a new revision changes &mdash; mods removed, updated, and added &mdash; then apply the removals and updates for real: real extraction, real deployment, your Ignored and Disabled mods and collection rules carried across untouched.",
+      "cardDesc": "Check for updates, review exactly what changes, and apply removals/updates for real &mdash; your Ignored/Disabled mods and rules stay put."
+    },
+    "remove-collection": {
+      "name": "Safe Collection Removal",
+      "emoji": "📦",
+      "function": "Safe Collection Removal",
+      "heroTitle": "Remove a Collection Without Breaking What Else Uses It",
+      "heroBody": "Removing a collection in Vortex can easily wipe out mods that your other collections are still using behind the scenes. This tool checks your entire setup first, highlights every shared mod, and lets you choose individually what to keep or delete. You can safely clear out old collections without worrying about breaking anything else.",
+      "cardDesc": "Checks for mods shared with your other collections before removing anything, so nothing else breaks."
     },
     "report-stats": {
       "name": "Stats",
@@ -113,6 +121,15 @@
       "heroBody": "Easily pinpoint missing master files and instantly see every mod relying on them&mdash;all in one clear view! Designed to streamline your troubleshooting, this tool takes the hassle out of tracking down broken dependencies so you can jump straight into Vortex and fix them with confidence.",
       "cardDesc": "Pinpoint missing master files and every mod that depends on them."
     },
+    "pgpatcher": {
+      "name": "PGPatcher Load Order",
+      "emoji": "⚔️",
+      "function": "PGPatcher Load Order",
+      "heroTitle": "Set Your Load Order With Drag-and-Drop",
+      "heroBody": "When two mods modify the same mesh or shader, your load order decides which one wins! This tool makes it easy to set that order exactly how you want it&mdash;drag mods around, multi-select to move batches together, or sort everything A–Z in one click. It works directly with your real PGPatcher setup and runs the authentic PGPatcher build engine underneath, so you get the same output files, logs, and modrules.json you'd get any other way&mdash;just with live progress tracking and instant reordering.",
+      "cardDesc": "Set your load order with drag-and-drop, multi-select, and A–Z sorting.",
+      "landingHint": "Click Start to load your mods from PGPatcher (can take a few minutes on large mod lists)."
+    },
     "scrub": {
       "name": "Mod Scrub",
       "emoji": "🧽",
@@ -142,7 +159,7 @@
       "emoji": "🩹",
       "function": "Rebuild Missing Files",
       "heroTitle": "Fix Just the Files That Are Actually Missing",
-      "heroBody": "Sometimes a mod's files quietly go missing from your staging folder, and rebuilding the whole collection to fix it feels like overkill. This tool checks the collections you pick and shows you exactly which files are gone&mdash;then restores just those, straight from the archive.",
+      "heroBody": "Whether a collection removed straight in Vortex (skipping Safe Collection Removal) wiped out shared files, a few mods quietly went missing from your staging folder, or rebuilding the entire collection feels like overkill&mdash;this tool has you covered. It scans your chosen collections, highlights exactly which files are missing, and restores only what's needed directly from the archive.",
       "cardDesc": "Check your collections for missing staging files, then fix just the ones that need it."
     },
     "settings": {

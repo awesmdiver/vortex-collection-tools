@@ -25,5 +25,7 @@
   "mergeOutputDir": null,
   "cycleHelperHistoryDir": null,
   "eslifierOutputDir": null,
-  "missingMastersRecognizeEslifier": true
+  "missingMastersRecognizeEslifier": true,
+  "pgpatcherCfgDir": null,
+  "pgpatcherOutputBackupDir": null
 }

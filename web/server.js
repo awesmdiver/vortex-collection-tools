@@ -35,8 +35,12 @@ const { createWorkshopReportRouter } = require('./workshop-report-routes');
 const { createModExceptionsRouter } = require('./mod-exceptions-routes');
 const { createCycleHelperRouter } = require('./cycle-helper-routes');
 const { createUpdateCollectionV2Router } = require('./update-collection-v2-routes');
+const { createRemoveCollectionRouter } = require('./remove-collection-routes');
+const { createPgpatcherRouter } = require('./pgpatcher-routes');
 const { loadSyncLib } = require('../lib/collection-runner');
 const appConfig = require('../lib/app-config');
+const helperClient = require('../lib/vortex-helper-client');
+const syncLib = require('../lib/vortex-sync/lib');
 
 function parseArgs(argv) {
     const args = {
@@ -104,6 +108,10 @@ function main() {
         // Mod Exceptions list (lib/mod-exception-store.js) -- shared between Rebuild Collection and
         // Rebuild Missing Files. No CLI flag, config.json/Settings only.
         modExceptionListDir: fileConfig.modExceptionListDir || null,
+        // PGPatcher Load Order Editor -- optional, blank is a supported state (see app-config.js's
+        // own comment). No CLI flag, config.json/Settings only.
+        pgpatcherCfgDir: fileConfig.pgpatcherCfgDir || null,
+        pgpatcherOutputBackupDir: fileConfig.pgpatcherOutputBackupDir || null,
         // maxBackupsToKeep is NOT included here deliberately -- unlike the paths above, it's read
         // fresh from config.json at the moment each rebuild run actually needs it (see
         // rebuild-routes.js), not baked in at startup, so changing it never needs a restart.
@@ -131,6 +139,20 @@ function main() {
     app.use('/api/mod-exceptions', createModExceptionsRouter());
     app.use('/api/cycle-helper', createCycleHelperRouter(config));
     app.use('/api/update-collection-v2', createUpdateCollectionV2Router(config));
+    app.use('/api/remove-collection', createRemoveCollectionRouter(config));
+    app.use('/api/pgpatcher', createPgpatcherRouter(config));
+
+    // Shared, whole-app route (not scoped to any one tool area) -- shell.js's Home "Update
+    // Collection" card uses this to decide LIVE, on every click, whether to open Update Collection
+    // v2 (Helper reachable) or Classic (Helper not reachable) -- the user never sees or picks
+    // between the two, one button routes automatically. Checked fresh every time, not cached at
+    // page load, since the Helper/Vortex's own running state can change between visits. Same real
+    // checkHelperAvailable() every *-routes.js file already calls internally for its own
+    // opportunistic fallback -- this is just the first place it's exposed directly to the frontend.
+    app.get('/api/helper-status', async (req, res) => {
+        const available = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+        res.json({ available });
+    });
 
     // Settings page's "Restart Now" button -- spawns a fresh, fully independent instance of this
     // same server (same args this one was launched with, forcing --no-open since a browser tab is

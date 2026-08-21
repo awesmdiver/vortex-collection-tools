@@ -1,5 +1,5 @@
 'use strict';
-// Get Started book (Skyrim-only) -- fetches its own themes/skyrim-book.json (a theme.js concern
+// Get Started book (any theme that declares one) -- fetches themes/<themeId>-book.json (a theme.js concern
 // would be a layering violation: theme.js only ever fills brand-slot markup already in the DOM, it
 // doesn't own whole new page content like this). Content: design/get-started-book-content-draft-v1-
 // Gemini.md is the source; skyrim-book.json is the built/structured form of it. Names/emoji/function
@@ -24,23 +24,65 @@ function bookLoadOnce(forceChapter) {
     else if (refParam) bookShowReference();
     return;
   }
+  // A direct "?area=book" link runs this at page load, which can genuinely beat theme.js's own
+  // async theme fetch -- and this needs the resolved theme now that the book file is named after it
+  // (it didn't when the path was hardcoded). Wait for the real theme rather than guessing an id.
+  // Deliberately BEFORE the bookLoaded flag is set, so the retry isn't swallowed by the
+  // already-loaded branch above.
+  if (!window.activeTheme) {
+    window.addEventListener('themeready', () => bookLoadOnce(forceChapter), { once: true });
+    return;
+  }
   bookLoaded = true;
-  fetch('/themes/skyrim-book.json')
-    .then((r) => r.json())
+
+  // The theme declares whether it has a book at all (2026-08-20 -- same theme-declared pattern
+  // hasHomeBackgroundWash established, replacing a hardcoded skyrim-book.json path). Without the
+  // flag there's nothing to fetch: skip straight to the same "leave the static shell alone"
+  // outcome the catch below produces, rather than firing a request that's guaranteed to 404.
+  const theme = window.activeTheme;
+  if (!theme.hasBook) return;
+
+  fetch(`/themes/${theme.id}-book.json`)
+    .then((r) => {
+      // An explicit status check -- a dev/static server that answers an unknown path with its own
+      // index.html would otherwise fail later, at JSON.parse, with a much less obvious reason.
+      if (!r.ok) throw new Error(`No book for theme ${theme.id}`);
+      return r.json();
+    })
     .then((data) => {
       bookData = data;
+      bookApplyTitles();
       bookRenderToc();
       if (chapterParam) bookShowChapter(chapterParam);
       else if (refParam) bookShowReference();
     })
     .catch(() => {
-      // No book for the active theme (Plain, or the fetch genuinely failed) -- the nav-book button
-      // that's the only way to reach this area is already hidden for Plain via CSS, so a failure
-      // here is either a real network hiccup or someone forced the URL directly. Either way, leave
-      // the static "table of contents" shell as-is rather than showing a broken/empty page.
+      // No book file for the active theme, or the fetch genuinely failed -- the nav-book button
+      // that's the only way to reach this area is already hidden without the hasBook flag, so a
+      // failure here is either a real network hiccup or someone forced the URL directly. Either
+      // way, leave the static "table of contents" shell as-is rather than showing a broken/empty
+      // page.
     });
 }
 window.bookLoadOnce = bookLoadOnce;
+
+// The two places the book's own NAME appears, both of which only this file can fill: the title
+// lives in the book JSON, not the theme JSON, and index.html can only ship a generic fallback since
+// every theme shares that markup. Both used to hard-code Skyrim's own book name -- the header
+// button's tooltip, and the table of contents heading, which would have shown "The Arcaneum" above
+// a Fallout 4 book (found while generalizing the other three hardcodes, 2026-08-20).
+//
+// Set once the book data actually resolves. For the ToC heading that IS the moment it renders, so
+// it's always right. The button's tooltip stays generic until the book has been opened once in this
+// page load -- the alternative, prefetching every book at page load purely for a tooltip, costs a
+// real request for something nobody may hover.
+function bookApplyTitles() {
+  if (!bookData || !bookData.title) return;
+  const btn = document.getElementById('nav-book');
+  if (btn) btn.title = bookData.title;
+  const toc = $bk('bookTocTitle');
+  if (toc) toc.textContent = '\u{1F4D6} ' + bookData.title;
+}
 
 function bookToolName(toolId) {
   const t = window.activeTheme && window.activeTheme.tools && window.activeTheme.tools[toolId];

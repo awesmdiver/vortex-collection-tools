@@ -1,6 +1,6 @@
 {
   "name": "vortex-collection-tools",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "Unified toolkit for Vortex collection management: fast direct-extraction staging rebuilds (Rebuild Collection), and update-preserving ignore/disable state sync (Update Collection), with a shared local web UI.",
   "engines": {
@@ -8,17 +8,24 @@
   },
   "scripts": {
     "web": "node web/server.js",
-    "compress-image": "node scripts/compress-image.js"
+    "compress-image": "node scripts/compress-image.js",
+    "vendor-cytoscape": "node scripts/vendor-cytoscape.js",
+    "postinstall": "node scripts/vendor-cytoscape.js"
   },
   "dependencies": {
     "classic-level": "^1.4.1",
+    "cose-base": "^2.2.0",
+    "cytoscape": "^3.34.1",
+    "cytoscape-cose-bilkent": "^4.1.0",
     "express": "^5.2.1",
     "fast-xml-parser": "^5.10.1",
+    "layout-base": "^2.0.1",
     "pex-parser": "github:matortheeternal/pex-parser",
     "semver": "^7.8.5",
     "xeditlib": "github:WingedGuardian/xeditlib"
   },
   "devDependencies": {
+    "playwright": "^1.62.1",
     "sharp": "^0.35.3"
   }
 }
