@@ -73,25 +73,25 @@ A dedicated tab for data views and checklists that don't fit into a single-actio
 
 Every tool above keeps its plain, functional name in this README — here's what each becomes under Skyrim or Fallout 4 theming. This table is the one place that needs updating as more themes ship (Starfield is next).
 
-| Tool | Skyrim | Fallout 4 |
+| Standard | Skyrim | Fallout 4 |
 | :--- | :--- | :--- |
-| Rebuild Collection | ✨ Restoration | 💧 Project Purity |
-| Update Collection | 📯 The Herald | 🧠 Memory Den |
-| Rules Generator | ✒️ The Scribe | 📡 Relay Tower Network |
-| Merge Plugins | 🔨 The Forge | ⚙️ Institute Sub-Assembly |
-| Safe Collection Removal | 📦 The Quartermaster | 📦 Overseer's Inventory Quarantine |
-| Missing Masters | 🔮 The Augur | ⚠️ Vault-Tec Diagnostic Prompt |
-| Mod Scrub | 🔥 The Cleansing | 🤖 Greygarden Maintenance Protocol |
-| Archive Finder | 👁️ Clairvoyance | 📚 Boston Library Terminal |
-| Rebuild Missing Files | 🗝️ The Vault-Keeper | 🩹 Auto-Doc Diagnostic & Repair |
-| Cycle Helper | 🕸️ The Webweaver | 🔌 Circuit Breaker Diagnostics |
-| Clear Update Flags | 💎 Cleansing Stone | 🟢 All-Clear Protocol |
-| PGPatcher Load Order Editor | 👑 Order of Succession | 🎚️ Vault-Tec Priority Protocol |
-| Stats | 📊 The Ledger | 📊 Overseer Performance Log |
-| Work Through | ✅ The Quest Log | ✅ Automated Correction Ledger |
-| Update Compare | 🔍 Scroll of Retrospection | 🔍 Terminal Delta Log |
-| Workshop Report | 📓 The Anvil's Mark | 🕒 Terminal Revision Timestamp |
-| Mod Exceptions | 🕊️ The Shadowmarked | 🙅 Override Exemption Protocol |
+| ⚡ Rebuild Collection | ✨ Restoration | 💧 Project Purity |
+| 🔄 Update Collection | 📯 The Herald | 🧠 Memory Den |
+| 🔗 Rules Generator | ✒️ The Scribe | 📡 Relay Tower Network |
+| 🧬 Merge Plugins | 🔨 The Forge | ⚙️ Institute Sub-Assembly |
+| 📦 Safe Collection Removal | 📦 The Quartermaster | 📦 Overseer's Inventory Quarantine |
+| 🧩 Missing Masters | 🔮 The Augur | ⚠️ Vault-Tec Diagnostic Prompt |
+| 🧽 Mod Scrub | 🔥 The Cleansing | 🤖 Greygarden Maintenance Protocol |
+| 📦 Archive Finder | 👁️ Clairvoyance | 📚 Boston Library Terminal |
+| 🩹 Rebuild Missing Files | 🗝️ The Vault-Keeper | 🩹 Auto-Doc Diagnostic & Repair |
+| 🔀 Cycle Helper | 🕸️ The Webweaver | 🔌 Circuit Breaker Diagnostics |
+| 🧹 Clear Update Flags | 💎 Cleansing Stone | 🟢 All-Clear Protocol |
+| ⚔️ PGPatcher Load Order Editor | 👑 Order of Succession | 🎚️ Vault-Tec Priority Protocol |
+| 📊 Stats | 📊 The Ledger | 📊 Overseer Performance Log |
+| ✅ Work Through | ✅ The Quest Log | ✅ Automated Correction Ledger |
+| 🔍 Update Compare | 🔍 Scroll of Retrospection | 🔍 Terminal Delta Log |
+| 🕒 Workshop Report | 📓 The Anvil's Mark | 🕒 Terminal Revision Timestamp |
+| 🙅 Mod Exceptions | 🕊️ The Shadowmarked | 🙅 Override Exemption Protocol |
 
 ---
 
