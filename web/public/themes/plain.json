@@ -53,8 +53,8 @@
       "name": "Update Collection",
       "emoji": "🔄️",
       "function": "Update Collection",
-      "heroTitle": "See Exactly What a Collection Update Changes",
-      "heroBody": "Check your installed collections for updates and review exactly what a new revision changes &mdash; mods removed, updated, and added &mdash; then apply the removals and updates for real: real extraction, real deployment, your Ignored and Disabled mods and collection rules carried across untouched.",
+      "heroTitle": "Review & Apply Collection Updates",
+      "heroBody": "Check your installed collections for updates and review exactly what a new revision changes&mdash;mods removed, updated, or added. Then apply those updates for real: complete extraction, genuine deployment, and all your Ignored and Disabled mods and collection rules carried over untouched.",
       "cardDesc": "Check for updates, review exactly what changes, and apply removals/updates for real &mdash; your Ignored/Disabled mods and rules stay put."
     },
     "remove-collection": {

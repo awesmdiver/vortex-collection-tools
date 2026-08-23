@@ -6,7 +6,7 @@
 
 const express = require('express');
 const runner = require('../lib/update-collection-v2-runner');
-const helperClient = require('../lib/vortex-helper-client');
+const { createSseSession } = require('./sse-session');
 
 function createUpdateCollectionV2Router(config) {
     const router = express.Router();
@@ -93,12 +93,35 @@ function createUpdateCollectionV2Router(config) {
         }
     });
 
-    // Phase 2's real Apply -- Updated mods get re-extracted+metadata-refreshed+redeployed, Removed
-    // mods get either fully uninstalled or left alone per removedChoice, Added mods are deliberately
-    // skipped (Phase 3). Requires the helper extension reachable -- see the runner's own
-    // HELPER_UNAVAILABLE handling; there is no state.v2 fallback for this route, unlike every read
-    // route in this file, since deploy/remove/metadata-refresh are real Vortex actions with no
-    // database-row equivalent this project could otherwise write directly.
+    // Phase 2/3's real Apply -- Updated mods get re-extracted+metadata-refreshed+redeployed, Removed
+    // mods get either fully uninstalled or left alone per removedChoice, Added mods get installed for
+    // real. Requires the helper extension reachable -- see the runner's own HELPER_UNAVAILABLE
+    // handling; there is no state.v2 fallback for this route, unlike every read route in this file,
+    // since deploy/remove/metadata-refresh are real Vortex actions with no database-row equivalent
+    // this project could otherwise write directly.
+    //
+    // Real, live streamed progress (2026-08-21) -- mirrors web/pgpatcher-routes.js's own /build +
+    // /build/events shape exactly (same POST-kicks-off-then-SSE-streams-progress pattern, same
+    // createSseSession primitive): a real multi-phase pipeline (re-review, backup, per-mod extraction/
+    // install, rule application, a full deploy) used to run as ONE blocking request with no feedback
+    // beyond a static "Applying…" button and a narrow side-channel poll that only ever covered the
+    // final deploy step (ucv2StartApplyProgressPolling/GET /apply-progress, both fully superseded by
+    // this -- removed below, not kept alongside).
+    //
+    // The dependency-break and FOMOD-choice gates genuinely need the user's own decision before ANY
+    // real write proceeds, so they stay a synchronous pre-flight check (runner.prepareApply) --
+    // exactly the same "check first, only then kick off the real background work" shape PGPatcher's
+    // own DynDoLOD gate already uses -- and still 409 exactly as before, before this route ever
+    // returns 202. Once prepareApply's own gates all clear, runner.runApply does the actual write
+    // work in the background, streaming real phase/progress events via emitIfCurrent.
+    const applySession = createSseSession();
+
+    router.get('/apply/events', (req, res) => {
+        if (!applySession.get()) return res.status(404).end();
+        const afterSeq = Number(req.headers['last-event-id'] || 0);
+        applySession.subscribe(res, { afterSeq });
+    });
+
     router.post('/apply', async (req, res) => {
         if (!staging || !downloads) return res.status(400).json({ error: 'Set up the staging and downloads folders under Settings first.' });
         const { collectionModId, removedChoice, ignoreDependencyBreaks, keepInstalledModIds, deleteArchives, fomodPicks } = req.body || {};
@@ -111,18 +134,13 @@ function createUpdateCollectionV2Router(config) {
         if (keepInstalledModIds !== undefined && !Array.isArray(keepInstalledModIds)) {
             return res.status(400).json({ error: 'keepInstalledModIds must be an array (or omitted).' });
         }
+
+        let prepared;
         try {
-            const result = await runner.applyUpdate({ collectionModId, staging, downloads, state, syncBackupRoot, removedChoice, ignoreDependencyBreaks, keepInstalledModIds, deleteArchives, fomodPicks });
-            res.json(result);
+            prepared = await runner.prepareApply({ collectionModId, staging, downloads, state, ignoreDependencyBreaks, keepInstalledModIds, fomodPicks });
         } catch (e) {
-            if (e.code === 'VORTEX_RUNNING') {
-                return res.status(409).json({ error: 'vortex-running', message: e.message });
-            }
             if (e.code === 'HELPER_UNAVAILABLE') {
                 return res.status(409).json({ error: 'helper-unavailable', message: e.message });
-            }
-            if (e.code === 'BACKUP_FAILED') {
-                return res.status(500).json({ error: 'backup-failed', message: e.message });
             }
             // No real write happened yet -- refused before the backup step, matching Vortex's own
             // real "Cancel" default. The frontend shows these details (which mod, old/new version,
@@ -138,21 +156,105 @@ function createUpdateCollectionV2Router(config) {
             if (e.code === 'FOMOD_CHOICES_NEEDED') {
                 return res.status(409).json({ error: 'fomod-choices-needed', message: e.message, fomodChoiceNeeds: e.fomodChoiceNeeds });
             }
+            return res.status(500).json({ error: e.message });
+        }
+
+        if (applySession.isActive()) {
+            return res.status(409).json({ error: 'An apply is already in progress.' });
+        }
+
+        const mySession = applySession.start({ id: `apply-${Date.now()}` });
+        res.status(202).json({});
+        const emitIfCurrent = (event) => {
+            if (applySession.get() === mySession) applySession.emit(event);
+        };
+
+        runner.runApply({
+            prepared, collectionModId, staging, downloads, syncBackupRoot, removedChoice,
+            ignoreDependencyBreaks, deleteArchives, onProgress: emitIfCurrent,
+        }).then((result) => {
+            emitIfCurrent({ type: 'done', result, done: true });
+        }).catch((e) => {
+            // BACKUP_FAILED is the one runner-thrown error code that can still happen here (every
+            // OTHER real write below it just reports its own per-mod ok:false/error rather than
+            // throwing) -- surfaced with the same code the frontend's own ucv2HandleError already
+            // knows how to render, just via the stream now instead of a synchronous 500.
+            emitIfCurrent({
+                type: 'error', message: e.message, done: true, error: true,
+                code: e.code === 'BACKUP_FAILED' ? 'backup-failed' : undefined,
+            });
+        });
+    });
+
+    // Apply Result's own per-problem Retry (2026-08-23) -- re-runs ONE specific failed operation from
+    // a just-completed apply, standalone, without a whole fresh Apply. See the runner's own "Apply
+    // Result Retry support" section for the shared mechanics (the short-lived retry cache, and why
+    // the single-mod retry deliberately doesn't use it). Guarded the same way /apply itself is
+    // guarded against a second concurrent /apply -- retrying one piece while a fresh full Apply is
+    // mid-flight on the same collection would race on the same live Vortex state/staging folder.
+    // RETRY_DATA_EXPIRED gets its own real error code (the cache's own bounded TTL, or simply never
+    // having applied yet this server session) so the frontend can say plainly "run Apply Update
+    // again" instead of a generic failure.
+    const retryBusyGuard = (req, res) => {
+        if (applySession.isActive()) {
+            res.status(409).json({ error: 'apply-in-progress', message: 'An apply is already in progress.' });
+            return true;
+        }
+        return false;
+    };
+
+    router.post('/apply/retry-mod-rules', async (req, res) => {
+        if (retryBusyGuard(req, res)) return;
+        const { collectionModId } = req.body || {};
+        if (!collectionModId || typeof collectionModId !== 'string') return res.status(400).json({ error: 'No collection given.' });
+        try {
+            res.json(await runner.retryModRules({ collectionModId }));
+        } catch (e) {
+            if (e.code === 'RETRY_DATA_EXPIRED') return res.status(409).json({ error: 'retry-data-expired', message: e.message });
             res.status(500).json({ error: e.message });
         }
     });
 
-    // Best-effort live status for an in-flight full deploy (runner.applyUpdate's own deployAllResult
-    // step -- fires only when this apply detected a real plugin-file change). The frontend polls this
-    // WHILE its own /apply POST above is still in flight -- Node's own event loop can genuinely serve
-    // this concurrently, since /apply's own await is on outstanding I/O (a pending Helper HTTP call),
-    // not synchronous CPU work. Always 200s with a real snapshot or a plain "nothing in flight" shape
-    // -- never errors, since this is purely informational and must never itself become something the
-    // frontend has to handle as a failure. See vortex-helper-client.js's getDeployAllProgress for the
-    // real, confirmed limitation on how reliably this responds during a large deploy.
-    router.get('/apply-progress', async (req, res) => {
-        const progress = await helperClient.getDeployAllProgress();
-        res.json(progress || { active: false, text: '', percent: 0, done: false, error: null });
+    router.post('/apply/retry-collection-attributes', async (req, res) => {
+        if (retryBusyGuard(req, res)) return;
+        const { collectionModId } = req.body || {};
+        if (!collectionModId || typeof collectionModId !== 'string') return res.status(400).json({ error: 'No collection given.' });
+        try {
+            res.json(await runner.retryCollectionAttributes({ collectionModId }));
+        } catch (e) {
+            if (e.code === 'RETRY_DATA_EXPIRED') return res.status(409).json({ error: 'retry-data-expired', message: e.message });
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    router.post('/apply/retry-membership-cleanup', async (req, res) => {
+        if (retryBusyGuard(req, res)) return;
+        const { collectionModId } = req.body || {};
+        if (!collectionModId || typeof collectionModId !== 'string') return res.status(400).json({ error: 'No collection given.' });
+        try {
+            res.json(await runner.retryMembershipCleanup({ collectionModId }));
+        } catch (e) {
+            if (e.code === 'RETRY_DATA_EXPIRED') return res.status(409).json({ error: 'retry-data-expired', message: e.message });
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Retry #4 -- a single Updated/Added mod's own extraction failure. Real Vortex writes, same as
+    // /apply itself, so it needs staging/downloads configured and the same HELPER_UNAVAILABLE/
+    // VORTEX_RUNNING handling every other real-write route in this file already has.
+    router.post('/apply/retry-mod', async (req, res) => {
+        if (retryBusyGuard(req, res)) return;
+        if (!staging || !downloads) return res.status(400).json({ error: 'Set up the staging and downloads folders under Settings first.' });
+        const { collectionModId, modId } = req.body || {};
+        if (!collectionModId || typeof collectionModId !== 'string') return res.status(400).json({ error: 'No collection given.' });
+        if (!modId || typeof modId !== 'string') return res.status(400).json({ error: 'No mod given to retry.' });
+        try {
+            res.json(await runner.retryModExtraction({ collectionModId, staging, downloads, state, modId }));
+        } catch (e) {
+            if (e.code === 'HELPER_UNAVAILABLE') return res.status(409).json({ error: 'helper-unavailable', message: e.message });
+            if (e.code === 'VORTEX_RUNNING') return res.status(409).json({ error: 'vortex-running', message: e.message });
+            res.status(500).json({ error: e.message });
+        }
     });
 
     return router;

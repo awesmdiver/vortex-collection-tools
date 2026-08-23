@@ -126,6 +126,20 @@
     <p class="tool-hero__body" data-brand-slot="heroBody">Pick a tool to get started. Everything here works on collections you've already installed in Vortex&mdash;rebuild them faster, keep your Ignored and Disabled mods through an update, sort out conflict rules, and see how it all went.</p>
   </div>
 
+  <!-- Second mount point for the outdated-Helper warning (2026-08-23, director's own find: it only
+       showed in Settings, and someone can land on Home and start using tools without ever opening
+       Settings). Body cloned from #helperOutdatedBodyTpl -- see that template for why the wording is
+       authored once rather than twice. Same visibility rule as its Settings twin, driven by the same
+       single helperInfo result in settings-app.js, so the two can never disagree.
+       Sits ABOVE the golden-rule warning below on purpose: an outdated Helper means results can be
+       silently WRONG across every tool, which is a more fundamental problem than the concurrent-use
+       risk (which is a real hazard, but one the user controls by waiting). Both are callout--warning;
+       this is an ordering judgment, not a severity one.
+       Also unlike the golden-rule banner, this has NO "Don't show this again" dismiss -- it's a real
+       condition that resolves by updating the Helper, not a standing tip to acknowledge once, and it
+       disappears on its own the moment the Helper is current. -->
+  <div id="homeHelperOutdatedBanner" class="callout callout--warning hidden" style="margin-bottom:20px"></div>
+
   <!-- Whole-app standing caution (2026-08-18), not scoped to Update Collection v2 specifically --
        any tool here that writes through the Helper extension while Vortex is open carries the same
        concurrent-write risk. Serious register (plain-language-writer skill) since this is a genuine
@@ -201,6 +215,76 @@
   </div>
   </div>
 
+  <div class="home-section" id="homeSectionUtilities" data-section-id="utilities">
+  <img class="home-section-banner-img hidden" data-brand-slot="bannerImage" alt="">
+  <div class="home-section-title" data-brand-slot="name">Utilities</div>
+  <div class="home-grid">
+    <div class="home-card-wrap" data-section="homeSectionUtilities">
+      <button class="home-card" data-area="utilities" data-sub="missingmasters" data-tool-id="missing-masters">
+        <div class="home-card__icon" data-brand-slot="emoji">🧩</div>
+        <div class="home-card__name" data-brand-slot="name">Missing Masters</div>
+        <div class="home-card__desc" data-brand-slot="cardDesc">Pinpoint missing master files and every mod that depends on them.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="missingmasters" title="Pin to top">☆</button>
+    </div>
+    <div class="home-card-wrap" data-section="homeSectionUtilities">
+      <button class="home-card" data-area="utilities" data-sub="scrub" data-tool-id="scrub">
+        <div class="home-card__icon" data-brand-slot="emoji">🧽</div>
+        <div class="home-card__name" data-brand-slot="name">Mod Scrub</div>
+        <div class="home-card__desc" data-brand-slot="cardDesc">Spot staging folders and archives Vortex stopped tracking, and reclaim the space.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="scrub" title="Pin to top">☆</button>
+    </div>
+    <div class="home-card-wrap" data-section="homeSectionUtilities">
+      <button class="home-card" data-area="utilities" data-sub="archivefinder" data-tool-id="archive-finder">
+        <div class="home-card__icon" data-brand-slot="emoji">📦</div>
+        <div class="home-card__name" data-brand-slot="name">Archive Finder</div>
+        <div class="home-card__desc" data-brand-slot="cardDesc">Search inside every mod archive without extracting a thing.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="archivefinder" title="Pin to top">☆</button>
+    </div>
+    <div class="home-card-wrap" data-section="homeSectionUtilities">
+      <button class="home-card" data-area="utilities" data-sub="missingfiles" data-tool-id="missing-files">
+        <div class="home-card__icon" data-brand-slot="emoji">🩹</div>
+        <div class="home-card__name" data-brand-slot="name">Rebuild Missing Files</div>
+        <div class="home-card__desc" data-brand-slot="cardDesc">Check your collections for missing staging files, then fix just the ones that need it.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="missingfiles" title="Pin to top">☆</button>
+    </div>
+    <div class="home-card-wrap" data-section="homeSectionUtilities">
+      <button class="home-card" data-area="utilities" data-sub="cyclehelper" data-tool-id="cycle-helper">
+        <div class="home-card__icon" data-brand-slot="emoji">🔀</div>
+        <div class="home-card__name" data-brand-slot="name">Cycle Helper</div>
+        <div class="home-card__desc" data-brand-slot="cardDesc">Pinpoint the rule actually causing a Vortex cycle, fix it, and confirm it's really gone.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="cyclehelper" title="Pin to top">☆</button>
+    </div>
+    <div class="home-card-wrap" data-section="homeSectionUtilities">
+      <button class="home-card" data-area="utilities" data-sub="clearflags" data-tool-id="clear-update-flags">
+        <div class="home-card__icon" data-brand-slot="emoji">🧹</div>
+        <div class="home-card__name" data-brand-slot="name">Clear Update Flags</div>
+        <div class="home-card__desc" data-brand-slot="cardDesc">Clear accidental "Update Available" badges so you can keep the exact mod versions your collection relies on.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="clearflags" title="Pin to top">☆</button>
+    </div>
+    <div class="home-card-wrap" data-section="homeSectionUtilities">
+      <button class="home-card" data-area="pgpatcher" data-tool-id="pgpatcher">
+        <div class="home-card__icon" data-brand-slot="emoji">⚔️</div>
+        <div class="home-card__name" data-brand-slot="name">PGPatcher Load Order</div>
+        <div class="home-card__desc" data-brand-slot="cardDesc">Drag mods into priority order and resolve PBR conflicts, without opening PGPatcher itself.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="pgpatcher" title="Pin to top">☆</button>
+    </div>
+  </div>
+  </div>
+
   <div class="home-section" id="homeSectionReports" data-section-id="reports">
   <img class="home-section-banner-img hidden" data-brand-slot="bannerImage" alt="">
   <div class="home-section-title" data-brand-slot="name">Reports</div>
@@ -262,67 +346,6 @@
         <div class="home-card__open">Open <span>→</span></div>
       </button>
       <button class="home-card__star" data-pin-key="modexceptions" title="Pin to top">☆</button>
-    </div>
-  </div>
-  </div>
-
-  <div class="home-section" id="homeSectionUtilities" data-section-id="utilities">
-  <img class="home-section-banner-img hidden" data-brand-slot="bannerImage" alt="">
-  <div class="home-section-title" data-brand-slot="name">Utilities</div>
-  <div class="home-grid">
-    <div class="home-card-wrap" data-section="homeSectionUtilities">
-      <button class="home-card" data-area="utilities" data-sub="missingmasters" data-tool-id="missing-masters">
-        <div class="home-card__icon" data-brand-slot="emoji">🧩</div>
-        <div class="home-card__name" data-brand-slot="name">Missing Masters</div>
-        <div class="home-card__desc" data-brand-slot="cardDesc">Pinpoint missing master files and every mod that depends on them.</div>
-        <div class="home-card__open">Open <span>→</span></div>
-      </button>
-      <button class="home-card__star" data-pin-key="missingmasters" title="Pin to top">☆</button>
-    </div>
-    <div class="home-card-wrap" data-section="homeSectionUtilities">
-      <button class="home-card" data-area="utilities" data-sub="scrub" data-tool-id="scrub">
-        <div class="home-card__icon" data-brand-slot="emoji">🧽</div>
-        <div class="home-card__name" data-brand-slot="name">Mod Scrub</div>
-        <div class="home-card__desc" data-brand-slot="cardDesc">Spot staging folders and archives Vortex stopped tracking, and reclaim the space.</div>
-        <div class="home-card__open">Open <span>→</span></div>
-      </button>
-      <button class="home-card__star" data-pin-key="scrub" title="Pin to top">☆</button>
-    </div>
-    <div class="home-card-wrap" data-section="homeSectionUtilities">
-      <button class="home-card" data-area="utilities" data-sub="archivefinder" data-tool-id="archive-finder">
-        <div class="home-card__icon" data-brand-slot="emoji">📦</div>
-        <div class="home-card__name" data-brand-slot="name">Archive Finder</div>
-        <div class="home-card__desc" data-brand-slot="cardDesc">Search inside every mod archive without extracting a thing.</div>
-        <div class="home-card__open">Open <span>→</span></div>
-      </button>
-      <button class="home-card__star" data-pin-key="archivefinder" title="Pin to top">☆</button>
-    </div>
-    <div class="home-card-wrap" data-section="homeSectionUtilities">
-      <button class="home-card" data-area="utilities" data-sub="missingfiles" data-tool-id="missing-files">
-        <div class="home-card__icon" data-brand-slot="emoji">🩹</div>
-        <div class="home-card__name" data-brand-slot="name">Rebuild Missing Files</div>
-        <div class="home-card__desc" data-brand-slot="cardDesc">Check your collections for missing staging files, then fix just the ones that need it.</div>
-        <div class="home-card__open">Open <span>→</span></div>
-      </button>
-      <button class="home-card__star" data-pin-key="missingfiles" title="Pin to top">☆</button>
-    </div>
-    <div class="home-card-wrap" data-section="homeSectionUtilities">
-      <button class="home-card" data-area="utilities" data-sub="cyclehelper" data-tool-id="cycle-helper">
-        <div class="home-card__icon" data-brand-slot="emoji">🔀</div>
-        <div class="home-card__name" data-brand-slot="name">Cycle Helper</div>
-        <div class="home-card__desc" data-brand-slot="cardDesc">Pinpoint the rule actually causing a Vortex cycle, fix it, and confirm it's really gone.</div>
-        <div class="home-card__open">Open <span>→</span></div>
-      </button>
-      <button class="home-card__star" data-pin-key="cyclehelper" title="Pin to top">☆</button>
-    </div>
-    <div class="home-card-wrap" data-section="homeSectionUtilities">
-      <button class="home-card" data-area="pgpatcher" data-tool-id="pgpatcher">
-        <div class="home-card__icon" data-brand-slot="emoji">⚔️</div>
-        <div class="home-card__name" data-brand-slot="name">PGPatcher Load Order</div>
-        <div class="home-card__desc" data-brand-slot="cardDesc">Drag mods into priority order and resolve PBR conflicts, without opening PGPatcher itself.</div>
-        <div class="home-card__open">Open <span>→</span></div>
-      </button>
-      <button class="home-card__star" data-pin-key="pgpatcher" title="Pin to top">☆</button>
     </div>
   </div>
   </div>
@@ -448,6 +471,7 @@
       <div id="planSummary" class="summary-badges"></div>
 
       <div class="view-actions">
+        <button id="cancelPlanBtnTop" class="btn btn--ghost">Cancel</button>
         <button id="startRebuildBtnTop" class="btn btn--primary">Start Rebuild</button>
         <span id="nothingToRebuildNoteTop" class="muted hidden">Nothing to rebuild &mdash; all mods are skipped/ignored.</span>
       </div>
@@ -473,6 +497,7 @@
       </div>
 
       <div class="view-actions">
+        <button id="cancelPlanBtn" class="btn btn--ghost">Cancel</button>
         <button id="startRebuildBtn" class="btn btn--primary">Start Rebuild</button>
         <span id="nothingToRebuildNote" class="muted hidden">Nothing to rebuild &mdash; all mods are skipped/ignored.</span>
       </div>
@@ -841,13 +866,15 @@
        own line under a narrow window. A dedicated row above the title keeps it consistently top-
        right regardless of width, and reads as a small utility strip rather than a peer action next
        to the page's own intro copy. -->
-  <div class="settings-header-actions">
+  <!-- Hidden, not removed (director's own call, 2026-08-21) -- may bring these back later. JS wiring
+       and backend routes (/api/settings/restart-server, /api/shutdown) are untouched. -->
+  <div class="settings-header-actions hidden">
     <button id="settingsRestartServerBtn" class="btn btn--ghost">Restart Server</button>
     <button id="settingsStopServerBtn" class="btn btn--ghost">Stop Server</button>
   </div>
   <div class="tool-hero" data-tool-id="settings">
     <h2 class="tool-hero__title" data-brand-slot="heroTitle">⚙️ Set It Up Once, Use It Everywhere</h2>
-    <p class="tool-hero__body" data-brand-slot="heroBody">Set your Vortex paths and preferences here just once, and every tool picks them up automatically! Designed to keep all your setup in one place, this saves you from entering the same folders and options over and over&mdash;so you can spend your time on the actual work, not the configuration.</p>
+    <p class="tool-hero__body" data-brand-slot="heroBody">Set your Vortex paths and preferences here once, and every tool picks them up automatically. Keeping your setup in one place means you never have to re-enter folders or options&mdash;so you can spend your time managing collections instead of configuring tools.</p>
   </div>
   <p id="settingsServerActionStatus" class="muted hidden"></p>
 
@@ -858,8 +885,8 @@
        and you're set" -- prevents the real failure mode of saving paths, then jumping straight
        into a tool whose own settings were never actually looked at. -->
   <div id="settingsFirstRunBanner" class="callout callout--info hidden">
-    <div class="callout__title">&#9432; Welcome! Let's get you set up</div>
-    <p>Save your staging and downloads paths under <strong>Paths &amp; Backups</strong> to get started -- Browse buttons pick them for you. Once that's saved, it's worth clicking through the other sections too, starting with <strong>General</strong>, so everything's set up the way you want before you dive into a tool. This only happens once.</p>
+    <div class="callout__title">👋 Welcome! Let's get you set up</div>
+    <p>Set your staging and downloads folders under <strong>Paths &amp; Backups</strong> to get started—use the Browse buttons to grab them quickly. From there, take a quick spin through the other tabs (starting with <strong>General</strong>) to tune everything to your setup before diving in. You'll only need to do this once.</p>
   </div>
 
   <!-- Same first-run condition as settingsFirstRunBanner above (shown/hidden together by shell.js),
@@ -868,8 +895,8 @@
        free account still works for most of this app, so callout--info + the established Ⓘ "next
        steps" icon, not a warning. -->
   <div id="settingsFirstRunPremiumBanner" class="callout callout--info hidden">
-    <div class="callout__title">&#9432; One thing to know: this app is built with Nexus Premium in mind</div>
-    <p>Most tools work fine either way, but a few features -- like automatically downloading a missing archive -- need Nexus Premium. That's Nexus's own rule for keeping downloads ad-supported on free accounts, not something this app adds. Wherever Premium is required, you'll get a clear note plus a way to grab the file yourself instead.</p>
+    <div class="callout__title">💎 A Quick Note on Nexus Premium</div>
+    <p>Most features work completely free, but automated archive downloads require a Nexus Mods Premium membership. That's an official Nexus API policy for free accounts—not a restriction added by this tool. Whenever Premium is needed, we'll let you know upfront and provide a direct link so you can download the file manually.</p>
   </div>
 
   <!-- Same first-run condition as the two banners above (shown/hidden together by shell.js), plus a
@@ -884,12 +911,90 @@
        already claimed by the header title), so a second slot here would just sit unfilled. -->
   <div id="settingsFirstRunBookBanner" class="callout callout--info hidden">
     <div class="callout__title">&#128214; New here? Meet every tool first</div>
-    <p>Before you dive in, click the book icon in the top-right corner for a quick, story-flavored tour of what every tool actually does.</p>
+    <p>Before diving in, click the book icon in the top-right corner for a quick tour of what each tool does.</p>
     <button id="settingsFirstRunBookBtn" class="btn btn--secondary">&#128214; Open the book</button>
   </div>
 
+  <!-- Same first-run condition as the three banners above (shown/hidden together by shell.js).
+       This replaced the installer's own "Install the Helper.txt" (2026-08-23, director's own call):
+       that was a plain text file opened in Notepad from a finish-page checkbox, which the installer
+       no longer offers at all -- build-installer.ps1 no longer writes the file and the .nsi no
+       longer has the SHOWREADME checkbox or the Start Menu shortcut to it. The wording below is the
+       SAME already-Gemini-reviewed copy that text file carried, restructured into real HTML: each
+       install method is a genuine <ol>, not the text file's own hand-typed "1. 2. 3." prose.
+       .callout ol / .callout ol li are already styled (styles.css), so no new CSS is needed.
+       The one deliberate wording change is the file's location line -- the text file said
+       "vortex-collection-helper.zip (right here, in this same folder)", which only made sense while
+       the reader was looking at a folder on disk; from a web page it has to name the folder instead.
+       Placed last of the four on purpose: the first three are things to do NOW (paths, expectations,
+       the tour), this one is genuinely optional and can be done any time. -->
+  <div id="settingsFirstRunHelperBanner" class="callout callout--info hidden">
+    <div class="callout__title">&#129513; Optional: add the Vortex Collection Helper</div>
+    <p><strong>What it's for.</strong> Some tools normally ask you to close Vortex before running. With the Helper installed, those tools work while Vortex stays open. Everything runs fine without it&mdash;the Helper just saves you from closing and reopening Vortex.</p>
+    <p><strong>How to add it.</strong> The Helper is a Vortex extension, so Vortex installs it directly. You'll find <code>vortex-collection-helper.zip</code> inside your Vortex Collection Tools folder.</p>
+    <div class="helper-install-methods"></div>
+    <p>Once installed, Vortex Collection Tools detects it automatically&mdash;no restart needed.</p>
+  </div>
+
+  <!-- The connected Helper is real, but older than this app needs (2026-08-23, director's own ask).
+       A real ongoing state, NOT a first-run one -- an outdated Helper stays wrong until it's updated,
+       so shell.js's first-run gate has nothing to do with this banner; settings-app.js's own
+       renderHelperBanners() shows it whenever /helper-info reports connected + outdated, however
+       Settings was reached. callout--warning, not --info, per DESIGN.md's severity rule: results can
+       genuinely be wrong here, which is "tread carefully", not information. Not a hard blocker
+       (nothing is refused), so warning rather than critical.
+       Deliberately distinct from the "add the Helper" banner above: someone who HAS the Helper
+       installed should never be told to install it. The two share only the install steps, which are
+       identical for both cases -- Vortex's own "Install from File" replaces an existing extension in
+       place -- via #helperInstallMethodsTpl below, cloned into each banner's own
+       .helper-install-methods slot rather than authored twice and left to drift. -->
+  <!-- Body cloned in from #helperOutdatedBodyTpl below -- deliberately empty here. The identical
+       warning also lives on Home (#homeHelperOutdatedBanner), and authoring the wording twice is
+       exactly how two copies of the same message drift apart after one of them gets a copy pass.
+       One template, two mount points, one wording. -->
+  <div id="settingsHelperOutdatedBanner" class="callout callout--warning hidden"></div>
+
+  <!-- Single source for the Helper install steps, shared by every banner that needs them. Cloned in
+       by settings-app.js's renderHelperBanners(); a <template> is inert until then, so nothing here
+       renders on its own. -->
+  <template id="helperInstallMethodsTpl">
+    <p><strong>Method 1: Through Vortex (Recommended)</strong></p>
+    <p><strong>To Install:</strong></p>
+    <ol>
+      <li>Open Vortex and go to <strong>Settings</strong> &gt; <strong>Extensions</strong>.</li>
+      <li>Click <strong>Install from File</strong> and select <code>vortex-collection-helper.zip</code>.</li>
+      <li>Restart Vortex.</li>
+    </ol>
+    <p><strong>To Remove:</strong></p>
+    <ol>
+      <li>Open Vortex and go to <strong>Settings</strong> &gt; <strong>Extensions</strong>.</li>
+      <li>Locate <strong>Vortex Collection Helper</strong> and click <strong>Remove</strong> (or toggle it off to disable).</li>
+      <li>Restart Vortex to finish uninstalling.</li>
+    </ol>
+    <p><strong>Method 2: Manual</strong></p>
+    <ol>
+      <li>Extract <code>vortex-collection-helper.zip</code> into its own folder.</li>
+      <li>Copy the <code>vortex-collection-helper</code> folder into <code>%APPDATA%\Vortex\plugins\</code> and overwrite the existing files.</li>
+      <li>Restart Vortex.</li>
+    </ol>
+  </template>
+
+  <!-- The ONE authored copy of the outdated-Helper warning (2026-08-23). Cloned into BOTH
+       #settingsHelperOutdatedBanner above and #homeHelperOutdatedBanner on the Home page -- the same
+       warning has to reach someone who never opens Settings, and duplicating the wording is how two
+       copies of one message end up disagreeing after a copy pass touches only one of them.
+       The version numbers are classes, not ids, precisely because this renders twice: two elements
+       sharing an id would be invalid, and only the first would ever get filled. -->
+  <template id="helperOutdatedBodyTpl">
+    <div class="callout__title">&#9888;&#65039; Your Vortex Collection Helper is out of date</div>
+    <p>Vortex is running Helper <strong>v<span class="helper-outdated-current"></span></strong>, but this version of Vortex Collection Tools requires <strong>v<span class="helper-outdated-min"></span></strong> or newer. Until it's updated, tools that work through the Helper can report incorrect results without raising any errors.</p>
+    <p><strong>How to update it.</strong> It's the same as installing it&mdash;Vortex replaces the old version in place. We've included the current <code>vortex-collection-helper.zip</code> in your Vortex Collection Tools folder.</p>
+    <div class="helper-install-methods"></div>
+    <p>Once Vortex restarts, the updated version is detected automatically.</p>
+  </template>
+
   <div id="settingsRestartBanner" class="callout callout--warning hidden">
-    A path change is saved but not yet active -- restart the server (Settings &rarr; Save Settings again, or close and re-run <code>node web/server.js</code>) to apply it.
+    A path change was saved but isn't active yet. Restart the server (<strong>Settings</strong> &rarr; <strong>Save Settings</strong> again, or close and re-run <code>node web/server.js</code>) to apply it.
   </div>
 
   <div class="settings-layout">
@@ -944,12 +1049,12 @@
     <div class="settings-group">
       <div class="settings-group__header">
         <h2 data-brand-slot="name">Rebuild Collection</h2>
-        <p class="muted">Rebuild a collection fast by extracting its mods straight into your staging folder.</p>
+        <p class="muted">Extract mod archives directly into your staging folder to rebuild collections quickly.</p>
       </div>
 
       <h3 class="settings-section-title">Backup path</h3>
       <div class="field-group">
-        <label class="field-label" for="settingsBackupRootInput">Backup root folder <span class="muted">(optional, only needed if backups are turned on below)</span></label>
+        <label class="field-label" for="settingsBackupRootInput">Backup root folder <span class="muted">(optional; required if backups are turned on below)</span></label>
         <div class="path-input-row">
           <input id="settingsBackupRootInput" class="input input--wide" type="text" placeholder="e.g. F:\Mod Extraction\Vortex-Rebuild-Backups" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsBackupRootInput">Browse&hellip;</button>
@@ -959,7 +1064,7 @@
       <div class="field-group">
         <label class="checkbox">
           <input type="checkbox" id="settingsForceExtractMismatchInput">
-          Automatically force-extract off-site mods when a downloaded file doesn't exactly match
+          Automatically force-extract off-site mods when a downloaded file doesn't match exactly
         </label>
       </div>
       <p class="muted">
@@ -969,7 +1074,7 @@
       </p>
 
       <h3 class="settings-section-title">Performance</h3>
-      <p class="muted">Runs several extractions in parallel -- faster for large collections, at the cost of more disk and CPU use.</p>
+      <p class="muted">Extracts multiple archives at once -- faster for large collections, at the cost of more disk and CPU usage.</p>
       <div class="field-group">
         <label class="field-label" for="settingsConcurrencyInput">Concurrent extractions (1-8)</label>
         <input id="settingsConcurrencyInput" class="input input--small" type="number" min="1" max="8" step="1">
@@ -978,7 +1083,7 @@
       <h3 class="settings-section-title">Backups</h3>
       <p class="muted">A backup is a full copy of every mod's current staging folder, made just before rebuilding it. For larger collections this could use a lot of disk space.</p>
       <div class="field-group">
-        <label class="field-label" for="settingsMaxBackupsInput">Number of backups to keep per collection (0 = off (suggested); 1-3 = keep only the N most recent; blank = unlimited, requires manual deletion)</label>
+        <label class="field-label" for="settingsMaxBackupsInput">Number of backups to keep per collection (0 = off, recommended; 1-3 = keep only the N most recent; blank = keep all)</label>
         <input id="settingsMaxBackupsInput" class="input input--small" type="number" min="0" max="3" step="1" placeholder="unlimited">
       </div>
       <div class="view-actions">
@@ -987,9 +1092,9 @@
       </div>
 
       <h3 class="settings-section-title" data-tool-id="report-exceptions"><span data-brand-slot="name">Mod Exceptions</span></h3>
-      <p class="muted">Where the "never auto-fix this mod" list is stored -- shared with <span data-tool-id="missing-files"><span data-brand-slot="name">Rebuild Missing Files</span></span>. Manage the list itself from its own report.</p>
+      <p class="muted">Stores the "never auto-fix this mod" list, shared with <span data-tool-id="missing-files"><span data-brand-slot="name">Rebuild Missing Files</span></span>. Manage individual entries from its own report.</p>
       <div class="field-group">
-        <label class="field-label" for="settingsModExceptionListDirInput">Folder to store the exception list in <span class="field-required">(required)</span></label>
+        <label class="field-label" for="settingsModExceptionListDirInput">Exception list folder <span class="field-required">(required)</span></label>
         <div class="path-input-row">
           <input id="settingsModExceptionListDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\mod-exceptions" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsModExceptionListDirInput">Browse&hellip;</button>
@@ -1003,7 +1108,7 @@
     <div class="settings-group">
       <div class="settings-group__header">
         <h2 data-brand-slot="name">Update Collection</h2>
-        <p class="muted">Keeps your Ignored and Disabled mods set the way you had them after an update.</p>
+        <p class="muted">Preserves your Ignored and Disabled mod settings after a collection update.</p>
       </div>
 
       <h3 class="settings-section-title">Paths</h3>
@@ -1015,7 +1120,7 @@
         </div>
       </div>
       <h3 class="settings-section-title">Collection snapshot backups</h3>
-      <p class="muted">Collection backups created from the "Create Backup" option.</p>
+      <p class="muted">Collection backups created with <strong>Create Backup</strong>.</p>
       <div class="view-actions">
         <button id="settingsSyncDeleteBackupsBtn" class="btn btn--ghost btn--small">Delete all backups</button>
         <span id="settingsSyncDeleteBackupsStatus" class="muted"></span>
@@ -1035,12 +1140,12 @@
     <div class="settings-group">
       <div class="settings-group__header">
         <h2 data-brand-slot="name">Missing Masters</h2>
-        <p class="muted">Point <span data-brand-slot="name">Missing Masters</span> at your Skyrim files here. It only reads these folders to track down missing masters -- it never changes anything in them.</p>
+        <p class="muted">Point <span data-brand-slot="name">Missing Masters</span> at your Skyrim folders. It only reads these files to locate missing masters and never modifies them.</p>
       </div>
 
       <h3 class="settings-section-title">Skyrim Data folder</h3>
       <div class="field-group">
-        <label class="field-label" for="settingsSkyrimDataDirInput">The Data directory is located directly inside Skyrim's root installation folder (for example, <code>C:\Program Files (x86)\Steam\steamapps\common\Skyrim Special Edition\Data</code>) <span class="field-required">(required)</span></label>
+        <label class="field-label" for="settingsSkyrimDataDirInput">Path to your Skyrim Data folder, located inside the game's root installation folder (for example, <code>C:\Program Files (x86)\Steam\steamapps\common\Skyrim Special Edition\Data</code>) <span class="field-required">(required)</span></label>
         <div class="path-input-row">
           <input id="settingsSkyrimDataDirInput" class="input input--wide" type="text" placeholder="e.g. E:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsSkyrimDataDirInput">Browse&hellip;</button>
@@ -1049,32 +1154,32 @@
 
       <h3 class="settings-section-title">Plugins.txt location</h3>
       <div class="field-group">
-        <label class="field-label" for="settingsPluginsListDirInput">The folder containing your Plugins.txt <span class="field-required">(required)</span></label>
+        <label class="field-label" for="settingsPluginsListDirInput">Folder containing your <code>Plugins.txt</code> <span class="field-required">(required)</span></label>
         <div class="path-input-row">
           <input id="settingsPluginsListDirInput" class="input input--wide" type="text" placeholder="e.g. C:\Users\YourUsername\AppData\Local\Skyrim Special Edition" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsPluginsListDirInput">Browse&hellip;</button>
         </div>
-        <p class="muted">Located in your Windows AppData folder (not the game folder). If you're not sure where that is, it's usually <code>C:\Users\YourUsername\AppData\Local\Skyrim Special Edition</code>.</p>
+        <p class="muted">Located in your Windows AppData folder, usually <code>C:\Users\YourUsername\AppData\Local\Skyrim Special Edition</code>.</p>
       </div>
 
       <h3 class="settings-section-title">Dummy Masters output folder</h3>
       <div class="field-group">
-        <label class="field-label" for="settingsDummyMastersOutputDirInput">Where a created dummy master gets written <span class="field-required">(required)</span></label>
+        <label class="field-label" for="settingsDummyMastersOutputDirInput">Output folder for created dummy masters <span class="field-required">(required)</span></label>
         <div class="path-input-row">
           <input id="settingsDummyMastersOutputDirInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\Wyre Output" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsDummyMastersOutputDirInput">Browse&hellip;</button>
         </div>
-        <p class="muted">Pick a dedicated folder for this -- not your live Data or SKSE folder. Somewhere inside your staging folder works great, the same way you'd set up a DynDOLOD or BodySlide output.</p>
+        <p class="muted">Use a dedicated folder for this -- not your live Data or SKSE folder. Somewhere inside your staging folder works great, the same way you'd set up a DynDOLOD or BodySlide output.</p>
       </div>
 
       <h3 class="settings-section-title">ESLifier output folder</h3>
       <div class="field-group">
-        <label class="field-label" for="settingsEslifierOutputDirInput">Point us at your ESLifier output folder here <span class="muted">(optional)</span></label>
+        <label class="field-label" for="settingsEslifierOutputDirInput">ESLifier output folder <span class="muted">(optional)</span></label>
         <div class="path-input-row">
           <input id="settingsEslifierOutputDirInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\ESLifier Output" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsEslifierOutputDirInput">Browse&hellip;</button>
         </div>
-        <p class="muted">ESLifier is a separate tool that shrinks eligible plugins into the lighter ESL format and updates everything that points at them, saving the results in its own folder. Tell us where that folder is and our tools will treat those files as intentional — instead of mistaking the swap for a problem.</p>
+        <p class="muted">ESLifier condenses eligible plugins into ESL format and updates references to them in a separate folder. Set that folder path here so our tools recognize converted plugins instead of flagging missing files.</p>
         <p><a href="https://www.nexusmods.com/skyrimspecialedition/mods/145168" class="mod-name-link" target="_blank" rel="noopener">&#9432; Learn more about ESLifier</a></p>
       </div>
     </div>
@@ -1090,13 +1195,13 @@
 
       <h3 class="settings-section-title">Exclude list location</h3>
       <div class="field-group">
-        <label class="field-label" for="settingsCleanupExcludeListDirInput">Folder to store the exclude list in <span class="field-required">(required)</span></label>
+        <label class="field-label" for="settingsCleanupExcludeListDirInput">Exclude list folder <span class="field-required">(required)</span></label>
         <div class="path-input-row">
           <input id="settingsCleanupExcludeListDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\clean-up-exclude-list" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsCleanupExcludeListDirInput">Browse&hellip;</button>
         </div>
       </div>
-      <p class="muted">Adding or removing items below takes effect right away -- no need to Save Settings for those, only for this path itself (requires a restart).</p>
+      <p class="muted">Changes to excluded items below take effect right away. Changing this path itself needs <strong>Save Settings</strong> and a server restart.</p>
 
       <h3 class="settings-section-title">Excluded staging folders</h3>
       <details id="settingsCleanupIgnoredStagingDetails">
@@ -1105,7 +1210,7 @@
           <label><input type="checkbox" id="settingsCleanupIgnoredStagingSelectAllInput"> Select all</label>
         </div>
         <ul id="settingsCleanupIgnoredStagingList" class="sync-result-list"></ul>
-        <p id="settingsCleanupIgnoredStagingEmpty" class="muted hidden">None excluded yet.</p>
+        <p id="settingsCleanupIgnoredStagingEmpty" class="muted hidden">No folders excluded yet.</p>
         <div class="view-actions">
           <button id="settingsCleanupIgnoredStagingRemoveSelectedBtn" class="btn btn--ghost btn--small" disabled>Remove Selected</button>
           <button id="settingsCleanupIgnoredStagingRemoveAllBtn" class="btn btn--ghost btn--small">Remove All</button>
@@ -1123,14 +1228,14 @@
           <label><input type="checkbox" id="settingsCleanupIgnoredArchivesSelectAllInput"> Select all</label>
         </div>
         <ul id="settingsCleanupIgnoredArchivesList" class="sync-result-list"></ul>
-        <p id="settingsCleanupIgnoredArchivesEmpty" class="muted hidden">None excluded yet.</p>
+        <p id="settingsCleanupIgnoredArchivesEmpty" class="muted hidden">No archives excluded yet.</p>
         <div class="view-actions">
           <button id="settingsCleanupIgnoredArchivesRemoveSelectedBtn" class="btn btn--ghost btn--small" disabled>Remove Selected</button>
           <button id="settingsCleanupIgnoredArchivesRemoveAllBtn" class="btn btn--ghost btn--small">Remove All</button>
         </div>
       </details>
       <div class="path-input-row" style="margin-top: 12px;">
-        <input id="settingsCleanupAddArchiveInput" class="input input--wide" type="text" placeholder="Exact archive file name (extension optional -- matched either way)" autocomplete="off">
+        <input id="settingsCleanupAddArchiveInput" class="input input--wide" type="text" placeholder="Exact archive file name (extension optional)" autocomplete="off">
         <button id="settingsCleanupAddArchiveBtn" class="btn btn--ghost btn--small">Add</button>
       </div>
       <span id="settingsCleanupStatus" class="muted"></span>
@@ -1147,19 +1252,19 @@
         <p class="muted">Searches inside the mod archives in your Vortex downloads folder (set under Paths &amp; Backups) -- nothing extra to point it at here.</p>
       </div>
 
-      <h3 class="settings-section-title">Database folder</h3>
+      <h3 class="settings-section-title">Index folder</h3>
       <div class="field-group">
-        <label class="field-label" for="settingsArchiveFinderDbDirInput">Where the archive search index is stored <span class="field-required">(required)</span></label>
+        <label class="field-label" for="settingsArchiveFinderDbDirInput">Folder for the archive search index <span class="field-required">(required)</span></label>
         <div class="path-input-row">
           <input id="settingsArchiveFinderDbDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Downloads\archive-finder-index" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsArchiveFinderDbDirInput">Browse&hellip;</button>
         </div>
-        <p class="muted">A small index file, kept separate from your downloads -- safe to put anywhere, and safe to delete anytime to force a fresh scan.</p>
+        <p class="muted">A small search index, kept separate from your downloads -- safe to put anywhere, and safe to delete anytime to force a fresh scan.</p>
       </div>
 
       <h3 class="settings-section-title">Default extraction folder</h3>
       <div class="field-group">
-        <label class="field-label" for="settingsArchiveFinderOutputDirInput">Where extracted files go by default <span class="muted">(optional -- you can also pick a folder each time you extract)</span></label>
+        <label class="field-label" for="settingsArchiveFinderOutputDirInput">Default extraction folder <span class="muted">(optional -- you can also pick a folder each time you extract)</span></label>
         <div class="path-input-row">
           <input id="settingsArchiveFinderOutputDirInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\My Patch Collection" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsArchiveFinderOutputDirInput">Browse&hellip;</button>
@@ -1180,12 +1285,12 @@
 
       <h3 class="settings-section-title">Default output folder</h3>
       <div class="field-group">
-        <label class="field-label" for="settingsMergeOutputDirInput">Where merged plugins go by default <span class="muted">(optional -- you can also pick a folder each time you merge)</span></label>
+        <label class="field-label" for="settingsMergeOutputDirInput">Default output folder for merged plugins <span class="muted">(optional -- you can also pick a folder each time you merge)</span></label>
         <div class="path-input-row">
           <input id="settingsMergeOutputDirInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\My Merged Plugins" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsMergeOutputDirInput">Browse&hellip;</button>
         </div>
-        <p class="muted">Pick a dedicated folder for this -- not your live Data folder. Somewhere inside your staging folder works great, so Vortex can pick up the merged plugin as its own mod afterward.</p>
+        <p class="muted">Use a dedicated folder for this -- not your live Data folder. Somewhere inside your staging folder works great, so Vortex can pick up the merged plugin as its own mod afterward.</p>
       </div>
 
       <!-- "Merge Settings" (2026-08-17) -- inspired directly by zEdit-Revised's own Merge Settings
@@ -1196,7 +1301,7 @@
            voice. -->
       <h3 class="settings-section-title">Merge Settings</h3>
       <div class="field-group">
-        <label class="field-label">What happens to the source plugins after a merge succeeds</label>
+        <label class="field-label">Action for the source plugins after a merge succeeds</label>
         <label class="checkbox"><input type="radio" name="settingsMergePostMergeAction" value="disable"> Disable them in Vortex <span class="muted">(they stay on disk, just switched off)</span></label>
         <label class="checkbox"><input type="radio" name="settingsMergePostMergeAction" value="remove"> Remove their files from staging <span class="muted">(deletes only the merged plugin files themselves -- nothing else in those mods' folders)</span></label>
         <label class="checkbox"><input type="radio" name="settingsMergePostMergeAction" value="backup-remove"> Back up, then remove <span class="muted">(copies the same files to a Backup folder next to the merged output first, then removes them from staging)</span></label>
@@ -1212,12 +1317,12 @@
     <div class="settings-group">
       <div class="settings-group__header">
         <h2 data-brand-slot="name">Cycle Helper</h2>
-        <p class="muted">Where Cycle Helper saves its Change History -- a record of every fix it's applied, so you can browse past sessions and undo any of them later.</p>
+        <p class="muted">Stores Cycle Helper's Change History -- a record of every fix it's applied, so you can browse past sessions and undo any of them later.</p>
       </div>
 
       <h3 class="settings-section-title">Change history folder</h3>
       <div class="field-group">
-        <label class="field-label" for="settingsCycleHelperHistoryDirInput">Where fix history is saved <span class="muted">(optional -- leave blank to use the built-in default)</span></label>
+        <label class="field-label" for="settingsCycleHelperHistoryDirInput">Folder for fix history <span class="muted">(optional -- leave blank to use the built-in default)</span></label>
         <div class="path-input-row">
           <input id="settingsCycleHelperHistoryDirInput" class="input input--wide" type="text" placeholder="Default: this app's own config/cycle-helper-history folder" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsCycleHelperHistoryDirInput">Browse&hellip;</button>
@@ -1234,22 +1339,22 @@
     <div class="settings-group">
       <div class="settings-group__header">
         <h2 data-brand-slot="name">PGPatcher Load Order</h2>
-        <p class="muted">Reads and writes modrules.json straight from PGPatcher's own cfg folder. Your Skyrim Data folder is already configured above (Missing Masters) -- this tool reuses that same setting as its source.</p>
+        <p class="muted">Reads and updates <code>modrules.json</code> directly in PGPatcher's config folder. This tool automatically reuses the Skyrim Data folder you configured above under Missing Masters.</p>
       </div>
 
-      <h3 class="settings-section-title">PGPatcher cfg folder</h3>
+      <h3 class="settings-section-title">PGPatcher Config Folder</h3>
       <div class="field-group">
-        <label class="field-label" for="settingsPgpatcherCfgDirInput">Folder containing modrules.json and settings.json <span class="muted">(e.g. PGPatcher's own install folder \ cfg)</span></label>
+        <label class="field-label" for="settingsPgpatcherCfgDirInput">The folder where PGPatcher stores its configuration files (<code>modrules.json</code> and <code>settings.json</code>), typically found inside <code>PGPatcher\cfg</code>.</label>
         <div class="path-input-row">
           <input id="settingsPgpatcherCfgDirInput" class="input input--wide" type="text" placeholder="e.g. D:\Games\Skyrim SE\PGPatcher\cfg" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsPgpatcherCfgDirInput">Browse&hellip;</button>
         </div>
       </div>
 
-      <h3 class="settings-section-title">Output backup folder <span class="muted">(optional)</span></h3>
+      <h3 class="settings-section-title">Output Backup Folder <span class="muted">(Optional)</span></h3>
       <div class="field-group">
-        <label class="field-label" for="settingsPgpatcherOutputBackupDirInput">Where to back up your existing PGPatcher output before a new build overwrites it <span class="muted">(leave blank for no backup)</span></label>
-        <p class="muted">Building real output deletes what's already there first. Set a folder here and this tool moves your existing output into a dated subfolder before every build, so you're never left without a working copy if a build fails partway through.</p>
+        <label class="field-label" for="settingsPgpatcherOutputBackupDirInput">Choose where to back up existing PGPatcher output before a new build replaces it. <span class="muted">Leave blank to skip backups.</span></label>
+        <p class="muted">Generating a new build clears the current output folder first. Setting a backup location moves your existing files into a dated subfolder before every run, ensuring you always keep a working copy if a build is interrupted.</p>
         <div class="path-input-row">
           <input id="settingsPgpatcherOutputBackupDirInput" class="input input--wide" type="text" placeholder="e.g. D:\Games\Skyrim SE\PGPatcher\output-backups" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsPgpatcherOutputBackupDirInput">Browse&hellip;</button>
@@ -1263,7 +1368,7 @@
     <div class="settings-group">
       <div class="settings-group__header">
         <h2>Paths &amp; Backups</h2>
-        <p class="muted">Where your Vortex files, database backups, and logs live.</p>
+        <p class="muted">Where your Vortex files, Vortex backups, and logs live.</p>
       </div>
 
       <h3 class="settings-section-title">Vortex paths</h3>
@@ -1283,17 +1388,17 @@
         </div>
       </div>
       <div class="field-group">
-        <label class="field-label" for="settingsStateInput">Vortex database path (leave blank to auto-detect)</label>
+        <label class="field-label" for="settingsStateInput">Vortex data file path (leave blank to auto-detect)</label>
         <div class="path-input-row">
           <input id="settingsStateInput" class="input input--wide" type="text" placeholder="auto-detected under %APPDATA%\Vortex\state.v2" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsStateInput">Browse&hellip;</button>
         </div>
       </div>
 
-      <h3 class="settings-section-title">Vortex database backups</h3>
-      <p class="muted">Shared by every tool that writes to Vortex's database. <strong>Restore</strong> lets you go back to an earlier backup if something goes wrong.</p>
+      <h3 class="settings-section-title">Vortex Database Backups</h3>
+      <p class="muted">Automatic safety backups created whenever a tool updates Vortex&rsquo;s database. Use <strong>Restore</strong> at any time to roll back your database if you need to undo changes.</p>
       <div class="field-group">
-        <label class="field-label" for="settingsMaxStateBackupsInput">Number of backups to keep (blank = unlimited, requires manual deletion)</label>
+        <label class="field-label" for="settingsMaxStateBackupsInput">Number of backups to keep (blank = keep all)</label>
         <input id="settingsMaxStateBackupsInput" class="input input--small" type="number" min="1" step="1" placeholder="unlimited">
       </div>
       <div class="view-actions">
@@ -1308,8 +1413,8 @@
         <button id="settingsStateRevealPreRestoreBtn" class="btn btn--ghost btn--small">Reveal</button>
       </div>
 
-      <h3 class="settings-section-title">Logs</h3>
-      <p class="muted">Where this app's run logs are stored. Each tool that keeps logs gets its own subfolder here. Leave blank to use the built-in default. Changes here need a server restart.</p>
+      <h3 class="settings-section-title">Log Storage Location</h3>
+      <p class="muted">Choose where to save run logs. Each logging tool creates its own subfolder in this location. Leave this blank to keep the default folder. Changing this setting requires a server restart.</p>
       <div class="field-group">
         <label class="field-label" for="settingsLogsDirInput">Log file location</label>
         <div class="path-input-row">
@@ -1328,9 +1433,15 @@
     <!-- General -- applies regardless of which tool you're using. -->
     <section class="settings-pane" id="pane-general">
     <div class="settings-group">
-      <div class="settings-group__header">
-        <h2>General</h2>
-        <p class="muted">How the app looks and behaves.</p>
+      <div class="settings-group__header settings-group__header--with-version">
+        <div>
+          <h2>General</h2>
+          <p class="muted">Customize how the app looks and behaves.</p>
+        </div>
+        <div class="settings-version-info">
+          <div>Vortex Collection Tools <span id="settingsToolVersion">&mdash;</span></div>
+          <div id="settingsHelperVersionRow" class="muted">Helper: <span id="settingsHelperVersion">checking&hellip;</span></div>
+        </div>
       </div>
 
       <h3 class="settings-section-title">Appearance</h3>
@@ -1355,7 +1466,7 @@
           <option value="fallout4">Fallout 4</option>
           <option value="plain">Standard (no theme)</option>
         </select>
-        <p class="muted" style="margin-top: 6px;">Renames and re-colors the app around a Skyrim theme -- every button still does exactly the same thing. Pick "Standard" for the plain, unthemed original.</p>
+        <p class="muted" style="margin-top: 6px;">Renames and re-colors the app around a Skyrim theme -- every button still does exactly the same thing. Pick "Standard" for the plain, default appearance.</p>
       </div>
 
       <!-- Font, only shown once a themed Style is picked -- Standard has no themed identity to pick a
@@ -1366,7 +1477,7 @@
       <div class="field-group" id="settingsFontFieldGroup" hidden>
         <label class="field-label" for="settingsFontSelect">Font</label>
         <select id="settingsFontSelect" class="select select--small"></select>
-        <p class="muted" style="margin-top: 6px;">The display font used for tool names and headings under this style -- body text always stays the app's own plain, readable font.</p>
+        <p class="muted" style="margin-top: 6px;">The display font used for tool names and headings under this style -- body text always stays the app's own plain system font.</p>
       </div>
 
       <!-- Color -- a personal override layered on top of whichever Style is active (design/vortex-
@@ -1392,11 +1503,11 @@
           <span class="muted color-hex-val" id="settingsBgTintColorHex"></span>
           <button class="reset-link" id="settingsBgTintColorReset">Reset to match accent</button>
         </div>
-        <p class="muted" style="margin-top: 6px;">Only affects the faint Home-page wash -- never body text or card backgrounds, those stay exactly as readable as they are today regardless of this color.</p>
+        <p class="muted" style="margin-top: 6px;">Only affects the faint Home-page wash -- card backgrounds and text stay exactly as readable as they are today, regardless of this color.</p>
       </div>
 
       <h3 class="settings-section-title">Server</h3>
-      <p class="muted">Changes here need a server restart. This server has no login of its own, so leave the host as <code>127.0.0.1</code> unless you specifically want another device on your network to reach it.</p>
+      <p class="muted">Path or port changes need a server restart. This server has no login of its own, so leave the host as <code>127.0.0.1</code> unless you specifically want another device on your network to reach it.</p>
       <div class="settings-row-2">
         <div class="field-group">
           <label class="field-label" for="settingsServerPortInput">Port</label>
@@ -1408,8 +1519,8 @@
         </div>
       </div>
       <div class="callout callout--warning" style="margin-top: 14px;">
-        <div class="callout__title">⚠️ Important Security Warning</div>
-        Only change the host if you know what you're doing! Setting this to anything other than <code>127.0.0.1</code> or <code>localhost</code> exposes this tool—and gives full read and write access to your mod files and Vortex state—to everyone on your local network without password protection.
+        <div class="callout__title">⚠️ Security Warning: Local Network Access</div>
+        Keep this set to <code>127.0.0.1</code> or <code>localhost</code> unless you intentionally need remote access. Changing this address allows any device on your local network to read and modify your mod files and Vortex data without requiring a password.
       </div>
       <div class="field-group">
         <label class="checkbox">
@@ -1425,7 +1536,7 @@
         <input id="settingsNexusKeyInput" class="input input--wide" type="password" placeholder="paste your personal API key" autocomplete="new-password" data-lpignore="true" data-1p-ignore data-bwignore="true" data-form-type="other">
         <span id="settingsNexusKeyStatus" class="muted"></span>
       </div>
-      <p class="muted">Stored as plain text in <code>config.json</code>, not encrypted -- anyone with access to this computer could read it directly from that file.</p>
+      <p class="muted">Stored as plain text in <code>config.json</code>, not encrypted -- anyone with access to this computer can read it directly from that file.</p>
       <div class="view-actions">
         <button id="settingsClearNexusKeyBtn" class="btn btn--ghost btn--small">Clear stored key</button>
       </div>
@@ -1449,20 +1560,20 @@
       </div>
       <p class="muted">If a mod's archive isn't in your downloads folder, we'll grab it from Nexus automatically instead of skipping it.</p>
       <div class="callout callout--warning">
-        This only works for Nexus <strong>Premium</strong> accounts -- Nexus's API blocks automatic
-        downloads for free accounts by design, the same way Vortex's own client does. If your
+        Automated downloads require a Nexus Mods <strong>Premium</strong> membership -- that's an
+        official Nexus API policy for free accounts, the same way Vortex's own client works. If your
         account isn't Premium, download the archive yourself from either within Vortex or on
         Nexus's website to reinstall it.
       </div>
 
       <h3 class="settings-section-title">Support this project</h3>
       <div class="field-group">
-        <p class="muted">If this tool saved you time and you'd like to say thanks, donations help keep it going — here's how: <a href="https://paypal.me/awesmdiver" target="_blank" rel="noreferrer">PayPal</a> • <a href="https://www.venmo.com/u/awesmdiver" target="_blank" rel="noreferrer">Venmo</a></p>
+        <p class="muted">If this tool saved you time, donations help keep it going: <a href="https://paypal.me/awesmdiver" target="_blank" rel="noreferrer">PayPal</a> • <a href="https://www.venmo.com/u/awesmdiver" target="_blank" rel="noreferrer">Venmo</a></p>
       </div>
 
       <h3 class="settings-section-title">Give feedback</h3>
       <div class="field-group">
-        <p class="muted">Found a bug or have a feature idea? <a href="https://github.com/awesmdiver/vortex-collection-tools/issues/new" target="_blank" rel="noreferrer">Let us know on GitHub</a>.</p>
+        <p class="muted">Found a bug or have a feature idea? <a href="https://github.com/awesmdiver/vortex-collection-tools/issues/new" target="_blank" rel="noreferrer">Report it on GitHub</a>.</p>
       </div>
     </div>
     </section>
@@ -1479,7 +1590,7 @@
 <div id="settingsRestartModal" class="modal-overlay hidden">
   <div class="modal">
     <h2>Restart required</h2>
-    <p>Settings saved. The server needs to restart to apply the path change(s) -- restart now?</p>
+    <p>Settings saved. The server needs to restart to apply your path changes -- restart now?</p>
     <div class="modal-actions">
       <button id="settingsRestartCancelBtn" class="btn btn--ghost">Not now</button>
       <button id="settingsRestartConfirmBtn" class="btn btn--primary">Restart Now</button>
@@ -1490,7 +1601,7 @@
 <div id="settingsStopServerModal" class="modal-overlay hidden">
   <div class="modal">
     <h2>Stop the server?</h2>
-    <p>This shuts the server down completely. You'll need to run <code>start-server.bat</code> (or <code>start-server.ps1</code>) yourself to use this app again.</p>
+    <p>This shuts down the server completely. Run <code>start-server.bat</code> (or <code>start-server.ps1</code>) yourself to use this app again.</p>
     <div class="modal-actions">
       <button id="settingsStopServerCancelBtn" class="btn btn--ghost">Cancel</button>
       <button id="settingsStopServerConfirmBtn" class="btn btn--primary">Stop Server</button>
@@ -1533,7 +1644,7 @@
 
 <div id="settingsStateDeleteBackupsModal" class="modal-overlay hidden">
   <div class="modal">
-    <h2>Delete all Vortex database backups?</h2>
+    <h2>Delete all Vortex backups?</h2>
     <p id="settingsStateDeleteBackupsModalText"></p>
     <div class="modal-actions">
       <button id="settingsStateDeleteBackupsCancelBtn" class="btn btn--ghost">Cancel</button>
@@ -1544,13 +1655,13 @@
 
 <div id="settingsStateRestoreModal" class="modal-overlay hidden">
   <div class="modal">
-    <h2>Restore a Vortex database backup</h2>
+    <h2>Restore a Vortex backup</h2>
     <div class="callout callout--warning">
       <div class="callout__title">⚠️ Make sure Vortex is completely closed before continuing!</div>
-      <p>This process will replace Vortex's database with the backup you choose below. Don't worry, though—we'll automatically create a fresh safety backup of your current setup first, so you can easily undo this anytime by restoring that new backup.</p>
+      <p>This replaces Vortex with the backup you choose below. Don't worry, though—we'll automatically create a fresh safety backup of your current setup first, so you can undo this anytime by restoring that new backup.</p>
     </div>
     <select id="settingsStateRestoreSelect" class="select"></select>
-    <p id="settingsStateRestoreEmpty" class="muted hidden">No Vortex database backups found.</p>
+    <p id="settingsStateRestoreEmpty" class="muted hidden">No Vortex backups found.</p>
     <div class="modal-actions">
       <button id="settingsStateRestoreCancelBtn" class="btn btn--ghost">Cancel</button>
       <button id="settingsStateRestoreConfirmBtn" class="btn btn--primary">Restore</button>
@@ -1869,6 +1980,7 @@
     <button id="utilities-sub-archivefinder" class="btn btn--ghost btn--small" data-tool-id="archive-finder"><span data-brand-slot="name">Archive Finder</span></button>
     <button id="utilities-sub-missingfiles" class="btn btn--ghost btn--small" data-tool-id="missing-files"><span data-brand-slot="name">Missing Files</span></button>
     <button id="utilities-sub-cyclehelper" class="btn btn--ghost btn--small" data-tool-id="cycle-helper"><span data-brand-slot="name">Cycle Helper</span></button>
+    <button id="utilities-sub-clearflags" class="btn btn--ghost btn--small" data-tool-id="clear-update-flags"><span data-brand-slot="name">Clear Update Flags</span></button>
   </div>
 
   <div id="utilities-sub-area-scrub">
@@ -2594,6 +2706,103 @@
   </div>
   <!-- /utilities-sub-area-cyclehelper -->
 
+  <div id="utilities-sub-area-clearflags" class="hidden">
+  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span>Utilities</div>
+  <div class="tool-hero" data-tool-id="clear-update-flags">
+    <h2 class="tool-hero__title" data-brand-slot="heroTitle">🧹 Dismiss Accidental Update Flags in Seconds</h2>
+    <p class="tool-hero__body" data-brand-slot="heroBody">Accidentally clicked Check for Updates in Vortex and now your mod list is full of orange update badges? This tool clears those flags across your installed mods so your list goes back to a clean state. It&rsquo;s especially useful when playing curated collections, where the collection curator manages tested mod versions&mdash;saving you from seeing distracting update notifications for files you shouldn&rsquo;t update manually.</p>
+  </div>
+
+  <div id="cufNotConfigured" class="empty-row hidden"></div>
+  <div id="cufCriticalError" class="callout callout--critical hidden"></div>
+  <div id="cufLoading" class="loading-row hidden"><span class="spinner"></span> Checking Vortex for pending update flags&hellip;</div>
+  <div id="cufEmpty" class="empty-row hidden">No mods currently have a pending update flag.</div>
+
+  <!-- Progress, warnings, and the completion/result message all live ABOVE the picker (DESIGN.md,
+       "Mandatory: every tool shows real 'what am I doing' progress" -- placement is part of the
+       requirement, not just streaming). A card grid can run to 30+ collections; anything below it is
+       scrolled out of view on anything but a tall window, and effectively invisible on a large
+       install. Real SSE-streamed progress mirrors PGPatcher's own pgpatcherBuildingProgress markup
+       (web/pgpatcher-routes.js's /build/events reference implementation). Hidden until Clear Flags is
+       actually clicked. -->
+  <div id="cufClearProgress" class="callout callout--info hidden" style="margin-top:14px">
+    <div class="callout__title">Clearing update flags&hellip;</div>
+    <div class="progress-bar-wrap"><div id="cufClearProgressBar" class="progress-bar"></div></div>
+    <p class="muted" id="cufClearProgressPhase">Starting&hellip;</p>
+    <div class="loading-row">
+      <span class="spinner"></span>
+      <button class="btn btn--ghost" id="cufCancelClearBtn" disabled>Cancel</button>
+    </div>
+  </div>
+
+  <div id="cufResult" class="callout hidden" style="margin-top:14px">
+    <div class="callout__title" id="cufResultTitle"></div>
+    <p id="cufResultSummary"></p>
+    <ul id="cufResultProblems" class="sync-result-list hidden"></ul>
+    <div id="cufRestoreRow" class="hidden" style="display:flex; justify-content:flex-end; margin-top:10px;">
+      <button id="cufRestoreBtn" class="btn btn--ghost btn--small">Restore</button>
+    </div>
+  </div>
+
+  <div id="cufMain" class="hidden">
+    <div class="af-selection-bar">
+      <div class="af-selection-bar__left">
+        <label><input type="checkbox" id="cufSelectAllInput" checked> Select all</label>
+        <button id="cufInvertSelectionBtn" class="btn btn--ghost btn--small">Invert selection</button>
+        <button id="cufClearSelectionBtn" class="btn btn--ghost btn--small">Clear selection</button>
+      </div>
+      <!-- First bar in the app to need a right-hand element. .af-selection-bar's own class default is
+           already justify-content: space-between (DESIGN.md, "Selectable lists"), so this plain
+           second child sits far-right on its own -- no __right wrapper class, and the inline
+           justify-content: flex-start override this bar used to carry (there was nothing on the right
+           before) is gone. -->
+      <button id="cufRefreshBtn" class="btn btn--ghost btn--small">Refresh</button>
+    </div>
+
+    <div id="cufInstalledSection" class="hidden">
+      <div class="group-head"><h2>Installed collections</h2><span class="n" id="cufInstalledCount"></span></div>
+      <div class="picker-grid" id="cufInstalledGrid"></div>
+    </div>
+
+    <div id="cufWorkshopSection" class="hidden">
+      <div class="group-head"><h2>Workshop collections</h2><span class="n" id="cufWorkshopCount"></span></div>
+      <div class="picker-grid" id="cufWorkshopGrid"></div>
+    </div>
+
+    <div id="cufStandaloneSection" class="hidden">
+      <div class="group-head"><h2>Not part of any collection</h2></div>
+      <ul id="cufStandaloneList" class="sync-result-list"></ul>
+    </div>
+
+    <div class="callout callout--info" style="margin-top:14px">
+      <p>This will clear the pending update flags for all selected collections. We&rsquo;ll automatically create a backup of your update states before saving any changes to Vortex.</p>
+      <p style="margin-top:8px">This only resets Vortex&rsquo;s internal notification records&mdash;your installed mod files, load order, and collection rules remain completely untouched.</p>
+    </div>
+
+    <div class="view-actions" id="cufClearActions">
+      <button id="cufClearBtn" class="btn btn--primary" disabled>Clear Flags (<span id="cufCheckedCount">0</span>)</button>
+    </div>
+  </div>
+  </div>
+  <!-- /utilities-sub-area-clearflags -->
+
+  <!-- Confirm step for Clear Update Flags' own Restore button -- same shape/copy conventions as
+       Update Collection's own syncRestoreBackupModal (a real write to live Vortex state needs a real
+       confirm first), minus its dropdown -- this restore always targets the ONE backup tied to the
+       clear that just completed, never a picker of older backups (director explicitly declined that
+       for now, see TODO.md). -->
+  <div id="cufRestoreConfirmModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>Restore Update Flags?</h2>
+      <p id="cufRestoreConfirmModalText"></p>
+      <p id="cufRestoreConfirmModalText2" style="margin-top:8px"></p>
+      <div class="modal-actions">
+        <button id="cufRestoreConfirmCancelBtn" class="btn btn--ghost">Cancel</button>
+        <button id="cufRestoreConfirmOkBtn" class="btn btn--primary">Restore</button>
+      </div>
+    </div>
+  </div>
+
   <div id="chFixModal" class="modal-overlay hidden">
     <div class="modal">
       <h2>🔧 Fix this rule</h2>
@@ -2869,29 +3078,35 @@
 <main class="app-main" data-tool-id="update-collection-v2">
   <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><span data-brand-slot="name">Update Collection</span></div>
   <div class="tool-hero" data-tool-id="update-collection-v2">
-    <h2 class="tool-hero__title" data-brand-slot="heroTitle">🔄️ See Exactly What a Collection Update Changes</h2>
-    <p class="tool-hero__body" data-brand-slot="heroBody">Check your installed collections for updates and review exactly what a new revision changes &mdash; mods removed, updated, and added &mdash; then apply the removals and updates for real: real extraction, real deployment, your Ignored/Disabled choices and collection rules preserved.</p>
+    <h2 class="tool-hero__title" data-brand-slot="heroTitle">🔄️ Review & Apply Collection Updates</h2>
+    <p class="tool-hero__body" data-brand-slot="heroBody">Check your installed collections for updates and review exactly what a new revision changes&mdash;mods removed, updated, or added. Then apply those updates for real: complete extraction, genuine deployment, and all your Ignored and Disabled mods and collection rules carried over untouched.</p>
   </div>
 
-  <div class="callout callout--warning" style="margin-bottom:16px">
-    <div class="callout__title">⚠️ New mods aren't installed here yet</div>
-    <p style="margin:0">Removing and updating mods works for real here. A mod the update newly adds is shown below so you know it's coming, but installing it doesn't happen automatically yet &mdash; you'll need to add it yourself in Vortex.</p>
+  <!-- Stepper + Refresh share one row (.sync-stepper-row, same pattern Rebuild Missing Files' own
+       stepper row already established -- see its header comment) instead of Refresh sitting on its
+       own line below -- reclaims a row of vertical space. Refresh only makes sense on the "Pick a
+       collection" step, so ucv2GoScreen toggles #ucv2RefreshRow's own visibility alongside the
+       screens themselves rather than tying it to any one screen's markup. -->
+  <div class="sync-stepper-row">
+    <div class="merge-stepper" id="ucv2Stepper"></div>
+    <!-- ucv2Loading is absolutely positioned (not a normal flex sibling) so its own text never
+         changes this row's width/wrapping when it appears -- confirmed real elsewhere in this
+         project (Missing Masters' own mmHeaderRow comment, 2026-07-27): a loading indicator sharing
+         normal flex flow forces the whole .sync-stepper-row to wrap onto two lines once the message
+         is wide enough, bouncing every collection below it down and back. -->
+    <div id="ucv2RefreshRow" style="position:relative;display:flex;align-items:center;margin-left:auto">
+      <div id="ucv2Loading" class="loading-row hidden" style="position:absolute;right:100%;margin:0 12px 0 0;white-space:nowrap"><span class="spinner"></span> Loading your installed collections&hellip;</div>
+      <button id="ucv2CheckUpdatesBtn" class="btn btn--primary">🔄 Refresh</button>
+    </div>
   </div>
-
-  <div class="merge-stepper" id="ucv2Stepper"></div>
 
   <!-- ============================================================ -->
   <!-- SCREEN 1 -- Collections overview -->
   <!-- ============================================================ -->
   <div id="ucv2Screen1">
-    <div class="toolbar" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
-      <div></div>
-      <button id="ucv2CheckUpdatesBtn" class="btn btn--primary">🔄 Refresh</button>
-    </div>
 
     <div id="ucv2Empty" class="empty-row hidden"></div>
     <div id="ucv2CriticalError" class="callout callout--critical hidden"></div>
-    <div id="ucv2Loading" class="loading-row hidden"><span class="spinner"></span> Loading your installed collections&hellip;</div>
 
     <div class="ucv2-grid" id="ucv2CollectionGrid"></div>
 
@@ -2912,6 +3127,15 @@
       <h1 style="font-size:19px" id="ucv2RemovedTitle"></h1>
     </div>
     <p class="lead" id="ucv2RemovedLead"></p>
+
+    <!-- "Shared with another collection" warning (2026-08-21) -- same real detection + visual
+         treatment as Safe Collection Removal's own #rcSharedWarning, shown here because THIS screen
+         has no per-mod keep/remove choice (Remove all / Keep all is all-or-nothing) -- the banner is
+         the only heads-up that Remove all would also break another installed collection. -->
+    <div id="ucv2RemovedSharedWarning" class="callout callout--warning hidden">
+      <div class="callout__title" id="ucv2RemovedSharedWarningTitle"></div>
+      <p>Removing these will break the other collection(s) that need them too &mdash; there's no per-mod choice on this screen, so review the list below before choosing Remove all.</p>
+    </div>
 
     <div class="ucv2-op-section" id="ucv2RemovedList"></div>
 
@@ -2943,6 +3167,23 @@
     </div>
     <p class="lead" id="ucv2ReviewLead"></p>
 
+    <!-- Top Apply/Cancel row (2026-08-21) -- same buttons as the bottom row (kept in sync via JS),
+         so a long mod list doesn't force scrolling all the way down just to click Apply. -->
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin:0 0 20px" id="ucv2ReviewActionsTop">
+      <button class="btn btn--ghost" id="ucv2CancelReviewBtn">Cancel</button>
+      <button class="btn btn--primary" id="ucv2ApplyUpdateBtn">Apply update &rarr;</button>
+    </div>
+
+    <!-- Real, live streamed Apply progress (2026-08-21) -- a callout below the Cancel/Apply row
+         (2026-08-23: moved below per live feedback), same shape as every other tool's own "what's
+         happening" indicator (e.g. PGPatcher's pgpatcherBuildingProgress). -->
+    <div class="callout callout--info hidden" id="ucv2ApplyProgress" style="margin-bottom:16px">
+      <div class="callout__title">Applying your update&hellip;</div>
+      <div class="loading-row">
+        <span class="spinner"></span> <span id="ucv2ApplyProgressText">Starting&hellip;</span>
+      </div>
+    </div>
+
     <div id="ucv2ReviewEmpty" class="empty-row hidden"></div>
 
     <!-- Keep-installed-version choice (2026-08-18) -- Updated bucket only. Same Select All/Invert
@@ -2970,25 +3211,28 @@
       </div>
     </div>
 
-    <!-- Real Apply results (2026-08-18, Phase 2) -- shown in place after a real Apply completes.
-         Added mods are explicitly out of scope this phase (Phase 3) -- their row in the table above
-         gets a "not applied yet" note rather than a real outcome. -->
-    <div id="ucv2ApplyResult" class="hidden" style="margin-top:20px">
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:24px" id="ucv2ReviewActions">
+      <button class="btn btn--ghost" id="ucv2CancelReviewBtnBottom">Cancel</button>
+      <button class="btn btn--primary" id="ucv2ApplyUpdateBtnBottom">Apply update &rarr;</button>
+    </div>
+  </div>
+
+  <!-- Apply results (2026-08-21) -- its own screen, not appended below the review table. A 100-mod
+       collection made the old in-place version (everything stacked under a very long table) genuinely
+       hard to find -- director's own live report. Stays step 2 ("Apply") on the stepper; only reached
+       once ucv2HandleApplyEvent's own 'done' frame fires. -->
+  <div id="ucv2ScreenApplyResult" class="hidden">
+    <div class="screen-head">
+      <img class="screen-head__thumb hidden" id="ucv2ApplyResultThumb" alt="">
+      <h1 style="font-size:19px" id="ucv2ApplyResultTitle"></h1>
+    </div>
+    <p class="lead" id="ucv2ApplyResultConfirm" style="margin:0 0 14px"></p>
+    <div id="ucv2ApplyResult">
       <div class="callout" id="ucv2ApplyResultSummary"></div>
       <div id="ucv2ApplyResultList"></div>
     </div>
-
-    <div style="display:flex;justify-content:space-between;margin-top:24px" id="ucv2ReviewActions">
-      <button class="btn btn--ghost" id="ucv2CancelReviewBtn">Cancel</button>
-      <button class="btn btn--primary" id="ucv2ApplyUpdateBtn">Apply update &rarr;</button>
-    </div>
-    <!-- Live status for the full Vortex redeploy step (2026-08-18) -- only ever shown for the
-         real deploy-mods sub-step (a plugin file was added/removed/renamed), which can genuinely
-         take a while (LOOT plugin sorting alone can run 20s+). Polled via ucv2PollApplyProgress
-         while the main Apply request is in flight -- see that function's own comment for why a
-         missed poll is expected sometimes on a large deploy, not treated as a failure. -->
-    <div class="loading-row hidden" id="ucv2ApplyProgress" style="margin-top:12px">
-      <span class="spinner"></span> <span id="ucv2ApplyProgressText"></span>
+    <div style="margin-top:24px">
+      <button class="btn btn--primary" id="ucv2ApplyResultBackBtn">Back to Collections</button>
     </div>
   </div>
 
@@ -3469,8 +3713,8 @@
        stretches with no count. Cancel actually stops the multi-minute wait, not just hides it. -->
   <div id="pgpatcherLoading" class="hidden">
     <div class="callout callout--info">
-      <div class="callout__title">Reading your mod list&hellip;</div>
-      <p>Reading data &mdash; this can take a few minutes on a large mod list.</p>
+      <div class="callout__title" id="pgpatcherLoadingTitle">Reading your mod list&hellip;</div>
+      <p id="pgpatcherLoadingIntro">Reading data &mdash; this can take a few minutes on a large mod list.</p>
       <div class="progress-bar-wrap"><div id="pgpatcherLoadingBar" class="progress-bar"></div></div>
       <p class="muted" id="pgpatcherLoadingPhase">Starting&hellip;</p>
       <div class="loading-row">
@@ -3491,8 +3735,8 @@
        what used to be a tiny status line at the bottom of the sort page. -->
   <div id="pgpatcherBuilding" class="hidden">
     <div id="pgpatcherBuildingProgress" class="callout callout--info">
-      <div class="callout__title">Building your real output&hellip;</div>
-      <p>This runs the real PGPatcher build &mdash; mesh and texture patching &mdash; so it can take a while on a large mod list.</p>
+      <div class="callout__title" id="pgpatcherBuildingTitle">Building your real output&hellip;</div>
+      <p id="pgpatcherBuildingIntro">This runs the real PGPatcher build &mdash; mesh and texture patching &mdash; so it can take a while on a large mod list.</p>
       <div class="progress-bar-wrap"><div id="pgpatcherBuildingBar" class="progress-bar"></div></div>
       <p class="muted" id="pgpatcherBuildingPhase">Starting&hellip;</p>
       <div class="loading-row">
@@ -3504,11 +3748,27 @@
 
     <div id="pgpatcherBuildingSuccess" class="hidden">
       <div class="pgp-build-success__banner">&#9989; Yep, it's built &mdash; happy gaming!</div>
-      <p class="pgp-build-success__path">Real output written to <code id="pgpatcherBuildingOutputPath"></code></p>
-      <p class="pgp-build-success__path hidden" id="pgpatcherBuildingBackupRow">Your previous output was backed up to <code id="pgpatcherBuildingBackupPath"></code></p>
-      <div class="callout callout--warning">
+      <div class="callout callout--warning hidden" id="pgpatcherOneMoreStep">
         <div class="callout__title">One more step in Vortex</div>
-        <p>This output isn't live in-game yet. Re-enable any mods you disabled for this build, then <strong>Deploy</strong> in Vortex to actually apply it.</p>
+        <p>DynDoLOD.esp and/or PGPatcher's previous output are still disabled. Enable them in Vortex, then <strong>Deploy</strong>, so your new output is actually live in-game.</p>
+      </div>
+
+      <!-- Shown when this session's own pgpHandleReenableOffers left something still disabled --
+           either the director declined one of its confirms (DynDoLOD's own "enable it now?" and/or the
+           output mod's own "enable and deploy?"), or an enable attempt itself failed. DynDoLOD's own
+           confirm needs no deploy (a free flag flip via /enable-dyndolod); the output mod's own confirm
+           IS a real write to Vortex's live, shared database plus a real full deploy -- this whole block
+           stays in the serious register throughout either way, matching plain-language-writer's own
+           rule for exactly this kind of action. -->
+      <div id="pgpatcherDeployAllProgress" class="callout callout--info hidden">
+        <div class="callout__title">Deploying your mods&hellip;</div>
+        <p>Your mods are currently being deployed, this will take a few minutes on a large mod list.</p>
+        <div class="progress-bar-wrap"><div id="pgpatcherDeployAllBar" class="progress-bar"></div></div>
+        <p class="muted" id="pgpatcherDeployAllPhase">Starting&hellip;</p>
+      </div>
+      <div id="pgpatcherDeployAllDone" class="callout callout--success hidden">
+        <div class="callout__title">Deploy complete</div>
+        <p>PGPatcher's new output is enabled and live in Vortex.</p>
       </div>
 
       <div class="pgp-build-success__actions">
@@ -3672,6 +3932,7 @@
 <script src="vendor/cytoscape/cose-base.js"></script>
 <script src="vendor/cytoscape/cytoscape-cose-bilkent.js"></script>
 <script src="cycle-helper-app.js"></script>
+<script src="clear-update-flags-app.js"></script>
 <script src="workshop-report-app.js"></script>
 <script src="update-collection-v2-app.js"></script>
 <script src="remove-collection-app.js"></script>

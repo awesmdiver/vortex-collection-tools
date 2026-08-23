@@ -135,7 +135,7 @@
       "emoji": "👑",
       "function": "PGPatcher Load Order",
       "heroTitle": "Order of Succession",
-      "heroBody": "When two competing smiths craft enchantments for the exact same armor or blade, only the higher decree determines which design governs your realm. Order of Succession replaces PGPatcher's bare list with full drag-to-reorder, multi-select shifting, and instant A–Z sorting so you can easily establish which mods win your shader conflicts. It reads directly from your existing PGPatcher setup and executes the official PGPatcher engine underneath&mdash;generating the identical modrules.json, build files, and logs you rely on, accompanied by real-time build progress every step of the way.<p>Everything runs on your actual PGPatcher installation. Your existing settings load automatically, and building here runs the genuine PGPatcher engine to produce the exact same final patch and logs&mdash;just with a smoother interface and live progress tracking.</p>",
+      "heroBody": "When two competing smiths craft enchantments for the exact same armor or blade, only the higher decree determines which design governs your realm. Order of Succession replaces PGPatcher's bare list with full drag-to-reorder, multi-select shifting, and instant A–Z sorting so you can easily establish which mods win your shader conflicts. It reads directly from your existing PGPatcher setup and executes the official PGPatcher engine underneath&mdash;generating the identical modrules.json, build files, and logs you rely on, accompanied by real-time build progress every step of the way.<p>Everything connects directly to your existing PGPatcher installation. Your settings load automatically, and building here executes the genuine PGPatcher engine to produce the exact same patch and logs&mdash;just with a smoother interface and live progress tracking.</p>",
       "cardDesc": "Dictate the chain of command and arbitrate visual precedence across your load order.",
       "landingHint": "Click Start to begin."
     },
@@ -162,6 +162,14 @@
       "heroTitle": "The Webweaver",
       "heroBody": "A weaver doesn't tear down the whole web to mend one torn thread&mdash;she finds the single knotted strand and reweaves just that. When Vortex tangles your load-order rules into a cycle, this finds the one rule actually responsible instead of dumping the whole snarl on you, fixes it, and confirms the web holds.",
       "cardDesc": "One torn thread, mended&mdash;not the whole web unraveled."
+    },
+    "clear-update-flags": {
+      "name": "Cleansing Stone",
+      "emoji": "💎",
+      "function": "Clear Update Flags",
+      "heroTitle": "Cleansing Stone",
+      "heroBody": "Ancient archives often bear false marks of decay&mdash;phantom sigils declaring a relic altered when its true form remains perfectly intact. A wise mage doesn&rsquo;t re-enchant the artifacts to silence a false omen; they apply a Cleansing Stone to wipe the phantom marks clean from the ledger. This ritual dispels the misleading marks across your chosen archives, leaving your relics untouched while recording a ward of recollection to restore the old signs whenever you wish.",
+      "cardDesc": "Purges phantom marks from your archives without disturbing a single relic."
     },
     "missing-files": {
       "name": "The Vault-Keeper",

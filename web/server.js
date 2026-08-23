@@ -37,6 +37,7 @@ const { createCycleHelperRouter } = require('./cycle-helper-routes');
 const { createUpdateCollectionV2Router } = require('./update-collection-v2-routes');
 const { createRemoveCollectionRouter } = require('./remove-collection-routes');
 const { createPgpatcherRouter } = require('./pgpatcher-routes');
+const { createClearUpdateFlagsRouter } = require('./clear-update-flags-routes');
 const { loadSyncLib } = require('../lib/collection-runner');
 const appConfig = require('../lib/app-config');
 const helperClient = require('../lib/vortex-helper-client');
@@ -141,6 +142,7 @@ function main() {
     app.use('/api/update-collection-v2', createUpdateCollectionV2Router(config));
     app.use('/api/remove-collection', createRemoveCollectionRouter(config));
     app.use('/api/pgpatcher', createPgpatcherRouter(config));
+    app.use('/api/clear-update-flags', createClearUpdateFlagsRouter(config));
 
     // Shared, whole-app route (not scoped to any one tool area) -- shell.js's Home "Update
     // Collection" card uses this to decide LIVE, on every click, whether to open Update Collection

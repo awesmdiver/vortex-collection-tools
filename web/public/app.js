@@ -128,16 +128,11 @@ $('errorModal').addEventListener('click', (e) => {
 // it never did, so every click threw `showConfirmModal is not defined` and silently did nothing.
 // Defined here for the same reason showErrorModal above is: first page script loaded, nothing before
 // it to clobber.
-function showConfirmModal(message) {
-  const overlay = $('wtConfirmModal');
-  $('wtConfirmModalText').textContent = message;
-  overlay.classList.remove('hidden');
-  return new Promise((resolve) => {
-    const cleanup = (result) => { overlay.classList.add('hidden'); resolve(result); };
-    $('wtConfirmModalOk').onclick = () => cleanup(true);
-    $('wtConfirmModalCancel').onclick = () => cleanup(false);
-  });
-}
+// showConfirmModal moved to shell.js (2026-08-21) -- this was the only actually-reachable definition
+// (work-through-app.js has an identical-looking copy, but it's private inside that file's own IIFE
+// and was never exported to `window`). Never guarded against a stale, still-open confirm silently
+// resolving a later, unrelated action -- real live bug, see shell.js's own header comment on this
+// function for the full writeup.
 // NOT wrapped in an IIFE, unlike stats-app.js/work-through-app.js -- this is the FIRST page script
 // loaded (after shell.js), so its declarations are the ones every later same-named collision used
 // to clobber (api/el/baseName/showErrorModal). Those two later files are now IIFE-wrapped instead,
@@ -900,6 +895,29 @@ $('resumeToggle').addEventListener('change', (e) => {
   const name = $('planTitle').textContent;
   openPlan(state.collectionModId, name, resumeLogPath);
 });
+
+// A FULL reset, not the breadcrumb's own lighter-weight "go back one step" nav (the
+// data-action="back-to-picker" link above this view's own title, which switches views but keeps
+// every piece of plan state exactly as it was -- confirmed by reading back-to-picker's own handler).
+// Clears every module-level piece of state openPlan/renderPlan/handlePlanEvent populate, not just
+// the obvious state.plan/state.collectionModId -- state.explicitResume/state.pendingOffSiteRecheck
+// are both read later by this same plan flow (renderPlan, handlePlanEvent's plan-ready case) and
+// would otherwise carry over into whatever collection gets opened next; planEventSource (a real, if
+// likely-already-closed, EventSource -- plan-ready/plan-error both null it out on success, but a
+// Cancel click WHILE a plan is still loading needs this too) and planStatusFilter (the summary-badge
+// filter Set) are both real state this same view creates, not just the state object's own fields.
+function cancelPlan() {
+  if (planEventSource) { planEventSource.close(); planEventSource = null; }
+  state.collectionModId = null;
+  state.plan = null;
+  state.resumeLogPath = null;
+  state.explicitResume = false;
+  state.pendingOffSiteRecheck = false;
+  planStatusFilter.clear();
+  showView('picker');
+  loadCollections();
+}
+for (const id of ['cancelPlanBtn', 'cancelPlanBtnTop']) $(id).addEventListener('click', cancelPlan);
 
 // ---------- Confirm modal ----------
 

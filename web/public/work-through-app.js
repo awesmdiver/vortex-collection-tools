@@ -71,16 +71,12 @@ function fmtDate(iso) {
   return iso ? new Date(iso).toLocaleString() : '--';
 }
 
-function showConfirmModal(message) {
-  const overlay = $g('wtConfirmModal');
-  $g('wtConfirmModalText').textContent = message;
-  overlay.classList.remove('hidden');
-  return new Promise((resolve) => {
-    const cleanup = (result) => { overlay.classList.add('hidden'); resolve(result); };
-    $g('wtConfirmModalOk').onclick = () => cleanup(true);
-    $g('wtConfirmModalCancel').onclick = () => cleanup(false);
-  });
-}
+// This file's own OWN copy of showConfirmModal used to live here -- removed (2026-08-21), it was
+// private inside this IIFE and never exported to `window` (see this file's own exports list), so it
+// was dead code as far as the rest of the app was concerned; the three call sites below now resolve
+// to shell.js's own canonical showConfirmModal via the normal scope chain (this IIFE doesn't block
+// access to globals). That canonical version fixes a real live bug app.js's own single reachable
+// copy had -- see shell.js's own header comment on showConfirmModal for the full writeup.
 function showErrorModal(message) {
   $g('wtErrorModalText').textContent = message;
   $g('wtErrorModal').classList.remove('hidden');

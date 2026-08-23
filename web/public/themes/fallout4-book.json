@@ -68,6 +68,12 @@
       "whatItDoes": "When Vortex reports a rule cycle after you've hand-edited your load-order rules, this points at the rule(s) actually responsible instead of dumping every mod caught in the tangle&mdash;fix it, apply it, and confirm the cycle's really gone, all in one place."
     },
     {
+      "toolId": "clear-update-flags",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-all-clear-protocol.png",
+      "lore": "When a Vault-Tec diagnostic console triggers an update klaxon, it is often reading a ghost signal &mdash; flagging a subsystem for recalibration when the Overseer deliberately locked its hardware specs to an exact factory standard. Executing the All-Clear Protocol overrides these false alarms, wiping the spurious maintenance alerts from the central terminal manifest while logging a full rollback image. It restores your command console to crisp, nominal status without disturbing a single byte of active machinery or rewiring a single circuit.",
+      "whatItDoes": "Vortex frequently flags mods with orange &lsquo;Update available&rsquo; badges even when a collection author purposefully fixed them to a specific version. This tool scans your setup for those misleading alerts, lets you choose which collections to clean up, and silences the badges right inside Vortex. It automatically backs up your settings beforehand &mdash; allowing a full restore whenever you like &mdash; without modifying your actual mod files, load order, or collection rules."
+    },
+    {
       "toolId": "remove-collection",
       "banner": "theme-assets/fallout4/book/book-banner-fallout4-remove-collection.png",
       "lore": "When a Vault clearing crew abandons an old storage cache, they don't just detonate the wing and hope the vital medical supplies weren't still being shared by the functional labs down the hall. Ripping out a collection without checking the inventory first is a fast track to stripping essential components right out from under your other running builds. This quarantine protocol inspects the shared manifest before any container gets purged, letting the Overseer hand-pick what stays on the shelves and what goes out with the slag. It ensures an old deployment gets gutted cleanly without leaving your other active systems hanging by a thread.",

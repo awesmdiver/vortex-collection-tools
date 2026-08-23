@@ -2,9 +2,21 @@ node_modules/
 logs/
 reports/
 
+# Third-party frontend libraries (cytoscape + its cose-bilkent layout plugin), copied from
+# node_modules by scripts/vendor-cytoscape.js -- regenerated automatically by `npm install`
+# (postinstall), never hand-edited, so it's a build artifact like node_modules/ itself, not source.
+web/public/vendor/
+
 # Release zip built by build-release.ps1 -- a build artifact uploaded directly to the GitHub
-# release, never committed to source.
-github-releases/
+# release, never committed to source. Scoped to the zip only (2026-08-23 fix, real bug found live):
+# the bare "github-releases/" pattern used to swallow the WHOLE folder, including
+# release-notes-vX.Y.Z.md -- the real, authored source docs.DOCUMENTATION-STYLE.md says belong there
+# and get committed. Past release-notes files only survived because they were tracked before this
+# rule existed/matched; this one silently blocked v1.3.0's notes from `git add` until caught.
+github-releases/*.zip
+# Same reasoning for the installer build-installer.ps1 produces -- a build artifact uploaded to the
+# GitHub release, never committed. Scoped to the .exe for the same reason as the .zip line above.
+github-releases/*.exe
 
 # Archived interactive terminal menu (sync-menu.js) -- this project is 100% web-UI-driven now;
 # kept on disk only as a reference/fallback for a possible future non-web-based flow, never pushed
@@ -69,6 +81,17 @@ prompts/handoff-latest.md
 
 # Board lifecycle state (Claude Workflow Board owns this; ephemeral check-off/sent state, not versioned)
 prompts/.board-state.json
+
+# A local standalone-installer test run, dropped its output directly into the repo root instead of
+# a build/dist folder -- a packaged .exe + launcher + bundled portable Node runtime, all real build
+# artifacts, never source. Anchored to the repo root (leading /) so this doesn't catch an unrelated
+# same-named file anywhere else in the tree. Left on disk (not deleted) -- this may be someone's real
+# local install test.
+/Vortex Collection Tools/
+/VortexCollectionTools.exe
+/uninstall.exe
+/vct-launcher.exe
+/node/
 
 # OS
 Thumbs.db

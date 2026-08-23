@@ -82,6 +82,43 @@ document.getElementById('vortexRunningRetryBtn').addEventListener('click', () =>
   if (pendingVortexRunningRetry) pendingVortexRunningRetry();
 });
 
+// Canonical showConfirmModal -- moved here from app.js (its only actually-reachable definition;
+// work-through-app.js has an identical-looking copy but it's private inside that file's own IIFE and
+// was never exported to `window`, confirmed by checking its own exports list -- it was never the
+// active one, despite loading later). The real, live bug this fixes: app.js's own single definition
+// never guarded against a STALE, still-open confirm from an earlier, abandoned action. Calling
+// showConfirmModal again while one was already pending just rewired the SAME OK/Cancel buttons to the
+// NEW promise -- so an old, forgotten confirm (left open from an earlier "enable and deploy?" prompt
+// nobody explicitly answered) could end up resolving a LATER, unrelated action's promise instead,
+// whenever it finally got clicked. Confirmed live, 2026-08-21: a PGPatcher output-mod deploy ran
+// without the director ever consciously confirming THAT run's own prompt. Now tracks the current
+// pending resolver and auto-resolves any previous one as `false` (the safe, non-destructive default)
+// before opening a new confirm, so a stale prompt can never silently attach itself to a later,
+// different action. Moved to shell.js (loads first) rather than left in app.js, matching the same
+// shared-modal pattern showVortexRunningModal already establishes just above.
+let pendingConfirmModalResolve = null;
+function showConfirmModal(message) {
+  if (pendingConfirmModalResolve) {
+    const stale = pendingConfirmModalResolve;
+    pendingConfirmModalResolve = null;
+    stale(false);
+  }
+  const overlay = document.getElementById('wtConfirmModal');
+  document.getElementById('wtConfirmModalText').textContent = message;
+  overlay.classList.remove('hidden');
+  return new Promise((resolve) => {
+    pendingConfirmModalResolve = resolve;
+    const cleanup = (result) => {
+      pendingConfirmModalResolve = null;
+      overlay.classList.add('hidden');
+      resolve(result);
+    };
+    document.getElementById('wtConfirmModalOk').onclick = () => cleanup(true);
+    document.getElementById('wtConfirmModalCancel').onclick = () => cleanup(false);
+  });
+}
+window.showConfirmModal = showConfirmModal;
+
 // A real, distinct case from Update Collection's own upfront Helper check above (which silently
 // routes to Classic before v2 ever opens) -- this is for the Helper genuinely dying PARTWAY through
 // an already-open v2 flow (Vortex closed, or the extension crashed). Same shared-modal shape as
@@ -363,9 +400,9 @@ function setStarVisual(star, on) {
 // put. Reused for both directions (into Pinned, back into a section) since a section's own order is
 // already just a sub-sequence of this same list.
 const HOME_CANONICAL_ORDER = [
-  'merge', 'rebuild', 'sync', 'rules-generator',
-  'stats', 'workthrough', 'updatecompare', 'rulesgen', 'workshopreport',
-  'missingmasters', 'scrub', 'archivefinder', 'missingfiles', 'cyclehelper', 'removecollection', 'pgpatcher',
+  'merge', 'rebuild', 'sync', 'rules-generator', 'removecollection',
+  'missingmasters', 'scrub', 'archivefinder', 'missingfiles', 'cyclehelper', 'clearflags', 'pgpatcher',
+  'stats', 'workthrough', 'updatecompare', 'rulesgen', 'workshopreport', 'modexceptions',
 ];
 function pinKeyOf(wrap) {
   return wrap.querySelector('.home-card__star').dataset.pinKey;
@@ -536,6 +573,13 @@ if (reportsSubTab) {
         if (premiumBanner) premiumBanner.classList.remove('hidden');
         const bookBanner = document.getElementById('settingsFirstRunBookBanner');
         if (bookBanner && !localStorage.getItem('vct-book-opened')) bookBanner.classList.remove('hidden');
+        // The Helper hand-off (2026-08-23) -- first-run is only HALF its condition, so this hands
+        // off to settings-app.js rather than unhiding the banner directly. Whether "Optional: add
+        // the Helper" is genuinely right to show also depends on a real /helper-info check that
+        // lives over there: someone can perfectly well install the Helper into Vortex BEFORE ever
+        // opening this app, and telling them to add something they already have reads as broken.
+        // That same check also decides whether the separate "out of date" warning shows instead.
+        window.markSettingsFirstRun?.();
         showToolArea('settings');
         // Force the Paths & Backups rail category open regardless of whatever category
         // localStorage last remembered (e.g. from browsing Settings before this specific install

@@ -34,6 +34,7 @@ const nexusCollectionDownload = require('../lib/nexus-collection-download');
 const runner = require('../lib/collection-runner');
 const syncRunner = require('../lib/sync-runner');
 const syncLib = require('../lib/vortex-sync/lib');
+const helperClient = require('../lib/vortex-helper-client');
 const appConfig = require('../lib/app-config');
 const lastFixedState = require('../lib/rebuild-missing-last-fixed-state');
 const { createSseSession } = require('./sse-session');
@@ -108,13 +109,25 @@ function createRebuildMissingRouter(config) {
     });
 
     // Shared by /nexus-slug below and the batch "refresh before scan" step in /scan (queue:
-    // rebuild-missing-batch-refresh-toggle) -- one real, isolated state.v2 read per collection, same
-    // logic either way. Throws with `.kind` set to one of 'bad-collection' (resolveCollectionInfo
-    // itself failed -- a genuinely bad collectionModId), 'no-slug' (state read succeeded, Vortex just
-    // has no Nexus id on record), or left unset for any other state-read failure (a real crash/
-    // timeout, not a "this collection doesn't have one" case) -- callers map these to the same
-    // 400/404/500 split the original two-try/catch version of this route used, not flattened into
-    // one status for every failure.
+    // rebuild-missing-batch-refresh-toggle) -- one real per-collection Vortex-state read, same logic
+    // either way. Throws with `.kind` set to one of 'bad-collection' (resolveCollectionInfo itself
+    // failed -- a genuinely bad collectionModId), 'no-slug' (state read succeeded, Vortex just has no
+    // Nexus id on record), or left unset for any other state-read failure (a real crash/timeout, not a
+    // "this collection doesn't have one" case) -- callers map these to the same 400/404/500 split the
+    // original two-try/catch version of this route used, not flattened into one status for every
+    // failure.
+    //
+    // Helper-first, state.v2-fallback (2026-08-21) -- same treatment Rebuild Collection just got
+    // (rebuild-collection-vortex-helper-support, same session), reusing its own brand-new
+    // `runner.loadSyncStateViaHelper` directly rather than introducing a second, parallel mechanism:
+    // that function already reconstructs `loadSyncState`'s identical output shape (collectionSlug
+    // included) from one live `helperClient.getAllMods()` call, with zero state.v2 access. Judgment
+    // call: the task's own reference was `update-collection-v2-runner.js`'s `resolveNexusInfoViaHelper`
+    // (a different, unexported, multi-modId-shaped helper for a different caller's own needs) -- since
+    // this route already consumes `loadSyncState`'s exact result shape via `syncState.collectionSlug`,
+    // reusing collection-runner.js's own sibling function is the smaller, more consistent change: no
+    // new cross-module export needed, and it's the SAME mechanism this file's neighbor
+    // (`web/rebuild-routes.js`) just verified live this same session.
     async function resolveSlugForCollection(collectionModId) {
         let collectionInfo;
         try {
@@ -123,9 +136,14 @@ function createRebuildMissingRouter(config) {
             e.kind = 'bad-collection';
             throw e;
         }
-        const syncState = await runner.loadSyncState({
-            state, collectionModId, collection: collectionInfo.collection, stagingDir: staging,
-        });
+        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+        const syncState = helperAvailable
+            ? await runner.loadSyncStateViaHelper({
+                helperClient, syncLib, collectionModId, collection: collectionInfo.collection, stagingDir: staging,
+            })
+            : await runner.loadSyncState({
+                state, collectionModId, collection: collectionInfo.collection, stagingDir: staging,
+            });
         if (!syncState.collectionSlug) {
             const err = new Error("Vortex doesn't have a Nexus id on record for this collection yet -- it needs to have been installed (or, for a Workshop collection, opened in Vortex) at least once before this can look it up on Nexus.");
             err.kind = 'no-slug';
@@ -141,8 +159,8 @@ function createRebuildMissingRouter(config) {
     // session -- only `info.name`/`author`/etc., nothing identifying). The only place this id is
     // recorded at all is Vortex's own live state (`attributes###collectionSlug`, the same one
     // rebuild-routes.js's picker already reads for its "View on Nexus" button) -- so this is a
-    // real, one-off isolated state.v2 read, run ONLY when the user explicitly clicks the button,
-    // never as part of the plain filesystem scan/picker load above.
+    // real, one-off Vortex-state read, run ONLY when the user explicitly clicks the button, never as
+    // part of the plain filesystem scan/picker load above.
     router.post('/nexus-slug', async (req, res) => {
         if (!requireConfigured(res)) return;
         // BUG FIX (queue: rebuild-missing-vortex-db-read, director's own call): hit this live while
@@ -151,7 +169,11 @@ function createRebuildMissingRouter(config) {
         // message. Deliberately deferred fixing it in that task ("fold the fix in here rather than
         // bolt it on piecemeal") since this task ALSO adds a second, bigger Vortex-DB read below --
         // same gate, same message shape as rebuild-routes.js's own /plan and /vortex-data/refresh.
-        if (syncLib.isVortexRunning()) {
+        //
+        // Helper-first (2026-08-21): skip this gate entirely once the Helper covers the read --
+        // resolveSlugForCollection's own Helper-vs-state.v2 branch makes the gate genuinely
+        // unnecessary in that case. Untouched (same message, same shape) for the no-Helper fallback.
+        if (!(await helperClient.checkHelperAvailable(syncLib.GAME_ID)) && syncLib.isVortexRunning()) {
             return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
         }
         const { collectionModId } = req.body || {};
@@ -195,11 +217,17 @@ function createRebuildMissingRouter(config) {
     // per-collection batch.
     router.post('/load-vortex-data', async (req, res) => {
         if (!requireConfigured(res)) return;
-        if (syncLib.isVortexRunning()) {
+        // Helper-first (2026-08-21, same treatment as /nexus-slug's own gate above): skip this check
+        // entirely once the Helper covers the read. Untouched (same message, same shape) for the
+        // no-Helper fallback.
+        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+        if (!helperAvailable && syncLib.isVortexRunning()) {
             return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
         }
         try {
-            const { workshopOnlyCollections: found } = await runner.loadSyncStateBatch({ state, entries: [], stagingDir: staging });
+            const { workshopOnlyCollections: found } = helperAvailable
+                ? await runner.loadSyncStateBatchViaHelper({ helperClient, syncLib, entries: [], stagingDir: staging })
+                : await runner.loadSyncStateBatch({ state, entries: [], stagingDir: staging });
             // Dedupe against collections that already have a local collection.json -- those already
             // show up in the normal "workshop" group above (listPickableCollections' own filesystem
             // scan already finds them); only a genuinely never-fetched one belongs here.
@@ -329,13 +357,23 @@ function createRebuildMissingRouter(config) {
     // live Vortex-state read for this scan (previously it was pure filesystem, see
     // missing-files-scan.js's own header comment), gated the exact same way every other live-state
     // read in this router already is.
-    router.post('/scan', (req, res) => {
+    router.post('/scan', async (req, res) => {
         if (!requireConfigured(res)) return;
         const collectionModIds = Array.isArray(req.body?.collectionModIds) ? req.body.collectionModIds : [];
         const refreshFirst = Array.isArray(req.body?.refreshFirst) ? req.body.refreshFirst : [];
         if (collectionModIds.length === 0) return res.status(400).json({ error: 'Pick at least one collection to check.' });
         if (scanSession.isActive()) return res.status(409).json({ error: 'A scan is already in progress.' });
-        if (syncLib.isVortexRunning()) {
+        // Helper-first (2026-08-21, same treatment as /nexus-slug's own gate above) -- BOTH real
+        // state.v2 dependencies inside this scan are Helper-capable now, not just refreshFirst's own
+        // per-collection slug lookups (resolveSlugForCollection, already Helper-aware): the ignored-
+        // mod loop below also gets a Helper path, since listIgnoredMods (sync-runner.js) has no
+        // Helper equivalent of its own and, left as the only path, would make this gate's removal
+        // unsafe -- its own try/catch already fails OPEN (empty ignored list) rather than aborting the
+        // scan, so simply skipping this outer 409 without also fixing that loop would have silently
+        // degraded scan ACCURACY (genuinely-ignored mods misreported as missing) for every collection,
+        // every time, whenever Vortex is open -- a real correctness regression, not a neutral no-op.
+        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+        if (!helperAvailable && syncLib.isVortexRunning()) {
             return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
         }
 
@@ -365,21 +403,37 @@ function createRebuildMissingRouter(config) {
                     }
                 }
 
-                // One listIgnoredMods call per collection (lib/sync-runner.js -- the exact primitive
-                // Update Collection's own Apply Ignores flow already uses), turned into a plain
-                // identity-matching function via vortex-sync/lib.js's own makeIdentityMatcher --
-                // that's the SAME cross-shape matcher this codebase already uses everywhere an
-                // Ignored/Disabled ref needs to be matched against a collection.json mod's own
-                // source, not new logic. Fails open per-collection (empty ignored list, not an
-                // aborted scan) -- a lookup failure here should never wrongly SUPPRESS the ignored
-                // check by crashing the whole run, and should never silently mislabel a real problem
-                // as ignored either; failing open just means this one collection's ignored mods (if
-                // any) show up as normal missing/archive-issue rows instead, same as before this
-                // feature existed.
+                // One ignored-mod lookup per collection, turned into a plain identity-matching
+                // function via vortex-sync/lib.js's own makeIdentityMatcher -- that's the SAME
+                // cross-shape matcher this codebase already uses everywhere an Ignored/Disabled ref
+                // needs to be matched against a collection.json mod's own source, not new logic.
+                // Fails open per-collection (empty ignored list, not an aborted scan) -- a lookup
+                // failure here should never wrongly SUPPRESS the ignored check by crashing the whole
+                // run, and should never silently mislabel a real problem as ignored either; failing
+                // open just means this one collection's ignored mods (if any) show up as normal
+                // missing/archive-issue rows instead, same as before this feature existed.
+                //
+                // Helper-first (2026-08-21): when the Helper's reachable, `ignored` comes from
+                // loadSyncStateViaHelper's own already-computed field instead of the state.v2-only
+                // syncRunner.listIgnoredMods -- both are syncLib.extractIgnored(mod.rules) under the
+                // hood (confirmed by reading collection-runner.js's own queryLiveStateBatch), so this
+                // is the identical value, just read live instead of from a closed-Vortex DB copy. This
+                // is what makes skipping the gate above actually safe, not just permissive -- without
+                // this, a Helper-available scan would still silently lose ignored-mod accuracy for
+                // every collection, since listIgnoredMods itself has no Helper equivalent.
                 const ignoredMatchers = new Map();
                 for (const collectionModId of collectionModIds) {
                     try {
-                        const ignored = await syncRunner.listIgnoredMods({ stateDir: state, modId: collectionModId });
+                        let ignored;
+                        if (helperAvailable) {
+                            const collectionInfo = runner.resolveCollectionInfo(staging, collectionModId);
+                            const syncState = await runner.loadSyncStateViaHelper({
+                                helperClient, syncLib, collectionModId, collection: collectionInfo.collection, stagingDir: staging,
+                            });
+                            ignored = syncState.ignored;
+                        } else {
+                            ignored = await syncRunner.listIgnoredMods({ stateDir: state, modId: collectionModId });
+                        }
                         ignoredMatchers.set(collectionModId, syncLib.makeIdentityMatcher(ignored));
                     } catch {
                         ignoredMatchers.set(collectionModId, () => null);

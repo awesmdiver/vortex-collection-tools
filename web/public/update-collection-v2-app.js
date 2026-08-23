@@ -98,11 +98,20 @@ ucv2RenderStepper(0);
 
 // ---- Screen navigation -- same "one visible section at a time" shape as the mockup's own goScreen,
 // just against this app's real element ids. ----
-const UCV2_SCREEN_IDS = ['ucv2Screen1', 'ucv2ScreenRemoved', 'ucv2Screen2'];
-const UCV2_SCREEN_STEP = { ucv2Screen1: 0, ucv2ScreenRemoved: 1, ucv2Screen2: 1 };
+const UCV2_SCREEN_IDS = ['ucv2Screen1', 'ucv2ScreenRemoved', 'ucv2Screen2', 'ucv2ScreenApplyResult'];
+// ucv2ScreenApplyResult maps to 3 (one PAST the last real step, "Apply") rather than 2 -- ucv2RenderStepper's
+// own `i < activeIdx ? 'done' : ...` only checkmarks a step once activeIdx has moved past it, so this
+// is what makes "Apply" itself show a checkmark instead of still reading as the current in-progress
+// step once the results screen is actually showing (2026-08-23, live feedback: "we don't have a
+// Complete pill, it still says 3, Apply").
+const UCV2_SCREEN_STEP = { ucv2Screen1: 0, ucv2ScreenRemoved: 1, ucv2Screen2: 1, ucv2ScreenApplyResult: 3 };
 function ucv2GoScreen(id) {
   UCV2_SCREEN_IDS.forEach((s) => $ucv2(s).classList.toggle('hidden', s !== id));
   ucv2RenderStepper(UCV2_SCREEN_STEP[id]);
+  // Refresh only makes sense on the "Pick a collection" step -- shares the stepper's own row
+  // (#ucv2RefreshRow), so it toggles here alongside the screens rather than living inside any one
+  // screen's own markup.
+  $ucv2('ucv2RefreshRow').classList.toggle('hidden', id !== 'ucv2Screen1');
   window.scrollTo(0, 0);
 }
 
@@ -121,8 +130,10 @@ function ucv2UpdateReviewLockUI() {
     const isActive = btn.dataset.modId === ucv2ActiveReviewModId;
     const locked = ucv2ActiveReviewModId !== null && !isActive;
     btn.disabled = locked;
-    const note = btn.parentElement.querySelector('.review-lock-note');
-    if (note) note.style.display = locked ? 'block' : 'none';
+    // Explanation lives in the disabled button's own tooltip (2026-08-23) -- a permanent line of text
+    // under every other card was more than a plain grayed-out button needs, and it grew each card's
+    // own height, pushing the grid below down every time a review started.
+    btn.title = locked ? 'Finish or cancel the update in progress first' : '';
   });
 }
 
@@ -150,8 +161,7 @@ function ucv2RenderCollections() {
         : c.updateAvailable ? `new: Rev ${escHtmlUcv2(c.newestRevisionNumber)}` : 'up to date')
       : 'click Refresh';
     const actionBtn = checked && c.updateAvailable
-      ? `<button class="btn btn--primary btn--small ucv2-review-btn" data-mod-id="${escHtmlUcv2(c.modId)}" style="width:100%" onclick="ucv2StartReview('${escHtmlUcv2(c.modId)}')">Review update →</button>
-         <p class="review-lock-note" style="display:none;font-size:11px;color:var(--text-muted);margin:6px 2px 0;text-align:center">Finish or cancel the update in progress first</p>`
+      ? `<button class="btn btn--primary btn--small ucv2-review-btn" data-mod-id="${escHtmlUcv2(c.modId)}" style="width:100%" onclick="ucv2StartReview('${escHtmlUcv2(c.modId)}')">Review update →</button>`
       : `<button class="btn btn--small" style="width:100%" disabled>${checked ? (c.checkError ? "Couldn't check" : 'Up to date') : 'Not checked yet'}</button>`;
     return `<div class="ucv2-card">
       <div class="ucv2-card__image" style="background:linear-gradient(135deg,var(--surface-2),var(--bg))">
@@ -266,15 +276,12 @@ function ucv2CancelReview() {
   ucv2ActiveReviewModId = null;
   ucv2CurrentReview = null;
   ucv2UpdateReviewLockUI();
-  // Reset Screen 2's own apply-result UI back to its pre-apply state, so the NEXT review (a
-  // different collection, or this same one re-reviewed) never shows stale results from a previous
-  // apply -- these are re-shown fresh by ucv2RenderReviewScreen/ucv2RenderApplyResult each time.
-  $ucv2('ucv2ApplyResult').classList.add('hidden');
-  $ucv2('ucv2ReviewActions').classList.remove('hidden');
-  const applyBtn = $ucv2('ucv2ApplyUpdateBtn');
-  applyBtn.disabled = false;
-  applyBtn.textContent = 'Apply Update →';
-  $ucv2('ucv2CancelReviewBtn').textContent = 'Cancel';
+  // Screen 2's own action row (Apply/Cancel) resets back to its pre-apply state -- the apply-result
+  // screen itself is fully repopulated fresh by ucv2RenderApplyResult on the next apply, so there's
+  // nothing stale to clear here beyond this.
+  ucv2SetReviewActionsVisible(true);
+  ucv2SetApplyBtnState(false, 'Apply Update →');
+  ucv2SetCancelBtnText('Cancel');
   ucv2GoScreen('ucv2Screen1');
   // A real apply may have changed what's installed -- always reload fresh rather than show a
   // possibly-stale pre-apply collections list.
@@ -283,6 +290,27 @@ function ucv2CancelReview() {
 $ucv2('ucv2RemovedBackLink').addEventListener('click', (e) => { e.preventDefault(); ucv2CancelReview(); });
 $ucv2('ucv2ReviewBackLink').addEventListener('click', (e) => { e.preventDefault(); ucv2CancelReview(); });
 $ucv2('ucv2CancelReviewBtn').addEventListener('click', ucv2CancelReview);
+$ucv2('ucv2CancelReviewBtnBottom').addEventListener('click', ucv2CancelReview);
+$ucv2('ucv2ApplyResultBackBtn').addEventListener('click', ucv2CancelReview);
+
+// Top + bottom Apply/Cancel rows (2026-08-21) -- a long mod list shouldn't force scrolling all the
+// way down just to find the Apply button, so the same two buttons are duplicated top and bottom and
+// kept in sync through these three helpers rather than touching each element individually everywhere.
+function ucv2SetApplyBtnState(disabled, text) {
+  for (const id of ['ucv2ApplyUpdateBtn', 'ucv2ApplyUpdateBtnBottom']) {
+    const btn = $ucv2(id);
+    btn.disabled = disabled;
+    if (text !== undefined) btn.textContent = text;
+  }
+}
+function ucv2SetCancelBtnText(text) {
+  $ucv2('ucv2CancelReviewBtn').textContent = text;
+  $ucv2('ucv2CancelReviewBtnBottom').textContent = text;
+}
+function ucv2SetReviewActionsVisible(visible) {
+  $ucv2('ucv2ReviewActions').classList.toggle('hidden', !visible);
+  $ucv2('ucv2ReviewActionsTop').classList.toggle('hidden', !visible);
+}
 
 function ucv2RenderRemovedScreen() {
   const r = ucv2CurrentReview;
@@ -290,10 +318,28 @@ function ucv2RenderRemovedScreen() {
   ucv2SetScreenHeadThumb('ucv2RemovedThumb', r.pictureUrl);
   const n = r.removed.length;
   $ucv2('ucv2RemovedLead').textContent = `The collection's author dropped ${n} mod${n === 1 ? '' : 's'} from this revision. Decide what should happen to ${n === 1 ? 'it' : 'them'} before anything else updates.`;
+
+  // "Shared with another collection" (2026-08-21) -- same real detection Safe Collection Removal's
+  // own Screen 2 uses (review.removed[].shared/usedBy, backend: reviewUpdate in
+  // update-collection-v2-runner.js). Unlike that tool, THIS screen has no per-mod keep/remove choice
+  // (Vortex's own real flow is all-or-nothing here, see this screen's own header comment in
+  // index.html) -- so a shared mod can't default to "kept safe" the way remove-collection-app.js does.
+  // The warning banner is the one place that matters more, not less, here: it's the only signal
+  // telling the director that clicking Remove all will ALSO break another installed collection, since
+  // there's no per-row checkbox to protect it with.
+  const sharedCount = r.removed.filter((m) => m.shared).length;
+  $ucv2('ucv2RemovedSharedWarning').classList.toggle('hidden', sharedCount === 0);
+  if (sharedCount > 0) {
+    $ucv2('ucv2RemovedSharedWarningTitle').textContent = `⚠️ ${sharedCount} of these mods ${sharedCount === 1 ? 'is' : 'are'} required by another installed collection too`;
+  }
+
   $ucv2('ucv2RemovedList').innerHTML = r.removed.map((m) => `
-    <div class="ucv2-op-row ucv2-op-row--remove">
-      <div class="ucv2-op-row__name">${escHtmlUcv2(m.name)}</div>
-      <div class="ucv2-op-row__detail">${m.version ? `v${escHtmlUcv2(m.version)}` : ''}${m.version && m.author ? ' · ' : ''}${m.author ? `by ${escHtmlUcv2(m.author)}` : ''}</div>
+    <div class="ucv2-op-row ucv2-op-row--remove${m.shared ? ' ucv2-op-row--shared' : ''}">
+      <div class="ucv2-op-row__main">
+        <div class="ucv2-op-row__name">${escHtmlUcv2(m.name)}</div>
+        <div class="ucv2-op-row__detail">${m.version ? `v${escHtmlUcv2(m.version)}` : ''}${m.version && m.author ? ' · ' : ''}${m.author ? `by ${escHtmlUcv2(m.author)}` : ''}${m.shared ? ` &middot; also required by: ${escHtmlUcv2(m.usedBy.join(', '))}` : ''}</div>
+      </div>
+      ${m.shared ? `<span class="ucv2-shared-tag">required by ${m.usedBy.length} other${m.usedBy.length === 1 ? '' : 's'}</span>` : ''}
     </div>`).join('');
 }
 
@@ -306,7 +352,7 @@ function ucv2ChooseRemoved(choice) {
 $ucv2('ucv2RemoveAllBtn').addEventListener('click', () => ucv2ChooseRemoved('remove'));
 $ucv2('ucv2KeepAllBtn').addEventListener('click', () => ucv2ChooseRemoved('keep'));
 
-function ucv2RowHtml(status, pillClass, name, versionText, keepCellHtml, author, instructions, rowClass) {
+function ucv2RowHtml(status, pillClass, name, versionText, keepCellHtml, author, instructions, rowClass, modKey) {
   // data-* attributes (properly HTML-escaped), not an inline onclick built from JSON.stringify --
   // real instructions text can contain a literal `"`, which breaks out of a double-quoted onclick
   // attribute early and corrupts the rest of the row's HTML (confirmed real: "Uncaught SyntaxError:
@@ -317,7 +363,12 @@ function ucv2RowHtml(status, pillClass, name, versionText, keepCellHtml, author,
     : '';
   // rowClass (2026-08-18) -- optional, only used by the collapsed Unchanged section below.
   const cls = rowClass ? ` class="${rowClass}"` : '';
-  return `<tr${cls}><td><span class="status-pill ${pillClass}">${status}</span></td><td>${escHtmlUcv2(name)}</td><td>${escHtmlUcv2(versionText)}</td><td class="ucv2-keep-col">${keepCellHtml}</td><td>${escHtmlUcv2(author || '')}</td><td>${instrBtn}</td></tr>`;
+  // modKey (2026-08-22) -- Updated/Added rows only, the same Nexus modId Apply's own live
+  // mod-start/mod-complete SSE frames carry (runner.runApply). Lets ucv2SyncProgressRows below build
+  // a modId -> <tr> Map after render, same data-attribute-then-querySelectorAll convention
+  // ucv2SyncKeepCheckboxes already established for the Keep-installed checkboxes in this same table.
+  const keyAttr = modKey ? ` data-ucv2-mod-key="${escHtmlUcv2(modKey)}"` : '';
+  return `<tr${cls}${keyAttr}><td><span class="status-pill ${pillClass}">${status}</span></td><td>${escHtmlUcv2(name)}</td><td>${escHtmlUcv2(versionText)}</td><td class="ucv2-keep-col">${keepCellHtml}</td><td>${escHtmlUcv2(author || '')}</td><td>${instrBtn}</td></tr>`;
 }
 
 // ---- Keep-installed-version choice (2026-08-18) -- "I already have Mod version 2.3.0 installed,
@@ -332,8 +383,18 @@ function ucv2UpdatedModId(u) {
   return String(u.old.source && u.old.source.modId);
 }
 
+// Added-bucket equivalent of ucv2UpdatedModId -- same Nexus modId runner.runApply's own Added-mod
+// loop already keys its mod-start/mod-complete SSE frames by (m.source.modId, matching every other
+// Added-mod call site in that file: resolveDownloadIdForArchive/buildCollectionMembershipRule/etc).
+function ucv2AddedModId(m) {
+  return String(m.source && m.source.modId);
+}
+
 function ucv2UpdateKeepCount() {
-  const total = (ucv2CurrentReview?.updated || []).length;
+  // Only counts mods that actually HAVE a "keep installed" checkbox (fileChanged !== false) -- a
+  // FOMOD-choices-only update has no checkbox at all, so it was previously padding this denominator
+  // with mods nobody could ever check ("0 of 2 kept" when 0 of those 2 even offered the choice).
+  const total = (ucv2CurrentReview?.updated || []).filter((u) => u.fileChanged !== false).length;
   const n = ucv2KeepInstalledModIds.size;
   $ucv2('ucv2KeepCount').textContent = total ? `${n} of ${total} kept at installed version` : '';
 }
@@ -343,6 +404,42 @@ function ucv2SyncKeepCheckboxes() {
     cb.checked = ucv2KeepInstalledModIds.has(cb.dataset.ucv2KeepModid);
   });
   ucv2UpdateKeepCount();
+}
+
+// Live per-mod Apply progress (2026-08-22) -- mirrors app.js's own state.progressRows/
+// updateProgressRow mechanism exactly (a Map from a stable id to its <tr>, refreshed via
+// querySelectorAll right after the table's own innerHTML render, same convention
+// ucv2SyncKeepCheckboxes already established for this table's Keep-installed checkboxes).
+// Adapted to THIS table's own column layout: unlike Rebuild Collection's progress table, this one
+// has no separate Detail column, so the live sub-status ("Extracting…") is the pill's own label
+// text instead of a second cell, and a failure's full error reaches the pill via its title
+// attribute (a tooltip) rather than a dedicated column -- deliberately not adding a 7th column to
+// every row type (most of which never show live progress at all) just for this one state.
+let ucv2ProgressRows = new Map();
+
+function ucv2SyncProgressRows() {
+  ucv2ProgressRows = new Map();
+  document.querySelectorAll('#ucv2ReviewTableBody tr[data-ucv2-mod-key]').forEach((row) => {
+    ucv2ProgressRows.set(row.dataset.ucv2ModKey, row);
+  });
+}
+
+function ucv2UpdateProgressRow(modId, label, pillClass, title) {
+  const row = ucv2ProgressRows.get(String(modId));
+  if (!row) return;
+  const cell = row.children[0];
+  cell.innerHTML = `<span class="status-pill ${pillClass}"${title ? ` title="${escHtmlUcv2(title)}"` : ''}>${escHtmlUcv2(label)}</span>`;
+  // Same bounded-wrap scroll math as app.js's own updateProgressRow -- row.scrollIntoView() walks
+  // every scrollable ancestor including the window itself, which is what caused the whole page to
+  // bounce there; this only ever scrolls ucv2ReviewTableWrap's own inner scroll position.
+  const wrap = $ucv2('ucv2ReviewTableWrap');
+  if (wrap) {
+    const rowRect = row.getBoundingClientRect();
+    const wrapRect = wrap.getBoundingClientRect();
+    const offsetWithinWrap = (rowRect.top - wrapRect.top) + wrap.scrollTop;
+    const target = offsetWithinWrap - (wrap.clientHeight / 2) + (row.clientHeight / 2);
+    wrap.scrollTo({ top: target, behavior: 'smooth' });
+  }
 }
 
 $ucv2('ucv2ReviewTableBody').addEventListener('change', (e) => {
@@ -383,14 +480,18 @@ function ucv2RenderReviewScreen() {
   // have vs. what the new revision offers) instead of reconciling against either one correctly.
   const installedTotal = r.unchanged.length + r.updated.length + r.removed.length;
   const installedChanged = r.updated.length + r.removed.length;
-  const addedNote = r.added.length === 0 ? '' : `, and ${r.added.length} new mod${r.added.length === 1 ? '' : 's'} ${r.added.length === 1 ? 'is' : 'are'} being introduced`;
-  $ucv2('ucv2ReviewLead').textContent = totalChanged === 0
+  const addedNote = r.added.length === 0 ? '' : `, and ${r.added.length} new mod${r.added.length === 1 ? '' : 's'} ${r.added.length === 1 ? 'is' : 'are'} being added`;
+  // Bolded to match its real button label exactly (plain-language-writer skill's "bold exact UI
+  // labels" rule) -- innerHTML, not textContent, since that's the only way <strong> actually renders
+  // rather than showing up as literal angle brackets; every value interpolated here is a plain number
+  // (.length), never raw/unescaped text, so this is safe without an HTML-escaping pass.
+  $ucv2('ucv2ReviewLead').innerHTML = totalChanged === 0
     ? "This revision doesn't change this collection's mod list at all -- nothing to review."
     : installedTotal === 0
-      ? `This revision adds ${r.added.length} new mod${r.added.length === 1 ? '' : 's'} to this collection. Review below, then click Apply Update when you're ready -- nothing happens to your files until then.`
+      ? `This revision adds ${r.added.length} new mod${r.added.length === 1 ? '' : 's'} to this collection. Review the changes below and click <strong>Apply update</strong> when you're ready. No files are modified until you confirm.`
       : installedChanged === 0
-        ? `None of your ${installedTotal} currently-installed mods change in this update${addedNote} -- they'll stay exactly as they are. Review below, then click Apply Update when you're ready -- nothing happens to your files until then.`
-        : `${installedChanged} of your ${installedTotal} currently-installed mods ${installedChanged === 1 ? 'is' : 'are'} changing in this update${addedNote} -- the rest stay exactly as they are. Review what's changing below, then click Apply Update when you're ready -- nothing happens to your files until then.`;
+        ? `None of your ${installedTotal} installed mods change in this update${addedNote}—they'll remain untouched. Review the changes below and click <strong>Apply update</strong> when you're ready. No files are modified until you confirm.`
+        : `${installedChanged} of your ${installedTotal} installed mods ${installedChanged === 1 ? 'is' : 'are'} changing in this update${addedNote}—the rest remain untouched. Review the changes below and click <strong>Apply update</strong> when you're ready. No files are modified until you confirm.`;
 
   // Pre-check "keep installed version" for a mod whose live install is genuinely newer than this
   // revision's own pin -- a real, deliberate default the director asked for; see
@@ -404,7 +505,7 @@ function ucv2RenderReviewScreen() {
       // actually changed instead. "Keep installed version" doesn't apply either: that choice is about
       // which FILE stays installed, and there's only one file here.
       if (u.fileChanged === false) {
-        return ucv2RowHtml('Update', 'status-pill--info', u.new.name, 'FOMOD', '', u.new.author, u.new.instructions);
+        return ucv2RowHtml('Update', 'status-pill--info', u.new.name, 'FOMOD', '', u.new.author, u.new.instructions, undefined, ucv2UpdatedModId(u));
       }
       const modId = ucv2UpdatedModId(u);
       const note = u.installedIsNewer ? '<br><span class="muted" style="font-size:12px">You have a newer version installed than this collection uses</span>' : '';
@@ -417,9 +518,9 @@ function ucv2RenderReviewScreen() {
       const fromVersion = u.liveInstalledVersion ?? u.old.version;
       const keepTooltip = 'This collection update includes an older version of this mod than you currently have. Check "Keep installed" to skip the downgrade and keep your current version.';
       const keepCell = `<label style="display:flex;align-items:flex-start;gap:6px;cursor:pointer" title="${escHtmlUcv2(keepTooltip)}"><input type="checkbox" data-ucv2-keep-modid="${escHtmlUcv2(modId)}" ${u.installedIsNewer ? 'checked' : ''}><span>Keep installed${note}</span></label>`;
-      return ucv2RowHtml('Update', 'status-pill--info', u.new.name, `v${fromVersion ?? '?'} → v${u.new.version ?? '?'}`, keepCell, u.new.author, u.new.instructions);
+      return ucv2RowHtml('Update', 'status-pill--info', u.new.name, `v${fromVersion ?? '?'} → v${u.new.version ?? '?'}`, keepCell, u.new.author, u.new.instructions, undefined, modId);
     }),
-    ...r.added.map((m) => ucv2RowHtml('New', 'status-pill--success', m.name, `v${m.version ?? '?'}`, '', m.author, m.instructions)),
+    ...r.added.map((m) => ucv2RowHtml('New', 'status-pill--success', m.name, `v${m.version ?? '?'}`, '', m.author, m.instructions, undefined, ucv2AddedModId(m))),
     // Removed/Kept (2026-08-18) -- the collection author dropped these; ucv2RemovedChoice (set on
     // the earlier Removed-decision screen, always non-null by the time any removed mod exists here
     // -- see ucv2StartReview) is a single all-or-nothing choice, so every removed mod gets the same
@@ -444,15 +545,21 @@ function ucv2RenderReviewScreen() {
     ...r.unchanged.map((m) => ucv2RowHtml('Installed', 'status-pill--neutral', m.name, m.version ? `v${m.version}` : '', '', m.author, m.instructions, 'ucv2-unchanged-row hidden')),
   ];
   $ucv2('ucv2ReviewTableBody').innerHTML = [...rows, ...unchangedRows].join('');
+  ucv2SyncProgressRows();
   // "Keep installed?" only ever applies to Updated rows -- an Added-only review (no updates at all)
-  // has nothing to put in that column, so hide it rather than showing a dead, empty header.
+  // has nothing to put in that column, so hide it rather than showing a dead, empty header. Same
+  // check drives the Select-all/Invert/Clear bar below -- a FOMOD-choices-only update (u.fileChanged
+  // === false) has no "Keep installed" checkbox at all (see the row-building comment above), so a
+  // revision where EVERY updated mod is FOMOD-only used to still show the column and the selection
+  // bar with nothing real to select -- confirmed confusing live, 2026-08-23.
+  const hasRealKeepChoices = r.updated.some((u) => u.fileChanged !== false);
   document.querySelectorAll('#ucv2ReviewTableWrap .ucv2-keep-col')
-    .forEach((el) => el.classList.toggle('hidden', r.updated.length === 0));
+    .forEach((el) => el.classList.toggle('hidden', !hasRealKeepChoices));
   const anyRows = rows.length > 0 || r.unchanged.length > 0;
   $ucv2('ucv2ReviewTableWrap').classList.toggle('hidden', !anyRows);
   $ucv2('ucv2ReviewEmpty').classList.toggle('hidden', anyRows);
   if (!anyRows) $ucv2('ucv2ReviewEmpty').textContent = "Nothing to show here for this update.";
-  $ucv2('ucv2KeepSelectionBar').classList.toggle('hidden', r.updated.length === 0);
+  $ucv2('ucv2KeepSelectionBar').classList.toggle('hidden', !hasRealKeepChoices);
   ucv2UpdateKeepCount();
 }
 // Same "+N more / Show less" mechanism as sync-app.js's own handleSyncListToggleClick, adapted to
@@ -498,7 +605,7 @@ function ucv2ApplyUpdateClicked() {
       ? `<li><strong>${r.removed.length}</strong> removed mod${r.removed.length === 1 ? '' : 's'} will be fully uninstalled from Vortex.</li>`
       : `<li><strong>${r.removed.length}</strong> removed mod${r.removed.length === 1 ? '' : 's'} will be left installed, just no longer tracked as part of this collection.</li>`;
   const addedNote = r.added.length === 0 ? ''
-    : `<li><strong>${r.added.length}</strong> new mod${r.added.length === 1 ? '' : 's'} will be extracted, installed, and deployed into Vortex.</li>`;
+    : `<li><strong>${r.added.length}</strong> new mod${r.added.length === 1 ? '' : 's'} will be installed.</li>`;
   const keptCount = ucv2KeepInstalledModIds.size;
   const toUpdateCount = r.updated.length - keptCount;
   const keepNote = keptCount === 0 ? ''
@@ -524,19 +631,19 @@ function ucv2ApplyUpdateClicked() {
   // mods, since that's the only real case that triggers it (confirmed live, repeatedly).
   const externalChangesNote = r.added.length === 0 ? '' : `<div class="callout callout--warning" style="margin:14px 0">`
     + `<div class="callout__title">⚠️ Vortex may ask about "External Changes"</div>`
-    + `Installing new mods can make Vortex show its own "External Changes" dialog partway through -- `
-    + `that's expected, not a problem. It happens because this tool writes new mod files directly, so `
-    + `Vortex notices content it has no prior record for. Choose <strong>Use newer file</strong> `
-    + `(already the dialog's own default) and continue -- the newly-installed content is exactly what `
-    + `should win.</div>`;
-  body.innerHTML = `<p>A real backup will be taken first. Then:</p><ul style="margin:0;padding-left:20px">`
-    + `<li><strong>${toUpdateCount}</strong> mod${toUpdateCount === 1 ? '' : 's'} will be re-extracted to the new version and redeployed into your Data folder.</li>`
+    + `Installing new mods may trigger Vortex's "External Changes" dialog -- this is completely normal. `
+    + `Because this tool writes mod files directly, Vortex detects incoming files it doesn't recognize `
+    + `yet. Simply select <strong>Use newer file</strong> (the default option) and continue so the `
+    + `newly installed files take priority.</div>`;
+  body.innerHTML = `<p>A backup will be taken first. Then:</p><ul style="margin:0;padding-left:20px">`
+    + `<li><strong>${toUpdateCount}</strong> mod${toUpdateCount === 1 ? '' : 's'} will be updated.</li>`
     + keepNote + removedNote + addedNote
     + `</ul>` + archiveDeleteBlock + externalChangesNote
-    + `<p style="margin-bottom:0">This writes real files. Vortex must stay open (via the helper extension) for this to work.</p>`;
+    + `<p style="margin-bottom:0">This modifies real files on disk. Keep Vortex open with the helper extension active to complete the process.</p>`;
   modal.classList.add('open');
 }
 $ucv2('ucv2ApplyUpdateBtn').addEventListener('click', ucv2ApplyUpdateClicked);
+$ucv2('ucv2ApplyUpdateBtnBottom').addEventListener('click', ucv2ApplyUpdateClicked);
 $ucv2('ucv2ApplyConfirmClose').addEventListener('click', () => $ucv2('ucv2ApplyConfirmModal').classList.remove('open'));
 $ucv2('ucv2ApplyConfirmCancel').addEventListener('click', () => $ucv2('ucv2ApplyConfirmModal').classList.remove('open'));
 
@@ -576,9 +683,7 @@ function ucv2ShowDependencyBreakModal(breaks) {
 $ucv2('ucv2DependencyBreakClose').addEventListener('click', () => $ucv2('ucv2DependencyBreakModal').classList.remove('open'));
 $ucv2('ucv2DependencyBreakCancel').addEventListener('click', () => {
   $ucv2('ucv2DependencyBreakModal').classList.remove('open');
-  const applyBtn = $ucv2('ucv2ApplyUpdateBtn');
-  applyBtn.disabled = false;
-  applyBtn.textContent = 'Apply Update →';
+  ucv2SetApplyBtnState(false, 'Apply Update →');
 });
 // Resolves each break's `updatedIndex` (the review's own Updated-bucket array position) back to the
 // mod's real Nexus modId, using ucv2CurrentReview -- the same source of truth the server itself
@@ -998,62 +1103,89 @@ function ucv2FomodPickerAdvance() {
 $ucv2('ucv2FomodPickerNext').addEventListener('click', ucv2FomodPickerAdvance);
 function ucv2CloseFomodPicker() {
   $ucv2('ucv2FomodPickerModal').classList.remove('open');
-  const applyBtn = $ucv2('ucv2ApplyUpdateBtn');
-  applyBtn.disabled = false;
-  applyBtn.textContent = 'Apply Update →';
+  ucv2SetApplyBtnState(false, 'Apply Update →');
 }
 $ucv2('ucv2FomodPickerClose').addEventListener('click', ucv2CloseFomodPicker);
 $ucv2('ucv2FomodPickerCancel').addEventListener('click', ucv2CloseFomodPicker);
 
-let ucv2ApplyProgressTimer = null;
+// Real, live streamed progress (2026-08-21) -- mirrors pgpatcher-app.js's own pgpatcherBuild/
+// pgpHandleBuildEvent shape exactly: POST kicks off the real work and returns immediately, a paired
+// GET /apply/events streams real phase/progress as it happens, this subscribes instead of blocking on
+// one long request. Supersedes the old ucv2StartApplyProgressPolling/GET /apply-progress side-channel
+// entirely (that only ever covered the final deploy step; this covers every real phase).
+let ucv2ApplyEventSource = null;
 
-function ucv2StopApplyProgressPolling() {
-  if (ucv2ApplyProgressTimer) { clearInterval(ucv2ApplyProgressTimer); ucv2ApplyProgressTimer = null; }
+function ucv2FinishApplyStream() {
+  if (ucv2ApplyEventSource) { ucv2ApplyEventSource.close(); ucv2ApplyEventSource = null; }
   $ucv2('ucv2ApplyProgress').classList.add('hidden');
+  ucv2SetApplyBtnState(false, 'Apply Update →');
+  $ucv2('ucv2Loading').classList.add('hidden');
 }
 
-// Polls the real full-deploy status (runner.applyUpdate's own deployAllResult step, via GET
-// /apply-progress) WHILE the main /apply POST above is still in flight -- Node's own event loop can
-// genuinely serve this concurrently, since /apply's own await is on outstanding Helper I/O, not
-// synchronous CPU work. Harmless when nothing is happening (the server always answers with
-// active:false, so the status line just stays hidden -- true for every apply that never needed a
-// full redeploy at all). A poll can genuinely fail or return stale data mid-deploy -- confirmed real,
-// documented limitation (a full Vortex deploy can make the Helper's own HTTP server look
-// unresponsive for extended stretches while it's still working normally, see
-// vortex-helper-client.js's own header comment) -- a failed poll is silently skipped here, never
-// shown as an error, since /apply's own eventual success/failure is the real source of truth, not
-// this purely-informational side channel.
-function ucv2StartApplyProgressPolling() {
+function ucv2SetApplyPhase(message, current, total) {
   const el = $ucv2('ucv2ApplyProgress');
   const textEl = $ucv2('ucv2ApplyProgressText');
-  ucv2ApplyProgressTimer = setInterval(async () => {
-    let progress;
-    try {
-      progress = await ucv2Api('GET', '/api/update-collection-v2/apply-progress');
-    } catch {
-      return;
-    }
-    if (progress && progress.active) {
-      el.classList.remove('hidden');
-      const pct = typeof progress.percent === 'number' && progress.percent > 0 ? ` (${Math.round(progress.percent)}%)` : '';
-      textEl.textContent = `${progress.text || 'Redeploying via Vortex…'}${pct}`;
-    }
-  }, 1500);
+  el.classList.remove('hidden');
+  textEl.textContent = current && total ? `${current} / ${total} — ${message}` : message;
+}
+
+function ucv2HandleApplyEvent(frame) {
+  if (frame.type === 'phase') {
+    ucv2SetApplyPhase(frame.message);
+  } else if (frame.type === 'progress') {
+    ucv2SetApplyPhase(frame.message, frame.current, frame.total);
+  } else if (frame.type === 'mod-start') {
+    // "Actively in progress" -- status-pill--vortex-progress (Vortex's own real brand color,
+    // confirmed against its source, 2026-08-23), kept distinct from the plain grey
+    // status-pill--pending other tools' own progress tables still use for this same generic state.
+    ucv2UpdateProgressRow(frame.modId, 'Working…', 'status-pill--vortex-progress');
+  } else if (frame.type === 'mod-phase') {
+    // Matches what Vortex's own native install/update flow shows (Downloading, then Installing) --
+    // real Vortex uses ONE color for both (confirmed against its own source, progressbar.scss's
+    // $brand-primary fill), not a separate color per phase, so this does the same rather than
+    // inventing a distinction Vortex itself doesn't make. No percent/byte progress here --
+    // rebuildSingleMod's own onPhase callback only ever fires these two binary phase transitions
+    // (see its own header comment for why: the underlying download call has no progress signal of
+    // its own to report from). No icon prefix -- matches every other status pill in this app, none
+    // of which carry one either.
+    const label = frame.phase === 'downloading' ? 'Downloading…' : frame.phase === 'installing' ? 'Installing…' : 'Working…';
+    ucv2UpdateProgressRow(frame.modId, label, 'status-pill--vortex-progress');
+  } else if (frame.type === 'mod-complete') {
+    // A known failure status (status-labels.js's own STATUS_TEXT table, already shared by Stats
+    // Report/Rebuild Collection to avoid a raw internal key leaking to the user -- see that file's
+    // own header comment) gets its real label instead of a flat "Failed"; an unknown status keeps
+    // the flat fallback rather than showing a raw, unrecognized key.
+    const knownFailureLabel = frame.ok === false && frame.status && STATUS_TEXT[frame.status] ? statusLabel(frame.status) : null;
+    const label = frame.ok === true ? 'Done' : frame.ok === false ? (knownFailureLabel || 'Failed') : 'Skipped';
+    const pillClass = frame.ok === true ? 'status-pill--success' : frame.ok === false ? 'status-pill--critical' : 'status-pill--neutral';
+    ucv2UpdateProgressRow(frame.modId, label, pillClass, frame.error || undefined);
+  } else if (frame.type === 'done') {
+    ucv2FinishApplyStream();
+    ucv2RenderApplyResult(frame.result);
+  } else if (frame.type === 'error') {
+    ucv2FinishApplyStream();
+    // The dependency-break/FOMOD-choice gates and helper-unavailable are always caught synchronously
+    // BEFORE this stream ever starts (runner.prepareApply, in ucv2ConfirmApply's own try/catch below)
+    // -- the only real errors that can reach here are a backup failure or an unexpected runtime error,
+    // neither of which ucv2HandleError special-cases beyond this same fallback, so going straight to
+    // it is the identical outcome the old blocking code already had for both.
+    ucv2ShowCriticalError(frame.message || 'The apply failed.');
+  }
 }
 
 async function ucv2ConfirmApply(extra) {
   $ucv2('ucv2ApplyConfirmModal').classList.remove('open');
   ucv2HideCriticalError();
-  const applyBtn = $ucv2('ucv2ApplyUpdateBtn');
-  applyBtn.disabled = true;
-  applyBtn.textContent = 'Applying…';
+  ucv2SetApplyBtnState(true, 'Applying…');
   $ucv2('ucv2Loading').classList.remove('hidden');
   // Advance the stepper to "Apply" the moment the real apply request actually goes out -- there's
   // no separate screen for this step (unlike Cycle Helper's chScreenApply), it happens inline here.
   ucv2RenderStepper(2);
-  ucv2StartApplyProgressPolling();
+  let result;
   try {
-    const result = await ucv2Api('POST', '/api/update-collection-v2/apply', {
+    // 202 with an empty body once runner.prepareApply's own gates clear -- the real work streams via
+    // GET /apply/events below, subscribed to BEFORE this resolves (see ucv2SubscribeApplyEvents).
+    result = await ucv2Api('POST', '/api/update-collection-v2/apply', {
       collectionModId: ucv2ActiveReviewModId,
       removedChoice: ucv2CurrentReview.removed.length > 0 ? ucv2RemovedChoice : undefined,
       keepInstalledModIds: [...ucv2KeepInstalledModIds],
@@ -1061,32 +1193,34 @@ async function ucv2ConfirmApply(extra) {
       fomodPicks: ucv2FomodPicks,
       ...(extra || {}),
     });
-    ucv2RenderApplyResult(result);
-    $ucv2('ucv2CancelReviewBtn').textContent = 'Back to Collections';
   } catch (e) {
     if (e.status === 409 && e.body?.error === 'dependency-breaks-found') {
       ucv2ShowDependencyBreakModal(e.body.dependencyBreaks || []);
-      applyBtn.disabled = false;
-      applyBtn.textContent = 'Apply Update →';
+      ucv2SetApplyBtnState(false, 'Apply Update →');
+      $ucv2('ucv2Loading').classList.add('hidden');
       return;
     }
     if (e.status === 409 && e.body?.error === 'fomod-choices-needed') {
       ucv2ShowFomodPicker(e.body.fomodChoiceNeeds || [], () => ucv2ConfirmApply());
-      applyBtn.disabled = false;
-      applyBtn.textContent = 'Apply Update →';
+      ucv2SetApplyBtnState(false, 'Apply Update →');
+      $ucv2('ucv2Loading').classList.add('hidden');
       return;
     }
-    applyBtn.disabled = false;
-    applyBtn.textContent = 'Apply Update →';
+    ucv2SetApplyBtnState(false, 'Apply Update →');
+    $ucv2('ucv2Loading').classList.add('hidden');
     // A real retry, not a no-op -- re-runs this SAME apply call (same extra flags, e.g. a
     // dependency-break already resolved earlier in this attempt), needed for the new
     // helper-unavailable modal's own "Try Again" to genuinely do something (2026-08-18: this was a
     // pre-existing no-op here, which would have silently carried over into that modal too).
     ucv2HandleError(e, () => ucv2ConfirmApply(extra));
-  } finally {
-    $ucv2('ucv2Loading').classList.add('hidden');
-    ucv2StopApplyProgressPolling();
+    return;
   }
+  // The POST resolved 202 -- a real apply is genuinely running server-side now. Subscribe to the
+  // stream (mirrors pgpatcherLoad's own EventSource setup exactly).
+  if (ucv2ApplyEventSource) ucv2ApplyEventSource.close();
+  const es = new EventSource('/api/update-collection-v2/apply/events');
+  ucv2ApplyEventSource = es;
+  es.onmessage = (msg) => ucv2HandleApplyEvent(JSON.parse(msg.data));
 }
 $ucv2('ucv2ApplyConfirmOk').addEventListener('click', () => ucv2ConfirmApply());
 
@@ -1095,10 +1229,108 @@ function ucv2ApplyRowLine(r) {
   return `<li>${icon} ${escHtmlUcv2(r.name)}${r.error ? ` — ${escHtmlUcv2(r.error)}` : r.action ? ` — ${escHtmlUcv2(r.action)}` : ''}</li>`;
 }
 
+// Per-problem Retry (2026-08-23) -- ucv2ProblemMessageHtml is split out from ucv2ProblemLineHtml so a
+// failed retry can rebuild just the message span in place (see the click handler below) without
+// re-rendering the whole <li> (which would also mean re-attaching its own Retry button state).
+function ucv2ProblemMessageHtml(label, name, message) {
+  return `<strong>${escHtmlUcv2(label)}${name ? ` — ${escHtmlUcv2(name)}` : ''}:</strong> ${escHtmlUcv2(message || 'Failed.')}`;
+}
+
+function ucv2ProblemLineHtml(p, i) {
+  const msgHtml = ucv2ProblemMessageHtml(p.label, p.name, p.message);
+  if (!p.retry) return `<li>${msgHtml}</li>`;
+  const modIdAttr = p.retry.modId ? ` data-ucv2-retry-modid="${escHtmlUcv2(p.retry.modId)}"` : '';
+  return `<li data-ucv2-problem-index="${i}" data-ucv2-problem-label="${escHtmlUcv2(p.label)}" data-ucv2-problem-name="${escHtmlUcv2(p.name || '')}">`
+    + `<span class="ucv2-problem-text">${msgHtml}</span> `
+    + `<button type="button" class="btn btn--ghost btn--small ucv2-problem-retry" data-ucv2-retry-kind="${escHtmlUcv2(p.retry.kind)}"${modIdAttr}>Retry</button>`
+    + `</li>`;
+}
+
+// Once every retryable problem AND every non-retryable note is gone, this apply is genuinely fully
+// resolved -- flips the summary callout from "Applied with some problems" back to a plain "Applied"
+// without needing a full re-render (and the scroll-position jump that would come with one).
+function ucv2MaybeClearApplyProblemsBadge() {
+  const problemsList = document.getElementById('ucv2ApplyProblemsList');
+  const notesList = document.getElementById('ucv2ApplyResultSummaryNotes');
+  const stillHasProblems = problemsList && problemsList.querySelectorAll('li').length > 0;
+  const stillHasNotes = notesList && notesList.querySelectorAll('li').length > 0;
+  if (stillHasProblems || stillHasNotes) return;
+  const summary = $ucv2('ucv2ApplyResultSummary');
+  summary.className = 'callout';
+  const title = summary.querySelector('.callout__title');
+  if (title) title.textContent = '✓ Applied';
+  if (problemsList) problemsList.remove();
+}
+
+// Split out from the click listener below (2026-08-23) so the helper-unavailable modal's own "Try
+// Again" can re-fire this SAME retry request for this SAME problem row -- not a generic page reload.
+async function ucv2AttemptProblemRetry(btn, li, kind, modId) {
+  const endpoint = kind === 'mod' ? '/api/update-collection-v2/apply/retry-mod'
+    : kind === 'rules' ? '/api/update-collection-v2/apply/retry-mod-rules'
+      : kind === 'attrs' ? '/api/update-collection-v2/apply/retry-collection-attributes'
+        : '/api/update-collection-v2/apply/retry-membership-cleanup';
+  btn.disabled = true;
+  btn.textContent = 'Retrying…';
+  try {
+    const res = await ucv2Api('POST', endpoint, { collectionModId: ucv2ActiveReviewModId, ...(kind === 'mod' ? { modId } : {}) });
+    // Collection rules' own retry can come back with either a top-level error (couldn't even read
+    // Vortex's live mod list) or a per-mod failure inside modsChanged -- either one means this
+    // specific problem line is still real.
+    const failedRuleMod = kind === 'rules' ? (res.modsChanged || []).find((m) => m.ok === false) : null;
+    const succeeded = kind === 'rules' ? (!res.error && !failedRuleMod) : res.ok !== false;
+    if (succeeded) {
+      li.remove();
+      ucv2MaybeClearApplyProblemsBadge();
+      return;
+    }
+    const freshMessage = kind === 'rules' ? (res.error || failedRuleMod?.error || 'Rule apply failed.') : (res.error || 'This is still failing.');
+    li.querySelector('.ucv2-problem-text').innerHTML = ucv2ProblemMessageHtml(li.dataset.ucv2ProblemLabel, li.dataset.ucv2ProblemName, freshMessage);
+    btn.disabled = false;
+    btn.textContent = 'Retry';
+  } catch (err) {
+    // Case 2 (DESIGN.md's "Helper-unavailable messaging" section) -- this retry is a step WITHIN the
+    // SAME Apply flow that already confirmed the Helper at the start (the main Apply endpoint's own
+    // ucv2HandleError already uses this exact modal for this exact error class; this retry button is
+    // its sibling within the same flow, not a fresh action starting cold). Reset the button first so
+    // the underlying row looks settled while the modal is up, same as ucv2ConfirmApply's own reset
+    // before calling ucv2HandleError.
+    if (err.status === 409 && err.body?.error === 'helper-unavailable') {
+      btn.disabled = false;
+      btn.textContent = 'Retry';
+      window.showHelperUnavailableModal(() => ucv2AttemptProblemRetry(btn, li, kind, modId));
+      return;
+    }
+    if (err.status === 409 && err.body?.error === 'retry-data-expired') {
+      ucv2ShowCriticalError(err.body.message || "This apply's own data has expired -- run Apply Update again to retry.");
+    } else if (err.status === 409 && err.body?.error === 'vortex-running') {
+      ucv2ShowCriticalError(err.body.message || 'Vortex must be reachable to retry this.');
+    } else if (err.status === 409 && err.body?.error === 'apply-in-progress') {
+      ucv2ShowCriticalError('An apply is already in progress. Wait for it to finish, then retry.');
+    } else {
+      ucv2ShowCriticalError(err.message || 'The retry failed.');
+    }
+    btn.disabled = false;
+    btn.textContent = 'Retry';
+  }
+}
+
+// Delegated on the summary itself -- the problems list is rebuilt wholesale every time
+// ucv2RenderApplyResult runs, so a per-button listener would need re-attaching every time; one
+// listener here covers every retry button, present or future.
+$ucv2('ucv2ApplyResultSummary').addEventListener('click', (e) => {
+  const btn = e.target.closest('.ucv2-problem-retry');
+  if (!btn) return;
+  const li = btn.closest('li');
+  const kind = btn.dataset.ucv2RetryKind;
+  const modId = btn.dataset.ucv2RetryModid;
+  ucv2AttemptProblemRetry(btn, li, kind, modId);
+});
+
 function ucv2RenderApplyResult(result) {
-  $ucv2('ucv2ReviewActions').classList.add('hidden');
-  const box = $ucv2('ucv2ApplyResult');
-  box.classList.remove('hidden');
+  const review = ucv2CurrentReview;
+  $ucv2('ucv2ApplyResultTitle').textContent = review ? `${review.collectionName} — ${ucv2RevisionLabel()}` : 'Update applied';
+  ucv2SetScreenHeadThumb('ucv2ApplyResultThumb', review?.pictureUrl);
+  ucv2GoScreen('ucv2ScreenApplyResult');
   const allUpdatedOk = result.updatedResults.every((r) => r.ok !== false);
   const allRemovedOk = result.removedResults.every((r) => r.ok !== false);
   const allAddedOk = (result.addedResults || []).every((r) => r.ok !== false);
@@ -1106,12 +1338,69 @@ function ucv2RenderApplyResult(result) {
   const allRulesOk = !result.modRulesResult || (!result.modRulesResult.error && (result.modRulesResult.modsChanged || []).every((m) => m.ok !== false));
   const allDependencyBreaksOk = (result.dependencyBreakResults || []).every((r) => r.ok !== false);
   const allArchiveDeletesOk = (result.deletedArchiveResults || []).every((r) => r.ok !== false);
-  const allOk = allUpdatedOk && allRemovedOk && allAddedOk && allDisabledOk && allRulesOk && allDependencyBreaksOk && allArchiveDeletesOk;
+  const allCollectionAttributesOk = result.collectionAttributesUpdated !== false;
+  const allRemovedMembershipOk = !result.removedMembershipCleanup || result.removedMembershipCleanup.ok !== false;
+  const allOk = allUpdatedOk && allRemovedOk && allAddedOk && allDisabledOk && allRulesOk && allDependencyBreaksOk
+    && allArchiveDeletesOk && allCollectionAttributesOk && allRemovedMembershipOk;
+
+  // Named up front (2026-08-21) -- "Applied with some problems" used to make you scan every section
+  // below for a stray ✗ to find out what actually went wrong. Every real failure across every
+  // category, named right in the summary, so a 100-mod apply doesn't hide its one real problem.
+  // The plain-language message lives server-side now (lib/update-collection-v2-runner.js's own
+  // describeApplyFailure/APPLY_FAILURE_MESSAGES, 2026-08-22) -- that's the SAME text the live per-mod
+  // pill's own tooltip already shows during Apply, so x.error is already a real, accurate sentence by
+  // the time it gets here. This used to keep a SECOND, separately-worded copy of the same explanations
+  // here on the frontend, which meant the live tooltip and this final summary could show two different
+  // sentences for the identical failure -- consolidated back to one source of truth.
+  // Each problem is {label, name, message, retry} -- retry (2026-08-23) is only ever set for the
+  // four categories this task built a real, standalone re-run operation for: a single mod's own
+  // extraction (keyed by its real modId), this revision's own collection rules, the collection's own
+  // record (revisionNumber/version), and its own removed-mod membership cleanup. Every other
+  // category (Remove/Keep disabled/Dependency warning/Delete archive) has no real retry mechanism
+  // built yet, so those never get a button that would silently do nothing.
+  const problems = [];
+  const pushProblem = (label, name, message, retry) => problems.push({ label, name, message, retry: retry || null });
+  (result.updatedResults || []).filter((x) => x.ok === false)
+    .forEach((x) => pushProblem('Update', x.name, x.error, x.modId ? { kind: 'mod', modId: x.modId } : null));
+  (result.removedResults || []).filter((x) => x.ok === false)
+    .forEach((x) => pushProblem('Remove', x.name, x.error));
+  (result.addedResults || []).filter((x) => x.ok === false)
+    .forEach((x) => pushProblem('Add', x.name, x.error, x.modId ? { kind: 'mod', modId: x.modId } : null));
+  (result.disabledResults || []).filter((x) => x.ok === false)
+    .forEach((x) => pushProblem('Keep disabled', x.name, x.error));
+  (result.dependencyBreakResults || []).filter((x) => x.ok === false)
+    .forEach((x) => pushProblem('Dependency warning', x.name, x.error));
+  (result.deletedArchiveResults || []).filter((x) => x.ok === false)
+    .forEach((x) => pushProblem('Delete archive', x.name, x.error));
+  if (result.modRulesResult?.error) {
+    pushProblem('Collection rules', null, result.modRulesResult.error, { kind: 'rules' });
+  }
+  (result.modRulesResult?.modsChanged || []).filter((m) => m.ok === false)
+    .forEach((m) => pushProblem('Collection rules', m.name, m.error || 'Rule apply failed.', { kind: 'rules' }));
+  if (result.collectionAttributesUpdated === false) {
+    pushProblem('Collection record', null, result.collectionAttributesError || "Couldn't update Vortex's own record for this collection.", { kind: 'attrs' });
+  }
+  if (result.removedMembershipCleanup && result.removedMembershipCleanup.ok === false) {
+    pushProblem('Collection membership', null, result.removedMembershipCleanup.error || "Couldn't update the collection's own membership list.", { kind: 'membership' });
+  }
+
+  // Confirmation, not a warning -- always true regardless of allOk, so it lives on its own outside
+  // the warning callout instead of getting lost inside/confused with it (2026-08-23, live feedback:
+  // "that isn't a warning, it's a confirmation"). No raw backup path either -- doesn't change what
+  // the director does next, same "cut details that don't help" rule this project already applies
+  // elsewhere.
+  $ucv2('ucv2ApplyResultConfirm').textContent = `Now on Rev ${result.newRevisionNumber}. A backup was saved.`;
+
+  // Deliberately NOT duplicating "Could not update Vortex's own record" here -- the Collection
+  // record problem entry above already carries that same message, now with a real Retry button;
+  // repeating it as a second, non-retryable note read as two separate complaints about one failure.
+  const summaryNotes = [];
+  if (!result.collectionJsonUpdated) summaryNotes.push('Could not update the local collection record -- the next Check for Updates may show this same diff again.');
   const summary = $ucv2('ucv2ApplyResultSummary');
   summary.className = allOk ? 'callout' : 'callout callout--warning';
   summary.innerHTML = `<div class="callout__title">${allOk ? '✓ Applied' : '⚠️ Applied with some problems'}</div>`
-    + `Now on Rev ${escHtmlUcv2(result.newRevisionNumber)}. Backup saved${result.backupPath ? ` to <code>${escHtmlUcv2(result.backupPath)}</code>` : ''}.`
-    + (result.collectionJsonUpdated ? '' : ' (Could not update the local collection record -- the next Check for Updates may show this same diff again.)');
+    + (problems.length > 0 ? `<ul id="ucv2ApplyProblemsList" style="margin:0;padding-left:20px">${problems.map(ucv2ProblemLineHtml).join('')}</ul>` : '')
+    + (summaryNotes.length > 0 ? `<ul id="ucv2ApplyResultSummaryNotes" style="margin:0;padding-left:20px">${summaryNotes.map((n) => `<li>${n}</li>`).join('')}</ul>` : '');
 
   const parts = [];
   // Full-deploy result (2026-08-18) -- real Vortex source confirmed (docs/VORTEX-DEPLOY-REFERENCE.md):
@@ -1120,7 +1409,7 @@ function ucv2RenderApplyResult(result) {
   // LOOT-resort plugins.txt/loadorder.txt. When this apply added, removed, or renamed an actual
   // plugin (.esp/.esm/.esl) file, this tool triggers a REAL full Vortex deploy (the same deploy-mods
   // event the actual Deploy Mods button dispatches, via the Helper's own /mods/deploy-all) so that
-  // reconciliation happens automatically -- see runner.applyUpdate's own deployAllResult. Falls back
+  // reconciliation happens automatically -- see runner.runApply's own deployAllResult. Falls back
   // to telling the user plainly ONLY if that real trigger didn't confirm success. Serious register
   // (per DESIGN.md's "Never run a real action silently" standing rule) and placed FIRST, above even
   // the curated-collection note -- this is the one thing on this screen that can genuinely affect

@@ -10,6 +10,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const runner = require('../lib/collection-runner');
+const helperClient = require('../lib/vortex-helper-client');
 const { createPauseController } = require('../lib/pause-controller');
 const { findSevenZip } = require('../lib/sevenzip');
 const nexusDownload = require('../lib/nexus-collection-download');
@@ -31,6 +32,37 @@ function createRouter(config) {
     const sevenZipExe = findSevenZip();
     const logsDir = appConfig.getLogsDir('rebuild-collection');
 
+    // Helper-first, state.v2-fallback (2026-08-21) -- same treatment Cycle Helper/Rules Generator
+    // already have, per the approved design/mockup-rebuild-collection-helper-support.html (no UI
+    // change at all -- purely which backend path runs). When the Vortex Collection Helper extension
+    // is reachable, Vortex can stay open the whole time; when it isn't, behavior is byte-for-byte
+    // identical to before, "Vortex must be closed" gate included.
+    async function loadSyncStateAnyPath({ collectionModId, collection, stagingDir, onProgress }) {
+        if (await helperClient.checkHelperAvailable(syncLib.GAME_ID)) {
+            return runner.loadSyncStateViaHelper({ helperClient, syncLib, collectionModId, collection, stagingDir });
+        }
+        return runner.loadSyncState({ state, collectionModId, collection, stagingDir, onProgress });
+    }
+    async function loadSyncStateBatchAnyPath({ entries, stagingDir, onProgress }) {
+        if (await helperClient.checkHelperAvailable(syncLib.GAME_ID)) {
+            return runner.loadSyncStateBatchViaHelper({ helperClient, syncLib, entries, stagingDir });
+        }
+        return runner.loadSyncStateBatch({ state, entries, stagingDir, onProgress });
+    }
+    // `gate` here mirrors this project's own blockUntilOutputModConfirmed-style shape (web/pgpatcher-
+    // routes.js): writes the response itself and returns true if it did, so a caller just does
+    // `if (await blockIfVortexRunningAndNoHelper(res)) return;`. Skips the "Vortex must be closed"
+    // check ENTIRELY once the Helper covers the read -- that's the one thing this whole feature
+    // actually changes; the check's own wording is untouched for the no-Helper case.
+    async function blockIfVortexRunningAndNoHelper(res) {
+        if (await helperClient.checkHelperAvailable(syncLib.GAME_ID)) return false;
+        if (syncLib.isVortexRunning()) {
+            res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
+            return true;
+        }
+        return false;
+    }
+
     // Shared by /retry-download and /import-offsite -- a FAILED_EXTRACTION_* row with
     // archiveNotFound is the SAME underlying problem as SKIP_NO_ARCHIVE (the archive genuinely isn't
     // there), just discovered later, at actual extraction time instead of during classification.
@@ -40,12 +72,16 @@ function createRouter(config) {
     }
 
     // Cache of loadSyncState results, keyed by collectionModId -- populated by
-    // POST /api/rebuild/vortex-data/refresh (one shared DB open across every installed collection,
-    // instead of one risky open per collection viewed). Vortex's state cannot change while it's
-    // closed, and this whole tool requires Vortex closed anyway, so this cache stays valid for as
-    // long as the user doesn't reopen Vortex -- exactly the real workflow (working through several
-    // collections in one sitting). null value = attempted but that specific collection failed
-    // (surfaced to the caller, not silently dropped); absent key = never attempted at all.
+    // POST /api/rebuild/vortex-data/refresh (one shared DB open, or one shared Helper read, across
+    // every installed collection, instead of one risky read per collection viewed). Without the
+    // Helper, Vortex's state cannot change while it's closed (and this tool requires it closed for
+    // that path anyway), so this cache stays valid for as long as the user doesn't reopen Vortex --
+    // exactly the real workflow (working through several collections in one sitting). With the Helper
+    // reachable, Vortex genuinely CAN change underneath this cache (nothing stops the user from
+    // toggling a mod in Vortex mid-session) -- same tradeoff Cycle Helper/Rules Generator's own
+    // Helper-backed caches already accept, not a new risk this feature introduces. null value =
+    // attempted but that specific collection failed (surfaced to the caller, not silently dropped);
+    // absent key = never attempted at all.
     const syncStateCache = new Map();
     let vortexDataLoadedAt = null;
     // The current run's pause controller (lib/pause-controller.js) -- one per active run, created
@@ -221,8 +257,8 @@ function createRouter(config) {
             // the fetch that already succeeded.
             try {
                 const collectionInfo = runner.resolveCollectionInfo(staging, collectionModId);
-                const { results } = await runner.loadSyncStateBatch({
-                    state, entries: [{ modId: collectionModId, collection: collectionInfo.collection }], stagingDir: staging,
+                const { results } = await loadSyncStateBatchAnyPath({
+                    entries: [{ modId: collectionModId, collection: collectionInfo.collection }], stagingDir: staging,
                 });
                 const entry = results.get(collectionModId);
                 if (entry) syncStateCache.set(collectionModId, entry);
@@ -260,16 +296,16 @@ function createRouter(config) {
         vortexDataSession.subscribe(res, { afterSeq });
     });
 
-    // One shared DB open across EVERY installed collection, instead of one risky open per
-    // collection viewed -- see syncStateCache's own comment above for the rationale (Vortex's
-    // state can't change while it's closed, and this tool requires Vortex closed anyway).
-    router.post('/vortex-data/refresh', (req, res) => {
+    // One shared read across EVERY installed collection, instead of one risky read per collection
+    // viewed -- see syncStateCache's own comment above for the rationale. Without the Helper, Vortex's
+    // state can't change while it's closed (and this path requires it closed); with the Helper, no
+    // closing needed at all -- see loadSyncStateBatchAnyPath/blockIfVortexRunningAndNoHelper's own
+    // comments.
+    router.post('/vortex-data/refresh', async (req, res) => {
         if (!staging) {
             return res.status(400).json({ error: 'not-configured', message: 'Staging folder is not configured yet -- open Settings to set it up.' });
         }
-        if (syncLib.isVortexRunning()) {
-            return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
-        }
+        if (await blockIfVortexRunningAndNoHelper(res)) return;
         let collections;
         try {
             collections = syncLib.scanStagingCollections(staging);
@@ -290,8 +326,8 @@ function createRouter(config) {
             try {
                 emitIfCurrent({ type: 'phase', phase: 'reading', count: collections.length });
                 const entries = collections.map((c) => ({ modId: c.modId, collection: runner.resolveCollectionInfo(staging, c.modId).collection }));
-                const { results, workshopOnlyCollections: found } = await runner.loadSyncStateBatch({
-                    state, entries, stagingDir: staging,
+                const { results, workshopOnlyCollections: found } = await loadSyncStateBatchAnyPath({
+                    entries, stagingDir: staging,
                     onProgress: (p) => emitIfCurrent({ type: 'sync-state-progress', ...p }),
                 });
                 for (const [modId, result] of results) syncStateCache.set(modId, result);
@@ -322,8 +358,8 @@ function createRouter(config) {
             if (!cached.ok) throw new Error(cached.error);
             ({ ignored, removedMods, keptMods, knownVortexModIds, otherVersionsByModId, sharedWithCollectionsByKey } = cached.data);
         } else {
-            ({ ignored, removedMods, keptMods, knownVortexModIds, otherVersionsByModId, sharedWithCollectionsByKey } = await runner.loadSyncState({
-                state, collectionModId: collectionInfo.modId, collection: collectionInfo.collection, stagingDir: staging,
+            ({ ignored, removedMods, keptMods, knownVortexModIds, otherVersionsByModId, sharedWithCollectionsByKey } = await loadSyncStateAnyPath({
+                collectionModId: collectionInfo.modId, collection: collectionInfo.collection, stagingDir: staging,
                 onProgress: onSyncStateProgress,
             }));
         }
@@ -375,9 +411,7 @@ function createRouter(config) {
         if (!staging || !downloads) {
             return res.status(400).json({ error: 'not-configured', message: 'Staging/downloads folders are not configured yet -- open Settings to set them up.' });
         }
-        if (syncLib.isVortexRunning()) {
-            return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
-        }
+        if (await blockIfVortexRunningAndNoHelper(res)) return;
 
         const mySession = planSession.start({ id: `${collectionModId}-${Date.now()}` });
         res.status(202).json({});
@@ -479,9 +513,7 @@ function createRouter(config) {
         if (!staging || !downloads) {
             return res.status(400).json({ error: 'not-configured', message: 'Staging/downloads folders are not configured yet -- open Settings to set them up.' });
         }
-        if (syncLib.isVortexRunning()) {
-            return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
-        }
+        if (await blockIfVortexRunningAndNoHelper(res)) return;
 
         const runId = `${collectionModId}-${Date.now()}`;
         let run;

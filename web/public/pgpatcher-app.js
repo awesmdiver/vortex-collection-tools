@@ -148,6 +148,45 @@ function pgpHideError() {
   $g('pgpatcherError').classList.add('hidden');
 }
 
+// The standardized "never available from the start" Helper message (DESIGN.md, "Helper-unavailable
+// messaging -- two real scenarios, two different messages"). Deliberately case 1 of the two, not
+// case 2's shared showHelperUnavailableModal: the check that produces this runs at the very START
+// of Deploy All, before anything has been re-enabled or deployed, so nothing is half-done and
+// nothing is at risk -- a flat refusal, not "it died on you partway through."
+//
+// Renders into #pgpatcherError, the page's own existing error box -- already a
+// `callout callout--critical`, the exact element DESIGN.md's section calls for, and already used
+// for structured content by pgpShowError above (its downloadLinks branch appends a real list), so
+// there was no need to invent a second element.
+//
+// Kept separate from pgpShowError rather than folded into it: this needs the caller's own retry
+// action, which pgpShowError has no way to know. Takes retryFn so a future PGPatcher endpoint that
+// hard-requires the Helper can reuse it with its own action.
+function pgpShowHelperUnavailable(retryFn) {
+  const box = $g('pgpatcherError');
+  box.textContent = '';
+  box.appendChild(el('div', { class: 'callout__title' }, '🛑 Vortex Connection Required'));
+  box.appendChild(el('p', {}, 'This tool requires a live connection to the Vortex Collection Helper extension to run.'));
+  box.appendChild(el('ul', {}, [
+    el('li', {}, [el('strong', {}, 'If you already have the extension installed:'), ' Make sure Vortex is actively running.']),
+    el('li', {}, [el('strong', {}, "If you haven't installed it yet:"), ' Install the Vortex Collection Helper extension into Vortex, restart Vortex, and then launch this tool again.']),
+  ]));
+  // Its own right-justified row below the text, never inline with the prose -- DESIGN.md records
+  // that as a real finding rather than a preference: inline, it gets lost in the copy.
+  const retryBtn = el('button', { class: 'btn btn--ghost btn--small' }, 'Retry');
+  retryBtn.addEventListener('click', () => retryFn());
+  box.appendChild(el('div', { style: 'display:flex; justify-content:flex-end; margin-top:10px;' }, [retryBtn]));
+  box.classList.remove('hidden');
+}
+
+// Is this the Helper being unreachable, as opposed to any other failure? Matches on BOTH the status
+// and the error code, the same pair cufHandleError checks -- the code alone would also match a
+// different route that happened to reuse the string, and the status alone is just "conflict"
+// (this route already returns a 409 for a deploy that's genuinely already running).
+function pgpIsHelperUnavailable(e) {
+  return e && e.status === 409 && e.body && e.body.error === 'helper-unavailable';
+}
+
 // ---------- Loading (step 1: read the data) ----------
 // pgtools' own conflict/shader scan is genuinely slow (minutes, on a large install) with no single
 // percent-complete signal for the whole run -- but it DOES log real phase names as each stage
@@ -177,7 +216,22 @@ function pgpStopLoadingTimer() {
   }
 }
 
+// The callout's own title/intro used to be a fixed "Reading your mod list…" the whole time this
+// screen is up -- misleading during the gate-driven deploy phases (output-mod gate, DynDoLOD's own
+// wait), which can genuinely run for minutes before the real mod-list read ever starts. Swapping
+// both lines to describe a deploy specifically while one's actually running, and back once it's
+// past, so the header always matches what's really happening (director's own real report, 2026-08-21
+// -- a screenshot showing "Deploying…" progress under a "Reading your mod list…" title).
+function pgpApplyPhaseHeader(titleId, introId, message) {
+  const isDeploying = /deploy/i.test(message);
+  $g(titleId).textContent = isDeploying ? 'Deploying in Vortex…' : 'Reading your mod list…';
+  $g(introId).textContent = isDeploying
+    ? 'Vortex is relinking files for this change — this can take a few minutes.'
+    : 'Reading data — this can take a few minutes on a large mod list.';
+}
+
 function pgpSetLoadingPhase(message, current, total) {
+  pgpApplyPhaseHeader('pgpatcherLoadingTitle', 'pgpatcherLoadingIntro', message);
   $g('pgpatcherLoadingPhase').textContent = current && total
     ? `${current} / ${total} — ${message}`
     : message;
@@ -212,20 +266,64 @@ function pgpResetCancelBtn(btnId) {
   btn.disabled = false;
 }
 
+// Generic confirm-then-retry loop for PGPatcher's own pre-flight gates (2026-08-21 -- was a single
+// hardcoded dyndolod-active retry; generalized now that PGPatcher's own previous-output-mod gate can
+// ALSO independently 409). Either gate can fire on any attempt, including after the other one was
+// just confirmed -- keeps retrying with accumulated confirm flags until the call succeeds, or the
+// user declines one of the prompts (returns null -- caller should stay put, same outcome as the old
+// hard block). Any OTHER error (not-configured, a real 4xx/5xx) is re-thrown for the caller's own
+// catch to handle, same as before this was pulled out into a shared helper.
+async function pgpTryWithGateConfirms(method, path, baseBody) {
+  const confirmFlags = {};
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      return await pgpatcherApi(method, path, { ...baseBody, ...confirmFlags });
+    } catch (e) {
+      if (e.status === 409 && e.body && e.body.error === 'dyndolod-active') {
+        if (!(await showConfirmModal(e.message))) return null;
+        confirmFlags.confirmDisableDyndolod = true;
+        continue;
+      }
+      if (e.status === 409 && e.body && e.body.error === 'output-mod-active') {
+        if (!(await showConfirmModal(e.message))) return null;
+        confirmFlags.confirmDisableOutputMod = true;
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw new Error('Too many confirmation retries.');
+}
+
+// DynDoLOD.esp / PGPatcher's own previous-output-mod gates each get a real confirm modal via
+// pgpTryWithGateConfirms above. Stays on whatever screen we're already on until a real load is
+// genuinely about to start, only THEN transitions to the Loading screen.
 async function pgpatcherLoad() {
   pgpHideError();
 
+  let result;
   try {
-    await pgpatcherApi('POST', '/api/pgpatcher/load', {});
+    result = await pgpTryWithGateConfirms('POST', '/api/pgpatcher/load', {});
   } catch (e) {
     if (e.body && e.body.error === 'not-configured') {
       $g('pgpatcherIdle').classList.add('hidden');
       $g('pgpatcherNotConfigured').classList.remove('hidden');
+    } else if (pgpIsHelperUnavailable(e)) {
+      // Vortex isn't running, so the DynDoLOD/output-mod gates never even ran -- say THAT, rather
+      // than letting their own "couldn't disable it automatically" message stand in for it.
+      // pgpTryWithGateConfirms deliberately rethrows this rather than branching on it: it is not a
+      // confirmable gate, there is nothing to say yes to.
+      //
+      // Retrying re-enters pgpatcherLoad from the very top, so once Vortex is open it runs the whole
+      // preflight afresh and walks straight into the real DynDoLOD/output-mod confirms exactly as it
+      // would have if the Helper had been reachable first time.
+      pgpShowHelperUnavailable(pgpatcherLoad);
     } else {
       pgpShowError(e);
     }
     return;
   }
+  if (result === null) return; // user declined a confirm -- stay put, same outcome as the old hard block
 
   // A real load is now genuinely running server-side -- only now switch to the Loading screen.
   $g('pgpatcherNotConfigured').classList.add('hidden');
@@ -234,6 +332,12 @@ async function pgpatcherLoad() {
   $g('pgpatcherLoading').classList.remove('hidden');
   $g('pgpatcherLoadingPhase').textContent = 'Starting…';
   $g('pgpatcherLoadingBar').style.width = '0%';
+  // Disabled until the backend's own 'cancellable' event confirms pgtools has actually spawned --
+  // cancel is a real no-op during the preflight output-mod disable+deploy step before that (real bug
+  // found live, 2026-08-21: clicking it there 404s silently, but the button stayed stuck showing
+  // "Cancelling…" for the rest of the run since nothing else ever reset it mid-stream). See
+  // pgpHandleLoadEvent's own 'cancellable' handling below.
+  $g('pgpatcherCancelLoadBtn').disabled = true;
   pgpStartLoadingTimer();
 
   if (pgpLoadEventSource) pgpLoadEventSource.close();
@@ -242,8 +346,44 @@ async function pgpatcherLoad() {
   es.onmessage = (msg) => pgpHandleLoadEvent(JSON.parse(msg.data));
 }
 
+// Shared by pgpHandleLoadEvent's/pgpHandleBuildEvent's own 'done' AND 'error' branches -- director's
+// own 4-case spec (2026-08-21): DynDoLOD only ever gets offered here when the backend decided IT never
+// touched it this session (still off, untouched -- see finalizeDyndolodAndOutputMod's own header
+// comment in pgpatcher-routes.js); the output mod is ALWAYS offered when disabled, regardless of who
+// disabled it, since its own reenable+deploy must NEVER run automatically on any exit path (a real,
+// potentially multi-minute Vortex deploy the user never asked for). Sequential, never concurrent --
+// showConfirmModal is a single shared modal (see shell.js's own header comment), so awaiting the first
+// before opening the second avoids one silently auto-declining the other. `oneMoreStepEl` (optional)
+// mirrors the build-success screen's own "one more step" reminder banner, shown once at the end if
+// EITHER one is still off (declined, or the enable attempt itself failed) -- omitted for /load's own
+// idle/error screens, which have no equivalent element.
+async function pgpHandleReenableOffers(frame, outputModMessage, oneMoreStepEl) {
+  let stillNeedsAttention = false;
+  if (frame.dyndolodOfferEnable) {
+    const confirmed = await showConfirmModal('DynDoLOD.esp is currently disabled. Would you like to enable it now?');
+    if (confirmed) {
+      try {
+        await pgpatcherApi('POST', '/api/pgpatcher/enable-dyndolod', {});
+      } catch (e) {
+        stillNeedsAttention = true;
+        pgpShowError(e);
+      }
+    } else {
+      stillNeedsAttention = true;
+    }
+  }
+  if (frame.outputModPendingReenable) {
+    const confirmed = await showConfirmModal(outputModMessage);
+    if (confirmed) pgpDeployAll(); // fire-and-forget -- its own progress UI takes over immediately
+    else stillNeedsAttention = true;
+  }
+  if (oneMoreStepEl && stillNeedsAttention) oneMoreStepEl.classList.remove('hidden');
+}
+
 function pgpHandleLoadEvent(frame) {
-  if (frame.type === 'phase') {
+  if (frame.type === 'cancellable') {
+    $g('pgpatcherCancelLoadBtn').disabled = false;
+  } else if (frame.type === 'phase') {
     pgpSetLoadingPhase(frame.message);
   } else if (frame.type === 'progress') {
     pgpSetLoadingPhase(frame.message, frame.current, frame.total);
@@ -295,10 +435,15 @@ function pgpHandleLoadEvent(frame) {
     $g('pgpatcherLoadedCount').textContent = String(data.mods.length);
     $g('pgpatcherDirtyStatus').textContent = 'no changes yet';
     pgpRenderAll();
+    // A successful load can still have a failed DynDoLOD / output-mod re-enable underneath it -- a
+    // non-fatal warning shown alongside the editor (not a blocking error, the load itself genuinely
+    // succeeded).
+    if (data.reenableFailedMessage) pgpShowError(new Error(data.reenableFailedMessage));
   } else if (frame.type === 'error') {
     pgpFinishLoading();
     $g('pgpatcherIdle').classList.remove('hidden');
     if (!frame.cancelled) pgpShowError(new Error(frame.message || 'The load failed.'));
+    pgpHandleReenableOffers(frame, 'PGPatcher’s previous output is still disabled from this run. Would you like to enable it and deploy the changes now?');
   }
 }
 
@@ -342,7 +487,18 @@ function pgpStopBuildingTimer() {
   }
 }
 
+// Same dynamic-header treatment as pgpApplyPhaseHeader above, own default text since this screen's
+// own "at rest" state is a real build, not a mod-list read.
+function pgpApplyBuildingPhaseHeader(message) {
+  const isDeploying = /deploy/i.test(message);
+  $g('pgpatcherBuildingTitle').textContent = isDeploying ? 'Deploying in Vortex…' : 'Building your real output…';
+  $g('pgpatcherBuildingIntro').textContent = isDeploying
+    ? 'Vortex is relinking files for this change — this can take a few minutes.'
+    : 'This runs the real PGPatcher build — mesh and texture patching — so it can take a while on a large mod list.';
+}
+
 function pgpSetBuildingPhase(message, current, total) {
+  pgpApplyBuildingPhaseHeader(message);
   $g('pgpatcherBuildingPhase').textContent = current && total
     ? `${current} / ${total} — ${message}`
     : message;
@@ -358,18 +514,34 @@ function pgpFinishBuildingStream() {
   pgpResetCancelBtn('pgpatcherCancelBuildBtn');
 }
 
+// pgpatcherApi's own body-collector, reused across the initial attempt and any confirmed retries
+// (pgpTryWithGateConfirms above sends the exact same checkbox state on every retry).
+function pgpBuildRequestBody() {
+  return {
+    considerAllMeshes: $g('pgpatcherConsiderAllMeshesInput').checked,
+    relaxWeightValidation: $g('pgpatcherRelaxWeightValidationInput').checked,
+  };
+}
+
 async function pgpatcherBuild() {
   pgpHideError();
 
+  // Stays on the editor screen for this check (a real build isn't actually starting yet, so
+  // switching to the Building screen just to immediately cover it with a confirm modal would be the
+  // wrong sequence).
+  let result;
   try {
-    await pgpatcherApi('POST', '/api/pgpatcher/build', {
-      considerAllMeshes: $g('pgpatcherConsiderAllMeshesInput').checked,
-      relaxWeightValidation: $g('pgpatcherRelaxWeightValidationInput').checked,
-    });
+    result = await pgpTryWithGateConfirms('POST', '/api/pgpatcher/build', pgpBuildRequestBody());
   } catch (e) {
+    // The build twin of pgpatcherLoad's own branch just above -- same reasoning, same retry shape.
+    if (pgpIsHelperUnavailable(e)) {
+      pgpShowHelperUnavailable(pgpatcherBuild);
+      return;
+    }
     pgpShowError(e);
     return;
   }
+  if (result === null) return; // user declined a confirm -- stay on the editor, same outcome as the old hard block
 
   // A real build is now genuinely running server-side -- only now switch to the Building screen and
   // start streaming its progress.
@@ -379,6 +551,8 @@ async function pgpatcherBuild() {
   $g('pgpatcherBuildingSuccess').classList.add('hidden');
   $g('pgpatcherBuildingPhase').textContent = 'Starting…';
   $g('pgpatcherBuildingBar').style.width = '0%';
+  // See pgpatcherLoad's own identical disable + comment -- same preflight-deploy bug, same fix.
+  $g('pgpatcherCancelBuildBtn').disabled = true;
   pgpStartBuildingTimer();
 
   if (pgpBuildEventSource) pgpBuildEventSource.close();
@@ -388,28 +562,114 @@ async function pgpatcherBuild() {
 }
 
 function pgpHandleBuildEvent(frame) {
-  if (frame.type === 'phase') {
+  if (frame.type === 'cancellable') {
+    $g('pgpatcherCancelBuildBtn').disabled = false;
+  } else if (frame.type === 'phase') {
     pgpSetBuildingPhase(frame.message);
   } else if (frame.type === 'progress') {
     pgpSetBuildingPhase(frame.message, frame.current, frame.total);
   } else if (frame.type === 'done') {
     pgpFinishBuildingStream();
     $g('pgpatcherBuildingProgress').classList.add('hidden');
-    $g('pgpatcherBuildingOutputPath').textContent = frame.outputDir;
-    if (frame.backupPath) {
-      $g('pgpatcherBuildingBackupPath').textContent = frame.backupPath;
-      $g('pgpatcherBuildingBackupRow').classList.remove('hidden');
-    } else {
-      $g('pgpatcherBuildingBackupRow').classList.add('hidden');
-    }
     $g('pgpatcherBuildingSuccess').classList.remove('hidden');
+    $g('pgpatcherOneMoreStep').classList.add('hidden'); // reset -- only a declined enable+deploy offer below shows this again
     $g('pgpatcherDirtyStatus').textContent = 'no changes yet';
+    // DynDoLOD.esp's own re-enable is automatic and immediate WHEN this session itself disabled it
+    // (free, no deploy needed) -- but per the director's own 4-case spec (2026-08-21), if it was
+    // already off before this tool ever touched it, it's offered as a confirm instead (frame.
+    // dyndolodOfferEnable) rather than silently flipped, handled below by pgpHandleReenableOffers. A
+    // successful build can still have a failed DynDoLOD AUTO-reenable underneath it -- a non-fatal
+    // warning shown alongside the success screen, not a blocking error.
+    if (frame.reenableFailedMessage) pgpShowError(new Error(frame.reenableFailedMessage));
+    // The output mod is ALWAYS "pending" here when disabled, regardless of who disabled it -- see
+    // web/pgpatcher-routes.js's own comment on why ITS re-enable stays gated behind this confirm
+    // (it genuinely needs a real full deploy to relink its files). Fired AFTER the success screen
+    // itself is already showing, not blocking it. pgpDeployAll() -> POST /api/pgpatcher/deploy-all is
+    // what actually re-enables it AND runs the real full deploy, in that order, as one combined
+    // action -- accepting this prompt IS the re-enable, not a separate step after one already happened.
+    // Sequential with any DynDoLOD offer above -- see pgpHandleReenableOffers's own header comment.
+    pgpHandleReenableOffers(frame, 'The build is complete. Would you like to enable PGPatcher’s new output and deploy the changes?', $g('pgpatcherOneMoreStep'));
   } else if (frame.type === 'error') {
     pgpFinishBuildingStream();
     $g('pgpatcherBuilding').classList.add('hidden');
     $g('pgpatcherEditor').classList.remove('hidden');
     if (!frame.cancelled) pgpShowError(new Error(frame.message || 'The build failed.'));
+    pgpHandleReenableOffers(frame, 'PGPatcher’s previous output is still disabled from this run. Would you like to enable it and deploy the changes now?');
   }
+}
+
+// Real, full Vortex "Deploy Mods" pipeline (POST /api/pgpatcher/deploy-all), offered only right after
+// a build that itself disabled PGPatcher's own previous-output mod and hasn't re-enabled it yet --
+// see pgpHandleBuildEvent's own outputModPendingReenable check above (DynDoLOD.esp's own re-enable no
+// longer goes through this at all -- it's immediate server-side, see that check's own comment). This
+// IS the re-enable (the backend flips the flag first, then deploys), not a separate step after one
+// already happened. Poll-driven, not SSE -- the
+// backend's own deployAllMods()/getDeployAllProgress() pair is itself poll-shaped
+// (lib/vortex-helper-client.js), so this reuses that same shape rather than wrapping it in an SSE
+// session the underlying primitive doesn't have. Reuses the SAME progress-bar/phase-text visual
+// pattern the build's own progress view already established (pgpSetBuildingPhase), just against the
+// deploy-specific elements.
+let pgpDeployAllPollInterval = null;
+
+function pgpStopDeployAllPolling() {
+  if (pgpDeployAllPollInterval) {
+    clearInterval(pgpDeployAllPollInterval);
+    pgpDeployAllPollInterval = null;
+  }
+}
+
+async function pgpDeployAll() {
+  $g('pgpatcherDeployAllDone').classList.add('hidden');
+  $g('pgpatcherDeployAllProgress').classList.remove('hidden');
+  $g('pgpatcherDeployAllPhase').textContent = 'Starting…';
+  $g('pgpatcherDeployAllBar').style.width = '0%';
+  // Restarting mid-deploy would abandon a real, still-running Vortex write -- disabled for the whole
+  // deploy, re-enabled once it's actually done (success or error), same guard shape as the Cancel
+  // buttons' own "Cancelling…" disable elsewhere in this file.
+  $g('pgpatcherBuildingBackToEditorBtn').disabled = true;
+
+  try {
+    await pgpatcherApi('POST', '/api/pgpatcher/deploy-all', {});
+  } catch (e) {
+    $g('pgpatcherDeployAllProgress').classList.add('hidden');
+    $g('pgpatcherBuildingBackToEditorBtn').disabled = false;
+    // Deploy All is the one PGPatcher action that genuinely cannot work without the Helper -- it
+    // runs Vortex's own real deploy through it, with no read-only fallback. That earns the
+    // standardized callout and a Retry rather than a bare error dump, since "start Vortex and try
+    // again" is a real, achievable fix the user can act on right there.
+    if (pgpIsHelperUnavailable(e)) {
+      pgpShowHelperUnavailable(pgpDeployAll);
+      return;
+    }
+    pgpShowError(e);
+    return;
+  }
+
+  pgpStopDeployAllPolling();
+  pgpDeployAllPollInterval = setInterval(async () => {
+    let progress;
+    try {
+      progress = await pgpatcherApi('GET', '/api/pgpatcher/deploy-all/progress');
+    } catch (e) {
+      return; // A single failed poll isn't evidence the real deploy failed -- just try again next tick.
+    }
+    if (progress && typeof progress.percent === 'number') {
+      $g('pgpatcherDeployAllBar').style.width = `${Math.round(progress.percent)}%`;
+    }
+    if (progress && progress.text) {
+      $g('pgpatcherDeployAllPhase').textContent = progress.text;
+    }
+    if (progress && progress.done) {
+      pgpStopDeployAllPolling();
+      $g('pgpatcherDeployAllProgress').classList.add('hidden');
+      $g('pgpatcherBuildingBackToEditorBtn').disabled = false;
+      if (progress.error) {
+        pgpShowError(new Error(progress.error));
+      } else {
+        $g('pgpatcherDeployAllDone').classList.remove('hidden');
+      }
+    }
+  }, 1000);
 }
 
 async function pgpatcherCancelBuild() {
@@ -754,6 +1014,7 @@ $g('pgpatcherRankedExportBtn').addEventListener('click', () => {
 function pgpResetToIdle() {
   pgpFinishLoading(); // defensive -- stops a stray load timer/EventSource if one somehow survived
   pgpFinishBuildingStream(); // same, for a stray build timer/EventSource
+  pgpStopDeployAllPolling(); // same, for a stray deploy-all poll if one somehow survived
   pgpModsByName = new Map();
   pgpRanked = [];
   pgpUnranked = [];

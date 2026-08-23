@@ -21,6 +21,8 @@ const path = require('path');
 const { spawn } = require('child_process');
 const express = require('express');
 const { createSseSession } = require('./sse-session');
+const helperClient = require('../lib/vortex-helper-client');
+const syncLib = require('../lib/vortex-sync/lib');
 
 // Resolved the same way lib/sevenzip.js resolves 7z.exe -- bundled copy first (build-release.ps1's
 // own "Bundle pgtools.exe" step stages it at tools/pgtools/pgtools.exe alongside its real runtime
@@ -264,6 +266,38 @@ function requirePgtoolsInstalled(res) {
 //   different problem. "Go install PGPatcher" would be actively wrong advice here; the fix is
 //   re-saving from PGPatcher's own Settings dialog, so this gets its own distinct message and no
 //   download links.
+// Gate 1 for every route that genuinely needs a live Helper (queue: pgpatcher-helper-gate-on-start).
+// Same write-the-response-and-return-falsy shape as requireConfigured/requirePgtoolsInstalled above,
+// so a caller reads `if (!(await requireHelperAvailable(res))) return;` and nothing else.
+//
+// WHY THIS HAS TO COME FIRST, and why it is a SEPARATE gate rather than better wording on the ones
+// below it. /load and /build both open with a DynDoLOD-active gate whose disable goes through the
+// Helper. With Vortex closed that disable simply fails, and the route answered with
+// DYNDOLOD_AUTO_DISABLE_FAILED_MESSAGE -- "DynDoLOD.esp is active and couldn't be disabled
+// automatically, disable it yourself in Vortex first." Every word of that is true, and it is the
+// right message for a real disable failure. It was just the ONLY thing said when the actual problem
+// was that Vortex was not running at all: two genuinely different problems, one of them silently
+// standing in for the other. Confirmed live.
+//
+// With this in front, those messages are untouched and now only ever describe what they actually
+// mean: by the time either gate runs, the Helper is known to be reachable, so a failure there is a
+// real disable failure and nothing else.
+//
+// 409 + 'helper-unavailable' is the standardized shape (DESIGN.md, "Helper-unavailable messaging"),
+// the same one clear-update-flags-routes.js's own requireHelper and this file's /deploy-all return,
+// and the frontend's pgpShowHelperUnavailable renders it.
+async function requireHelperAvailable(res) {
+    const available = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+    if (!available) {
+        res.status(409).json({
+            error: 'helper-unavailable',
+            message: 'The Vortex Collection Helper extension must be reachable (Vortex genuinely open) to use this tool.',
+        });
+        return false;
+    }
+    return true;
+}
+
 function requirePgpatcherSettings(cfg, res) {
     try {
         return readPgpatcherSettings(cfg.cfgDir);
@@ -326,22 +360,196 @@ function isDynDoLODActive(skyrimDataDir) {
     return false;
 }
 
-// Plain, static hard block -- reverted back to this (2026-08-21) after the real disable -> build ->
-// re-enable -> deploy automation that used to live here (resolveDynDoLODModId, runFullDeployWithProgress,
-// disableDyndolodForRequest, reenableDyndolod, blockUntilDyndolodConfirmed -- see git history, commits
-// 652f018/5b3b15a/90cf4b9, for the full versions). Director's own live report: the automated flow
-// didn't work correctly, and its own disable step runs a real, long, un-cancellable Vortex deploy --
-// there's no way to back out once it starts. A silent multi-minute write against the director's live
-// install with no escape hatch is a real problem, not a rough edge worth iterating on -- reverted
-// outright rather than patched. Shared verbatim by /load and /build, same as the automated version
-// was, so neither route forks its own wording.
-function blockIfDynDoLODActive(cfg, res) {
-    if (!isDynDoLODActive(cfg.source)) return false;
-    res.status(400).json({
-        error: 'dyndolod-active',
-        message: "🛑 DynDoLOD.esp is active in your load order. Disable it (and redeploy) in Vortex before you can Start or Build — you can re-enable it again afterward to generate LODs against PGPatcher's own output.",
-    });
+// Real DynDoLOD.esp disable -> re-enable flow, v2 (2026-08-21) -- REPLACES both the original static
+// hard block AND the first automated attempt at this (resolveDynDoLODModId + whole-mod setModEnabled,
+// commits 652f018/5b3b15a/90cf4b9, reverted in 5670cca). That first attempt disabled the entire mod
+// that a stale vortex.deployment.json recorded as dyndolod.esp's "current owner" -- unreliable by
+// construction whenever more than one installed mod ships a dyndolod.esp (confirmed live, director's
+// own install: 4 different mods all contain one), since disabling the recorded "winner" just promotes
+// the next-highest-priority mod that also has the file, and the plugin never actually goes inactive.
+// It also had real collateral risk: disabling a whole MOD takes every OTHER file that mod provides
+// offline too, not just the one plugin.
+//
+// This version targets the PLUGIN directly -- Vortex's own `state.loadOrder['dyndolod.esp'].enabled`
+// flag, via the Vortex Collection Helper's `POST /plugins/:pluginName/set-enabled`
+// (lib/vortex-helper-client.js's setPluginEnabled). Live-verified round-trip against the director's
+// own real Vortex (2026-08-21): the dispatch flips the flag instantly and precisely, visible
+// immediately in Vortex's own Plugins tab, with zero effect on any mod's other files -- no mod
+// resolution needed at all, so the whole unreliable "which mod currently owns this" problem is gone
+// by construction, not just patched around. Confirmed (director's own separate test, 2026-08-20) that
+// leaving DynDoLOD's OWN mod(s) fully enabled the whole time is safe: PGPatcher's own settings already
+// exclude DynDoLOD's generated LOD meshes/textures from its scan, so the only real gate PGPatcher's
+// GUI enforces is "is DynDoLOD.esp itself active" -- nothing about the mesh/texture files.
+//
+// NO DEPLOY NEEDED AT ALL -- corrected 2026-08-21, director's own sharp catch: an earlier version of
+// this comment claimed a full deploy was still required to reach plugins.txt. That was wrong, and the
+// live test that seemed to "confirm" it was confounded (DynDoLOD.esp's own FILE had already been
+// undeployed by earlier, unrelated mod-level testing at the time -- see the docs' own case study).
+// The real mechanism, confirmed straight from Vortex's own source
+// (extensions/gamebryo-plugin-management/src/util/PluginPersistor.ts): plugins.txt/loadorder.txt are
+// written by a Redux PERSISTOR bound to state.loadOrder itself -- ANY change to that state schedules
+// a write via `serialize()`'s own 200ms debounce (`doSerialize()`), with NO deploy involved at all.
+// `doSerialize()` only ever omits a plugin from the output if it isn't in `mKnownPlugins` (the FILE
+// isn't physically deployed) -- as long as this flow never touches the owning mod (it doesn't),
+// dyndolod.esp's file stays right where it is, and the persistor's own write correctly reflects the
+// new enabled/disabled flag as the `*` prefix within ~200ms. **Live re-verified end to end** (director's
+// own real Vortex, 2026-08-21): dispatch disable -> plugins.txt shows `DynDOLOD.esp` unstarred within
+// 2s, file still on disk -> dispatch re-enable -> `*DynDOLOD.esp` back within 2s. See
+// docs/VORTEX-PLUGIN-ENABLE-DISABLE-REFERENCE.md for the full writeup.
+//
+// This also fully resolves the original "can't cancel a multi-minute deploy" problem that got the
+// FIRST automated attempt reverted -- for THIS gate specifically, there's no deploy to be stuck in at
+// all anymore. (The SEPARATE output-mod gate below is a genuinely different case -- that one really
+// does need a full deploy, since it's unlinking real files from Data, not flipping a Redux flag -- see
+// that section's own header comment.)
+const DYNDOLOD_PLUGIN_NAME = 'DynDOLOD.esp';
+
+// Serious register (plain-language-writer skill) -- a real write to Vortex's own live/shared database,
+// not a casual confirmation, even though it's now fast. Names the manual alternative too (director's
+// own explicit ask from the first build of this feature) -- Cancel here isn't a dead end, it's "go
+// disable it yourself in Vortex, then click Start again" (this app never reruns the check on its own).
+const DYNDOLOD_CONFIRM_MESSAGE = 'DynDoLOD.esp is not disabled. Would you like to disable it now?\n\nIf not, click Cancel, disable it directly in Vortex yourself, then click Start again.';
+const DYNDOLOD_AUTO_DISABLE_FAILED_MESSAGE = "🛑 DynDoLOD.esp is active in your load order, and it couldn't be disabled automatically. Disable it yourself in Vortex first -- you can re-enable it afterward.";
+const DYNDOLOD_REENABLE_FAILED_NOTE = " DynDoLOD.esp could not be re-enabled automatically -- re-enable it yourself in Vortex before your next play session.";
+
+// Runs the REAL, full Vortex deploy pipeline (deployAllMods) with live progress streamed through
+// whichever SSE session is already running -- used ONLY by the output-mod gate below now (the
+// DynDoLOD gate no longer needs a deploy at all, see this section's own header comment). Polls
+// getDeployAllProgress() on an interval WHILE deployAllMods() is in flight and always clears the
+// interval once the deploy settles, success or not. Returns the same boolean deployAllMods() itself
+// returns.
+async function runFullDeployWithProgress(emitIfCurrent, phaseLabel) {
+    emitIfCurrent({ type: 'phase', message: phaseLabel });
+    const pollInterval = setInterval(async () => {
+        const progress = await helperClient.getDeployAllProgress();
+        if (progress && typeof progress.percent === 'number') {
+            emitIfCurrent({ type: 'progress', message: phaseLabel, current: Math.round(progress.percent), total: 100 });
+        }
+    }, 1000);
+    try {
+        return await helperClient.deployAllMods();
+    } finally {
+        clearInterval(pollInterval);
+    }
+}
+
+// Polls isDynDoLODActive(skyrimDataDir) (a plain plugins.txt + file-existence read) until it matches
+// `expectedActive`, or timeoutMs elapses -- confirms the PluginPersistor's own debounced write (see
+// this section's own header comment, ~200ms in practice) actually landed on disk before this route
+// proceeds, rather than trusting a blind sleep. Always returns the final observed state, even on
+// timeout, so the caller can tell a genuine failure apart from "technically still true but we waited
+// long enough".
+//
+// 3s -> 15s (2026-08-21, live failure): the dispatch itself genuinely succeeded (confirmed after the
+// fact -- both Vortex's own live Redux state and plugins.txt on disk correctly showed the new value),
+// but the write hadn't landed within the old 3s ceiling because Vortex was busy with its own
+// background work at that moment ("Checking archives", director's own live report) -- everything
+// running on Vortex's single main thread, this project's own HTTP calls to the Helper included, can
+// genuinely stall while Vortex is doing something else. Same class of problem as the already-
+// documented ~83s deploy-mods block (vortex-helper-client.js's own header comment) -- this poll is a
+// much cheaper write than a full deploy, but the same "Vortex's main thread can be busy" risk applies.
+// 15s costs nothing in the normal case (the poll still resolves in ~200ms whenever Vortex isn't busy)
+// but gives real headroom for exactly this scenario before falling back to
+// DYNDOLOD_AUTO_DISABLE_FAILED_MESSAGE's own "do it yourself in Vortex" fallback.
+async function waitForDyndolodPluginsTxtState(skyrimDataDir, expectedActive, timeoutMs = 15000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        if (isDynDoLODActive(skyrimDataDir) === expectedActive) return true;
+        await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    return isDynDoLODActive(skyrimDataDir) === expectedActive;
+}
+
+// Re-enables DynDoLOD.esp -- a no-op (returns true) if `disabledThisRequest` is falsy, i.e. this
+// request never disabled anything to begin with. No deploy needed here either (see this section's own
+// header comment). Never throws (a re-enable failure still needs the caller's own terminal SSE event
+// to fire) -- returns false on failure so the caller can append DYNDOLOD_REENABLE_FAILED_NOTE to
+// whatever message it was already about to emit.
+async function reenableDyndolod(cfg, disabledThisRequest, emitIfCurrent) {
+    if (!disabledThisRequest) return true;
+    try {
+        const enabledOk = await helperClient.setPluginEnabled(DYNDOLOD_PLUGIN_NAME, true);
+        if (!enabledOk) return false;
+        return await waitForDyndolodPluginsTxtState(cfg.source, true);
+    } catch (e) {
+        console.error('[pgpatcher] reenableDyndolod failed:', e.message);
+        return false;
+    }
+}
+
+// PGPatcher's own PRIOR OUTPUT gate (2026-08-21) -- a real GUI-only guard, separate from the
+// DynDoLOD one above and for a genuinely different reason. The real GUI refuses to run at all if a
+// leftover ParallaxGen_Diff.json marker from a previous build already exists in the real Data folder
+// (PGPatcher/src/main.cpp:449-456, pgpatcher-fork): "PGPatcher meshes exist in your data directory,
+// please delete before re-running." Confirmed this check runs at the very start of the GUI's own
+// mainRunnerPrep, BEFORE any file scanning, and confirmed it runs unconditionally on every GUI launch
+// (the real GUI has no separate "just check conflicts" mode at all -- mainRunner always chains
+// mainRunnerPrep straight into mainRunnerPatch; the conflicts-vs-patch split is entirely this
+// project's own pgtools-CLI-only concept). Applied to both /load and /build here for the same
+// consistency reason the DynDoLOD gate already is.
+//
+// pgtools.exe itself has NO equivalent pre-flight check (confirmed: PGTools/src/main.cpp only ever
+// WRITES ParallaxGen_Diff.json as part of its own output, never checks for a pre-existing one first)
+// -- but unlike DynDoLOD, this isn't just a GUI-policy mismatch to mirror for consistency: if
+// PGPatcher's own previous output mod stays enabled/deployed, its own conflict scan would see its
+// prior output as just another live mod and could try to re-patch already-patched meshes. A real
+// correctness risk for this project's own /build, not only a "match the GUI's own refusal" concern.
+//
+// Resolving WHICH mod to disable is unambiguous here, unlike DynDoLOD -- this is our own tool's
+// configured output.dir (settings.outputDir, already read from PGPatcher's real settings.json), so
+// there's exactly one real candidate: whichever live mod's own folder name matches
+// path.basename(outputDir) exactly. No fuzzy stripDownloadNameSuffix matching needed (that's for
+// cross-referencing a mod's Nexus-derived staging name against an author-recorded collection.json
+// source name -- a different problem; this mod's folder name IS the configured output dir, verbatim).
+function isPgpatcherOutputDeployed(skyrimDataDir) {
+    return fs.existsSync(path.join(skyrimDataDir, 'ParallaxGen_Diff.json'));
+}
+
+async function resolveOutputMod(outputDir) {
+    const folderName = path.basename(outputDir);
+    const allMods = await helperClient.getAllMods();
+    if (!allMods || !allMods.mods) return null;
+    const enabledSet = new Set(allMods.enabledModKeys || []);
+    for (const [modId, mod] of Object.entries(allMods.mods)) {
+        const installPath = (mod && mod.installationPath) || modId;
+        if (installPath === folderName) return { modId, enabled: enabledSet.has(modId) };
+    }
+    return null;
+}
+
+const OUTPUT_MOD_CONFIRM_MESSAGE = 'PGPatcher’s own previous output is still deployed in your Data folder. Disabling it (and redeploying) makes sure this run doesn’t process its own prior output as input — this can take a few minutes. Would you like to disable it and redeploy?\n\nIf not, click Cancel, disable and redeploy directly in Vortex yourself, then click Start again.';
+const OUTPUT_MOD_AUTO_DISABLE_FAILED_MESSAGE = "🛑 PGPatcher's own previous output is still deployed in your Data folder, and it couldn't be disabled automatically. Disable it yourself in Vortex (and redeploy) first -- you can re-enable it afterward once this run finishes.";
+
+// Unlike the DynDoLOD gate (now a plain synchronous preflight check, see this file's own "Real
+// DynDoLOD.esp disable" header comment), this one can't be purely synchronous -- resolving the owning
+// mod needs a real Vortex call. Returns null if there's nothing to gate on (no leftover marker at
+// all, no configured output dir, the owning mod wasn't found, or it's already disabled). Otherwise
+// returns `{ modId }` for the caller's own blockUntilOutputModConfirmed to use.
+async function checkOutputModGate(cfg, settings) {
+    if (!isPgpatcherOutputDeployed(cfg.source)) return null;
+    if (!settings.outputDir) return null;
+    const resolved = await resolveOutputMod(settings.outputDir);
+    if (!resolved || !resolved.enabled) return null;
+    return { modId: resolved.modId };
+}
+
+// `gate` is the caller's own already-resolved checkOutputModGate() result (or null). Returns true if
+// it already wrote a 409 asking the frontend to show the confirm modal and retry.
+function blockUntilOutputModConfirmed(gate, req, res) {
+    if (!gate) return false;
+    if (req.body && req.body.confirmDisableOutputMod) return false;
+    res.status(409).json({ error: 'output-mod-active', message: OUTPUT_MOD_CONFIRM_MESSAGE, confirmDisableOutputMod: true });
     return true;
+}
+
+// Mod-level disable (this IS the right tool here, unlike DynDoLOD -- there's no individual plugin to
+// target, ParallaxGen_Diff.json is a plain marker file, and the mod itself is unambiguous). Returns
+// true on success, false on ANY failure.
+async function disableOutputModForRequest(modId, emitIfCurrent) {
+    emitIfCurrent({ type: 'phase', message: "Disabling PGPatcher's previous output…" });
+    const disabledOk = await helperClient.setModEnabled(modId, false);
+    if (!disabledOk) return false;
+    return runFullDeployWithProgress(emitIfCurrent, "Deploying to disable PGPatcher's previous output…");
 }
 
 // Same backup-stamp shape this project already uses everywhere else it backs up a file before
@@ -398,6 +606,43 @@ async function copyDirWithProgress(src, dest, total, onProgress) {
 function createPgpatcherRouter(config) {
     const router = express.Router();
 
+    // Shared "finalize" step for DynDoLOD + the output mod -- director's own 4-case spec (2026-08-21):
+    // the 4 cases are every combination of (DynDoLOD.esp enabled/disabled) x (output mod
+    // enabled/disabled) at the moment /load's own preflight first runs. Two DIFFERENT treatments:
+    // - DynDoLOD: if THIS session's own action disabled it (dyndolodDisabledThisRequest this request,
+    //   or dyndolodPendingReenable carried over from an earlier /load), auto-reenable -- free/instant,
+    //   we caused it, safe to undo automatically, no confirm needed. If it's CURRENTLY still off and
+    //   we never touched it ourselves, offer a confirm instead of silently flipping user-set state we
+    //   didn't touch (real, live-tested behavior: the user may have left it off for their own reasons
+    //   unrelated to this run).
+    // - The output mod: ALWAYS live-checked here, regardless of whether THIS session's own actions
+    //   were what disabled it -- if it's disabled for ANY reason when the run ends, the "enable and
+    //   deploy" reminder always applies, since the risk (new/existing output not actually live) is the
+    //   same either way. Replaces the old outputModIdToReenable/markOutputModPendingIfNeeded session-
+    //   history tracking, which missed the case where the mod was disabled before this tool ever
+    //   touched it.
+    // Used on every exit path where the SESSION is actually ending (both routes' cancel/failure/
+    // exception, and /build's own success -- NOT /load's own success, which hands off to /build
+    // without touching either yet, same as before). Returns { dyndolodOfferEnable,
+    // dyndolodReenableFailed, outputModPendingReenable } for the caller's own terminal event payload.
+    let dyndolodPendingReenable = false;
+    let outputModPendingReenableModId = null;
+    async function finalizeDyndolodAndOutputMod(cfg, settings, dyndolodDisabledThisRequest, emitIfCurrent) {
+        let dyndolodReenableFailed = false;
+        let dyndolodOfferEnable = false;
+        if (dyndolodDisabledThisRequest || dyndolodPendingReenable) {
+            if (await reenableDyndolod(cfg, true, emitIfCurrent)) dyndolodPendingReenable = false;
+            else dyndolodReenableFailed = true;
+        } else if (!isDynDoLODActive(cfg.source)) {
+            dyndolodOfferEnable = true;
+        }
+        if (settings && settings.outputDir) {
+            const resolved = await resolveOutputMod(settings.outputDir);
+            if (resolved && !resolved.enabled) outputModPendingReenableModId = resolved.modId;
+        }
+        return { dyndolodOfferEnable, dyndolodReenableFailed, outputModPendingReenable: !!outputModPendingReenableModId };
+    }
+
     // Step 1 -- read the data. Runs the real conflict-detection pass (no output ever written --
     // see PGLib's own dryRun flag, pgpatcher-fork). This genuinely takes a few minutes on a large
     // install (the director's own ~2000-mod install: 3m29s) -- there is no faster real path, the
@@ -429,22 +674,59 @@ function createPgpatcherRouter(config) {
         res.json({ ok: true });
     });
 
-    router.post('/load', (req, res) => {
+    router.post('/load', async (req, res) => {
         if (!requirePgtoolsInstalled(res)) return;
         const cfg = requireConfigured(config, res);
         if (!cfg) return;
-
-        // Hard blocks outright if DynDoLOD.esp is active -- see blockIfDynDoLODActive's own comment
-        // for why this isn't automated (a real, interactive disable/re-enable/deploy flow used to
-        // live here; reverted 2026-08-21).
-        if (blockIfDynDoLODActive(cfg, res)) return;
-
-        if (loadSession.isActive()) {
-            return res.status(409).json({ error: 'A load is already in progress.' });
-        }
+        // Fetched early now (was fetched further down) -- the new output-mod gate below needs
+        // settings.outputDir to know which mod to resolve, and PGPatcher's own real GUI gates this
+        // before any file reading at all, so this project's own gate check happens just as early.
         const settings = requirePgpatcherSettings(cfg, res);
         if (!settings) return;
+        // Gate 1 -- before the DynDoLOD and output-mod gates below, both of which drive real Helper
+        // writes and can say nothing useful without one. See requireHelperAvailable's own comment.
+        if (!(await requireHelperAvailable(res))) return;
+
+        // Real interactive disable -> re-enable flow (2026-08-21 v3 -- see this file's own "Real
+        // DynDoLOD.esp disable" section header for the full rebuild writeup: targets the plugin
+        // directly, no mod resolution, no deploy). EACH GATE NOW ACTS AS SOON AS IT'S OWN CONFIRM
+        // LANDS, rather than checking every applicable gate up front and only doing any real work once
+        // ALL of them clear -- director's own explicit fix, 2026-08-21: confirming the DynDoLOD prompt
+        // used to silently do nothing at all if the output-mod gate was ALSO pending, since both
+        // disables were bundled into the same later async step. DynDoLOD's own gate is fast enough (no
+        // deploy) to disable synchronously right here, in this preflight block, the instant it's
+        // confirmed -- not deferred alongside the output-mod gate, which genuinely does still need a
+        // slow deploy and stays deferred to the async body below (with real SSE progress).
+        let dyndolodDisabledThisRequest = false;
+        if (isDynDoLODActive(cfg.source)) {
+            if (!(req.body && req.body.confirmDisableDyndolod)) {
+                return res.status(409).json({ error: 'dyndolod-active', message: DYNDOLOD_CONFIRM_MESSAGE, confirmDisableDyndolod: true });
+            }
+            const disabledOk = await helperClient.setPluginEnabled(DYNDOLOD_PLUGIN_NAME, false);
+            const settled = disabledOk && await waitForDyndolodPluginsTxtState(cfg.source, false);
+            if (!settled) {
+                return res.status(400).json({ error: 'dyndolod-disable-failed', message: DYNDOLOD_AUTO_DISABLE_FAILED_MESSAGE });
+            }
+            dyndolodDisabledThisRequest = true;
+        }
+
+        // PGPatcher's own PRIOR OUTPUT gate (2026-08-21) -- see checkOutputModGate's own header
+        // comment. Genuinely needs a real deploy, so this one STAYS deferred: 409 to confirm here,
+        // then its own disable+deploy runs inside the async body below with real SSE progress, same as
+        // before. (Re-checked fresh here, AFTER the DynDoLOD preflight above -- if DynDoLOD's own
+        // disable just ran, that's already reflected in live state by the time this runs.)
+        const outputModGate = await checkOutputModGate(cfg, settings);
+        if (blockUntilOutputModConfirmed(outputModGate, req, res)) return;
+
+        if (loadSession.isActive()) {
+            // DynDoLOD may have already been disabled above (a real write) even though this request
+            // is about to bail out -- re-enable it rather than leave it silently disabled over a
+            // "session already busy" collision.
+            if (dyndolodDisabledThisRequest) await reenableDyndolod(cfg, true, () => {});
+            return res.status(409).json({ error: 'A load is already in progress.' });
+        }
         if (settings.patchers.length === 0) {
+            if (dyndolodDisabledThisRequest) await reenableDyndolod(cfg, true, () => {});
             return res.status(400).json({
                 error: 'no-patchers-active',
                 message: `No shader patchers are enabled in PGPatcher's own settings (${settings.settingsPath}) -- nothing to check conflicts for.`,
@@ -458,45 +740,117 @@ function createPgpatcherRouter(config) {
             if (loadSession.get() === mySession) loadSession.emit(event);
         };
 
-        const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pgpatcher-conflicts-'));
-        const jsonOutput = path.join(workDir, 'conflicts.json');
-        const outputDir = path.join(workDir, 'unused-output');
+        // Request-scoped, not module-global -- same reasoning as /build's own identical set.
+        // dyndolodDisabledThisRequest itself is already set (or not) from the preflight above.
+        let outputModIdToReenable = null;
 
-        runPgtools([
-            'conflicts',
-            settings.patchers.join(','),
-            '--source', cfg.source,
-            '--output', outputDir,
-            '--cfg-dir', cfg.cfgDir,
-            '--json-output', jsonOutput,
-        ], {
-            onSpawn: (c) => { currentLoadChild = c; },
-            onLine: (line) => {
-                const parsed = parsePgtoolsLine(line);
-                if (parsed) emitIfCurrent(parsed);
-            },
-        }).then(({ code, stderr }) => {
-            currentLoadChild = null;
-            if (loadCancelled) {
-                emitIfCurrent({ type: 'error', message: 'Cancelled.', done: true, error: true, cancelled: true });
-                return;
+        (async () => {
+            // outputModGate is only reachable here with its own confirm flag already true -- runs
+            // BEFORE the real conflict scan, same ordering /build uses. DynDoLOD's own disable already
+            // happened in the preflight above (if it was needed) -- nothing left to do for it here.
+            if (outputModGate) {
+                const disabledOk = await disableOutputModForRequest(outputModGate.modId, emitIfCurrent);
+                if (!disabledOk) {
+                    // DynDoLOD's own preflight disable may have already succeeded -- finalize handles
+                    // reenabling it (or offering to, per the 4-case spec) even though the output mod's
+                    // OWN disable is what just failed here.
+                    const result = await finalizeDyndolodAndOutputMod(cfg, settings, dyndolodDisabledThisRequest, emitIfCurrent);
+                    const note = result.dyndolodReenableFailed ? DYNDOLOD_REENABLE_FAILED_NOTE : '';
+                    emitIfCurrent({ type: 'error', message: `${OUTPUT_MOD_AUTO_DISABLE_FAILED_MESSAGE}${note}`, done: true, error: true, outputModPendingReenable: result.outputModPendingReenable, dyndolodOfferEnable: result.dyndolodOfferEnable });
+                    return;
+                }
+                outputModIdToReenable = outputModGate.modId;
             }
-            if (code !== 0) {
-                emitIfCurrent({ type: 'error', message: `pgtools conflicts failed (exit ${code}): ${tail(stderr, 20)}`, done: true, error: true });
-                return;
-            }
-            try {
-                const mods = JSON.parse(fs.readFileSync(jsonOutput, 'utf8'));
-                emitIfCurrent({ type: 'done', mods, patchers: settings.patchers, done: true });
-            } catch (e) {
-                emitIfCurrent({ type: 'error', message: `Couldn't read pgtools' own output: ${e.message}`, done: true, error: true });
-            }
-        }).catch((e) => {
-            currentLoadChild = null;
-            emitIfCurrent({ type: 'error', message: e.message, done: true, error: true });
-        }).finally(() => {
-            fs.rmSync(workDir, { recursive: true, force: true });
-        });
+
+            const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pgpatcher-conflicts-'));
+            const jsonOutput = path.join(workDir, 'conflicts.json');
+            const outputDir = path.join(workDir, 'unused-output');
+
+            runPgtools([
+                'conflicts',
+                settings.patchers.join(','),
+                '--source', cfg.source,
+                '--output', outputDir,
+                '--cfg-dir', cfg.cfgDir,
+                '--json-output', jsonOutput,
+            ], {
+                // Real bug found live (2026-08-21, director's own report): the frontend's own Cancel
+                // button had no way to know cancel is only real once pgtools has actually spawned --
+                // /load/cancel 404s ("No load is currently running") for the whole preflight output-mod
+                // disable+deploy step above (currentLoadChild is still null then), but the button stayed
+                // stuck showing "Cancelling…" (disabled) for the REST of the run regardless, since that
+                // 404 silently no-ops client-side and nothing else ever resets it mid-stream. This event
+                // is the one genuine signal for "cancel will actually do something now" -- emitted the
+                // instant the real child process exists, matching this route's own currentLoadChild
+                // assignment exactly.
+                onSpawn: (c) => { currentLoadChild = c; emitIfCurrent({ type: 'cancellable' }); },
+                onLine: (line) => {
+                    const parsed = parsePgtoolsLine(line);
+                    if (parsed) emitIfCurrent(parsed);
+                },
+            }).then(async ({ code, stderr }) => {
+                currentLoadChild = null;
+                // Real bug found live (2026-08-21, director's own report): this used to call
+                // reenableAllIfNeeded() (both DynDoLOD AND the output mod) unconditionally right here,
+                // BEFORE branching on cancelled/failed/succeeded -- so a genuinely successful load
+                // immediately re-enabled AND redeployed the output mod the instant the scan finished,
+                // long before the sort screen or /build ever ran, and a CANCELLED load did the exact
+                // same thing silently -- a real, potentially multi-minute deploy the user never asked
+                // for, triggered just by hitting Cancel. The session is genuinely ENDING on the
+                // cancelled/failed branches below (no /build to hand off to), so those call the full
+                // finalize step (director's own 4-case spec, 2026-08-21: auto-reenable DynDoLOD if this
+                // session disabled it, else offer to enable it if it's still off; always live-check the
+                // output mod). The SUCCESS branch is different -- it hands off to /build, so it only
+                // records what THIS request itself disabled, same as before.
+                if (loadCancelled) {
+                    const result = await finalizeDyndolodAndOutputMod(cfg, settings, dyndolodDisabledThisRequest, emitIfCurrent);
+                    const note = result.dyndolodReenableFailed ? DYNDOLOD_REENABLE_FAILED_NOTE : '';
+                    emitIfCurrent({ type: 'error', message: `Cancelled.${note}`, done: true, error: true, cancelled: true, outputModPendingReenable: result.outputModPendingReenable, dyndolodOfferEnable: result.dyndolodOfferEnable });
+                    return;
+                }
+                if (code !== 0) {
+                    const result = await finalizeDyndolodAndOutputMod(cfg, settings, dyndolodDisabledThisRequest, emitIfCurrent);
+                    const note = result.dyndolodReenableFailed ? DYNDOLOD_REENABLE_FAILED_NOTE : '';
+                    emitIfCurrent({ type: 'error', message: `pgtools conflicts failed (exit ${code}): ${tail(stderr, 20)}${note}`, done: true, error: true, outputModPendingReenable: result.outputModPendingReenable, dyndolodOfferEnable: result.dyndolodOfferEnable });
+                    return;
+                }
+                let mods;
+                try {
+                    mods = JSON.parse(fs.readFileSync(jsonOutput, 'utf8'));
+                } catch (e) {
+                    const result = await finalizeDyndolodAndOutputMod(cfg, settings, dyndolodDisabledThisRequest, emitIfCurrent);
+                    const note = result.dyndolodReenableFailed ? DYNDOLOD_REENABLE_FAILED_NOTE : '';
+                    emitIfCurrent({ type: 'error', message: `Couldn't read pgtools' own output: ${e.message}${note}`, done: true, error: true, outputModPendingReenable: result.outputModPendingReenable, dyndolodOfferEnable: result.dyndolodOfferEnable });
+                    return;
+                }
+                // SUCCESS -- director's own explicit correction (2026-08-21): DynDoLOD.esp should NOT
+                // reenable right here. Even though the flip itself is free (no deploy), reenabling it
+                // immediately after /load meant it was active again by the time /build's own preflight
+                // ran, which either re-gated it for no reason or (if that second reenable silently
+                // failed) left it looking "stuck disabled" with no visibility into which of the two
+                // reenable attempts actually broke. Now DynDoLOD follows the EXACT same contract as the
+                // output mod: disable once here, stay disabled through the sort screen and the real
+                // build, reenable only once Build itself actually completes -- finalize (and the offer-
+                // to-enable decision) only ever runs at the true end of a session, not here.
+                if (dyndolodDisabledThisRequest) dyndolodPendingReenable = true;
+                if (outputModIdToReenable) outputModPendingReenableModId = outputModIdToReenable;
+                emitIfCurrent({
+                    type: 'done',
+                    mods,
+                    patchers: settings.patchers,
+                    done: true,
+                    reenableFailedMessage: null,
+                    outputModPendingReenable: !!outputModPendingReenableModId,
+                });
+            }).catch(async (e) => {
+                currentLoadChild = null;
+                const result = await finalizeDyndolodAndOutputMod(cfg, settings, dyndolodDisabledThisRequest, emitIfCurrent);
+                const note = result.dyndolodReenableFailed ? DYNDOLOD_REENABLE_FAILED_NOTE : '';
+                emitIfCurrent({ type: 'error', message: `${e.message}${note}`, done: true, error: true, outputModPendingReenable: result.outputModPendingReenable, dyndolodOfferEnable: result.dyndolodOfferEnable });
+            }).finally(() => {
+                fs.rmSync(workDir, { recursive: true, force: true });
+            });
+        })();
     });
 
     // Step 3 -- create modrules.json. Backs up the existing file first (same timestamp convention
@@ -613,31 +967,66 @@ function createPgpatcherRouter(config) {
         res.json({ ok: true });
     });
 
-    router.post('/build', (req, res) => {
+    router.post('/build', async (req, res) => {
         if (!requirePgtoolsInstalled(res)) return;
         const cfg = requireConfigured(config, res);
         if (!cfg) return;
-
-        // Hard blocks outright if DynDoLOD.esp is active -- see blockIfDynDoLODActive's own comment
-        // for why this isn't automated (a real, interactive disable/re-enable/deploy flow used to
-        // live here; reverted 2026-08-21).
-        if (blockIfDynDoLODActive(cfg, res)) return;
-
-        if (buildSession.isActive()) {
-            return res.status(409).json({ error: 'A build is already in progress.' });
-        }
+        // Fetched early now (was fetched further down) -- the output-mod gate below needs
+        // settings.outputDir to know which mod to resolve, and PGPatcher's own real GUI gates this
+        // before any file reading at all.
         const settings = requirePgpatcherSettings(cfg, res);
         if (!settings) return;
-        if (settings.patchers.length === 0) {
-            return res.status(400).json({
-                error: 'no-patchers-active',
-                message: `No shader patchers are enabled in PGPatcher's own settings (${settings.settingsPath}).`,
-            });
-        }
         if (!settings.outputDir) {
             return res.status(400).json({
                 error: 'no-output-dir',
                 message: `PGPatcher's own settings.json (${settings.settingsPath}) has no output.dir configured.`,
+            });
+        }
+
+        // Gate 1, the twin of /load's own -- see requireHelperAvailable. Sits AFTER the no-output-dir
+        // check just above deliberately: that one is a configuration problem this app can diagnose
+        // and the user can fix with Vortex closed, so it stays the first thing reported, exactly as
+        // it is today.
+        if (!(await requireHelperAvailable(res))) return;
+
+        // Real interactive disable -> build -> re-enable flow (2026-08-21 v3 -- see this file's own
+        // "Real DynDoLOD.esp disable" section header for the full rebuild writeup). EACH GATE NOW ACTS
+        // AS SOON AS ITS OWN CONFIRM LANDS (director's own explicit fix, 2026-08-21): DynDoLOD's own
+        // gate is fast enough (no deploy) to disable synchronously right here, in this preflight,
+        // rather than being bundled with the (much slower) output-mod gate below -- confirming
+        // DynDoLOD used to silently do nothing if the output-mod gate was ALSO pending, since both
+        // disables lived in the same later async step.
+        let dyndolodDisabledThisRequest = false;
+        if (isDynDoLODActive(cfg.source)) {
+            if (!(req.body && req.body.confirmDisableDyndolod)) {
+                return res.status(409).json({ error: 'dyndolod-active', message: DYNDOLOD_CONFIRM_MESSAGE, confirmDisableDyndolod: true });
+            }
+            const disabledOk = await helperClient.setPluginEnabled(DYNDOLOD_PLUGIN_NAME, false);
+            const settled = disabledOk && await waitForDyndolodPluginsTxtState(cfg.source, false);
+            if (!settled) {
+                return res.status(400).json({ error: 'dyndolod-disable-failed', message: DYNDOLOD_AUTO_DISABLE_FAILED_MESSAGE });
+            }
+            dyndolodDisabledThisRequest = true;
+        }
+
+        // PGPatcher's own PRIOR OUTPUT gate (2026-08-21) -- see checkOutputModGate's own header
+        // comment. Genuinely needs a real deploy, so this one STAYS deferred: 409 to confirm here,
+        // then its own disable+deploy runs inside the async build body below with real SSE progress.
+        const outputModGate = await checkOutputModGate(cfg, settings);
+        if (blockUntilOutputModConfirmed(outputModGate, req, res)) return;
+
+        if (buildSession.isActive()) {
+            // DynDoLOD may have already been disabled above (a real write) even though this request
+            // is about to bail out -- re-enable it rather than leave it silently disabled over a
+            // "session already busy" collision.
+            if (dyndolodDisabledThisRequest) await reenableDyndolod(cfg, true, () => {});
+            return res.status(409).json({ error: 'A build is already in progress.' });
+        }
+        if (settings.patchers.length === 0) {
+            if (dyndolodDisabledThisRequest) await reenableDyndolod(cfg, true, () => {});
+            return res.status(400).json({
+                error: 'no-patchers-active',
+                message: `No shader patchers are enabled in PGPatcher's own settings (${settings.settingsPath}).`,
             });
         }
 
@@ -679,6 +1068,11 @@ function createPgpatcherRouter(config) {
             if (buildSession.get() === mySession) buildSession.emit(event);
         };
 
+        // Request-scoped, not module-global (a second, later build in the same server process must
+        // never re-enable DynDoLOD.esp / PGPatcher's own output mod if THIS run never disabled them).
+        // dyndolodDisabledThisRequest itself is already set (or not) from the preflight above.
+        let outputModIdToReenable = null;
+
         // Back up the existing output BEFORE pgtools ever touches it -- pgtools itself deletes
         // settings.outputDir's existing contents before doing any real build work (same as the real
         // GUI), so if the pgtools process then crashes, hangs, or gets killed partway through, the
@@ -692,6 +1086,25 @@ function createPgpatcherRouter(config) {
         // route body below is wrapped in an async IIFE now because the CROSS-drive fallback isn't --
         // see copyDirWithProgress above.
         (async () => {
+            // outputModGate is only reachable here with its own confirm flag already true -- the user
+            // has genuinely said yes. Runs BEFORE the backup-move step and pgtools itself -- MUST run
+            // before the backup-move below: that step physically moves settings.outputDir elsewhere,
+            // which would desync Vortex's own live mod entry (still pointing at the old path) if the
+            // mod were still deployed/linked at that moment. Disabling first cleanly un-links it.
+            // DynDoLOD's own disable already happened in the preflight above (if it was needed) --
+            // nothing left to do for it here.
+            if (outputModGate) {
+                const disabledOk = await disableOutputModForRequest(outputModGate.modId, emitIfCurrent);
+                if (!disabledOk) {
+                    // dyndolod's own disable above may have already succeeded
+                    const result = await finalizeDyndolodAndOutputMod(cfg, settings, dyndolodDisabledThisRequest, emitIfCurrent);
+                    const note = result.dyndolodReenableFailed ? DYNDOLOD_REENABLE_FAILED_NOTE : '';
+                    emitIfCurrent({ type: 'error', message: `${OUTPUT_MOD_AUTO_DISABLE_FAILED_MESSAGE}${note}`, done: true, error: true, outputModPendingReenable: result.outputModPendingReenable, dyndolodOfferEnable: result.dyndolodOfferEnable });
+                    return;
+                }
+                outputModIdToReenable = outputModGate.modId;
+            }
+
             let backupPath = null;
             if (config.pgpatcherOutputBackupDir) {
                 let hasExistingOutput = false;
@@ -736,11 +1149,17 @@ function createPgpatcherRouter(config) {
                                 // The response already returned 202 above, so this is a terminal SSE
                                 // event, not a synchronous 4xx/5xx -- same "serious register, hard
                                 // blocker" reasoning as before, just delivered over the stream now.
+                                // Re-enable anything this run's own disable steps already succeeded on
+                                // -- a backup failure here must not leave either silently disabled.
+                                const result = await finalizeDyndolodAndOutputMod(cfg, settings, dyndolodDisabledThisRequest, emitIfCurrent);
+                                const note = result.dyndolodReenableFailed ? DYNDOLOD_REENABLE_FAILED_NOTE : '';
                                 emitIfCurrent({
                                     type: 'error',
-                                    message: `🛑 Couldn't back up your existing PGPatcher output before building (tried moving it, then copying it across drives — both failed). Nothing was deleted or changed — your current output at ${settings.outputDir} is untouched. Build stopped instead of continuing without a backup. (${copyErr.message})`,
+                                    message: `🛑 Couldn't back up your existing PGPatcher output before building (tried moving it, then copying it across drives — both failed). Nothing was deleted or changed — your current output at ${settings.outputDir} is untouched. Build stopped instead of continuing without a backup.${note} (${copyErr.message})`,
                                     done: true,
                                     error: true,
+                                    outputModPendingReenable: result.outputModPendingReenable,
+                                    dyndolodOfferEnable: result.dyndolodOfferEnable,
                                 });
                                 return;
                             }
@@ -751,11 +1170,15 @@ function createPgpatcherRouter(config) {
                             // register: a hard blocker on a real filesystem write). Do NOT proceed to
                             // build -- with no confirmed backup, letting pgtools delete the existing
                             // output next would be exactly the data loss this step exists to prevent.
+                            const result = await finalizeDyndolodAndOutputMod(cfg, settings, dyndolodDisabledThisRequest, emitIfCurrent);
+                            const note = result.dyndolodReenableFailed ? DYNDOLOD_REENABLE_FAILED_NOTE : '';
                             emitIfCurrent({
                                 type: 'error',
-                                message: `🛑 Couldn't back up your existing PGPatcher output before building. Nothing was deleted or changed — your current output at ${settings.outputDir} is untouched. Build stopped instead of continuing without a backup. (${renameErr.message})`,
+                                message: `🛑 Couldn't back up your existing PGPatcher output before building. Nothing was deleted or changed — your current output at ${settings.outputDir} is untouched. Build stopped instead of continuing without a backup.${note} (${renameErr.message})`,
                                 done: true,
                                 error: true,
+                                outputModPendingReenable: result.outputModPendingReenable,
+                                dyndolodOfferEnable: result.dyndolodOfferEnable,
                             });
                             return;
                         }
@@ -764,38 +1187,131 @@ function createPgpatcherRouter(config) {
             }
 
             runPgtools(pgtoolsArgs, {
-                onSpawn: (c) => { currentBuildChild = c; },
+                // Same fix as /load's own onSpawn -- see that route's own comment for the full bug
+                // writeup. currentBuildChild only exists from here on, so this is the real moment
+                // /build/cancel stops 404ing.
+                onSpawn: (c) => { currentBuildChild = c; emitIfCurrent({ type: 'cancellable' }); },
                 onLine: (line) => {
                     const parsed = parsePgtoolsLine(line);
                     if (parsed) emitIfCurrent(parsed);
                 },
-            }).then(({ code, stdout, stderr }) => {
+            }).then(async ({ code, stdout, stderr }) => {
                 currentBuildChild = null;
                 if (buildCancelled) {
-                    emitIfCurrent({ type: 'error', message: 'Cancelled.', done: true, error: true, cancelled: true });
+                    const result = await finalizeDyndolodAndOutputMod(cfg, settings, dyndolodDisabledThisRequest, emitIfCurrent);
+                    const note = result.dyndolodReenableFailed ? DYNDOLOD_REENABLE_FAILED_NOTE : '';
+                    emitIfCurrent({ type: 'error', message: `Cancelled.${note}`, done: true, error: true, cancelled: true, outputModPendingReenable: result.outputModPendingReenable, dyndolodOfferEnable: result.dyndolodOfferEnable });
                     return;
                 }
                 if (code !== 0) {
+                    const result = await finalizeDyndolodAndOutputMod(cfg, settings, dyndolodDisabledThisRequest, emitIfCurrent);
+                    const note = result.dyndolodReenableFailed ? DYNDOLOD_REENABLE_FAILED_NOTE : '';
                     const backupNote = backupPath
                         ? ` Your previous output was backed up before this build started and is safe at ${backupPath}.`
                         : '';
                     emitIfCurrent({
                         type: 'error',
-                        message: `⚠️ The build failed (exit ${code}).${backupNote} Real error: ${tail(stderr, 20)}`,
+                        message: `⚠️ The build failed (exit ${code}).${backupNote}${note} Real error: ${tail(stderr, 20)}`,
                         done: true,
                         error: true,
+                        outputModPendingReenable: result.outputModPendingReenable,
+                        dyndolodOfferEnable: result.dyndolodOfferEnable,
                     });
                     return;
                 }
-                emitIfCurrent({ type: 'done', outputDir: settings.outputDir, backupPath, log: tail(stdout, 10), done: true });
-            }).catch((e) => {
+                // SUCCESS -- THIS is where DynDoLOD.esp's own fate actually gets decided now (director's
+                // own 4-case spec, 2026-08-21): auto-reenabled if THIS session's own action disabled it
+                // (free, no deploy, no confirm needed -- we caused it); offered as a confirm instead if
+                // it's still off and this session never touched it (don't silently flip user-set state
+                // we didn't touch). The output mod is ALWAYS live-checked here too, regardless of who
+                // disabled it or when -- if it's disabled for any reason, the "enable and deploy"
+                // reminder applies, since the risk (new output not actually live) is identical either
+                // way. See finalizeDyndolodAndOutputMod's own header comment for the full writeup.
+                const result = await finalizeDyndolodAndOutputMod(cfg, settings, dyndolodDisabledThisRequest, emitIfCurrent);
+                emitIfCurrent({
+                    type: 'done',
+                    outputDir: settings.outputDir,
+                    backupPath,
+                    log: tail(stdout, 10),
+                    done: true,
+                    reenableFailedMessage: result.dyndolodReenableFailed ? DYNDOLOD_REENABLE_FAILED_NOTE.trim() : null,
+                    outputModPendingReenable: result.outputModPendingReenable,
+                    dyndolodOfferEnable: result.dyndolodOfferEnable,
+                });
+            }).catch(async (e) => {
                 currentBuildChild = null;
+                const result = await finalizeDyndolodAndOutputMod(cfg, settings, dyndolodDisabledThisRequest, emitIfCurrent);
+                const note = result.dyndolodReenableFailed ? DYNDOLOD_REENABLE_FAILED_NOTE : '';
                 const backupNote = backupPath
                     ? ` Your previous output was backed up before this build started and is safe at ${backupPath}.`
                     : '';
-                emitIfCurrent({ type: 'error', message: `⚠️ The build failed.${backupNote} Real error: ${e.message}`, done: true, error: true });
+                emitIfCurrent({ type: 'error', message: `⚠️ The build failed.${backupNote}${note} Real error: ${e.message}`, done: true, error: true, outputModPendingReenable: result.outputModPendingReenable, dyndolodOfferEnable: result.dyndolodOfferEnable });
             });
         })();
+    });
+
+    // Separate, standalone "deploy everything" flow -- offered on the build success screen only when
+    // this SAME build's own output-mod disable happened (see /build's own `outputModPendingReenable`
+    // flag). DynDoLOD.esp itself is no longer part of this at all (2026-08-21 correction: its own
+    // re-enable is now immediate, right in /build's success handler -- it never needed a deploy, see
+    // this file's own "Real DynDoLOD.esp disable" header comment). This is deliberately the REAL, full
+    // Vortex deploy pipeline (deployAllMods -- the same event the native "Deploy Mods" button
+    // dispatches). Fire-and-poll, same POST-kicks-off-then-separately-checked shape as /load and
+    // /build, but a plain poll rather than an SSE stream -- deployAllMods()/getDeployAllProgress() are
+    // themselves a poll-shaped pair, not a push-based one. One at a time, module-scoped (not
+    // per-session like buildSession) -- a real, out-of-band, whole-install Vortex operation, not
+    // something scoped to a single PGPatcher build.
+    //
+    // A build's own output-mod disable is NOT auto-reenabled the instant the build finishes -- it
+    // stays off, tracked here as "pending," until the user's own explicit "enable and deploy the
+    // changes" confirm accepts it. This endpoint is where that acceptance actually lands: re-enable the
+    // pending mod FIRST, then run the one real full deploy that both re-enabling (to relink its
+    // deployed files) and "deploy everything" genuinely need anyway -- one deploy covers both, not two.
+    // A no-op if nothing's pending. KNOWN GAP, not yet handled: if the user declines this prompt (or
+    // navigates away without ever triggering a deploy), the output mod stays disabled indefinitely
+    // with no automatic recovery.
+    let deployAllInProgress = false;
+    router.post('/deploy-all', async (req, res) => {
+        if (deployAllInProgress) {
+            return res.status(409).json({ error: 'A deploy is already in progress.' });
+        }
+        // Was an inline copy of exactly this check; folded into the shared requireHelperAvailable
+        // once /load and /build needed the same gate, so the three cannot drift into three slightly
+        // different 409s. Behaviour is unchanged -- same status, same body.
+        if (!(await requireHelperAvailable(res))) return;
+        deployAllInProgress = true;
+        res.status(202).json({});
+        (async () => {
+            if (outputModPendingReenableModId) {
+                await helperClient.setModEnabled(outputModPendingReenableModId, true);
+                outputModPendingReenableModId = null;
+            }
+            await helperClient.deployAllMods();
+        })().finally(() => { deployAllInProgress = false; });
+    });
+
+    router.get('/deploy-all/progress', async (req, res) => {
+        const progress = await helperClient.getDeployAllProgress();
+        // getDeployAllProgress() can legitimately return null mid-deploy (a transient poll failure,
+        // not evidence the deploy itself failed) -- fall back to this route's own `deployAllInProgress`
+        // flag rather than reporting a false "not active".
+        res.json(progress || { active: deployAllInProgress, done: !deployAllInProgress });
+    });
+
+    // Accepts the "would you like to enable DynDoLOD.esp?" confirm surfaced when finalizeDyndolod
+    // AndOutputMod finds it still off and untouched by this session (director's own 4-case spec,
+    // 2026-08-21). Unlike the output mod's own /deploy-all, this needs no deploy at all -- the same
+    // free/instant flip reenableDyndolod already uses everywhere else. Fire-and-forget shape (no SSE
+    // session, no polling) since it settles in well under a second in the normal case.
+    router.post('/enable-dyndolod', async (req, res) => {
+        const cfg = requireConfigured(config, res);
+        if (!cfg) return;
+        const enabledOk = await helperClient.setPluginEnabled(DYNDOLOD_PLUGIN_NAME, true);
+        const settled = enabledOk && await waitForDyndolodPluginsTxtState(cfg.source, true);
+        if (!settled) {
+            return res.status(400).json({ error: 'dyndolod-enable-failed', message: DYNDOLOD_REENABLE_FAILED_NOTE.trim() });
+        }
+        res.json({ ok: true });
     });
 
     return router;

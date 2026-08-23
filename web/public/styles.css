@@ -18,6 +18,12 @@
   --danger-bg: rgba(240, 84, 107, 0.12);
   --neutral: #7c8494;
   --neutral-bg: rgba(124, 132, 148, 0.12);
+  /* Vortex's own real brand color (confirmed against its actual source, $brand-primary in
+     src/stylesheets/variables.scss -- the fill color its own real progress bars use) -- used ONLY
+     for a live "downloading"/"installing" pill, so that specific state visually reads as "this is
+     what Vortex itself is doing right now," not a generic in-progress grey. */
+  --vortex-orange: #c87b28;
+  --vortex-orange-bg: rgba(200, 123, 40, 0.14);
   --radius: 10px;
   --shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
   /* Standard vertical gap between stacked cards/sections app-wide -- see DESIGN.md's "Spacing --
@@ -53,6 +59,8 @@
     --danger-bg: rgba(194, 54, 82, 0.12);
     --neutral: #6b7280;
     --neutral-bg: rgba(107, 114, 128, 0.12);
+    --vortex-orange: #a3651f;
+    --vortex-orange-bg: rgba(163, 101, 31, 0.14);
     --shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
   }
 }
@@ -76,6 +84,8 @@
   --danger-bg: rgba(194, 54, 82, 0.12);
   --neutral: #6b7280;
   --neutral-bg: rgba(107, 114, 128, 0.12);
+  --vortex-orange: #a3651f;
+  --vortex-orange-bg: rgba(163, 101, 31, 0.14);
   --shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
 }
 
@@ -141,7 +151,7 @@ a:hover { color: var(--accent-hover); }
    without this, \n characters in .textContent collapse to a single run-on line by default. Short
    one-line status text is unaffected. */
 #syncBackupStatus, #syncIgnoresStatus, #syncDisablesStatus { white-space: pre-line; }
-code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 0.9em; }
+code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 0.9em; background: var(--surface-2); color: var(--text); padding: 2px 6px; border-radius: 4px; }
 
 /* Header */
 .app-header {
@@ -274,7 +284,8 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 #cleanupResultsList,
 #cleanupCrossCheckList,
 #settingsCleanupIgnoredStagingList,
-#settingsCleanupIgnoredArchivesList { padding-left: 20px; }
+#settingsCleanupIgnoredArchivesList,
+#cufStandaloneList { padding-left: 20px; }
 /* .mm-neededby-list deliberately does NOT get this same padding-left -- its own rows now use the
    same 4-column grid as .mm-row__header with an empty leading column (see .mm-neededby-row above),
    which already provides the visual indent AND keeps every column aligned with the header's own.
@@ -496,7 +507,8 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   color: var(--text);
   border-color: var(--border);
 }
-.btn--ghost:hover { background: var(--surface-2); border-color: var(--accent); }
+.btn--ghost:hover:not(:disabled) { background: var(--surface-2); border-color: var(--accent); }
+.btn--ghost:disabled { color: var(--neutral); border-color: var(--border); cursor: not-allowed; }
 /* A real destructive action's own primary button (Safe Collection Removal's "Remove collection") --
    same solid-fill weight as .btn--primary, danger-colored instead of accent-colored, so it reads as
    the deliberate action it is rather than a default browser button. */
@@ -759,6 +771,10 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .settings-group__header { margin-bottom: 4px; }
 .settings-group__header h2 { font-size: 17px; margin: 0; }
 .settings-group__header p { margin: 4px 0 0; }
+/* General pane's own version display (2026-08-23) -- upper-right, alongside the pane's title/subtitle
+   rather than a separate row, so it never competes for attention with the actual settings below. */
+.settings-group__header--with-version { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.settings-version-info { text-align: right; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 /* Sub-headings INSIDE an already-bounded card -- tighter and quieter than the old flat-list rhythm
    above, same uppercase/letter-spacing/muted treatment this app already uses for table headers
    (.plan-table th), applied here to a new context rather than inventing another label style. */
@@ -1057,6 +1073,12 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .status-pill--failed_extraction_no_prior_data { background: var(--danger-bg); color: var(--danger); }
 .status-pill--critical_manual_restore_needed { background: var(--danger); color: #fff; }
 .status-pill--pending { background: var(--surface-2); color: var(--text-muted); }
+/* Update Collection Apply's own live per-mod "actively in progress" states (Working/Downloading/
+   Installing) -- Vortex's own real brand color (confirmed against its source, not guessed), so this
+   specific state visually reads as "this is what Vortex itself is doing right now." Kept distinct
+   from the plain grey status-pill--pending above, which other tools' own progress tables still use
+   for their generic in-progress row (director's own earlier call not to touch those). */
+.status-pill--vortex-progress { background: var(--vortex-orange-bg); color: var(--vortex-orange); }
 /* Update Collection's Ignored/Disabled report -- same color convention as the Rebuild Collection
    pills above (neutral for a plain informational status, warning for one that needs attention). */
 .status-pill--ignored { background: var(--neutral-bg); color: var(--neutral); }
@@ -1110,8 +1132,8 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 /* Lets an explicit \n\n in a confirm message render as a real paragraph break instead of collapsing
    to a space -- textContent doesn't interpret whitespace on its own, this is what makes it visible.
    Scoped to just this one shared paragraph rather than every modal, since most confirm messages are
-   a single sentence with nothing to break. (Added for a DynDoLOD prompt that's since been reverted --
-   left in place as a general capability of the shared confirm modal, no caller currently needs it.) */
+   a single sentence with nothing to break. Used by PGPatcher's own DYNDOLOD_CONFIRM_MESSAGE
+   (web/pgpatcher-routes.js) to separate its main explanation from the "if not" fallback instructions. */
 #wtConfirmModalText { white-space: pre-line; }
 .modal-overlay {
   position: fixed;
@@ -1814,7 +1836,6 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .ucv2-card__meta { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; color: rgba(255,255,255,.72); margin-top: 2px; }
 .ucv2-card__revision { background: var(--surface-2); border-radius: 8px; padding: 2px 8px; font-weight: 600; color: var(--text); }
 .ucv2-card__actions { padding: 10px 14px 14px; }
-.ucv2-card__actions .review-lock-note { display: none; font-size: 11px; color: var(--text-muted); margin: 6px 2px 0; text-align: center; }
 
 .ucv2-op-section { margin-bottom: 22px; }
 /* Small collection banner next to a review screen's own title -- matches the approved mockup
@@ -1823,8 +1844,21 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .screen-head__thumb { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex: none; border: 1px solid var(--border); }
 .ucv2-op-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); margin-bottom: 8px; }
 .ucv2-op-row--remove { border-color: rgba(240, 84, 107, .3); }
-.ucv2-op-row__name { font-size: 13.5px; font-weight: 600; flex: 1; }
+/* "Shared with another collection" (2026-08-21) -- same warning-tinted treatment Safe Collection
+   Removal's own .rc-mod-row--shared/.rc-shared-tag use for the identical situation, reusing that
+   proven visual language rather than inventing a new color/shape for the same meaning. .ucv2-op-row
+   only ever holds Removed-mods rows (confirmed: no other screen in this file reuses these classes),
+   so --shared can safely override --remove's own border tint when both apply. __main wraps
+   __name/__detail in a column so the shared-tag badge can sit as a proper flex:none sibling at the
+   row's end, matching .rc-mod-row's own label+badge split. */
+.ucv2-op-row--shared { border-color: rgba(245, 185, 66, .35); }
+.ucv2-op-row__main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.ucv2-op-row__name { font-size: 13.5px; font-weight: 600; }
 .ucv2-op-row__detail { font-size: 12px; color: var(--text-muted); }
+.ucv2-shared-tag {
+  font-size: 11px; color: var(--warning); background: var(--warning-bg);
+  border-radius: 999px; padding: 2px 8px; font-weight: 600; flex: none;
+}
 
 .ucv2-instr-btn { width: 22px; height: 22px; border-radius: 6px; border: none; background: var(--warning); color: #0b1220;
   font-size: 11px; font-weight: 700; cursor: pointer; flex: none; display: inline-flex; align-items: center; justify-content: center; }
@@ -1985,6 +2019,5 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    success severity color (TECHNICAL.md's own convention), not a new color, just much larger. */
 .pgp-build-success__banner { background: var(--success-bg); border: 1px solid var(--success); border-radius: var(--radius); padding: 32px 24px; margin-bottom: 20px; text-align: center; font-size: 28px; font-weight: 700; }
 .pgp-build-success__path { text-align: center; font-size: 14px; color: var(--text-muted); margin: 0 0 10px; }
-.pgp-build-success__path code { color: var(--text); background: var(--surface-2); padding: 2px 6px; border-radius: 4px; }
 .pgp-build-success .callout { text-align: left; max-width: 640px; margin: 20px auto; }
 .pgp-build-success__actions { text-align: center; margin-top: 20px; }

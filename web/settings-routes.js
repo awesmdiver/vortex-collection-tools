@@ -11,6 +11,9 @@ const { spawn } = require('child_process');
 const express = require('express');
 const appConfig = require('../lib/app-config');
 const { pickFolderAsync } = require('../lib/vortex-sync/win-dialog');
+const helperClient = require('../lib/vortex-helper-client');
+const { version: TOOL_VERSION } = require('../package.json');
+const syncLib = require('../lib/vortex-sync/lib');
 
 // Every log file this project writes (currently only Rebuild Collection's) follows this exact
 // name shape -- same pattern used everywhere else a log filename is validated (rebuild-routes.js).
@@ -80,7 +83,9 @@ const MERGE_POST_MERGE_ACTIONS = ['disable', 'remove', 'backup-remove'];
 
 function withoutKey(cfg) {
     const { nexusApiKey, ...rest } = cfg;
-    return { ...rest, hasNexusApiKey: !!nexusApiKey };
+    // toolVersion (2026-08-23) -- static, from package.json, always safe to include (no network call,
+    // unlike the Helper's own version below which needs a live round-trip -- see GET /helper-info).
+    return { ...rest, hasNexusApiKey: !!nexusApiKey, toolVersion: TOOL_VERSION };
 }
 
 function createSettingsRouter() {
@@ -187,6 +192,29 @@ function createSettingsRouter() {
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
+    });
+
+    // Helper extension's own reported version + connection state (2026-08-23) -- separate from the
+    // main GET / above since this needs a real network round-trip to the Helper's /health endpoint
+    // (slow/absent whenever Vortex isn't open), unlike the static toolVersion field. Never throws --
+    // getHelperHealth already returns null on any failure, same "connected: false" either way whether
+    // Vortex is closed or the extension genuinely isn't installed.
+    //
+    // Also reports whether that version is new enough (2026-08-23). The comparison lives HERE, not in
+    // the browser, because it's a real semver comparison and `semver` is a Node dependency -- the
+    // frontend just renders the booleans. `outdated` is only ever true when genuinely connected: "not
+    // connected" is a separate state with its own established "Vortex Connection Required" handling,
+    // and conflating the two would tell someone with no Helper at all that theirs is out of date.
+    router.get('/helper-info', async (req, res) => {
+        const health = await helperClient.getHelperHealth();
+        const connected = !!health && health.ok === true && health.gameId === syncLib.GAME_ID;
+        const version = connected ? (health.version || null) : null;
+        res.json({
+            connected,
+            version,
+            minVersion: helperClient.MIN_HELPER_VERSION,
+            outdated: connected && helperClient.isHelperOutdated(version),
+        });
     });
 
     // Read-only count for the "Delete all backups" confirmation dialog -- lets the client show a

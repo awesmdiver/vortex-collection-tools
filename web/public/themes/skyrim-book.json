@@ -110,6 +110,12 @@
       "whatItDoes": "When Vortex says your load-order rules have a cycle, it dumps every mod caught in the tangle at once, leaving you to guess which one's actually wrong. Snapshot your rules, go set them in Vortex, then scan here to find the specific rule responsible, fix it, and confirm the cycle's actually gone."
     },
     {
+      "toolId": "clear-update-flags",
+      "banner": "theme-assets/skyrim/book/book-banner-cleansing-stone.png",
+      "lore": "When a temple archivist beholds a phantom rune glowing red upon a scroll, it does not mean the ancient ink has faded. Often, a Grand Mage deliberately bound that text to remain in its exact current form, yet a lingering trickster spell insists the parchment requires re-enchanting. Passing a Cleansing Stone over the ledger dispels these false omens, washing away the distracting glare so the true catalog shines clear once more &mdash; without altering a single word written upon the sacred parchment.",
+      "whatItDoes": "Vortex often displays orange &lsquo;Update available&rsquo; badges on mods even when a collection curator deliberately pinned them to a specific version. This tool identifies those phantom badges, lets you select which collections to clean up, and safely removes the false warnings directly in Vortex. It takes an automatic backup first so you can restore the flags anytime, without touching your actual installed files or load order."
+    },
+    {
       "toolId": "pgpatcher",
       "banner": "theme-assets/skyrim/book/book-banner-order-of-succession.png",
       "lore": "When rival claimants or disputed bloodlines lay claim to the same high seat, the realm cannot abide two crowns atop a single head. Order is preserved only through the unyielding law of succession, where every title and decree is weighed in deliberate rank so the greater authority instantly supplants the lesser. In the same manner, when competing craftworks and visual enchantments vie to reshape the very same stone or steel, an undisputed hierarchy must be proclaimed. Setting the line of precedence ensures every subordinate claim yields without bloodshed, leaving your world governed solely by the craft of the master whose decree holds ultimate dominion.",

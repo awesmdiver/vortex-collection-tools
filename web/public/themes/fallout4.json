@@ -177,6 +177,14 @@
       "heroBody": "When a grid short-circuits, every panel downstream lights up red at once — the whole system screaming that something's wrong, with zero indication of which single crossed wire is actually responsible. A real electrician doesn't rewire the whole building; they trace the fault back to the one bad connection and fix that. Vortex's own cycle warning is the panel full of red lights. This tool is the trace: find the one rule actually causing the short, and cut it.",
       "cardDesc": "Traces a rule cycle back to the one bad connection and cuts it — not the whole grid."
     },
+    "clear-update-flags": {
+      "name": "All-Clear Protocol",
+      "emoji": "🟢",
+      "function": "Clear Update Flags",
+      "heroTitle": "All-Clear Protocol",
+      "heroBody": "Vault-Tec monitoring consoles frequently trigger phantom maintenance warnings, blaring red even when every component downstream is configured to exact operational specification. A proper technician doesn&rsquo;t tear apart functioning machinery just to quiet a glitching status light; they execute an All-Clear Protocol to reset the terminal logs back to nominal status. This routine silences false warnings across your designated manifests without touching your actual hardware, keeping a full rollback log on file should you ever need to restore the previous alarm states.",
+      "cardDesc": "Silences phantom sensor warnings across your manifests without disturbing nominal hardware."
+    },
     "missing-files": {
       "name": "Auto-Doc Diagnostic & Repair",
       "emoji": "🩹",
