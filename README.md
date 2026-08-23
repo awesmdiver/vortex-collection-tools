@@ -67,13 +67,13 @@ A dedicated tab for data views and checklists that don't fit into a single-actio
 * **Skyrim or Fallout 4 themes:** Flip a switch in Settings to give every tool a lore-friendly name, custom icon, and color accent tailored to the game you're playing. Rebuild Collection becomes *Restoration* (Skyrim) or *Project Purity* (Fallout 4); Merge Plugins becomes *The Forge* or *Institute Sub-Assembly*. You can switch back to the standard theme anytime.
 * **Custom accent and background colors:** Adjust accent colors and background tints in Settings. Preferences save separately for each theme.
 * **Dedicated theme fonts:** Choose from six Skyrim-style fonts (Cinzel by default) or five retro-terminal Fallout fonts in Settings for headings and lore text.
-* **Themed in-app guide:** Consult *The Arcaneum* (Skyrim) or *The Pip-Boy — A Survivor's Manual* (Fallout 4) for details on what each tool does, complete with lore descriptions and a quick cross-reference table mapping plain tool names to their themed equivalents. Open it via the book icon in the header or directly from Home.
+* **Themed in-app guide:** Consult *The Arcaneum* (Skyrim) or *The Pip-Boy — A Survivor's Manual* (Fallout 4) for in-universe lore on what each tool does, plus its own built-in name-lookup guide. Open it via the book icon in the header or directly from Home.
 
 #### 🏷️ Theme Name Reference
 
 ![Standard, Skyrim, and Fallout 4 side by side](assets/theme-reference-banner.png)
 
-Every tool above keeps its plain, functional name in this README — here's what each becomes under Skyrim or Fallout 4 theming. This table is the one place that needs updating as more themes ship (Starfield is next).
+Every tool above sticks to its plain, functional name across this README — here's what each one becomes once you switch on Skyrim or Fallout 4 theming (with Starfield up next!):
 
 | Standard | Skyrim | Fallout 4 |
 | :--- | :--- | :--- |
