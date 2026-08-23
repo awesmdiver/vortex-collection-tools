@@ -71,6 +71,8 @@ A dedicated tab for data views and checklists that don't fit into a single-actio
 
 #### 🏷️ Theme Name Reference
 
+![Standard, Skyrim, and Fallout 4 side by side](assets/theme-reference-banner.png)
+
 Every tool above keeps its plain, functional name in this README — here's what each becomes under Skyrim or Fallout 4 theming. This table is the one place that needs updating as more themes ship (Starfield is next).
 
 | Standard | Skyrim | Fallout 4 |
