@@ -36,21 +36,21 @@ A collection of focused utilities rounds out the workspace — clearing leftover
 
 ### 🧰 Main Tools
 
-* **Rebuild Collection** *(✨ Restoration / Project Purity)*: Rebuilding massive collections inside Vortex takes hours and can chew through your system RAM. This tool extracts the same files — including your FOMOD choices — outside of Vortex at top speed. Turn on parallel extraction in Settings to unpack up to 8 mods at once and cut rebuild times by 2–3x. Pause and resume whenever you want without re-extracting completed mods. Nexus Premium users can download missing archives automatically. Leaves `.ghost` files (Vortex's markers for disabled files) intact so your custom file tweaks survive.
-* **Update Collection** *(🛡️ The Ward / Defense Protocol)*: Updating a collection in Vortex normally wipes your Ignored and Disabled mod choices, forcing you to hunt down and re-disable dozens of mods by hand. This tool snapshots your choices before the update and restores them automatically once it's done. A step-by-step wizard previews every single change before applying it.
-* **Rules Generator** *(✒️ The Scribe / Automation Terminal)*: Collection updates often break custom "load after" rules when mods get renamed or replaced. This tool matches your old rules to their updated equivalents — even matching rules that point to older version numbers — so you don't have to rebuild your rule list from scratch.
-* **Merge Plugins** *(🔨 The Forge / Institute Sub-Assembly)*: Skyrim's plugin limit fills up fast. This tool bundles new-content plugins from your collections into a single merged file, ESL-flagging the result whenever possible (costing 0 load-order slots) while leaving your original files safe to disable. You can review all contents before merging.
-* **Safe Collection Removal** *(📦 The Quartermaster / Supply Depot)*: Uninstalling a collection in Vortex can easily wipe out mods that your other collections still rely on. This tool scans your setup first, flags every shared mod, and lets you choose what to keep and what to delete — so you can clean up old collections without breaking anything else.
+* **Rebuild Collection**: Rebuilding massive collections inside Vortex takes hours and can chew through your system RAM. This tool extracts the same files — including your FOMOD choices — outside of Vortex at top speed. Turn on parallel extraction in Settings to unpack up to 8 mods at once and cut rebuild times by 2–3x. Pause and resume whenever you want without re-extracting completed mods. Nexus Premium users can download missing archives automatically. Leaves `.ghost` files (Vortex's markers for disabled files) intact so your custom file tweaks survive.
+* **Update Collection**: Updating a collection in Vortex normally wipes your Ignored and Disabled mod choices, forcing you to hunt down and re-disable dozens of mods by hand. This tool snapshots your choices before the update and restores them automatically once it's done. A step-by-step wizard previews every single change before applying it.
+* **Rules Generator**: Collection updates often break custom "load after" rules when mods get renamed or replaced. This tool matches your old rules to their updated equivalents — even matching rules that point to older version numbers — so you don't have to rebuild your rule list from scratch.
+* **Merge Plugins**: Skyrim's plugin limit fills up fast. This tool bundles new-content plugins from your collections into a single merged file, ESL-flagging the result whenever possible (costing 0 load-order slots) while leaving your original files safe to disable. You can review all contents before merging.
+* **Safe Collection Removal**: Uninstalling a collection in Vortex can easily wipe out mods that your other collections still rely on. This tool scans your setup first, flags every shared mod, and lets you choose what to keep and what to delete — so you can clean up old collections without breaking anything else.
 
 ### 🧩 Utilities
 
-* **Missing Masters** *(🔮 The Augur)*: Instantly shows active plugins missing master files — the #1 cause of startup crashes — without making you run a slow manual scan. Fix problems on the spot with **Create Dummy Master** or re-extract missing files with **Rebuild This Mod**.
-* **Mod Scrub** *(🔥 The Cleansing)*: Scans staging folders and downloaded archives for leftover files that aren't linked to any active Vortex mod. Review and safely clean up orphaned clutter, with a permanent exclude list for anything you want to keep.
-* **Archive Finder** *(👁️ Clairvoyance)*: Indexes your download archives up front without unpacking them. Search across all your archives by file or mod name and extract specific files instantly.
-* **Rebuild Missing Files** *(🗝️ The Vault-Keeper)*: Fixes individual missing staging files without rebuilding an entire collection. Scans your collections, pinpoints missing files per mod, and restores just those files straight from your archives.
-* **Cycle Helper** *(🕸️ The Webweaver)*: When Vortex detects a load-order cycle, it dumps every involved mod on screen at once without telling you which rule caused the loop. Snapshot your rules, pinpoint the exact conflicting rule, view it as a visual graph diagram, and test rule changes directly before returning to Vortex.
-* **Clear Update Flags** *(💎 Cleansing Stone)*: Vortex's "Check for Updates" button often flags hundreds of mods with "Update Available" badges — even when a curated collection intentionally pins older, tested versions. This tool clears those stale badges in bulk directly from Vortex without touching your installed files, load order, or collection rules.
-* **PGPatcher Load Order Editor** *(👑 Order of Succession)*: Replaces PGPatcher's bare-bones ordering screen with a full drag-and-drop load-order editor, reads your PGPatcher settings, and runs the command-line patcher behind the scenes with live phase-by-phase progress. *(Requires PGPatcher to be installed and configured once first — see Important Notes.)*
+* **Missing Masters**: Instantly shows active plugins missing master files — the #1 cause of startup crashes — without making you run a slow manual scan. Fix problems on the spot with **Create Dummy Master** or re-extract missing files with **Rebuild This Mod**.
+* **Mod Scrub**: Scans staging folders and downloaded archives for leftover files that aren't linked to any active Vortex mod. Review and safely clean up orphaned clutter, with a permanent exclude list for anything you want to keep.
+* **Archive Finder**: Indexes your download archives up front without unpacking them. Search across all your archives by file or mod name and extract specific files instantly.
+* **Rebuild Missing Files**: Fixes individual missing staging files without rebuilding an entire collection. Scans your collections, pinpoints missing files per mod, and restores just those files straight from your archives.
+* **Cycle Helper**: When Vortex detects a load-order cycle, it dumps every involved mod on screen at once without telling you which rule caused the loop. Snapshot your rules, pinpoint the exact conflicting rule, view it as a visual graph diagram, and test rule changes directly before returning to Vortex.
+* **Clear Update Flags**: Vortex's "Check for Updates" button often flags hundreds of mods with "Update Available" badges — even when a curated collection intentionally pins older, tested versions. This tool clears those stale badges in bulk directly from Vortex without touching your installed files, load order, or collection rules.
+* **PGPatcher Load Order Editor**: Replaces PGPatcher's bare-bones ordering screen with a full drag-and-drop load-order editor, reads your PGPatcher settings, and runs the command-line patcher behind the scenes with live phase-by-phase progress. *(Requires PGPatcher to be installed and configured once first — see Important Notes.)*
 
 ### 📊 Reports
 
@@ -68,6 +68,30 @@ A dedicated tab for data views and checklists that don't fit into a single-actio
 * **Custom accent and background colors:** Adjust accent colors and background tints in Settings. Preferences save separately for each theme.
 * **Dedicated theme fonts:** Choose from six Skyrim-style fonts (Cinzel by default) or five retro-terminal Fallout fonts in Settings for headings and lore text.
 * **Themed in-app guide:** Consult *The Arcaneum* (Skyrim) or *The Pip-Boy — A Survivor's Manual* (Fallout 4) for details on what each tool does, complete with lore descriptions and a quick cross-reference table mapping plain tool names to their themed equivalents. Open it via the book icon in the header or directly from Home.
+
+#### 🏷️ Theme Name Reference
+
+Every tool above keeps its plain, functional name in this README — here's what each becomes under Skyrim or Fallout 4 theming. This table is the one place that needs updating as more themes ship (Starfield is next).
+
+| Tool | Skyrim | Fallout 4 |
+| :--- | :--- | :--- |
+| Rebuild Collection | ✨ Restoration | 💧 Project Purity |
+| Update Collection | 📯 The Herald | 🧠 Memory Den |
+| Rules Generator | ✒️ The Scribe | 📡 Relay Tower Network |
+| Merge Plugins | 🔨 The Forge | ⚙️ Institute Sub-Assembly |
+| Safe Collection Removal | 📦 The Quartermaster | 📦 Overseer's Inventory Quarantine |
+| Missing Masters | 🔮 The Augur | ⚠️ Vault-Tec Diagnostic Prompt |
+| Mod Scrub | 🔥 The Cleansing | 🤖 Greygarden Maintenance Protocol |
+| Archive Finder | 👁️ Clairvoyance | 📚 Boston Library Terminal |
+| Rebuild Missing Files | 🗝️ The Vault-Keeper | 🩹 Auto-Doc Diagnostic & Repair |
+| Cycle Helper | 🕸️ The Webweaver | 🔌 Circuit Breaker Diagnostics |
+| Clear Update Flags | 💎 Cleansing Stone | 🟢 All-Clear Protocol |
+| PGPatcher Load Order Editor | 👑 Order of Succession | 🎚️ Vault-Tec Priority Protocol |
+| Stats | 📊 The Ledger | 📊 Overseer Performance Log |
+| Work Through | ✅ The Quest Log | ✅ Automated Correction Ledger |
+| Update Compare | 🔍 Scroll of Retrospection | 🔍 Terminal Delta Log |
+| Workshop Report | 📓 The Anvil's Mark | 🕒 Terminal Revision Timestamp |
+| Mod Exceptions | 🕊️ The Shadowmarked | 🙅 Override Exemption Protocol |
 
 ---
 
