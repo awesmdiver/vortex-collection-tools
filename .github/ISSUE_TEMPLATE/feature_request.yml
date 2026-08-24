@@ -1,0 +1,71 @@
+name: 💡 Idea or feature request
+description: Suggest something new, or an improvement to an existing tool
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Got an idea that would make modding collections easier? We'd love to hear it!
+
+        Don't worry about having a complete technical solution designed—just telling us **what you're trying to do and what's slowing you down** is the most helpful part.
+
+        💡 **Quick tip:** Take a quick glance through [existing feature requests](../issues?q=is%3Aissue+label%3Aenhancement) first to see if someone already pitched a similar idea.
+
+  - type: dropdown
+    id: tool
+    attributes:
+      label: Which tool is this for?
+      options:
+        - Rebuild Collection
+        - Update Collection
+        - Rules Generator
+        - Merge Plugins (The Forge)
+        - Missing Masters
+        - Mod Scrub / Clean Up
+        - Archive Finder
+        - Rebuild Missing Files
+        - Safe Collection Removal
+        - Cycle Helper
+        - PGPatcher
+        - Clear Update Flags
+        - "Reports (Stats, Work Through, Workshop, Mod Exceptions, etc.)"
+        - Settings
+        - A brand-new tool altogether
+        - Something else / Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do, and what gets in the way?
+      description: Describe the friction or limitation you're running into today.
+      placeholder: e.g. "Every time I merge plugins, I have to go back and manually disable the original 50 mods in Vortex one by one."
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: How would you love to see this work?
+      description: Your idea for how the tool could handle this. No wrong answers!
+      placeholder: e.g. "An option on the merge completion screen to automatically disable source mods in Vortex."
+    validations:
+      required: false
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How are you dealing with this right now?
+      description: (Optional) Are you using another tool, a manual workaround, or just suffering through it?
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked existing issues to see if this has already been suggested.
+          required: false

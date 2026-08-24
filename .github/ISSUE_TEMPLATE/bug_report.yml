@@ -1,0 +1,136 @@
+name: 🐛 Something's not working
+description: Report a bug or something that isn't behaving right
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping make the toolkit better! Bugs happen, but with a few quick details—especially a log file—we can usually find and fix them pretty quickly.
+
+        💡 **Quick tip:** Take a quick glance through [open and closed issues](../issues?q=is%3Aissue) first. If someone already reported it, you can add your thumbs-up or extra details there instead of starting from scratch!
+
+  - type: dropdown
+    id: tool
+    attributes:
+      label: Which tool were you using?
+      options:
+        - Rebuild Collection
+        - Update Collection
+        - Rules Generator
+        - Merge Plugins (The Forge)
+        - Missing Masters
+        - Mod Scrub / Clean Up
+        - Archive Finder
+        - Rebuild Missing Files
+        - Safe Collection Removal
+        - Cycle Helper
+        - PGPatcher
+        - Clear Update Flags
+        - "Reports (Stats, Work Through, Workshop, Mod Exceptions, etc.)"
+        - Vortex Collection Helper (the Vortex extension)
+        - Settings
+        - Something else / Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: Collection Tools version
+      description: What version of Vortex Collection Tools are you running? (Check the footer or main screen).
+      placeholder: e.g. 1.4.2
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Tell us what went wrong in your own words.
+      placeholder: e.g. "I clicked Apply Update and it got stuck on 'Applying...' with no progress."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you click or do leading up to the issue? If it only happens with a specific collection or mod, let us know which one.
+      placeholder: |
+        1. Opened Merge Plugins
+        2. Picked "My Collection"
+        3. Selected 30 plugins
+        4. Clicked Build
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+      description: A quick note on what you thought should have happened instead.
+      placeholder: e.g. "The merge should have finished and created the new plugin."
+    validations:
+      required: false
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log file or error message (if you have one)
+      description: |
+        Most tools write a log during their run—this is often the single most helpful thing for tracking down what went wrong. You can paste the text here or drag and drop the `.log`/`.txt` file right into this box.
+
+        Screenshots of errors or stuck screens are super helpful too!
+      render: text
+
+  - type: dropdown
+    id: game
+    attributes:
+      label: Which game?
+      options:
+        - Skyrim Special Edition / Anniversary Edition
+        - Skyrim VR
+        - Fallout 4
+        - Fallout 4 VR
+        - Something else / Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: vortex-version
+    attributes:
+      label: Vortex version
+      description: Vortex's own version number (found in Vortex under Settings → About).
+      placeholder: e.g. 1.13.6
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: How did you install the toolkit?
+      options:
+        - The setup installer (.exe)
+        - The portable release (.zip)
+        - Not sure
+    validations:
+      required: false
+
+  - type: dropdown
+    id: helper
+    attributes:
+      label: Do you have the Vortex Collection Helper extension installed?
+      description: It's an optional extension installed inside Vortex itself that helps the two apps talk to each other.
+      options:
+        - "Yes"
+        - "No"
+        - Not sure
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked existing issues to see if this was already reported.
+          required: false
