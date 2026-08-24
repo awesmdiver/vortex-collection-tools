@@ -10,7 +10,7 @@ body:
 
         Don't worry about having a complete technical solution designed—just telling us **what you're trying to do and what's slowing you down** is the most helpful part.
 
-        💡 **Quick tip:** Take a quick glance through [existing feature requests](../issues?q=is%3Aissue+label%3Aenhancement) first to see if someone already pitched a similar idea.
+        💡 **Quick tip:** Take a quick glance through [existing feature requests](https://github.com/awesmdiver/vortex-collection-tools/issues?q=is%3Aissue+label%3Aenhancement) first to see if someone already pitched a similar idea.
 
   - type: dropdown
     id: tool

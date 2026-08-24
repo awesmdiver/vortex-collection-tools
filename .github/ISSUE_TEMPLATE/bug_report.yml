@@ -8,7 +8,7 @@ body:
       value: |
         Thanks for helping make the toolkit better! Bugs happen, but with a few quick details—especially a log file—we can usually find and fix them pretty quickly.
 
-        💡 **Quick tip:** Take a quick glance through [open and closed issues](../issues?q=is%3Aissue) first. If someone already reported it, you can add your thumbs-up or extra details there instead of starting from scratch!
+        💡 **Quick tip:** Take a quick glance through [open and closed issues](https://github.com/awesmdiver/vortex-collection-tools/issues?q=is%3Aissue) first. If someone already reported it, you can add your thumbs-up or extra details there instead of starting from scratch!
 
   - type: dropdown
     id: tool
