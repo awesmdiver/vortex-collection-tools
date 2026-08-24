@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Merge Plugin Verifier · Vortex Collection Tools vs. zMerge</title>
+<style>
+  :root {
+    --bg: #0f1115; --surface: #171a21; --surface-2: #1f232c; --border: #2a2f3a;
+    --text: #e6e8ec; --text-muted: #9aa1ad; --accent: #5b8def; --accent-bg: rgba(91,141,239,0.12);
+    --success: #3ddc84; --success-bg: rgba(61,220,132,0.10);
+    --danger: #ff6b6b; --danger-bg: rgba(255,107,107,0.10);
+    --warning: #f0b429; --warning-bg: rgba(240,180,41,0.10);
+    --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .sub { color: var(--text-muted); margin: 0 0 28px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+  .pickers { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 640px) { .pickers { grid-template-columns: 1fr; } }
+  .picker { background: var(--surface-2); border: 1px dashed var(--border); border-radius: 10px; padding: 16px; text-align: center; }
+  .picker h3 { margin: 0 0 4px; font-size: 14px; }
+  .picker p.hint { color: var(--text-muted); font-size: 12px; margin: 0 0 12px; }
+  .picker .file-info { margin-top: 10px; font-size: 12px; color: var(--text-muted); word-break: break-all; }
+  .picker .file-info.found { color: var(--text); }
+  input[type=file] { display: none; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn--primary { background: var(--accent); border-color: var(--accent); color: #0b1220; }
+  .btn--primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn--primary:disabled:hover { border-color: var(--accent); }
+  .btn--ghost { background: transparent; }
+  .actions { display: flex; justify-content: center; margin: 24px 0; }
+  .result { display: none; }
+  .result.show { display: block; }
+  .verdict { display: flex; align-items: center; gap: 14px; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
+  .verdict.pass { background: var(--success-bg); border: 1px solid var(--success); }
+  .verdict.fail { background: var(--danger-bg); border: 1px solid var(--danger); }
+  .verdict .icon { font-size: 40px; line-height: 1; }
+  .verdict h2 { margin: 0 0 4px; font-size: 18px; }
+  .verdict.pass h2 { color: var(--success); }
+  .verdict.fail h2 { color: var(--danger); }
+  .verdict p { margin: 0; color: var(--text-muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+  td.num { font-family: var(--mono); }
+  tr.diff td { color: var(--danger); }
+  .match-badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .match-badge.ok { background: var(--success-bg); color: var(--success); }
+  .match-badge.bad { background: var(--danger-bg); color: var(--danger); }
+  pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; overflow-x: auto; font-family: var(--mono); font-size: 12px; margin: 0; }
+  .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-muted); margin: 0 0 10px; }
+  .callout { border-radius: 8px; padding: 12px 14px; font-size: 13px; margin-top: 16px; }
+  .callout--info { background: var(--accent-bg); border: 1px solid var(--accent); }
+  .callout--warning { background: var(--warning-bg); border: 1px solid var(--warning); }
+  .error-box { background: var(--danger-bg); border: 1px solid var(--danger); border-radius: 8px; padding: 12px 14px; color: var(--danger); font-size: 13px; margin-top: 16px; display: none; }
+  .error-box.show { display: block; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.25); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  a { color: var(--accent); }
+  code { font-family: var(--mono); background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔍 Merge Plugin Verifier</h1>
+  <p class="sub">Compare a plugin merged in <strong>The Forge</strong> (Vortex Collection Tools)
+    against the exact same merge built in <strong>zMerge</strong>.</p>
+  <p class="sub"><strong>Comparison runs entirely inside your browser</strong> — no files leave your
+    machine while checking. If a mismatch is found and you decide to report it, you can download a
+    diagnostic bundle (the merged plugin plus generated log/JSON files from both tools) to attach to
+    a GitHub issue yourself. Nothing is ever sent automatically.</p>
+
+  <div class="card">
+    <div class="pickers">
+      <div class="picker">
+        <h3>🧬 Vortex Collection Tools Output</h3>
+        <p class="hint">Select the merge output folder generated by The Forge</p>
+        <label class="btn" for="folderA">📁 Choose folder…</label>
+        <input type="file" id="folderA" webkitdirectory multiple>
+        <div class="file-info" id="infoA">No folder selected yet</div>
+      </div>
+      <div class="picker">
+        <h3>🛠️ zMerge Reference Output</h3>
+        <p class="hint">Select the output folder for the same merge from zMerge</p>
+        <label class="btn" for="folderB">📁 Choose folder…</label>
+        <input type="file" id="folderB" webkitdirectory multiple>
+        <div class="file-info" id="infoB">No folder selected yet</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn--primary" id="compareBtn" disabled>Compare Plugins</button>
+  </div>
+
+  <div class="error-box" id="errorBox"></div>
+
+  <div class="result" id="result">
+    <div class="verdict" id="verdict"></div>
+
+    <div class="card">
+      <div class="section-title">Record counts by type</div>
+      <table id="recordTable"></table>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Master files (.esm / .esp dependencies)</div>
+      <table id="masterTable"></table>
+    </div>
+
+    <div class="card" id="byteDiffCard" style="display:none">
+      <div class="section-title">Byte-level difference breakdown</div>
+      <table>
+        <tr><td>Plugin header (TES4)</td><td class="num" id="headerDiffCell"></td></tr>
+        <tr><td>Plugin record data (body)</td><td class="num" id="bodyDiffCell"></td></tr>
+      </table>
+      <div class="callout callout--info" id="regionsNote"></div>
+    </div>
+
+    <div class="card" id="reportCard">
+      <div class="section-title">Full technical diff summary</div>
+      <pre id="reportText"></pre>
+    </div>
+
+    <div class="card" id="issueCard" style="display:none">
+      <div class="section-title">Help us fix this mismatch</div>
+      <div class="callout callout--warning">⚠️ <strong>What's inside the diagnostic bundle:</strong>
+        The comparison report, the merged plugin file, and the log/metadata files (<code>.json</code>
+        and <code>.txt</code>) generated by both tools — the exact data needed to reproduce and fix
+        the bug.<br><br>It strictly excludes mod assets (no textures, meshes, voice audio, or BSA
+        archives). Keep in mind that attaching this zip to a GitHub issue will make these
+        tool-generated files publicly visible.</div>
+      <ol style="margin: 14px 0 0; padding-left: 20px">
+        <li><strong>Download the diagnostic report:</strong> Click the button below to save the
+          <code>.zip</code> archive to your computer.</li>
+        <li><strong>Open the GitHub issue:</strong> Click the button to open a pre-filled issue with
+          your merge details already written up.</li>
+        <li><strong>Attach the zip:</strong> Drag and drop the downloaded <code>.zip</code> file
+          directly into the GitHub issue description before hitting submit.</li>
+      </ol>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px">
+        <button class="btn btn--primary" id="downloadZipBtn">⬇️ Download Diagnostic Report (.zip)</button>
+        <a class="btn" id="openIssueBtn" target="_blank" rel="noopener">🐙 Open Pre-Filled GitHub Issue</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ---------- Shared config ----------
+const ISSUE_REPO = 'awesmdiver/vortex-collection-tools';
+
+// ---------- Folder picking ----------
+let filesA = null, filesB = null;
+
+function pickPluginFile(fileList, label) {
+  // Find the top-level .esp/.esm/.esl in the chosen folder -- mirrors how a real merge output
+  // folder is shaped (the merged plugin sits at the folder's own root, one level up from any
+  // "merge - <name>" subfolder the app/zMerge write their own logs/artifacts into).
+  const candidates = Array.from(fileList).filter((f) => {
+    const rel = f.webkitRelativePath || f.name;
+    const depth = rel.split('/').length;
+    return depth === 2 && /\.(esp|esm|esl)$/i.test(f.name);
+  });
+  if (candidates.length === 0) throw new Error(`We couldn't find a valid merged plugin (.esp, .esm, or .esl) inside the ${label} folder. Please make sure you selected the root output folder of the merge.`);
+  if (candidates.length > 1) {
+    // Ambiguous -- pick the largest, plugins from a merge are rarely tiny, and warn in the report.
+    candidates.sort((a, b) => b.size - a.size);
+  }
+  return candidates[0];
+}
+
+function updateInfo(el, file, err) {
+  if (err) { el.textContent = err; el.classList.remove('found'); return; }
+  const folderName = (file.webkitRelativePath || '').split('/')[0] || file.name;
+  el.textContent = `Selected: ${folderName} (${file.name} found, ${(file.size / 1024).toFixed(1)} KB)`;
+  el.classList.add('found');
+}
+
+let folderListA = null, folderListB = null;
+
+document.getElementById('folderA').addEventListener('change', (e) => {
+  folderListA = e.target.files;
+  try {
+    const f = pickPluginFile(e.target.files, 'Vortex Collection Tools');
+    filesA = f;
+    updateInfo(document.getElementById('infoA'), f);
+  } catch (err) {
+    filesA = null;
+    updateInfo(document.getElementById('infoA'), null, err.message);
+  }
+  refreshCompareEnabled();
+});
+document.getElementById('folderB').addEventListener('change', (e) => {
+  folderListB = e.target.files;
+  try {
+    const f = pickPluginFile(e.target.files, 'zMerge');
+    filesB = f;
+    updateInfo(document.getElementById('infoB'), f);
+  } catch (err) {
+    filesB = null;
+    updateInfo(document.getElementById('infoB'), null, err.message);
+  }
+  refreshCompareEnabled();
+});
+function refreshCompareEnabled() {
+  document.getElementById('compareBtn').disabled = !(filesA && filesB);
+}
+
+// ---------- Byte-level plugin parsing (ported from scripts/compare-merge-output.js) ----------
+
+function readPluginHeader(bytes) {
+  // TES4 header: 4-byte signature, 4-byte dataSize, 4-byte flags, then subrecords in the header's
+  // own data block. Same layout lib/esp-header.js reads on the Node side.
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (bytesToAscii(bytes, 0, 4) !== 'TES4') return null;
+  const dataSize = view.getUint32(4, true);
+  const flags = view.getUint32(8, true);
+  const FLAG_COMPRESSED = 0x00040000;
+  if (flags & FLAG_COMPRESSED) return { flags, masters: null, compressed: true, headerSize: dataSize };
+  const dataStart = 24;
+  const masters = [];
+  let offset = 0;
+  while (offset + 6 <= dataSize) {
+    const subSig = bytesToAscii(bytes, dataStart + offset, dataStart + offset + 4);
+    const subSize = view.getUint16(dataStart + offset + 4, true);
+    const subDataStart = dataStart + offset + 6;
+    if (offset + 6 + subSize > dataSize) break;
+    if (subSig === 'MAST') {
+      let name = win1252Decode(bytes, subDataStart, subDataStart + subSize);
+      if (name.endsWith('\0')) name = name.slice(0, -1);
+      masters.push(name);
+    }
+    offset += 6 + subSize;
+  }
+  return { flags, masters, compressed: false, headerSize: dataSize };
+}
+
+function bytesToAscii(bytes, start, end) {
+  let s = '';
+  for (let i = start; i < end; i++) s += String.fromCharCode(bytes[i]);
+  return s;
+}
+
+// Windows-1252 covers every byte value; bytes 0x80-0x9F are the handful of codepoints that differ
+// from Latin-1 (smart quotes, em-dash, etc.) -- real plugin author names/mod titles occasionally use
+// them. Same table lib/esp-header.js's own decodeWin1252 uses.
+const WIN1252_HIGH = {
+  0x80: 0x20AC, 0x82: 0x201A, 0x83: 0x0192, 0x84: 0x201E, 0x85: 0x2026, 0x86: 0x2020, 0x87: 0x2021,
+  0x88: 0x02C6, 0x89: 0x2030, 0x8A: 0x0160, 0x8B: 0x2039, 0x8C: 0x0152, 0x8E: 0x017D, 0x91: 0x2018,
+  0x92: 0x2019, 0x93: 0x201C, 0x94: 0x201D, 0x95: 0x2022, 0x96: 0x2013, 0x97: 0x2014, 0x98: 0x02DC,
+  0x99: 0x2122, 0x9A: 0x0161, 0x9B: 0x203A, 0x9C: 0x0153, 0x9E: 0x017E, 0x9F: 0x0178,
+};
+function win1252Decode(bytes, start, end) {
+  let s = '';
+  for (let i = start; i < end; i++) {
+    const b = bytes[i];
+    s += String.fromCharCode(WIN1252_HIGH[b] || b);
+  }
+  return s;
+}
+
+function walkGroup(bytes, view, start, end, bySig, topLabels, depth) {
+  let offset = start;
+  while (offset < end - 24) {
+    const sig = bytesToAscii(bytes, offset, offset + 4);
+    if (sig === 'GRUP') {
+      const groupSize = view.getUint32(offset + 4, true);
+      const label = bytesToAscii(bytes, offset + 8, offset + 12);
+      if (depth === 0) topLabels.push(label.trim() || '(binary label)');
+      walkGroup(bytes, view, offset + 24, offset + groupSize, bySig, topLabels, depth + 1);
+      offset += groupSize;
+    } else if (/^[A-Z0-9_]{4}$/.test(sig)) {
+      const dataSize = view.getUint32(offset + 4, true);
+      bySig.set(sig, (bySig.get(sig) || 0) + 1);
+      offset += 24 + dataSize;
+    } else {
+      break;
+    }
+  }
+}
+
+function walkTopLevel(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (bytesToAscii(bytes, 0, 4) !== 'TES4') throw new Error('Not a valid plugin (no TES4 header)');
+  const headerSize = view.getUint32(4, true);
+  const bySig = new Map(), topLabels = [];
+  walkGroup(bytes, view, 24 + headerSize, bytes.length, bySig, topLabels, 0);
+  return { bySig, grupLabels: topLabels };
+}
+
+function byteDiffSummary(a, b, headerEnd) {
+  const len = Math.max(a.length, b.length);
+  let headerDiff = 0, headerTotal = 0, bodyDiff = 0, bodyTotal = 0;
+  const regions = [];
+  let regionStart = -1;
+  for (let i = 0; i < len; i++) {
+    const inHeader = i < headerEnd;
+    const av = i < a.length ? a[i] : null;
+    const bv = i < b.length ? b[i] : null;
+    const diff = av !== bv;
+    if (inHeader) { headerTotal++; if (diff) headerDiff++; } else { bodyTotal++; if (diff) bodyDiff++; }
+    if (diff && regionStart < 0) regionStart = i;
+    if (!diff && regionStart >= 0) { regions.push([regionStart, i - 1]); regionStart = -1; }
+  }
+  if (regionStart >= 0) regions.push([regionStart, len - 1]);
+  return {
+    headerDiff, headerTotal, headerPct: headerTotal ? (100 * headerDiff / headerTotal) : 0,
+    bodyDiff, bodyTotal, bodyPct: bodyTotal ? (100 * bodyDiff / bodyTotal) : 0,
+    regions,
+  };
+}
+
+function hexDump(bytes, start, len) {
+  const end = Math.min(start + len, bytes.length);
+  const parts = [];
+  for (let i = start; i < end; i++) parts.push(bytes[i].toString(16).padStart(2, '0'));
+  return parts.join(' ');
+}
+
+async function sha256(bytes) {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ---------- Comparison + rendering ----------
+
+let lastReportText = '';
+let lastVerdict = null;
+
+async function runCompare() {
+  document.getElementById('errorBox').classList.remove('show');
+  document.getElementById('result').classList.remove('show');
+  const btn = document.getElementById('compareBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Comparing files…';
+  try {
+    if (!(window.crypto && window.crypto.subtle)) {
+      throw new Error('Browser security restriction: this page requires a secure environment to read and hash local files. Please open this HTML file directly from your disk (double-click the file), or host it over a secure connection (https://) — not plain http://.');
+    }
+    const bufA = new Uint8Array(await filesA.arrayBuffer());
+    const bufB = new Uint8Array(await filesB.arrayBuffer());
+    const hdrA = readPluginHeader(bufA);
+    const hdrB = readPluginHeader(bufB);
+    if (!hdrA || !hdrB) throw new Error('One of these files does not look like a real Skyrim plugin (no TES4 header found).');
+    const walkA = walkTopLevel(bufA);
+    const walkB = walkTopLevel(bufB);
+    const [hashA, hashB] = await Promise.all([sha256(bufA), sha256(bufB)]);
+    const byteIdentical = hashA === hashB;
+
+    const allSigs = new Set([...walkA.bySig.keys(), ...walkB.bySig.keys()]);
+    let totalA = 0, totalB = 0;
+    const recordRows = [...allSigs].sort().map((sig) => {
+      const a = walkA.bySig.get(sig) || 0, b = walkB.bySig.get(sig) || 0;
+      totalA += a; totalB += b;
+      return { sig, a, b, match: a === b };
+    });
+
+    const mastersA = (hdrA.masters || []).map((m) => m.toLowerCase());
+    const mastersB = (hdrB.masters || []).map((m) => m.toLowerCase());
+    const setB = new Set(mastersB), setA = new Set(mastersA);
+    const onlyA = mastersA.filter((m) => !setB.has(m));
+    const onlyB = mastersB.filter((m) => !setA.has(m));
+    let orderMatches = mastersA.length === mastersB.length;
+    if (orderMatches) for (let i = 0; i < mastersA.length; i++) if (mastersA[i] !== mastersB[i]) { orderMatches = false; break; }
+    const masterSetMatches = onlyA.length === 0 && onlyB.length === 0;
+
+    const headerEnd = 24 + hdrA.headerSize;
+    const diff = byteDiffSummary(bufA, bufB, headerEnd);
+
+    const recordsMatch = totalA === totalB && recordRows.every((r) => r.match);
+    const pass = byteIdentical;
+
+    lastVerdict = {
+      pass, filenameA: filesA.name, filenameB: filesB.name, sizeA: bufA.length, sizeB: bufB.length,
+      hashA, hashB, totalA, totalB, mastersA: mastersA.length, mastersB: mastersB.length,
+      masterSetMatches, orderMatches,
+    };
+
+    renderResult({
+      pass, recordsMatch, recordRows, totalA, totalB,
+      mastersA, mastersB, onlyA, onlyB, orderMatches, masterSetMatches,
+      diff, bufA, bufB, hashA, hashB, headerEnd, sizeA: bufA.length, sizeB: bufB.length,
+    });
+
+    lastReportText = buildReportText({
+      recordRows, totalA, totalB, hdrA, hdrB, mastersA, mastersB, onlyA, onlyB, orderMatches,
+      masterSetMatches, diff, bufA, bufB, hashA, hashB, headerEnd, walkA, walkB,
+      sizeA: bufA.length, sizeB: bufB.length, byteIdentical,
+      nameA: filesA.name, nameB: filesB.name,
+    });
+    document.getElementById('reportText').textContent = lastReportText;
+    document.getElementById('issueCard').style.display = pass ? 'none' : 'block';
+
+    document.getElementById('result').classList.add('show');
+  } catch (err) {
+    document.getElementById('errorBox').textContent = '⚠️ ' + err.message;
+    document.getElementById('errorBox').classList.add('show');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Compare Plugins';
+  }
+}
+
+function renderResult(d) {
+  const verdict = document.getElementById('verdict');
+  if (d.pass) {
+    verdict.className = 'verdict pass';
+    verdict.innerHTML = '<div class="icon">✅</div><div><h2>Perfect Match! Byte-for-Byte Identical</h2><p>Every single byte of the merged plugin matches zMerge\'s output. The Forge produced an exact 1:1 replica of the reference merge.</p></div>';
+  } else {
+    verdict.className = 'verdict fail';
+    verdict.innerHTML = '<div class="icon">⚠️</div><div><h2>Differences Detected</h2><p>The plugin built by The Forge does not match zMerge\'s output. Check the breakdown below to see what differs, and consider submitting a quick report so we can fix it.</p></div>';
+  }
+
+  const recordTable = document.getElementById('recordTable');
+  let rt = '<tr><th>Record Type</th><th>Ours</th><th>zMerge</th><th></th></tr>';
+  for (const r of d.recordRows) {
+    rt += `<tr class="${r.match ? '' : 'diff'}"><td>${r.sig}</td><td class="num">${r.a}</td><td class="num">${r.b}</td><td>${r.match ? '' : '⚠️ Differs'}</td></tr>`;
+  }
+  rt += `<tr><td><strong>Total</strong></td><td class="num"><strong>${d.totalA}</strong></td><td class="num"><strong>${d.totalB}</strong></td><td>${d.totalA === d.totalB ? '<span class="match-badge ok">Match</span>' : '<span class="match-badge bad">Differs</span>'}</td></tr>`;
+  recordTable.innerHTML = rt;
+
+  const masterTable = document.getElementById('masterTable');
+  let mt = `<tr><td>Count</td><td class="num">${d.mastersA.length} / ${d.mastersB.length}</td><td>${d.masterSetMatches ? '<span class="match-badge ok">Identical master list</span>' : '<span class="match-badge bad">Different master list</span>'}</td></tr>`;
+  mt += `<tr><td>Order</td><td></td><td>${d.orderMatches ? '<span class="match-badge ok">Correct order</span>' : '<span class="match-badge bad">Order mismatch</span>'}</td></tr>`;
+  if (d.onlyA.length) mt += `<tr class="diff"><td colspan="3">Only in ours: ${d.onlyA.join(', ')}</td></tr>`;
+  if (d.onlyB.length) mt += `<tr class="diff"><td colspan="3">Only in zMerge: ${d.onlyB.join(', ')}</td></tr>`;
+  masterTable.innerHTML = mt;
+
+  const byteDiffCard = document.getElementById('byteDiffCard');
+  if (d.pass) {
+    byteDiffCard.style.display = 'none';
+  } else {
+    byteDiffCard.style.display = 'block';
+    document.getElementById('headerDiffCell').textContent = `${d.diff.headerDiff} / ${d.diff.headerTotal} bytes (${d.diff.headerPct.toFixed(1)}%)`;
+    document.getElementById('bodyDiffCell').textContent = `${d.diff.bodyDiff} / ${d.diff.bodyTotal} bytes (${d.diff.bodyPct.toFixed(1)}%)`;
+    document.getElementById('regionsNote').textContent = `${d.diff.regions.length} differing byte region(s) total — the full list is in the text report below and the downloadable diagnostic file.`;
+  }
+}
+
+function buildReportText(d) {
+  const lines = [];
+  lines.push('Merge Plugins Verify report');
+  lines.push('Generated: ' + new Date().toISOString());
+  lines.push('');
+  lines.push(`Ours (Vortex Collection Tools): ${d.nameA} (${d.sizeA} bytes)`);
+  lines.push(`zMerge:                         ${d.nameB} (${d.sizeB} bytes)`);
+  lines.push('');
+  lines.push(`SHA-256 ours:   ${d.hashA}`);
+  lines.push(`SHA-256 zMerge: ${d.hashB}`);
+  lines.push(`byte-identical: ${d.byteIdentical}`);
+  lines.push('');
+  lines.push('Record counts by signature (ours / zMerge):');
+  for (const r of d.recordRows) {
+    lines.push(`  ${r.sig}  ${String(r.a).padStart(5)} / ${String(r.b).padStart(5)}${r.match ? '' : '  <-- DIFFERS'}`);
+  }
+  lines.push(`  TOTAL  ${String(d.totalA).padStart(5)} / ${String(d.totalB).padStart(5)}${d.totalA === d.totalB ? '  (match)' : '  <-- DIFFERS'}`);
+  lines.push('');
+  lines.push(`Top-level GRUP labels ours (${d.walkA.grupLabels.length}): ${d.walkA.grupLabels.join(', ')}`);
+  lines.push(`Top-level GRUP labels zMerge (${d.walkB.grupLabels.length}): ${d.walkB.grupLabels.join(', ')}`);
+  lines.push('');
+  lines.push(`Masters ours: ${d.mastersA.length}   Masters zMerge: ${d.mastersB.length}`);
+  lines.push(`  set match: ${d.masterSetMatches}`);
+  if (d.onlyA.length) lines.push(`  only in ours: ${d.onlyA.join(', ')}`);
+  if (d.onlyB.length) lines.push(`  only in zMerge: ${d.onlyB.join(', ')}`);
+  lines.push(`  order matches: ${d.orderMatches}`);
+  if (!d.orderMatches && d.mastersA.length === d.mastersB.length) {
+    lines.push('  ours order:   ' + d.mastersA.join(', '));
+    lines.push('  zMerge order: ' + d.mastersB.join(', '));
+  }
+  lines.push('');
+  lines.push(`TES4 header size ours: ${d.hdrA.headerSize}   zMerge: ${d.hdrB.headerSize}   ${d.hdrA.headerSize === d.hdrB.headerSize ? '(match)' : '<-- DIFFERS'}`);
+  lines.push('');
+  lines.push(`Byte differences -- header region (0..${d.headerEnd}): ${d.diff.headerDiff}/${d.diff.headerTotal} (${d.diff.headerPct.toFixed(1)}%)`);
+  lines.push(`Byte differences -- body region   (${d.headerEnd}..end): ${d.diff.bodyDiff}/${d.diff.bodyTotal} (${d.diff.bodyPct.toFixed(1)}%)`);
+  lines.push('');
+  const N = 12;
+  lines.push(`First ${Math.min(N, d.diff.regions.length)} differing regions (of ${d.diff.regions.length} total):`);
+  for (const [s, e] of d.diff.regions.slice(0, N)) {
+    lines.push(`  [${s}-${e}] (${e - s + 1} bytes)`);
+    lines.push(`    ours:   ${hexDump(d.bufA, s, Math.min(e - s + 1, 24))}`);
+    lines.push(`    zMerge: ${hexDump(d.bufB, s, Math.min(e - s + 1, 24))}`);
+  }
+  return lines.join('\n');
+}
+
+document.getElementById('compareBtn').addEventListener('click', runCompare);
+
+// ---------- Diagnostic zip (hand-rolled, uncompressed "store" format, zero dependencies) ----------
+// A real zip file needs: local file header + data (per entry), then a central directory, then an
+// end-of-central-directory record. "Store" (no compression) skips needing a deflate implementation
+// entirely -- fine here, the report is plain text and small.
+
+function crc32(bytes) {
+  let table = crc32.table;
+  if (!table) {
+    table = crc32.table = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      table[n] = c >>> 0;
+    }
+  }
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) crc = table[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function buildZip(entries) {
+  // entries: [{ name, data: Uint8Array }]
+  const chunks = [];
+  const centralEntries = [];
+  let offset = 0;
+  const nowDosTime = 0, nowDosDate = 0x21; // fixed placeholder timestamp -- not meaningful here
+
+  for (const { name, data } of entries) {
+    const nameBytes = new TextEncoder().encode(name);
+    const crc = crc32(data);
+    const localHeader = new Uint8Array(30 + nameBytes.length);
+    const lv = new DataView(localHeader.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true); // version needed
+    lv.setUint16(6, 0, true); // flags
+    lv.setUint16(8, 0, true); // method: 0 = store
+    lv.setUint16(10, nowDosTime, true);
+    lv.setUint16(12, nowDosDate, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, data.length, true); // compressed size
+    lv.setUint32(22, data.length, true); // uncompressed size
+    lv.setUint16(26, nameBytes.length, true);
+    lv.setUint16(28, 0, true); // extra field length
+    localHeader.set(nameBytes, 30);
+
+    chunks.push(localHeader, data);
+    centralEntries.push({ nameBytes, crc, size: data.length, offset });
+    offset += localHeader.length + data.length;
+  }
+
+  const centralStart = offset;
+  for (const e of centralEntries) {
+    const central = new Uint8Array(46 + e.nameBytes.length);
+    const cv = new DataView(central.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, nowDosTime, true);
+    cv.setUint16(14, nowDosDate, true);
+    cv.setUint32(16, e.crc, true);
+    cv.setUint32(20, e.size, true);
+    cv.setUint32(24, e.size, true);
+    cv.setUint16(28, e.nameBytes.length, true);
+    cv.setUint16(30, 0, true);
+    cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true);
+    cv.setUint16(36, 0, true);
+    cv.setUint32(38, 0, true);
+    cv.setUint32(42, e.offset, true);
+    central.set(e.nameBytes, 46);
+    chunks.push(central);
+    offset += central.length;
+  }
+  const centralSize = offset - centralStart;
+
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(4, 0, true);
+  ev.setUint16(6, 0, true);
+  ev.setUint16(8, centralEntries.length, true);
+  ev.setUint16(10, centralEntries.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, centralStart, true);
+  ev.setUint16(20, 0, true);
+  chunks.push(eocd);
+
+  const total = chunks.reduce((sum, c) => sum + c.length, 0);
+  const out = new Uint8Array(total);
+  let pos = 0;
+  for (const c of chunks) { out.set(c, pos); pos += c.length; }
+  return out;
+}
+
+// The merged plugin itself plus every .json/.txt diagnostic file (merge.json, map.json,
+// fidCache.json, the text log) from each folder -- real source material to validate a bug against,
+// without pulling in anything else a merge output folder can contain (e.g. zMerge's own
+// sound/voice/*.wav re-dubbed audio, which is someone else's copyrighted mod content, not this
+// tool's own diagnostic data). Namespaced under ours/zmerge/ inside the zip, using each file's own
+// path relative to the folder root (webkitRelativePath's own first segment is that root folder's
+// name, stripped here since it's not meaningful once repackaged).
+function shouldIncludeInZip(fileName) {
+  return /\.(esp|esm|esl|json|txt)$/i.test(fileName);
+}
+async function collectFolderEntries(fileList, prefix) {
+  const entries = [];
+  for (const file of Array.from(fileList || [])) {
+    if (!shouldIncludeInZip(file.name)) continue;
+    const rel = (file.webkitRelativePath || file.name).split('/').slice(1).join('/') || file.name;
+    entries.push({ name: `${prefix}/${rel}`, data: new Uint8Array(await file.arrayBuffer()) });
+  }
+  return entries;
+}
+
+document.getElementById('downloadZipBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('downloadZipBtn');
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Packaging…';
+  try {
+    const [oursEntries, zmergeEntries] = await Promise.all([
+      collectFolderEntries(folderListA, 'ours'),
+      collectFolderEntries(folderListB, 'zmerge'),
+    ]);
+    const entries = [
+      { name: 'merge-verify-report.txt', data: new TextEncoder().encode(lastReportText) },
+      ...oursEntries,
+      ...zmergeEntries,
+    ];
+    const zipBytes = buildZip(entries);
+    const blob = new Blob([zipBytes], { type: 'application/zip' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'merge-verify-report.zip';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+});
+
+document.getElementById('openIssueBtn').addEventListener('click', (e) => {
+  e.preventDefault();
+  const v = lastVerdict;
+  const title = encodeURIComponent(`Merge mismatch: ${v.filenameA}`);
+  const summary = [
+    `A merge produced by Vortex Collection Tools doesn't byte-match the same merge built by zMerge.`,
+    '',
+    `**Ours:** \`${v.filenameA}\` (${v.sizeA} bytes)`,
+    `**zMerge:** \`${v.filenameB}\` (${v.sizeB} bytes)`,
+    `**Records:** ${v.totalA} / ${v.totalB}`,
+    `**Masters:** ${v.mastersA} / ${v.mastersB} (set match: ${v.masterSetMatches}, order match: ${v.orderMatches})`,
+    '',
+    '**Full diagnostic report:** attached as a .zip below (downloaded from the verify tool — drag it in here before submitting).',
+  ].join('\n');
+  const body = encodeURIComponent(summary);
+  const url = `https://github.com/${ISSUE_REPO}/issues/new?title=${title}&body=${body}&labels=bug`;
+  window.open(url, '_blank', 'noopener');
+});
+</script>
+</body>
+</html>
