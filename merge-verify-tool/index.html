@@ -135,6 +135,7 @@
     <details class="card">
       <summary class="section-title">Master files (.esm / .esp dependencies)</summary>
       <table id="masterTable"></table>
+      <div class="callout callout--info" id="masterMismatchNote" style="display:none; margin-top:10px"></div>
     </details>
 
     <details class="card">
@@ -444,6 +445,18 @@ function renderResult(d) {
   if (d.onlyA.length) mt += `<tr class="diff"><td colspan="3">Only in ours: ${d.onlyA.join(', ')}</td></tr>`;
   if (d.onlyB.length) mt += `<tr class="diff"><td colspan="3">Only in zMerge: ${d.onlyB.join(', ')}</td></tr>`;
   masterTable.innerHTML = mt;
+
+  // A master zMerge included that ours didn't isn't necessarily wrong -- our own detection only adds
+  // a master when a copied record genuinely still references it, which can be stricter (and more
+  // accurate) than zMerge's own approach. Confirmed real 2026-08-25 (GitHub issue #3): a live tester's
+  // own re-check in xEdit found nothing in the merged output actually used the "missing" master.
+  const masterNote = document.getElementById('masterMismatchNote');
+  if (d.onlyB.length) {
+    masterNote.style.display = 'block';
+    masterNote.innerHTML = 'ℹ️ <strong>About the missing master:</strong> Our reference-based detection is stricter than zMerge\'s, and may be more accurate here -- it only adds a master when something in the merged plugin still genuinely points to it. Test the merged plugin in-game to confirm everything works as expected.';
+  } else {
+    masterNote.style.display = 'none';
+  }
 
   const byteDiffCard = document.getElementById('byteDiffCard');
   if (d.pass) {
