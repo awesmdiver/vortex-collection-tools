@@ -37,6 +37,7 @@ const syncLib = require('../lib/vortex-sync/lib');
 const helperClient = require('../lib/vortex-helper-client');
 const appConfig = require('../lib/app-config');
 const lastFixedState = require('../lib/rebuild-missing-last-fixed-state');
+const workshopReportFetchState = require('../lib/workshop-report-fetch-state');
 const { createSseSession } = require('./sse-session');
 
 const scanSession = createSseSession();
@@ -252,18 +253,23 @@ function createRebuildMissingRouter(config) {
     // revisionNumber, so a genuinely fresher revision can still sort BEHIND an older, larger
     // revisionNumber if only picked that way. updatedAt is the only field that actually reflects "was
     // this the one most recently changed."
-    async function resolveNewestRevisionNumber(slug) {
+    // Renamed from resolveNewestRevisionNumber (2026-08-24, workshop-report-real-staleness-check) --
+    // now returns the whole resolved {revisionNumber, updatedAt}, not just the number, so
+    // refreshCollectionFromNexus below can record BOTH into workshop-report-fetch-state.js's own
+    // tracker. updatedAt is the field Workshop Report's own staleness check actually compares on
+    // (see that route's own comment on why revisionNumber alone is unreliable).
+    async function resolveNewestRevisionInfo(slug) {
         const apiKey = nexusCollectionDownload.resolveApiKey();
         const { revisions } = await nexusCollectionDownload.fetchCollectionRevisions(apiKey, slug);
         const newest = nexusCollectionDownload.resolveNewestRevision(revisions);
         if (!newest) {
             throw new Error(`No revisions found on Nexus for slug="${slug}".`);
         }
-        return newest.revisionNumber;
+        return { revisionNumber: newest.revisionNumber, updatedAt: newest.updatedAt };
     }
 
     // Pulls a collection's newest saved revision from Nexus (always -- see
-    // resolveNewestRevisionNumber's own comment, no picker) and writes it to collectionModId's own
+    // resolveNewestRevisionInfo's own comment, no picker) and writes it to collectionModId's own
     // staging folder -- either REFRESHING an existing collection.json (the fix for the "archive
     // mismatch" false-positives a stale one can cause -- Rebuild Missing Files diffs against whatever
     // collection.json says SHOULD be installed, so a stale copy makes correctly-installed mods look
@@ -275,6 +281,14 @@ function createRebuildMissingRouter(config) {
     // ALREADY-handled case (a missing backup write, a fetch failure) -- callers get a normal
     // {ok:false, error} back instead, since /scan's own batch loop must keep going past one
     // collection's failure (see its own comment) rather than unwind on an exception.
+    //
+    // Also records the fetched revision into workshop-report-fetch-state.js's own tracker
+    // (2026-08-24, workshop-report-real-staleness-check) -- on EVERY successful fetch through here,
+    // first-time or re-fetch, regardless of which caller triggered it (this function is the one
+    // shared implementation, so fixing it here covers Workshop Report's own "Update from Nexus"
+    // button AND Rebuild Missing Files' own first-fetch/batch-refresh paths in one place). That
+    // tracker is what a LATER Workshop Report check compares against to decide updateAvailable --
+    // this function itself has no opinion on staleness, it just honestly records what got fetched.
     async function refreshCollectionFromNexus(collectionModId, slug) {
         const destDir = path.join(staging, collectionModId);
         const collectionJsonPath = path.join(destDir, 'collection.json');
@@ -303,7 +317,7 @@ function createRebuildMissingRouter(config) {
         }
 
         try {
-            const revisionNumber = await resolveNewestRevisionNumber(slug);
+            const { revisionNumber, updatedAt } = await resolveNewestRevisionInfo(slug);
             const result = await nexusCollectionDownload.fetchAndExtractCollectionJson({
                 slug, revisionNumber, destDir, sevenZipExe,
             });
@@ -314,6 +328,9 @@ function createRebuildMissingRouter(config) {
             if (isFirstFetch) {
                 notDownloadedCollections = notDownloadedCollections.filter((w) => w.modId !== collectionModId);
             }
+            // Record what actually landed on disk -- see this function's own header comment above.
+            // Best-effort: a tracker write failure must never undo an otherwise-successful fetch.
+            try { workshopReportFetchState.recordFetch(collectionModId, { revisionNumber, updatedAt }); } catch { /* non-fatal */ }
             return { ok: true, isFirstFetch, backupPath, previousModCount, ...result };
         } catch (e) {
             // The backup above (if any) is real and untouched -- extractFile only overwrites

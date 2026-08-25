@@ -323,6 +323,12 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .tool-hero { margin-bottom: var(--stack-gap); }
 .tool-hero__title { font-size: 22px; margin: 0 0 8px; }
 .tool-hero__body { margin: 0; color: var(--text); font-size: 14px; line-height: 1.6; }
+/* Merge Plugins' own hero body is the first to need two paragraphs (2026-08-24) -- the wrapper
+   became a <div> so theme.js's innerHTML swap can hold real <p> children (nesting <p> inside <p>
+   is invalid and gets silently reparented by the browser). Plain <p> margins would otherwise add
+   unwanted top/bottom spacing inconsistent with every other single-paragraph tool-hero__body. */
+.tool-hero__body p { margin: 0 0 8px; }
+.tool-hero__body p:last-child { margin-bottom: 0; }
 /* Themed hero banner image (theme.js's data-brand-slot="bannerImage") -- Plain has none, so this
    stays .hidden and the tool-hero reads exactly as it always did. A themed brand (e.g. Skyrim) that
    supplies one gets it rendered full-width above the title, own rounded corners matching every other
@@ -646,6 +652,10 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .badge--ignored { background: var(--neutral-bg); color: var(--neutral); }
 .badge--disabled { background: var(--warning-bg); color: var(--warning); }
 .badge__count { font-variant-numeric: tabular-nums; }
+/* Small currentColor status dot, e.g. Merge Plugins Step 1's selection pill (merge-step1-picker-fix,
+   2026-08-24, mockup-merge-step1-header.html) -- reuses .badge's own shape/color variants
+   (badge--show-all for zero selected, badge--info once something is) rather than a one-off pill. */
+.badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
 /* Generic severity variants (Compare Report and any future badge that isn't one of the specific
    per-status colors above) -- same four-color convention as .callout-- / .modal--, see TECHNICAL.md's
    "Callout severity conventions". */
@@ -670,6 +680,7 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .rg-section-header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .rg-section-header-row .settings-section-title { margin: 0; }
 #rgReadySectionHeaderRow, #rgReviewSectionHeaderRow { margin: var(--stack-gap) 0 10px; }
+#mergeResultsHeaderRow { margin: 2px 0 10px; }
 /* "Expand all" / "Collapse all" -- follows the "Nothing to do" badge's muted/neutral color on
    purpose (confirmed with the user 2026-07-26), regardless of which section it's attached to, so it
    never competes visually with that section's own success/warning-colored pill. It's a real
@@ -1103,6 +1114,12 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .checkbox input { width: 16px; height: 16px; accent-color: var(--accent); }
 
 .view-actions { display: flex; align-items: center; gap: 14px; margin-top: 8px; margin-bottom: 20px; }
+/* Pins Merge Plugins' Step 0 top Next button to the right edge of this ONE .view-actions row
+   (2026-08-24, merge-step0-top-next) -- scoped to its own id, not the shared class itself, same
+   "margin-left: auto on the specific id" pattern .sync-stepper-row #syncListModsBtn already uses
+   below. .view-actions is reused by 28 other rows in this app; changing the shared class would shift
+   all of them. */
+.view-actions #mergeStep0NextBtnTop { margin-left: auto; }
 
 /* Keeps Pause anchored on the same row as the phase text regardless of whether the backup/download
    notice rows below it are shown -- those rows appearing/disappearing must not shift the button. */
@@ -1276,6 +1293,11 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    2026-07-27: a separate .view-actions row above it was unnecessary vertical space) -- meta on the
    left, button pinned right via space-between/margin-left:auto rather than a fixed width. */
 .mm-header-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 8px 0 20px; }
+/* Merge Plugins' Done-screen ESL banner reuses .mm-header-row for its title+button row, but that
+   class's own 20px bottom margin is sized for a section header ahead of a big list -- far too much
+   space above a single tight paragraph inside a compact callout. Scoped to this one id rather than
+   touching the shared class other rows still rely on (2026-08-24). */
+#mergeDoneEslCallout .mm-header-row { margin-bottom: 6px; }
 .mm-header-row p { margin: 0; }
 /* Scanning... indicator sits on this SAME line, right before Refresh, instead of its own block
    below -- confirmed 2026-07-27: a separate .loading-row inserted/removed a whole line every time
@@ -2021,3 +2043,15 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .pgp-build-success__path { text-align: center; font-size: 14px; color: var(--text-muted); margin: 0 0 10px; }
 .pgp-build-success .callout { text-align: left; max-width: 640px; margin: 20px auto; }
 .pgp-build-success__actions { text-align: center; margin-top: 20px; }
+
+/* Restore chooser + confirm summary (Missing Masters, 2026-08-23). Deliberately small: the row is a
+   plain label so the whole thing is clickable, and the summary is a definition list because that is
+   what "From archive / Extract to / Then" actually is. */
+.mm-restore-chooser { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 4px; max-height: 320px; overflow-y: auto; }
+.mm-restore-choice { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.mm-restore-choice:hover { border-color: var(--accent); }
+.mm-restore-choice__name { font-weight: 600; word-break: break-all; }
+.mm-restore-choice__meta { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.mm-restore-summary { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 12px 0 4px; font-size: 13.5px; }
+.mm-restore-summary dt { font-weight: 600; color: var(--muted); }
+.mm-restore-summary dd { margin: 0; word-break: break-all; }

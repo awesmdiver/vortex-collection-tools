@@ -92,8 +92,8 @@
     {
       "repo": "Nexus-Mods/Vortex",
       "path": "src/renderer/src/extensions/collections/index.ts",
-      "lastVerifiedCommit": "fba98ff394cd6b75cbd021010958f7c97da747bf",
-      "lastVerifiedDate": "2026-07-23T11:38:49Z",
+      "lastVerifiedCommit": "ad8f02ae0b6d34b6fdab293186f76a194fea5f5c",
+      "lastVerifiedDate": "2026-07-29T17:54:11Z",
       "derivedInto": "lib/state-query-worker.js (scanAllCollections)",
       "whatWeDerived": "generateCollectionMap(): the real algorithm behind Vortex's own '+N collections' badge on the Mods page. Prefers rule.reference.id (a direct live-modKey link), falls back to findModByRef content-identity matching for a rule with no such id. CONFIRMED LIVE this session that rule.reference.id is NEVER populated for real collection-sourced rules -- only the fallback path is actually exercised for this project's data, which is why scanAllCollections mirrors findModByRef/testModReference below, not this file's primary path."
     },
@@ -140,24 +140,24 @@
     {
       "repo": "Nexus-Mods/Vortex",
       "path": "src/renderer/src/extensions/health_check/utils/modRequirements/onDownloadRequirement.ts",
-      "lastVerifiedCommit": "abebc145b4ac89549de6659bf68799eb7fb17899",
-      "lastVerifiedDate": "2026-07-02T10:53:40Z",
+      "lastVerifiedCommit": "5e04c86f557c9128c36d5ff031ca52846a16cbe5",
+      "lastVerifiedDate": "2026-08-11T15:13:34Z",
       "derivedInto": "lib/nexus-mod-download.js",
       "whatWeDerived": "Vortex's own real 'download this exact modId+fileId from Nexus' trigger: build an nxm://<domain>/mods/<modId>/files/<fileId> URL and emit a 'start-download' event. Confirms the modId+fileId (not a search/guess) is the correct identity to resolve a specific file against, matching what this project's downloadModArchive() does via the direct REST call instead of the nxm:// protocol indirection (this project has no OS-level protocol handler to route through -- it calls the same underlying API endpoint directly)."
     },
     {
       "repo": "Nexus-Mods/Vortex",
       "path": "src/renderer/src/extensions/nexus_integration/eventHandlers.ts",
-      "lastVerifiedCommit": "b8ef79b034f3c5e3ba523849635bed3b5655d717",
-      "lastVerifiedDate": "2026-07-23T12:12:07Z",
+      "lastVerifiedCommit": "d8505c32200d1c36101c49b60c8777f50235d322",
+      "lastVerifiedDate": "2026-08-11T14:23:25Z",
       "derivedInto": "lib/nexus-mod-download.js",
       "whatWeDerived": "downloadFile()'s own explicit Premium-only gate for direct/automated downloads: 'nexusmods can't let users download files directly from client, without showing ads' -- a non-Premium account is refused client-side, by design, to protect Nexus's ad-supported revenue model for free users. This project's checkPremiumStatus() + upfront Premium check before any download attempt mirrors this exact policy rather than working around it -- a non-Premium account gets the same refusal Vortex's own client would give, with no attempt to route around Nexus's ad model."
     },
     {
       "repo": "Nexus-Mods/node-nexus-api",
       "path": "src/Nexus.ts",
-      "lastVerifiedCommit": "d2856eccdc852f6b7eb36ac7288f9446b3bc66e5",
-      "lastVerifiedDate": "2026-07-23T07:59:24Z",
+      "lastVerifiedCommit": "ba61e6f7dfd58720e6013650bd13c0d342dbde47",
+      "lastVerifiedDate": "2026-08-18T11:43:38Z",
       "derivedInto": "lib/nexus-mod-download.js",
       "whatWeDerived": "getDownloadURLs()'s real endpoint shape: GET /v1/games/{gameId}/mods/{modId}/files/{fileId}/download_link.json, no key/expires needed for Premium accounts (those are only for the free-user nxm-link-click flow this project does not implement). Response is an array of {URI,...} (or a single object) -- resolveDownloadLink() handles both shapes, matching this library's own res.download_links ?? [res.download_link] fallback."
     }

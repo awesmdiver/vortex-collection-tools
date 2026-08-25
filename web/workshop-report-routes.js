@@ -43,6 +43,8 @@ const { loadCollection } = require('../lib/collection-parser');
 const nexusCollectionDownload = require('../lib/nexus-collection-download');
 const runner = require('../lib/collection-runner');
 const syncLib = require('../lib/vortex-sync/lib');
+const helperClient = require('../lib/vortex-helper-client');
+const workshopReportFetchState = require('../lib/workshop-report-fetch-state');
 const { createSseSession } = require('./sse-session');
 
 const checkSession = createSseSession();
@@ -80,6 +82,10 @@ function createWorkshopReportRouter(config) {
                     row.revisionStatus = null;
                     row.updatedAt = null;
                     row.checkError = null;
+                    // No real staleness check has run for this row yet (that's what a real Check
+                    // Nexus for updates pass, not this self-heal, establishes) -- false, not stale by
+                    // default, same reasoning as the "no tracked record yet" baseline case below.
+                    row.updateAvailable = false;
                 }
             }
         }
@@ -92,9 +98,15 @@ function createWorkshopReportRouter(config) {
         checkSession.subscribe(res, { afterSeq });
     });
 
-    router.post('/check', (req, res) => {
+    router.post('/check', async (req, res) => {
         if (!requireConfigured(res)) return;
-        if (syncLib.isVortexRunning()) {
+        // Helper-first (2026-08-24), same treatment as rebuild-missing-routes.js's own
+        // POST /load-vortex-data -- skip the Vortex-closed gate entirely once the Helper covers the
+        // read below (loadSyncStateBatchViaHelper). Untouched (same message, same shape) for the
+        // no-Helper fallback -- this only ever skips the gate when the Helper genuinely reads the
+        // same data the direct state.v2 open would have.
+        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+        if (!helperAvailable && syncLib.isVortexRunning()) {
             return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
         }
         if (checkSession.isActive()) return res.status(409).json({ error: 'A check is already in progress.' });
@@ -126,10 +138,13 @@ function createWorkshopReportRouter(config) {
 
                 // ONE shared Vortex-DB open for every local collection's slug AND the not-yet-
                 // downloaded ones, rather than a per-collection read (see loadSyncStateBatch's own
-                // header for why this matters on a large Workshop list).
-                const { results, workshopOnlyCollections } = await runner.loadSyncStateBatch({
-                    state, entries, stagingDir: staging,
-                });
+                // header for why this matters on a large Workshop list). Helper-first (2026-08-24):
+                // loadSyncStateBatchViaHelper is the exact same shape/return, just sourced from the
+                // Helper's live getAllMods() instead of opening state.v2 directly -- see the gate
+                // above for why this route can skip Vortex-closed once the Helper covers this read.
+                const { results, workshopOnlyCollections } = helperAvailable
+                    ? await runner.loadSyncStateBatchViaHelper({ helperClient, syncLib, entries, stagingDir: staging })
+                    : await runner.loadSyncStateBatch({ state, entries, stagingDir: staging });
 
                 // Same dedup rebuild-missing-routes.js's own POST /load-vortex-data already applies -- a collection with a
                 // local collection.json already appears via localWorkshop; only a genuinely
@@ -154,22 +169,46 @@ function createWorkshopReportRouter(config) {
                     const row = rows[i];
                     emitIfCurrent({ type: 'collection-checking', index: i + 1, total, name: row.name });
                     if (!row.slug) {
-                        finalRows.push({ ...row, revisionNumber: null, revisionStatus: null, updatedAt: null, checkError: 'no-slug' });
+                        finalRows.push({ ...row, revisionNumber: null, revisionStatus: null, updatedAt: null, checkError: 'no-slug', updateAvailable: false });
                         continue;
                     }
                     try {
                         const { revisions } = await nexusCollectionDownload.fetchCollectionRevisions(apiKey, row.slug);
                         const newest = nexusCollectionDownload.resolveNewestRevision(revisions);
                         if (!newest) {
-                            finalRows.push({ ...row, revisionNumber: null, revisionStatus: null, updatedAt: null, checkError: 'no-revisions' });
+                            finalRows.push({ ...row, revisionNumber: null, revisionStatus: null, updatedAt: null, checkError: 'no-revisions', updateAvailable: false });
                         } else {
+                            // Real staleness check (2026-08-24, workshop-report-real-staleness-check),
+                            // only meaningful for an already-fetched row -- a not-yet-downloaded row
+                            // has no "update available" concept, just a fetch to do. Compares on
+                            // updatedAt, never revisionNumber alone -- see this file's own header
+                            // comment for why a same-number draft can still be a real update.
+                            //
+                            // No tracked record yet (every collection fetched before this feature
+                            // shipped, the common case on rollout): can't know if it's stale without a
+                            // real fetch history, so this check's own resolved revision becomes the
+                            // assumed baseline -- written to the tracker right now -- and reports
+                            // updateAvailable: false for THIS pass. The alternative (assume stale with
+                            // no baseline) would just recreate "everything shows the button," the
+                            // exact complaint this feature exists to fix. Every check after this one is
+                            // accurate, since a real fetch (or this fallback baseline write) always
+                            // populates the tracker going forward.
+                            let updateAvailable = false;
+                            if (row.fetched) {
+                                const tracked = workshopReportFetchState.getTrackedRevision(row.collectionModId);
+                                if (!tracked) {
+                                    workshopReportFetchState.recordFetch(row.collectionModId, { revisionNumber: newest.revisionNumber, updatedAt: newest.updatedAt });
+                                } else {
+                                    updateAvailable = new Date(newest.updatedAt) > new Date(tracked.updatedAt);
+                                }
+                            }
                             finalRows.push({
                                 ...row, revisionNumber: newest.revisionNumber, revisionStatus: newest.revisionStatus,
-                                updatedAt: newest.updatedAt, checkError: null,
+                                updatedAt: newest.updatedAt, checkError: null, updateAvailable,
                             });
                         }
                     } catch (e) {
-                        finalRows.push({ ...row, revisionNumber: null, revisionStatus: null, updatedAt: null, checkError: e.message });
+                        finalRows.push({ ...row, revisionNumber: null, revisionStatus: null, updatedAt: null, checkError: e.message, updateAvailable: false });
                     }
                 }
 

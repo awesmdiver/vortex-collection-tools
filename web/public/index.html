@@ -339,6 +339,15 @@
       <button class="home-card__star" data-pin-key="workshopreport" title="Pin to top">☆</button>
     </div>
     <div class="home-card-wrap" data-section="homeSectionReports">
+      <button class="home-card" data-area="reports" data-sub="mergehistory" data-tool-id="report-mergehistory">
+        <div class="home-card__icon" data-brand-slot="emoji">🩹</div>
+        <div class="home-card__name" data-brand-slot="name">Merge History</div>
+        <div class="home-card__desc" data-brand-slot="cardDesc">Review past merges, spot drifted plugins, and cleanly Revert or Restore them when your mod list changes.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="mergehistory" title="Pin to top">☆</button>
+    </div>
+    <div class="home-card-wrap" data-section="homeSectionReports">
       <button class="home-card" data-area="reports" data-sub="exceptions" data-tool-id="report-exceptions">
         <div class="home-card__icon" data-brand-slot="emoji">🙅</div>
         <div class="home-card__name" data-brand-slot="name">Mod Exceptions</div>
@@ -1171,17 +1180,6 @@
         </div>
         <p class="muted">Use a dedicated folder for this -- not your live Data or SKSE folder. Somewhere inside your staging folder works great, the same way you'd set up a DynDOLOD or BodySlide output.</p>
       </div>
-
-      <h3 class="settings-section-title">ESLifier output folder</h3>
-      <div class="field-group">
-        <label class="field-label" for="settingsEslifierOutputDirInput">ESLifier output folder <span class="muted">(optional)</span></label>
-        <div class="path-input-row">
-          <input id="settingsEslifierOutputDirInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\ESLifier Output" autocomplete="off">
-          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsEslifierOutputDirInput">Browse&hellip;</button>
-        </div>
-        <p class="muted">ESLifier condenses eligible plugins into ESL format and updates references to them in a separate folder. Set that folder path here so our tools recognize converted plugins instead of flagging missing files.</p>
-        <p><a href="https://www.nexusmods.com/skyrimspecialedition/mods/145168" class="mod-name-link" target="_blank" rel="noopener">&#9432; Learn more about ESLifier</a></p>
-      </div>
     </div>
     </section>
 
@@ -1307,6 +1305,14 @@
         <label class="checkbox"><input type="radio" name="settingsMergePostMergeAction" value="backup-remove"> Back up, then remove <span class="muted">(copies the same files to a Backup folder next to the merged output first, then removes them from staging)</span></label>
         <p class="muted">This runs automatically after every successful merge, using whichever option is selected here -- there's no per-merge override yet.</p>
       </div>
+
+      <!-- Merge Plugin Verifier (2026-08-24) -- copy final, Gemini-reviewed
+           (queue: gemini-merge-verify-settings-blurb, Option 1). -->
+      <h3 class="settings-section-title">Merge Plugin Verifier</h3>
+      <div class="field-group">
+        <p class="muted">A companion web tool to compare plugins merged here against the same build in zMerge, checking byte-for-byte parity right in your browser. If there's a mismatch, it bundles the relevant logs and diagnostics so you can file a quick, actionable bug report.</p>
+        <p><a href="https://awesmdiver.github.io/vortex-collection-tools/merge-verify-tool/" class="mod-name-link" target="_blank" rel="noopener">&#9432; Open the Merge Plugin Verifier</a></p>
+      </div>
     </div>
     </section>
 
@@ -1393,6 +1399,17 @@
           <input id="settingsStateInput" class="input input--wide" type="text" placeholder="auto-detected under %APPDATA%\Vortex\state.v2" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsStateInput">Browse&hellip;</button>
         </div>
+      </div>
+
+      <h3 class="settings-section-title">ESLifier output folder</h3>
+      <div class="field-group">
+        <label class="field-label" for="settingsEslifierOutputDirInput">ESLifier output folder <span class="muted">(optional)</span></label>
+        <div class="path-input-row">
+          <input id="settingsEslifierOutputDirInput" class="input input--wide" type="text" placeholder="e.g. E:\Vortex Mods\skyrimse\ESLifier Output" autocomplete="off">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsEslifierOutputDirInput">Browse&hellip;</button>
+        </div>
+        <p class="muted">ESLifier condenses eligible plugins into ESL format and updates references to them in a separate folder. Set that folder path here so our tools recognize converted plugins instead of flagging missing files.</p>
+        <p><a href="https://www.nexusmods.com/skyrimspecialedition/mods/145168" class="mod-name-link" target="_blank" rel="noopener">&#9432; Learn more about ESLifier</a></p>
       </div>
 
       <h3 class="settings-section-title">Vortex Database Backups</h3>
@@ -1683,6 +1700,7 @@
     <!-- Hidden from nav (2026-08-17), not deleted -- see the Home card's own comment above for why. -->
     <button id="reports-sub-rulesgen" class="btn btn--ghost btn--small hidden" data-tool-id="report-rulesgen"><span data-brand-slot="name">Rules Generator Report</span></button>
     <button id="reports-sub-workshop" class="btn btn--ghost btn--small" data-tool-id="report-workshop"><span data-brand-slot="name">Workshop Report</span></button>
+    <button id="reports-sub-mergehistory" class="btn btn--ghost btn--small" data-tool-id="report-mergehistory"><span data-brand-slot="name">Merge History</span></button>
     <button id="reports-sub-exceptions" class="btn btn--ghost btn--small" data-tool-id="report-exceptions"><span data-brand-slot="name">Mod Exceptions</span></button>
   </div>
 
@@ -1881,6 +1899,13 @@
 
   <div class="view-actions">
     <button id="wrCheckBtn" class="btn btn--primary btn--small">🔄 Check Nexus for updates</button>
+    <!-- Bulk update-all (2026-08-24, workshop-report-real-staleness-check) -- disabled (with a
+         title explaining why, same dynamic pattern update-collection-v2-app.js's own btn.title
+         already uses for a locked button) whenever no row currently has a real update available,
+         so it's never a dead click. wrRefreshUpdateAllBtnState (workshop-report-app.js) is the one
+         place that flips this, called from wrRenderRows so it's always in sync with whatever's on
+         screen. -->
+    <button id="wrUpdateAllBtn" class="btn btn--primary btn--small" disabled>⬇️ Update all</button>
     <span class="muted" id="wrLastChecked"></span>
   </div>
 
@@ -1913,6 +1938,31 @@
     collection's files on disk. Collections you haven't fetched into staging yet show up too, so you
     can spot one worth pulling down before it drifts further out of date.
   </p>
+  </div>
+
+  <!-- Merge History -- Restore/Revert report, see web/merge-history-routes.js's own header for the
+       full three-state model writeup and design/mockup-merge-plugins-new-features.html section 6 for
+       the design rationale it was argued through. Uses the canonical read-only browse/expand pattern
+       (DESIGN.md's "The read-only browse/expand pattern" section), extended to 3 levels: merge ->
+       collection -> plugin -- the real example that section's own follow-up note points to. -->
+  <div id="reports-sub-area-mergehistory" class="hidden">
+  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span>Reports</div>
+  <div class="tool-hero" data-tool-id="report-mergehistory">
+    <h2 class="tool-hero__title" data-brand-slot="heroTitle">🩹 Check Past Merges for Drift</h2>
+    <p class="tool-hero__body" data-brand-slot="heroBody">Compares every merge you've built against your live mod list. If a collection update quietly brought back an original file or your merged plugin went missing, you can put everything back in order with one click.</p>
+  </div>
+
+  <div class="view-actions">
+    <button id="mhRefreshBtn" class="btn btn--primary btn--small">🔄 Refresh</button>
+    <span class="muted" id="mhCount"></span>
+  </div>
+
+  <div id="mhNotConfigured" class="empty-row hidden"></div>
+  <div id="mhCriticalError" class="callout callout--critical hidden"></div>
+  <div id="mhResultBox" class="callout callout--success hidden"></div>
+  <div id="mhEmpty" class="empty-row hidden">No merges recorded yet. Once you build a merge in The Forge, you can track its status and fix drifted files here.</div>
+
+  <div id="mhList"></div>
   </div>
 
   <!-- Mod Exceptions -- mods to never auto-fix/rebuild, e.g. a hand-pick-only FOMOD where the
@@ -2263,10 +2313,14 @@
   <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span>Utilities</div>
   <div class="tool-hero" data-tool-id="missing-masters">
     <h2 class="tool-hero__title" data-brand-slot="heroTitle">🧩 Triage Missing Masters in Seconds</h2>
-    <p class="tool-hero__body" data-brand-slot="heroBody">Easily pinpoint missing master files and instantly see every mod relying on them&mdash;all in one clear view! Designed to streamline your troubleshooting, this tool takes the hassle out of tracking down broken dependencies so you can jump straight into Vortex and fix them with confidence.</p>
+    <p class="tool-hero__body" data-brand-slot="heroBody">Easily pinpoint missing master files and instantly see every mod relying on them&mdash;all in one clear view! Designed to streamline your troubleshooting, this tool takes the hassle out of tracking down broken dependencies so you can get everything sorted with confidence.</p>
   </div>
 
-  <div class="callout callout--info">
+  <!-- The fallback instruction, shown ONLY when the Helper is unavailable (2026-08-23). With the
+       Helper there, the Deploy Mods button below replaces it -- telling someone to go do a thing by
+       hand while offering to do it for them reads as broken. Starts hidden and is revealed by
+       mmRenderDeployBanners(); wording deliberately unchanged from its earlier pass. -->
+  <div class="callout callout--info hidden" id="mmDeployTip">
     <div class="callout__title">💡 Tip</div>
     <p>Fixing something here only updates your staging folder — open Vortex and click <strong>Deploy Mods</strong> afterward to finish moving it into your game.</p>
   </div>
@@ -2279,7 +2333,7 @@
       <input type="checkbox" id="mmRecognizeEslifierInput">
       Recognize ESLifier output
     </label>
-    <p class="muted">When a file traces back to your ESLifier output folder, we'll show it as a quiet heads-up instead of a missing-master alert — the swap is on purpose, so there's nothing to fix.</p>
+    <p class="muted">When a file is found in your ESLifier output folder, we'll show it as a quiet heads-up instead of a missing-master alert — it's an intentional replacement, so there's nothing to fix.</p>
     <!-- Same shape as syncBackupRootMissingBanner's own "not configured yet, here's the direct
          link" pattern -- a callout, not a bare muted line, so it visually ties to the checkbox it's
          actually about instead of reading like a stray sentence floating in the page. -->
@@ -2294,7 +2348,7 @@
   <div class="summary-badges" id="mmSummaryBadges"></div>
 
   <!-- One persistent header row (not nested inside #mmResults) -- mmResultsMeta doubles as both
-       the "N problem master(s)..." count line AND the "all clear" empty message, so the Refresh
+       the "N missing or disabled masters..." count line AND the "all clear" empty message, so the Refresh
        button always has something to sit next to instead of occupying its own line. Hidden as a
        whole only in the not-configured state, same as everything else on this page. mmLoading
        lives on this SAME line too (not its own block below) -- confirmed 2026-07-27: a separate
@@ -2311,13 +2365,82 @@
   <div id="mmNotConfigured" class="empty-row hidden"></div>
   <div id="mmCriticalError" class="callout callout--critical hidden"></div>
 
+  <!-- Plugins the scan genuinely couldn't read (2026-08-23). Populated by mmRenderUnreadable().
+       Deliberately OUTSIDE #mmResults: that container stays hidden in the all-clear case, which is
+       exactly the case where a silently-skipped plugin does the most damage ("no problems found"
+       while one of your plugins was never actually looked at). callout--warning, not --critical --
+       the scan ran and nothing was refused, it just couldn't cover everything. -->
+  <div id="mmUnreadable" class="callout callout--warning hidden"></div>
+
+  <!-- Helper-unavailable note (2026-08-23). Deliberately callout--info, NOT this app's hard
+       "🛑 Vortex Connection Required" blocker: that one is for tools that genuinely cannot function
+       without the Helper, and Missing Masters works fine without it -- only Enable and Restore
+       (items 2 and 3, not built yet) need it. Populated by mmRenderHelperNote(); outside #mmResults
+       for the same reason as #mmUnreadable above. -->
+  <div id="mmHelperNote" class="callout callout--info hidden"></div>
+
+  <!-- All-clear success banner (2026-08-23) -- replaces the flat grey sentence that used to live in
+       mmResultsMeta for this case. Populated by mmRenderDeployBanners(). -->
+  <div id="mmAllClear" class="callout callout--success hidden"></div>
+
+  <!-- "Fixes applied, one step left" + the real Deploy Mods button. Shown only when there is at
+       least one ready-to-deploy row AND the Helper is genuinely available; without the Helper the
+       tip above carries the same message as an instruction instead. -->
+  <div id="mmPendingDeploy" class="callout callout--info hidden"></div>
+
+  <!-- Live deploy progress / result. Separate from the banner above so the banner can be swapped out
+       the moment a deploy starts without losing this element's own polling state. -->
+  <div id="mmDeployProgress" class="callout callout--info hidden">
+    <div class="callout__title">Deploying mods in Vortex&hellip;</div>
+    <div class="progress-bar-wrap"><div id="mmDeployBar" class="progress-bar"></div></div>
+    <p class="muted" id="mmDeployPhase">Starting&hellip;</p>
+  </div>
+  <div id="mmDeployResult" class="callout hidden"></div>
+
+  <!-- Restore progress / result (2026-08-23). Outside #mmResults for the same reason as the other
+       result-level blocks: it must survive the list being re-rendered underneath it. -->
+  <div id="mmRestoreProgress" class="callout callout--info hidden">
+    <div class="callout__title" id="mmRestoreProgressTitle">Extracting mod files from archive&hellip;</div>
+    <div class="progress-bar-wrap"><div id="mmRestoreBar" class="progress-bar"></div></div>
+    <p class="muted" id="mmRestorePhase">Starting&hellip;</p>
+  </div>
+  <div id="mmRestoreResult" class="callout hidden"></div>
+
   <div id="mmResults" class="hidden">
     <div id="mmGroupsList"></div>
   </div>
 
-  <div id="mmCreateDummyConfirmModal" class="modal-overlay hidden">
+  <!-- Restore: pick which downloaded archive to restore from (2026-08-23). Only shown when the same
+     plugin was found in more than one archive -- a single match goes straight to the confirm below. -->
+<div id="mmRestoreChooserModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Choose archive to restore from</h2>
+    <p>We found this file in more than one downloaded archive. Pick the one you want to restore:</p>
+    <div id="mmRestoreChooserList" class="mm-restore-chooser"></div>
+    <div class="modal-actions">
+      <button id="mmRestoreChooserCancelBtn" class="btn btn--ghost">Cancel</button>
+      <button id="mmRestoreChooserContinueBtn" class="btn btn--primary">Continue with Selected Archive</button>
+    </div>
+  </div>
+</div>
+
+<!-- Restore: the real confirm. Serious register -- this writes real files into staging and registers
+     a new mod with Vortex. -->
+<div id="mmRestoreConfirmModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Restore complete mod</h2>
+    <p>Restoring extracts the entire mod from your archive, not just the missing plugin. This ensures any associated meshes, textures, and scripts are restored alongside it.</p>
+    <dl class="mm-restore-summary" id="mmRestoreConfirmSummary"></dl>
+    <div class="modal-actions">
+      <button id="mmRestoreConfirmCancelBtn" class="btn btn--ghost">Cancel</button>
+      <button id="mmRestoreConfirmOkBtn" class="btn btn--primary">Extract and Add to Vortex</button>
+    </div>
+  </div>
+</div>
+
+<div id="mmCreateDummyConfirmModal" class="modal-overlay hidden">
     <div class="modal modal--wide">
-      <h2>🧩 Create a Dummy Master?</h2>
+      <h2>🧩 Create Dummy Master</h2>
       <div id="mmCreateDummyConfirmModalText"></div>
       <!-- Static explainer -- most users clicking this button have no idea what a "dummy master" is,
            and we're the ones offering the button, so this makes sure they understand what it does
@@ -2327,28 +2450,28 @@
            it just might not fully resolve everything on its own, matching the "tread lightly, not a
            blocker" case in DESIGN.md's icon-severity test. -->
       <div class="callout callout--info">
-        <div class="callout__title">🧩 Understanding Dummy Master Files</div>
-        <p>A dummy master is a lightweight placeholder file (.esm, .esp, or .esl) created solely to trick Skyrim into thinking a required dependency is installed. This prevents the game from immediately crashing on startup when a master file is missing.</p>
-        <p><strong>💡 When to use a dummy master</strong></p>
+        <div class="callout__title">ⓘ What is a dummy master?</div>
+        <p>A dummy master is a lightweight placeholder file (.esm, .esp, or .esl) that tricks Skyrim into thinking a required mod is installed.</p>
+        <p><strong>When to use one:</strong></p>
         <ul>
-          <li><strong>Bypassing requirements:</strong> Useful if a patch or mod demands a master plugin you don't actually need or want in your setup.</li>
-          <li><strong>Merged mods:</strong> Helps older patches recognize merged plugins that replaced original .esp files.</li>
+          <li><strong>Skipping unwanted requirements:</strong> Useful when a patch requires a master file you don't want or need in your setup.</li>
+          <li><strong>Merged mods:</strong> Helps older patches recognize plugins that were merged into a different file.</li>
         </ul>
       </div>
       <div class="callout callout--warning">
-        <div class="callout__title">⚠️ Important Caveat: Resolving Conflicts</div>
-        <p>Generating a dummy master prevents startup crashes, but it doesn't add actual mod data. If the dependent mod relies on scripts, textures, or specific game records from that missing master, you may still run into in-game glitches or missing content. After creating a dummy master, you might still need to manually resolve conflicts or adjust your load order in Vortex to ensure everything runs smoothly.</p>
+        <div class="callout__title">⚠️ Dummy masters do not restore missing content</div>
+        <p>A dummy master only stops startup crashes. If other mods depend on scripts, textures, or records from the missing file, you may still run into in-game glitches or broken quests.</p>
       </div>
       <div class="modal-actions">
         <button id="mmCreateDummyConfirmCancelBtn" class="btn btn--ghost">Cancel</button>
-        <button id="mmCreateDummyConfirmOkBtn" class="btn btn--primary">Create</button>
+        <button id="mmCreateDummyConfirmOkBtn" class="btn btn--primary">Create Dummy Master</button>
       </div>
     </div>
   </div>
 
   <div id="mmRebuildConfirmModal" class="modal-overlay hidden">
     <div class="modal">
-      <h2>🛠️ Rebuild Single Mod from Archive</h2>
+      <h2>🛠️ Rebuild Mod from Archive</h2>
       <p id="mmRebuildConfirmModalText"></p>
       <!-- The "Vortex must be closed" precondition is its OWN visually distinct stop-tier callout,
            not just another sentence in the description above -- it's a hard blocking requirement
@@ -2356,11 +2479,11 @@
            of critical severity ("a step that cannot proceed"), not just a general caution. Static
            (not JS-set) since this line never changes regardless of which mod is being rebuilt. -->
       <div class="callout callout--critical">
-        <div class="callout__title">🛑 Make sure Vortex is completely closed before continuing!</div>
+        <div class="callout__title">🛑 Close Vortex completely before continuing.</div>
       </div>
       <div class="modal-actions">
         <button id="mmRebuildConfirmCancelBtn" class="btn btn--ghost">Cancel</button>
-        <button id="mmRebuildConfirmOkBtn" class="btn btn--primary">Rebuild</button>
+        <button id="mmRebuildConfirmOkBtn" class="btn btn--primary">Rebuild Mod</button>
       </div>
     </div>
   </div>
@@ -3397,7 +3520,7 @@
   <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><span data-brand-slot="name">Merge Plugins</span></div>
   <div class="tool-hero" data-tool-id="merge">
     <h2 class="tool-hero__title" data-brand-slot="heroTitle">🧬 Merge Many Plugins Into One</h2>
-    <p class="tool-hero__body" data-brand-slot="heroBody">Skyrim's plugin slots fill up fast. Pick plugins from one or more collections and this tool bundles them into a single file&mdash;freeing up slots without touching xEdit. Review exactly what's going in first, and it'll flag the result as ESL automatically when it fits.</p>
+    <div class="tool-hero__body" data-brand-slot="heroBody"><p>Even with light mods, Skyrim's 4,096-plugin limit can sneak up on a large load order. Pick plugins across your collections to bundle them into a single file&mdash;freeing up light slots without opening xEdit.</p><p>You can preview everything going into the merge first, and the tool will automatically mark the new bundle as a light plugin whenever it fits.</p></div>
   </div>
 
   <div class="merge-stepper" id="mergeStepper"></div>
@@ -3405,7 +3528,16 @@
 
   <!-- Step 0: Choose collections -->
   <div id="mergeStep0" class="settings-group">
-    <h2>Choose collections</h2>
+    <!-- Refresh + auto-refresh (2026-08-24, merge-step0-refresh) -- reuses Missing Masters' own
+         established mmRefreshBtn pattern exactly (same .mm-header-row/.btn--primary.btn--small
+         placement Archive Finder's own #afIndexCard header row already reuses), not a new button
+         treatment. No separate inline-loading indicator here -- mergeLoadCollections() already has
+         its own full loading-row treatment below (#mergeCollLoading), reused as-is by both this
+         button and the auto-refresh call in merge-app.js. -->
+    <div class="mm-header-row">
+      <h2>Choose collections</h2>
+      <button id="mergeCollRefreshBtn" class="btn btn--primary btn--small">Refresh</button>
+    </div>
     <p class="muted">Pick one or more collections. The next step searches the plugins in their installed mods (in your staging folder).</p>
     <!-- CORRECTED 2026-08-14: originally said this page couldn't recognize a Workshop-authored
          collection at all -- true then, but scanStagingCollections (vortex-sync/lib.js) has since
@@ -3414,12 +3546,19 @@
          isn't enough (confirmed live, commit ed97e13) -- this callout now says what actually is. -->
     <div class="callout callout--info">
       <div class="callout__title">&#9432; Not seeing a Workshop-authored collection here?</div>
-      <p>Fetching its info from the <a href="/?area=reports&amp;reports=workshop" data-tool-id="report-workshop"><span data-brand-slot="name">Workshop Report</span></a> alone isn't enough — this page needs at least one of its mods to have real files in your staging folder. Run <strong><span data-tool-id="missing-files"><span data-brand-slot="name">Rebuild Missing Files</span></span></strong> or <strong><span data-tool-id="rebuild"><span data-brand-slot="name">Rebuild Collection</span></span></strong> against it first, then it'll show up here.</p>
+      <p>Reading this from the <a href="/?area=reports&amp;reports=workshop" data-tool-id="report-workshop"><span data-brand-slot="name">Workshop Report</span></a> isn't quite enough&mdash;this page needs at least one of its mods extracted to your staging folder. Run <strong><span data-tool-id="missing-files"><span data-brand-slot="name">Rebuild Missing Files</span></span></strong> or <strong><span data-tool-id="rebuild"><span data-brand-slot="name">Rebuild Collection</span></span></strong> on it first, and it'll pop up right here.</p>
     </div>
     <div class="view-actions">
       <button id="mergeCollSelectAllBtn" class="btn btn--ghost btn--small">Select All</button>
       <button id="mergeCollClearBtn" class="btn btn--ghost btn--small">Clear</button>
       <span id="mergeCollCount" class="muted"></span>
+      <!-- Top convenience copy of mergeStep0NextBtn below (2026-08-24, merge-step0-top-next) -- a
+           real 31-collection picker forces scrolling to the bottom just to advance. Same id-suffix
+           convention Step 1's own cart bar already uses for this exact "top copy of a bottom button"
+           shape (mergeStep1NextBtnTop/mergeStep1BackBtnTop). Right-justified via a rule scoped to
+           this id alone (styles.css) -- .view-actions itself stays untouched, shared by 29 other
+           rows in this app. -->
+      <button id="mergeStep0NextBtnTop" class="btn btn--primary" disabled>Next: Find files →</button>
     </div>
     <div id="mergeCollLoading" class="loading-row"><span class="spinner"></span> Loading installed collections&hellip;</div>
     <div id="mergeCollList" class="hidden"></div>
@@ -3445,11 +3584,33 @@
         <input type="text" id="mergeNewExtensionInput" class="input" placeholder=".ext">
         <button id="mergeAddExtensionBtn" class="btn btn--ghost btn--small">Add</button>
       </div>
+      <!-- ESLifier exclusion filter (2026-08-24, merge-step1-eslifier-filter) -- same "Recognize
+           ESLifier output" concept as Missing Masters' own mmRecognizeEslifierGroup elsewhere in this
+           file, reused here as a picker filter instead of an alert suppressor. ON by default. Purely a
+           client-side view over the already-fetched search results (mergeVisibleResults in
+           merge-app.js) -- toggling it, or clicking "Show them anyway", never re-fetches. Same
+           not-configured-yet callout shape as mmRecognizeEslifierEmptyHint, reused verbatim (checkbox
+           itself stays visible and enabled even when unconfigured, matching that same pattern -- it's
+           just a no-op then, since the server never flags any plugin eslifierOutput without a folder
+           to match against). -->
+      <div class="field-group" id="mergeEslifierFilterGroup" style="margin-top: 14px;">
+        <label class="checkbox">
+          <input type="checkbox" id="mergeEslifierExcludeInput" checked>
+          Exclude ESLifier output files
+        </label>
+        <p class="muted hidden" id="mergeEslifierHiddenHint">
+          <span id="mergeEslifierHiddenLead"></span> <strong>ESLifier output folder</strong> <span id="mergeEslifierHiddenTail"></span>
+          <a href="#" id="mergeEslifierShowAnywayLink">Show them anyway</a>
+        </p>
+        <div class="callout callout--warning hidden" id="mergeEslifierEmptyHint">
+          No ESLifier output folder is set yet — <a href="/?area=settings">open Settings</a> to add one before this can recognize anything.
+        </div>
+      </div>
     </div>
 
     <div class="merge-cart-bar" id="mergeCartBar">
-      🧬 <strong><span id="mergeCartCount">0</span> plugins chosen for the merge</strong>
-      <span class="muted">&mdash; building up across every search you run</span>
+      🧬 <strong><span id="mergeCartCount">0</span> plugins selected.</strong>
+      <span class="muted">Picked plugins will collect here across all your searches.</span>
       <div class="spacer"></div>
       <button id="mergeViewCartBtn" class="btn btn--ghost btn--small">View chosen (<span id="mergeCartCount2">0</span>) ↗</button>
       <!-- Reachable from the top without scrolling past the results table (see the CSS comment on
@@ -3462,13 +3623,21 @@
     </div>
 
     <div class="settings-group">
-      <h3 class="settings-section-title" id="mergeResultsSummary" style="margin-top: 2px;"></h3>
+      <!-- Selection count promoted next to the headline (2026-08-24, merge-step1-picker-fix) --
+           design/mockup-merge-step1-header.html, approved 2026-08-23: the director selected 30 of 32
+           across pages and only 23 reached the merge, and the old muted count (after three buttons,
+           same grey as everything around it) never made the gap visible. Reuses .rg-section-header-row
+           (Rules Generator's own header-row layout) and .badge's existing severity variants instead of
+           one-off styles -- see TECHNICAL.md's "Merge Plugins Step 1 selection pill" note. -->
+      <div class="rg-section-header-row" id="mergeResultsHeaderRow">
+        <h3 class="settings-section-title" id="mergeResultsSummary"></h3>
+        <span id="mergeSelectionPill" class="badge badge--show-all"><span class="dot"></span><span id="mergeSelectionPillText"></span></span>
+      </div>
       <div class="af-selection-bar" id="mergeSelectionActions">
         <div class="af-selection-bar__left">
           <button id="mergeSelectAllBtn" class="btn btn--ghost btn--small">Select All</button>
           <button id="mergeInvertBtn" class="btn btn--ghost btn--small">Invert Selection</button>
           <button id="mergeClearSearchBtn" class="btn btn--ghost btn--small">Clear Selection</button>
-          <span id="mergeSelectionCount" class="muted"></span>
         </div>
       </div>
       <div id="mergeSelectAllBanner" class="callout callout--info hidden">
@@ -3513,7 +3682,6 @@
       <div id="mergeReviewBody" class="hidden">
         <div id="mergeMasterCallout" class="callout callout--warning hidden"></div>
         <div id="mergeOverrideCallout" class="callout callout--warning hidden"></div>
-        <div id="mergeEslCallout" class="callout callout--info hidden"></div>
         <div class="summary-badges" id="mergeReviewBadges"></div>
         <div class="plan-table-wrap">
           <table class="plan-table" id="mergeReviewTable">
@@ -3567,7 +3735,37 @@
       <h2 id="mergeDoneTitle">✅ Merge complete</h2>
       <p class="muted">Your plugins were bundled into one file.</p>
       <div class="merge-stat-grid" id="mergeDoneStats"></div>
-      <div id="mergeDoneEslCallout" class="callout callout--info hidden"></div>
+      <!-- Combined "created" + eligibility banner (2026-08-24, merge-done-screen-tighten) -- ONE box
+           now, not three. Title/body are dedicated child elements (mergeDoneEslTitle/mergeDoneEslBody)
+           updated in place rather than the whole box's innerHTML being replaced, specifically so the
+           nested checking/eligible/ineligible children below survive a re-render without losing their
+           own listeners/state. Auto-flagged (eslFlagged: true) sets title+body and stops there --
+           mergeHideLightSection() hides everything below. The non-auto-flagged case sets a neutral
+           body first, then mergeCheckLightEligibility fills in the rest once the real check resolves:
+           checking (loading-row), eligible (body upgraded to the full safe-to-flag wording + button),
+           or ineligible (body stays neutral, the existing ineligible explanation appends below it --
+           copy already went through a real Gemini pass and design review, never rewritten here). -->
+      <div id="mergeDoneEslCallout" class="callout callout--info hidden">
+        <div class="mm-header-row">
+          <div class="callout__title" id="mergeDoneEslTitle"></div>
+          <div id="mergeDoneLightEligibleActions" class="hidden">
+            <button id="mergeFlagAsLightBtn" class="btn btn--primary btn--small">🪶 Flag as Light</button>
+          </div>
+        </div>
+        <p id="mergeDoneEslBody"></p>
+        <div id="mergeDoneLightCheck" class="loading-row hidden"><span class="spinner"></span> Checking whether this can be flagged as Light&hellip;</div>
+        <div id="mergeFlagAsLightResult" class="hidden" style="margin-top: 10px;"></div>
+        <p id="mergeDoneLightIneligibleText" class="hidden">Its records aren't already numbered in the light-plugin range, so flipping the flag alone isn't safe. Run ESLifier on the merged output first&mdash;it will renumber the records and update references&mdash;then you can flag it here.</p>
+      </div>
+      <!-- Light-plugin slot budget (2026-08-24, merge-light-slot-budget) -- a genuinely different
+           number from the eligibility check above: that one asks whether THIS merged file's own
+           FormID range fits under the light-plugin limit; this one is the real, current, system-wide
+           Light slot budget (0-4095, shared across every active light-flagged plugin in the whole
+           load order) computed fresh from Plugins.txt + the real Data folder, matching Vortex's own
+           status bar. Shown regardless of eligibility -- only the savings sentence inside it depends
+           on whether this specific merge is (or could be) flagged. See merge-app.js's
+           mergeRenderSlotBudget. -->
+      <div id="mergeDoneSlotBudget" class="callout callout--info hidden"></div>
       <!-- Relink Scripts (2026-08-18) -- proactive, not a blind "push the button and see" action:
            web/merge-routes.js's own /merge success handler already scans for this automatically, so
            by the time this step renders we already know whether anything needs it. Serious register
@@ -3580,9 +3778,17 @@
         <button id="mergeRelinkScriptsBtn" class="btn btn--primary btn--small">Relink Scripts</button>
         <div id="mergeRelinkResult" class="hidden" style="margin-top: 10px;"></div>
       </div>
-      <div class="callout callout--info">
-        <div class="callout__title">Next: turn it on in Vortex</div>
-        <p id="mergeDoneNextStepsText"></p>
+      <!-- Complete-style green callout (2026-08-24, merge-done-screen-tighten) -- director's own
+           exact copy shape: a numbered <ol>, not manual "1."/"2." text, so the steps stay a real list
+           regardless of styling. mergeDoneNextStepsClosing swaps between a neutral closer and one that
+           celebrates freed light-plugin headroom -- only accurate once this merge really IS
+           light-flagged (auto-flagged at render, or a manual Flag as Light click that just succeeded
+           above) -- see mergeRenderNextSteps's own header comment. -->
+      <div class="callout callout--success">
+        <div class="callout__title">🎉 Merge Complete!</div>
+        <p>Next steps in Vortex:</p>
+        <ol id="mergeDoneNextStepsList"></ol>
+        <p id="mergeDoneNextStepsClosing"></p>
       </div>
       <details id="mergeDoneLogDetails" class="hidden">
         <summary>View merge log</summary>
@@ -3599,6 +3805,22 @@
        active plugins depend on as a master breaks them (zEdit/zMerge's own real warning dialog is
        the direct precedent for this modal's copy/shape). Serious register (real breakage, not just
        an FYI) -- see mergeOpenMasterDependencyModal's own comment for the exact wording. -->
+  <!-- Pre-flight (2026-08-23) -- what can't be loaded, listed BEFORE any merge starts. Separate
+       modal from mergeMasterDepModal above: that one is about consequences AFTER a successful build
+       (plugins left needing a master that got merged away), this one is about the build not being
+       able to run at all. Title icon is set from JS, since the same modal covers both a hard stop
+       and a proceed-with-caution list -- see mergeOpenPreflightModal. -->
+  <div id="mergePreflightModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2 id="mergePreflightModalTitle"></h2>
+      <div id="mergePreflightModalText"></div>
+      <div class="modal-actions">
+        <button id="mergePreflightCancelBtn" class="btn btn--ghost">Cancel</button>
+        <button id="mergePreflightContinueBtn" class="btn btn--primary">Build Anyway</button>
+      </div>
+    </div>
+  </div>
+
   <div id="mergeMasterDepModal" class="modal-overlay hidden">
     <div class="modal">
       <h2>⚠️ These plugins will stop working</h2>
@@ -3934,6 +4156,7 @@
 <script src="cycle-helper-app.js"></script>
 <script src="clear-update-flags-app.js"></script>
 <script src="workshop-report-app.js"></script>
+<script src="merge-history-app.js"></script>
 <script src="update-collection-v2-app.js"></script>
 <script src="remove-collection-app.js"></script>
 <script src="mod-exceptions-report-app.js"></script>

@@ -55,6 +55,20 @@ const mergeState = {
   collSelected: new Set(), // chosen modIds (Step 0)
   extensions: ['.esp', '.esl', '.esm'],
   searchResults: [], // the CURRENT search's full result set (flat, across all its pages)
+  // Fingerprint (sorted, order-independent) of collSelected as of the last SUCCESSFUL search
+  // (2026-08-24, merge-step1-stale-search-fix) -- null until the first search ever completes. See
+  // mergeEnterStep1's own comment for the real bug this fixes: re-entering Step 1 after changing
+  // Step 0's selection used to skip re-searching whenever searchResults was already non-empty,
+  // silently showing the PREVIOUS collection's stale plugin list under the new selection's own
+  // "Searching plugins across your selected collection(s)" text.
+  searchedCollIds: null,
+  // ESLifier exclusion filter (2026-08-24, merge-step1-eslifier-filter) -- eslifierExclude is the
+  // checkbox's own state, ON by default per the task spec. eslifierOutputDirConfigured comes fresh off
+  // every /api/merge/plugins response (Settings can change the folder without a restart); false until
+  // the first search completes, same "assume configured until told otherwise" default as Missing
+  // Masters' own mmEslifierOutputDirConfigured.
+  eslifierExclude: true,
+  eslifierOutputDirConfigured: true,
   cart: new Map(), // fullPath -> item -- accumulates across every search, never reset by a new one
   pageSize: 25,
   page: 1,
@@ -117,9 +131,14 @@ function mergeRenderSortArrows(sortState, arrows) {
 // ---------- Stepper + navigation ----------
 
 function mergeRenderStepper() {
+  const lastStep = MERGE_STEPS.length - 1;
   $m('mergeStepper').innerHTML = MERGE_STEPS.map((label, i) => {
-    const cls = i === mergeState.step ? 'active' : i < mergeState.step ? 'done' : '';
-    const num = i < mergeState.step ? '✓' : String(i + 1);
+    // Reaching the last step (Done) means the whole merge actually completed -- render it green
+    // (same "done" treatment earlier steps get), not the blue "active" treatment every other
+    // in-progress step uses (2026-08-24, merge-done-step-green).
+    const isDone = i < mergeState.step || (i === mergeState.step && i === lastStep);
+    const cls = isDone ? 'done' : i === mergeState.step ? 'active' : '';
+    const num = isDone ? '✓' : String(i + 1);
     return `<div class="merge-step ${cls}"><b>${num}</b>${label}</div>`;
   }).join('');
 }
@@ -150,6 +169,27 @@ async function loadMergeOnBoot() {
   mergeLoadMasterDependents();
   await mergeLoadCollections();
 }
+
+// Refresh + auto-refresh (2026-08-24, merge-step0-refresh) -- the collections list used to load
+// exactly once (loadMergeOnBoot's own eager call above, at script-load time regardless of which area
+// is visible). Install or update a collection in Vortex while this tab was already open, and it
+// never showed up without a full page reload. mergeCollRefreshBtn re-runs the SAME
+// mergeLoadCollections() the page already calls on load -- no separate fetch/render path to keep in
+// sync.
+$m('mergeCollRefreshBtn').addEventListener('click', () => mergeLoadCollections());
+
+// Auto-refresh: called from shell.js's navigateToArea, ONLY when actually arriving at 'merge' from a
+// DIFFERENT area (that check lives in shell.js, using its own currentArea tracking, since this file
+// has no visibility into area-level navigation on its own) -- so this fires once per genuine "opened
+// Merge Plugins" and never again just from switching BROWSER tabs and back (no visibilitychange
+// listener anywhere touches this) or from internal step navigation within Merge Plugins itself
+// (Back/Merge another use mergeGoToStep directly, never navigateToArea, so they never re-trigger
+// this). Reuses the exact same mergeLoadCollections() as the button and the original boot-time load
+// -- one real fetch/render implementation, not a second copy.
+function mergeAutoRefreshCollectionsOnEntry() {
+  mergeLoadCollections();
+}
+window.mergeAutoRefreshCollectionsOnEntry = mergeAutoRefreshCollectionsOnEntry;
 
 async function mergeLoadMasterDependents() {
   try {
@@ -201,7 +241,10 @@ function mergeUpdateCollCount() {
   const n = mergeState.collSelected.size;
   const m = mergeState.collections.length;
   $m('mergeCollCount').textContent = m ? `${n} of ${m} selected` : '';
+  // Top and bottom Next always agree (2026-08-24, merge-step0-top-next) -- one disabled state, set
+  // in the one place that already owns it, never two independent copies that could drift apart.
   $m('mergeStep0NextBtn').disabled = n === 0;
+  $m('mergeStep0NextBtnTop').disabled = n === 0;
 }
 
 function mergeRenderCollectionList() {
@@ -235,15 +278,36 @@ $m('mergeCollClearBtn').addEventListener('click', () => {
   mergeRenderCollectionList();
 });
 $m('mergeStep0NextBtn').addEventListener('click', () => mergeGoToStep(1));
+$m('mergeStep0NextBtnTop').addEventListener('click', () => mergeGoToStep(1));
 
 // ---------- Step 1: find & select plugins ----------
 
 function mergeEnterStep1() {
   const names = mergeState.collections.filter((c) => mergeState.collSelected.has(c.modId)).map((c) => c.name);
-  $m('mergeStep1Sub').textContent = `Searching the plugins in your ${names.length} chosen collection${names.length === 1 ? '' : 's'}. Search as many times as you like — each pick adds to the merge and stays put.`;
+  $m('mergeStep1Sub').textContent = `Searching plugins across your selected collection${names.length === 1 ? '' : 's'}. Search and pick as many times as you like—every selection is added to the merge and saved in your queue.`;
   mergeRenderExtensionTags();
   mergeUpdateCartBar();
-  if (!mergeState.searchResults.length) mergeRunSearch();
+  // Real bug fix (2026-08-24, merge-step1-stale-search-fix): this used to only check
+  // `!mergeState.searchResults.length`, so re-entering Step 1 after going BACK to Step 0 and
+  // changing the selection (deselect collection A, select collection B, Next again) skipped
+  // mergeRunSearch entirely whenever the OLD search's results were still non-empty -- silently
+  // showing collection A's stale plugin list under B's own "Searching the plugins in your 1 chosen
+  // collection" text. Confirmed live: selected Grass Mods (2 plugins) -> Step 1 -> Back -> switched
+  // to a 33-mod collection -> Step 1 again still showed the same 2 Grass Mods plugins. Now also
+  // re-searches whenever the current selection's fingerprint no longer matches what was actually
+  // searched last (mergeCollIdsFingerprint, order-independent so reselecting the exact same set
+  // doesn't trigger a needless re-search).
+  if (!mergeState.searchResults.length || mergeState.searchedCollIds !== mergeCollIdsFingerprint(mergeState.collSelected)) {
+    mergeRunSearch();
+  } else {
+    // Re-sync the current page's checkboxes and the selection pill from the cart every time this
+    // step is (re-)entered without a fresh search (merge-step1-picker-fix, 2026-08-24) -- the cart
+    // can change elsewhere (e.g. removing an item on Step 2, then clicking Back) without a new
+    // search ever running, and the pill's whole job is to never show a stale number.
+    mergeRefreshRowsFromCart();
+    mergeUpdateSelectionCount();
+    mergeCheckSelectAllBanner();
+  }
 }
 
 function mergeRenderExtensionTags() {
@@ -279,17 +343,91 @@ $m('mergeSearchInput').addEventListener('input', () => {
   mergeSearchDebounce = setTimeout(mergeRunSearch, 250);
 });
 
+// Sorted, order-independent fingerprint of a Set of collection modIds -- Set iteration order follows
+// insertion order, which can differ between two selections with identical CONTENT (deselect A,
+// reselect A back), so a plain join() would falsely detect drift there. Shared by mergeRunSearch
+// (records what it actually searched) and mergeEnterStep1 (checks whether the current selection still
+// matches that).
+function mergeCollIdsFingerprint(collSelected) {
+  return [...collSelected].sort().join(',');
+}
+
+// ESLifier exclusion filter (2026-08-24, merge-step1-eslifier-filter) -- pure client-side view over
+// mergeState.searchResults. Every render/selection/count call site below reads THIS instead of
+// mergeState.searchResults directly, so a hidden ESLifier-output plugin is excluded from being shown,
+// paged, counted, or swept up by Select All/Invert/Clear/the header checkbox. mergeState.searchResults
+// itself stays the raw fetched set, untouched -- mergeEnterStep1's own staleness check and
+// mergeRunSearch's own fetch/assignment both still read/write that directly.
+function mergeVisibleResults() {
+  if (!mergeState.eslifierExclude) return mergeState.searchResults;
+  return mergeState.searchResults.filter((it) => !it.eslifierOutput);
+}
+
+// Refreshes the "N plugins hidden" line and the not-configured-yet callout from the CURRENT
+// mergeState.searchResults + eslifierExclude/eslifierOutputDirConfigured. Called after every fresh
+// search and every checkbox/"Show them anyway" toggle -- never triggers a re-fetch itself.
+function mergeUpdateEslifierHint() {
+  $m('mergeEslifierEmptyHint').classList.toggle('hidden', mergeState.eslifierOutputDirConfigured);
+  const hiddenCount = mergeState.eslifierExclude
+    ? mergeState.searchResults.filter((it) => it.eslifierOutput).length
+    : 0;
+  const hint = $m('mergeEslifierHiddenHint');
+  if (hiddenCount > 0) {
+    $m('mergeEslifierHiddenLead').textContent = `${hiddenCount} plugin${hiddenCount === 1 ? '' : 's'} in your`;
+    $m('mergeEslifierHiddenTail').textContent = `${hiddenCount === 1 ? 'is' : 'are'} hidden from this list — they're intentional replacements, not separate mods to merge.`;
+    hint.classList.remove('hidden');
+  } else {
+    hint.classList.add('hidden');
+  }
+}
+$m('mergeEslifierExcludeInput').addEventListener('change', (e) => {
+  mergeState.eslifierExclude = e.target.checked;
+  mergeState.page = 1;
+  mergeUpdateEslifierHint();
+  mergeUpdateResultsSummary();
+  mergeRenderResultsPage();
+});
+$m('mergeEslifierShowAnywayLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  $m('mergeEslifierExcludeInput').checked = false;
+  mergeState.eslifierExclude = false;
+  mergeState.page = 1;
+  mergeUpdateEslifierHint();
+  mergeUpdateResultsSummary();
+  mergeRenderResultsPage();
+});
+
+// "N plugins found"/"Results for ..." + the no-results message -- both scoped to the VISIBLE
+// (post-ESLifier-filter) set, same scope mergeRenderResultsPage/Select All/the selection pill already
+// use, so the header never claims a count the table itself doesn't back up. Split out of mergeRunSearch
+// (2026-08-24, merge-step1-eslifier-filter) so toggling the filter can refresh this line too, without
+// re-running the actual search.
+function mergeUpdateResultsSummary() {
+  const q = $m('mergeSearchInput').value.trim();
+  const visible = mergeVisibleResults();
+  $m('mergeResultsSummary').textContent = q ? `Results for "${q}" · ${visible.length} match${visible.length === 1 ? '' : 'es'}` : `${visible.length} plugin${visible.length === 1 ? '' : 's'} found`;
+  $m('mergeNoResults').textContent = visible.length ? '' : (mergeState.searchResults.length
+    ? 'Every matching plugin is ESLifier output, hidden by the filter above — click "Show them anyway" to see them.'
+    : 'No matching plugins found in your chosen collections.');
+}
+
 async function mergeRunSearch() {
   mergeHideError();
   const q = $m('mergeSearchInput').value.trim();
   const collectionIds = [...mergeState.collSelected].join(',');
   try {
-    const { results } = await mergeApi('GET', `/api/merge/plugins?collections=${encodeURIComponent(collectionIds)}&q=${encodeURIComponent(q)}&extensions=${encodeURIComponent(mergeState.extensions.join(','))}`);
+    const { results, eslifierOutputDirConfigured } = await mergeApi('GET', `/api/merge/plugins?collections=${encodeURIComponent(collectionIds)}&q=${encodeURIComponent(q)}&extensions=${encodeURIComponent(mergeState.extensions.join(','))}`);
     mergeState.searchResults = results;
+    mergeState.eslifierOutputDirConfigured = !!eslifierOutputDirConfigured;
+    // Recorded only on a SUCCESSFUL search (2026-08-24, merge-step1-stale-search-fix) -- if this
+    // request fails, the fingerprint must NOT update, so mergeEnterStep1 keeps treating the results
+    // as stale/missing and retries on the next visit rather than wrongly trusting a search that never
+    // actually completed for the current selection.
+    mergeState.searchedCollIds = mergeCollIdsFingerprint(mergeState.collSelected);
     mergeState.page = 1;
+    mergeUpdateEslifierHint();
     mergeRenderResultsPage();
-    $m('mergeResultsSummary').textContent = q ? `Results for "${q}" · ${results.length} match${results.length === 1 ? '' : 'es'}` : `${results.length} plugin${results.length === 1 ? '' : 's'} found`;
-    $m('mergeNoResults').textContent = results.length ? '' : 'No matching plugins found in your chosen collections.';
+    mergeUpdateResultsSummary();
   } catch (e) {
     mergeHandleError(e);
   }
@@ -306,8 +444,12 @@ function mergePaginate(units) {
 
 function mergeRenderResultsPage() {
   mergeRenderSortArrows(mergeResultsSort, { fileName: 'mergeResultsFileSortArrow', modName: 'mergeResultsModSortArrow' });
-  const { pageItems, totalPages, total } = mergePaginate(mergeSortedRows(mergeState.searchResults, mergeResultsSort));
+  const { pageItems, totalPages, total } = mergePaginate(mergeSortedRows(mergeVisibleResults(), mergeResultsSort));
   $m('mergeSelectionActions').classList.toggle('hidden', !total);
+  // Called unconditionally, even when this search has zero results (see below) -- the pill next to
+  // the headline (merge-step1-picker-fix, 2026-08-24) always reads the true, whole-picker cart size,
+  // not something scoped to what this particular search happens to show.
+  mergeUpdateSelectionCount();
   if (!total) {
     $m('mergeResultsTable').classList.add('hidden');
     $m('mergePaginationBar').classList.add('hidden');
@@ -320,7 +462,6 @@ function mergeRenderResultsPage() {
   for (const item of pageItems) body.appendChild(mergeBuildResultRow(item));
   mergeUpdatePaginationBar(totalPages, total);
   mergeUpdateHeaderCheckboxState();
-  mergeUpdateSelectionCount();
   mergeCheckSelectAllBanner();
 }
 
@@ -347,9 +488,16 @@ function mergeBuildResultRow(item) {
   });
   checkbox.addEventListener('change', (e) => {
     mergeSetCartMembership(item, e.target.checked);
-    tr.classList.toggle('selected', e.target.checked);
+    // Full re-sync from the cart, not just this one row (merge-step1-picker-fix, 2026-08-24) -- two
+    // rows on the SAME page can share the identical fullPath (a plugin belonging to more than one
+    // chosen collection, see mergeUpdateSelectionCount's own comment). Before this fix, only THIS
+    // row's own checkbox/class got updated, so a sibling row sharing its key stayed visually stale
+    // until some other re-render happened -- meaning unchecking what looked like a still-checked
+    // "different" row could silently clear the shared cart entry while its own checkbox kept showing
+    // checked. mergeRefreshRowsFromCart re-derives every row's checked state fresh from the cart, so
+    // any row sharing this key updates immediately, and also covers mergeUpdateHeaderCheckboxState.
+    mergeRefreshRowsFromCart();
     mergeUpdateSelectionCount();
-    mergeUpdateHeaderCheckboxState();
     mergeCheckSelectAllBanner();
     mergeUpdateCartBar();
     mergeRefreshCartWindow();
@@ -423,7 +571,7 @@ function mergeCurrentPageItems() {
   // Sorted the SAME way mergeRenderResultsPage itself does -- must match exactly, since this drives
   // the header checkbox's tri-state AND the shift-click range select (mergeApplyShiftRange indexes
   // into the live DOM rows, which are already in this same sorted order).
-  const { pageItems } = mergePaginate(mergeSortedRows(mergeState.searchResults, mergeResultsSort));
+  const { pageItems } = mergePaginate(mergeSortedRows(mergeVisibleResults(), mergeResultsSort));
   return pageItems;
 }
 
@@ -444,14 +592,40 @@ $m('mergeHeaderCheckbox').addEventListener('change', (e) => {
   mergeRefreshCartWindow();
 });
 
+// Root cause (merge-step1-picker-fix, 2026-08-24): the OLD version counted matching ROWS in the
+// current search (`searchResults.filter(cart.has)`), not distinct entries in the cart itself. A
+// plugin shared by two chosen collections shows as two separate rows with the IDENTICAL fullPath
+// (lib/merge-plugin-scan.js's scanCollectionPlugins pushes one row per collection that references
+// it) -- confirmed live and common (775 duplicate-fullPath groups found across just 8 real
+// collections, some even duplicated within a single collection). mergeState.cart is a Map keyed by
+// fullPath (MERGE_ITEM_KEY), so checking two such rows only ever adds ONE cart entry -- but the old
+// formula counted BOTH rows as "selected", silently inflating the on-screen number above what the
+// cart (and therefore the merge, and therefore Step 2's own count -- see mergeEnterStep2's `items =
+// Array.from(mergeState.cart.values())`) actually holds. That gap between "rows checked" and "cart
+// size" is exactly what let 30-checked-but-23-merged go unnoticed.
+//
+// Now reads mergeState.cart.size directly -- the same true, running, whole-picker total every other
+// step already uses -- so this can never again show a number bigger than what will actually merge.
+// The denominator is also deduped by fullPath (not a raw row count) for the same reason: with
+// duplicate rows in play, a raw row count could never be reached by checking every box, which would
+// be its own small version of the same "count that lies" problem.
+//
+// mergeState.cart can legitimately hold MORE unique items than are in the CURRENT search's results
+// (items picked during an earlier, different search) -- true by design ("each pick adds to the merge
+// and stays put"), so `n` can exceed `uniqueTotal`; the pill shows that honestly (e.g. "38 of 20
+// selected") rather than clamping it, since the goal is a number that's never silently wrong, not one
+// that's always tidy.
 function mergeUpdateSelectionCount() {
-  const inThisSearch = mergeState.searchResults.filter((it) => mergeState.cart.has(MERGE_ITEM_KEY(it))).length;
-  const total = mergeState.searchResults.length;
-  $m('mergeSelectionCount').textContent = total ? `${inThisSearch} of ${total} in this search selected` : '';
+  const uniqueTotal = new Set(mergeVisibleResults().map(MERGE_ITEM_KEY)).size;
+  const n = mergeState.cart.size;
+  $m('mergeSelectionPillText').textContent = uniqueTotal ? `${n} of ${uniqueTotal} selected` : `${n} selected`;
+  const pill = $m('mergeSelectionPill');
+  pill.classList.toggle('badge--show-all', n === 0);
+  pill.classList.toggle('badge--info', n > 0);
 }
 
 $m('mergeSelectAllBtn').addEventListener('click', () => {
-  for (const it of mergeState.searchResults) mergeSetCartMembership(it, true);
+  for (const it of mergeVisibleResults()) mergeSetCartMembership(it, true);
   mergeRefreshRowsFromCart();
   mergeUpdateSelectionCount();
   mergeCheckSelectAllBanner();
@@ -459,7 +633,7 @@ $m('mergeSelectAllBtn').addEventListener('click', () => {
   mergeRefreshCartWindow();
 });
 $m('mergeInvertBtn').addEventListener('click', () => {
-  for (const it of mergeState.searchResults) mergeSetCartMembership(it, !mergeState.cart.has(MERGE_ITEM_KEY(it)));
+  for (const it of mergeVisibleResults()) mergeSetCartMembership(it, !mergeState.cart.has(MERGE_ITEM_KEY(it)));
   mergeRefreshRowsFromCart();
   mergeUpdateSelectionCount();
   mergeCheckSelectAllBanner();
@@ -467,7 +641,7 @@ $m('mergeInvertBtn').addEventListener('click', () => {
   mergeRefreshCartWindow();
 });
 $m('mergeClearSearchBtn').addEventListener('click', () => {
-  for (const it of mergeState.searchResults) mergeSetCartMembership(it, false);
+  for (const it of mergeVisibleResults()) mergeSetCartMembership(it, false);
   mergeRefreshRowsFromCart();
   mergeUpdateSelectionCount();
   mergeHideSelectAllBanner();
@@ -475,7 +649,7 @@ $m('mergeClearSearchBtn').addEventListener('click', () => {
   mergeRefreshCartWindow();
 });
 $m('mergeSelectAllBannerBtn').addEventListener('click', () => {
-  for (const it of mergeState.searchResults) mergeSetCartMembership(it, true);
+  for (const it of mergeVisibleResults()) mergeSetCartMembership(it, true);
   mergeRefreshRowsFromCart();
   mergeUpdateSelectionCount();
   mergeHideSelectAllBanner();
@@ -487,11 +661,12 @@ $m('mergeSelectAllBannerBtn').addEventListener('click', () => {
 // scoped here to "all M results IN THIS SEARCH", not the whole cart (the cart is a separate,
 // longer-lived accumulation across many different searches).
 function mergeCheckSelectAllBanner() {
-  const total = mergeState.searchResults.length;
+  const visible = mergeVisibleResults();
+  const total = visible.length;
   const pageItems = mergeCurrentPageItems();
   const pageSelected = pageItems.filter((it) => mergeState.cart.has(MERGE_ITEM_KEY(it))).length;
   const allPageSelected = pageItems.length > 0 && pageSelected === pageItems.length;
-  const allSelected = total > 0 && mergeState.searchResults.every((it) => mergeState.cart.has(MERGE_ITEM_KEY(it)));
+  const allSelected = total > 0 && visible.every((it) => mergeState.cart.has(MERGE_ITEM_KEY(it)));
   if (allPageSelected && total > pageItems.length && !allSelected) {
     $m('mergeSelectAllBannerPageCount').textContent = pageItems.length;
     $m('mergeSelectAllBannerTotalCount').textContent = total;
@@ -650,7 +825,7 @@ function mergeRenderReviewStep() {
   const nOverride = items.filter((it) => it.status === 'override').length;
   const nClean = items.filter((it) => it.status === 'ok').length;
 
-  $m('mergeReviewSub').textContent = `${items.length} plugin${items.length === 1 ? '' : 's'} chosen. Filter by status, drop anything that shouldn't go in, or go back to add more. None of these stop the merge — they're just heads-ups.`;
+  $m('mergeReviewSub').textContent = `${items.length} plugin${items.length === 1 ? '' : 's'} selected for the merge. Filter the list, remove unneeded plugins, or search again to add more. Status flags are purely informational and won't block the merge.`;
 
   const masterCallout = $m('mergeMasterCallout');
   if (nMaster > 0) {
@@ -667,27 +842,9 @@ function mergeRenderReviewStep() {
     overrideCallout.classList.remove('hidden');
     const overrideAreIs = nOverride === 1 ? 'is' : 'are';
     const overridePatchNoun = nOverride === 1 ? 'a patch' : 'patches';
-    overrideCallout.innerHTML = `<div class="callout__title">⚠️ ${nOverride} of these ${overrideAreIs} ${overridePatchNoun}</div><p>Patches change records from other mods instead of only adding their own new content. That's fine — the merge keeps whatever plugin they change as a required master, so those changes still apply exactly like before.</p>`;
+    overrideCallout.innerHTML = `<div class="callout__title">⚠️ ${nOverride} of these ${overrideAreIs} ${overridePatchNoun}</div><p>Patches override records from other mods rather than just introducing new content. This is completely normal—the merge automatically preserves the original mods as required masters so every tweak continues to apply as intended.</p>`;
   } else {
     overrideCallout.classList.add('hidden');
-  }
-
-  const totalNewRecords = included.reduce((sum, it) => sum + (it.newRecordCount || 0), 0);
-  const anyCellWorldspace = included.some((it) => it.hasCellOrWorldspace);
-  const qualifies = included.length > 0 && totalNewRecords <= 4096 && !anyCellWorldspace;
-  const eslCallout = $m('mergeEslCallout');
-  if (included.length === 0) {
-    eslCallout.classList.add('hidden');
-  } else {
-    eslCallout.classList.remove('hidden');
-    if (qualifies) {
-      eslCallout.innerHTML = `<div class="callout__title">🪶 This merge will be ESL-flagged — it won't cost a load-order slot</div><p>${totalNewRecords.toLocaleString()} new records (under the 4,096-record light-plugin limit) and no risky cell or worldspace edits — so it keeps its .esp name but loads as a light plugin (an "ESPFE"). Zero slots used.</p>`;
-    } else {
-      const reason = anyCellWorldspace
-        ? 'It has cell or worldspace edits — too risky to flag as an ESL automatically'
-        : `It has ${totalNewRecords.toLocaleString()} new records — over the 4,096 light-plugin limit`;
-      eslCallout.innerHTML = `<div class="callout__title">This merge will stay a full .esp</div><p>${reason} — so it takes one load-order slot like a normal plugin.</p>`;
-    }
   }
 
   // Drop any active filter status that no longer has a matching row (e.g. the last "Needs a
@@ -762,11 +919,7 @@ function mergeOutputFileName() {
   return raw.toLowerCase().endsWith('.esp') ? raw : `${raw}.esp`;
 }
 function mergeUpdateOutputPreview() {
-  const included = mergeState.reviewItems; // 'override' no longer excludes (2026-08-17)
-  const totalNewRecords = included.reduce((sum, it) => sum + (it.newRecordCount || 0), 0);
-  const anyCellWorldspace = included.some((it) => it.hasCellOrWorldspace);
-  const qualifies = included.length > 0 && totalNewRecords <= 4096 && !anyCellWorldspace;
-  $m('mergeResultPreview').textContent = `${mergeOutputFileName()} · ${qualifies ? 'ESL-flagged ✓' : 'Full ✓'}`;
+  $m('mergeResultPreview').textContent = mergeOutputFileName();
 }
 $m('mergeOutputNameInput').addEventListener('input', mergeUpdateOutputPreview);
 $m('mergeOutputBrowseBtn').addEventListener('click', async () => {
@@ -855,6 +1008,77 @@ $m('mergeMasterDepIncludeBtn').addEventListener('click', async () => {
   mergeStartMerge(); // re-run -- the check passes this time, since they're now in the cart
 });
 
+// ---- Pre-flight (2026-08-23) -------------------------------------------------------------------
+// "Check up front and show what's wrong" -- the director's own explicit ask after a real merge died
+// at plugin 11 of 53 with nothing but a generic "something went wrong". Everything about to be
+// loaded is checked first, and anything that can't be is LISTED, before a single plugin is read.
+//
+// Two tiers, because they genuinely differ (see lib/merge-preflight.js's checkLoadList): a blocking
+// problem means a file can't be read at all and there is nothing to do but fix it, while a
+// non-blocking one -- a declared master that isn't installed -- has always been survivable, so the
+// merge stays available and the user decides. The modal is the same either way; only the icon, the
+// lead sentence and whether Build Anyway exists change.
+let mergePendingPreflightBuild = null;
+
+function mergeOpenPreflightModal(problems, onContinue) {
+  const blocking = problems.filter((p) => p.blocking);
+  const warnings = problems.filter((p) => !p.blocking);
+  const isBlocked = blocking.length > 0;
+  mergePendingPreflightBuild = isBlocked ? null : onContinue;
+
+  const listFor = (list) => list.map((p) =>
+    `<li><strong>${escMergeHtml(p.fileName)}</strong> &mdash; ${escMergeHtml(p.detail)}</li>`).join('');
+
+  $m('mergePreflightModalTitle').textContent = isBlocked
+    ? '\u{1F6D1} These plugins can\u2019t be loaded'
+    : '\u26A0\uFE0F Some files are missing';
+
+  let html = '';
+  if (isBlocked) {
+    html += `<p>The merge was stopped before it started. ${blocking.length === 1 ? 'This plugin has' : 'These plugins have'} a problem that has to be sorted out first:</p><ul>${listFor(blocking)}</ul>`;
+    if (warnings.length) html += `<p>Also worth knowing about:</p><ul>${listFor(warnings)}</ul>`;
+    html += '<p>Take these out of your selection, or fix them in Vortex, then try again.</p>';
+  } else {
+    html += `<p>${warnings.length === 1 ? 'One file the plugins you picked rely on isn\u2019t' : 'Some files the plugins you picked rely on aren\u2019t'} installed:</p><ul>${listFor(warnings)}</ul>`;
+    html += '<p>You can go ahead and build, but anything that depends on the missing file may not carry over. Cancel if you\u2019d rather install it first.</p>';
+  }
+  $m('mergePreflightModalText').innerHTML = html;
+  $m('mergePreflightContinueBtn').classList.toggle('hidden', isBlocked);
+  $m('mergePreflightCancelBtn').textContent = isBlocked ? 'Close' : 'Cancel';
+  $m('mergePreflightModal').classList.remove('hidden');
+}
+$m('mergePreflightCancelBtn').addEventListener('click', () => {
+  mergePendingPreflightBuild = null;
+  $m('mergePreflightModal').classList.add('hidden');
+});
+$m('mergePreflightContinueBtn').addEventListener('click', () => {
+  $m('mergePreflightModal').classList.add('hidden');
+  const go = mergePendingPreflightBuild;
+  mergePendingPreflightBuild = null;
+  if (go) go();
+});
+
+// Overwrite check (2026-08-24, merge-overwrite-warning) -- called right before mergeProceedWithMerge
+// from EVERY path that leads there (the happy path below, and the preflight modal's own confirm
+// callback), so a real existing output file always gets a real confirm regardless of which path got
+// the user here. Serious register (plain-language-writer skill) -- this is a genuine, permanent,
+// easy-to-not-notice-until-later overwrite, not a casual heads-up. Non-fatal on its own failure, same
+// philosophy as the master-dependency/preflight checks above: web/merge-routes.js's own /merge route
+// independently re-checks the same path right before it writes and refuses outright unless this
+// returned a real confirmed `overwrite: true` -- so a check that couldn't run here just means the
+// user hits that real backstop instead of this nicer client-side confirm, never a silent overwrite.
+async function mergeConfirmOverwrite(outputDir) {
+  try {
+    const check = await mergeApi('GET', `/api/merge/output-exists?outputDir=${encodeURIComponent(outputDir)}&outputName=${encodeURIComponent(mergeOutputFileName())}`);
+    if (!check.exists) return { proceed: true, overwrite: false };
+    const existingName = check.path.slice(Math.max(check.path.lastIndexOf('\\'), check.path.lastIndexOf('/')) + 1);
+    const ok = await window.showConfirmModal(`${existingName} already exists in this folder. Merging again will overwrite it — continue?`);
+    return { proceed: ok, overwrite: ok };
+  } catch {
+    return { proceed: true, overwrite: false };
+  }
+}
+
 async function mergeStartMerge() {
   const included = mergeState.reviewItems; // 'override' no longer excludes (2026-08-17) -- everything in the cart goes into the build
   if (!included.length) return;
@@ -872,24 +1096,62 @@ async function mergeStartMerge() {
     // whole merge over a heads-up feature; proceed as this always did before the check existed.
   }
 
-  mergeProceedWithMerge(included, outputDir);
+  // Runs AFTER the master-dependency check above so the two modals can never both be open, and so
+  // the "these plugins will stop working" question -- which can still change the selection, via
+  // Include them in the merge -- is settled before we validate the final set. Same non-fatal
+  // philosophy: a pre-flight that can't run itself never blocks a merge, and web/merge-routes.js's
+  // own server-side copy of this check is the real backstop either way.
+  try {
+    const { problems } = await mergeApi('POST', '/api/merge/preflight', {
+      items: included.map((it) => ({ fullPath: it.fullPath, fileName: it.fileName, modName: it.modName })),
+    });
+    if (problems && problems.length) {
+      mergeOpenPreflightModal(problems, async () => {
+        const { proceed, overwrite } = await mergeConfirmOverwrite(outputDir);
+        if (proceed) mergeProceedWithMerge(included, outputDir, overwrite);
+      });
+      return;
+    }
+  } catch {
+    // see above
+  }
+
+  const { proceed, overwrite } = await mergeConfirmOverwrite(outputDir);
+  if (!proceed) return;
+  mergeProceedWithMerge(included, outputDir, overwrite);
 }
 $m('mergeStartBtn').addEventListener('click', mergeStartMerge);
 
-async function mergeProceedWithMerge(included, outputDir) {
+async function mergeProceedWithMerge(included, outputDir, overwrite) {
   mergeGoToStep(3);
-  $m('mergeProgressSub').innerHTML = `Building <strong>${mergeOutputFileName()}</strong> from ${included.length} plugin${included.length === 1 ? '' : 's'}. Vortex must stay closed while this runs.`;
+  $m('mergeProgressSub').innerHTML = `Building <strong>${mergeOutputFileName()}</strong> from ${included.length} plugin${included.length === 1 ? '' : 's'}.`;
   $m('mergeProgressBar').style.width = '0%';
   $m('mergeProgressText').textContent = 'Starting…';
 
   try {
     await mergeApi('POST', '/api/merge/merge', {
-      items: included.map((it) => ({ fullPath: it.fullPath, fileName: it.fileName, modName: it.modName })),
+      // collectionName added (2026-08-24, merge-restore-report-data) -- the /merge route has no other
+      // way to know which chosen collection a plugin came from (it can't be re-derived server-side:
+      // the same fullPath can belong to more than one chosen collection, and the route has no way to
+      // know which one the user actually picked from). Feeds web/merge-routes.js's merge.json
+      // enrichment for the future Restore/Revert report -- see design/mockup-merge-plugins-new-
+      // features.html section 6.
+      items: included.map((it) => ({ fullPath: it.fullPath, fileName: it.fileName, modName: it.modName, collectionName: it.collectionName })),
       outputName: mergeOutputFileName(),
       outputDir,
+      // overwrite (2026-08-24, merge-overwrite-warning) -- explicit confirmed-intent signal, never
+      // just "the client didn't error out." See /merge's own comment for why this is required, not
+      // advisory: it refuses outright when a real existing file is found and this isn't exactly true.
+      overwrite: !!overwrite,
     });
   } catch (e) {
     mergeGoToStep(2);
+    // The server runs the same pre-flight; if IT blocked, show the real list rather than the bare
+    // message (this path only happens when the client-side check above couldn't run).
+    if (e.body?.error === 'preflight-blocked' && Array.isArray(e.body.problems)) {
+      mergeOpenPreflightModal(e.body.problems, null);
+      return;
+    }
     mergeHandleError(e, mergeStartMerge);
     return;
   }
@@ -937,14 +1199,19 @@ function mergeRenderDoneStep(result, included) {
   ].map(([n, label]) => `<div class="merge-stat"><div class="merge-stat__n">${n.toLocaleString()}</div><div class="merge-stat__l">${label}</div></div>`).join('');
 
   const outFile = mergeOutputFileName();
+  $m('mergeDoneSlotBudget').classList.add('hidden'); // reset -- avoids a stale flash from a previous merge while the fresh fetch below is in flight
   const eslCallout = $m('mergeDoneEslCallout');
   eslCallout.classList.remove('hidden');
+  $m('mergeDoneEslTitle').textContent = `🧬 ${outFile} created${result.eslFlagged ? ' — ESL-flagged' : ''}`;
   if (result.eslFlagged) {
-    eslCallout.innerHTML = `<div class="callout__title">🧬 ${escMergeHtml(outFile)} created — ESL-flagged</div><p>Saved to <code>${escMergeHtml(result.outputPath)}</code>. Because it's light-flagged, it costs <strong>0</strong> of your 254 load-order slots — you just freed up the ones its originals were using.</p>`;
+    $m('mergeDoneEslBody').innerHTML = `Because it's light-flagged, it uses <strong>0</strong> of your 254 full load-order slots — instead it shares the separate light-plugin pool (capped at 4,096 total). You just freed up the full slots its originals were using.`;
+    mergeHideLightSection();
+    mergeRenderSlotBudget(included.length, true);
   } else {
-    eslCallout.innerHTML = `<div class="callout__title">🧬 ${escMergeHtml(outFile)} created</div><p>Saved to <code>${escMergeHtml(result.outputPath)}</code>. It's a full .esp, so it takes one of your 254 load-order slots.</p>`;
+    $m('mergeDoneEslBody').textContent = 'This is a full .esp taking up one of your 254 regular plugin slots.';
+    mergeCheckLightEligibility(result.outputPath, outFile, included.length);
   }
-  $m('mergeDoneNextStepsText').innerHTML = `Install <strong>${escMergeHtml(outFile)}</strong> as a mod in Vortex and enable it, then disable the ${included.length} original${included.length === 1 ? '' : 's'} it replaces &mdash; same as adding a Dummy Master or DynDOLOD output.`;
+  mergeRenderNextSteps(outFile, included.length, result.eslFlagged);
 
   // textContent, not innerHTML -- logContent is plain text from lib/merge-worker.js's buildMergeLog
   // (real plugin/mod names embedded in it, never sanitized for HTML).
@@ -959,6 +1226,132 @@ function mergeRenderDoneStep(result, included) {
 
   mergeRenderRelinkSection(result, included.length);
 }
+
+// Flag as Light (2026-08-24, merge-flag-as-light) -- mirrors Vortex's own real "Mark as Light"
+// mechanism: a plain header flag-flip, gated on a REAL FormID-range validity scan of the actual
+// finished file (never the pre-merge Review-step estimate, and never a blind toggle). See
+// lib/esp-light-flag.js's own header comment for the full design writeup and the real Vortex source
+// this was confirmed against. Only offered when the merge didn't already auto-flag itself
+// (mergeRenderDoneStep's own eslFlagged branch above) -- if it's already light, there's nothing for
+// this section to offer, so it stays fully hidden.
+function mergeHideLightSection() {
+  $m('mergeDoneLightCheck').classList.add('hidden');
+  $m('mergeDoneLightEligibleActions').classList.add('hidden');
+  $m('mergeDoneLightIneligibleText').classList.add('hidden');
+}
+
+// { outputPath, fileName } for the confirm/click handler below -- null until a real eligibility
+// check has actually confirmed this specific merge is safe to flag.
+let mergePendingLightFlag = null;
+async function mergeCheckLightEligibility(outputPath, fileName, sourceCount) {
+  mergeHideLightSection();
+  mergePendingLightFlag = null;
+  $m('mergeFlagAsLightBtn').disabled = false;
+  $m('mergeFlagAsLightBtn').classList.remove('hidden');
+  $m('mergeFlagAsLightResult').classList.add('hidden');
+  $m('mergeFlagAsLightResult').innerHTML = '';
+  $m('mergeDoneLightCheck').classList.remove('hidden');
+  try {
+    const check = await mergeApi('GET', `/api/merge/light-eligibility?outputPath=${encodeURIComponent(outputPath)}`);
+    $m('mergeDoneLightCheck').classList.add('hidden');
+    if (check.eligible) {
+      mergePendingLightFlag = { outputPath, fileName, sourceCount };
+      $m('mergeDoneEslBody').textContent = 'This is a full .esp taking up one of your 254 regular plugin slots. It can be safely flagged as light (ESL), freeing up a standard slot while counting toward your 4,096 light plugin limit.';
+      $m('mergeDoneLightEligibleActions').classList.remove('hidden');
+      mergeRenderSlotBudget(sourceCount, 'pending');
+    } else {
+      $m('mergeDoneLightIneligibleText').classList.remove('hidden');
+      mergeRenderSlotBudget(sourceCount, false);
+    }
+  } catch {
+    // Non-fatal (2026-08-24) -- the merge itself already succeeded; a failed eligibility check just
+    // means this one optional action doesn't offer itself on this visit, not a reason to disrupt the
+    // rest of the Done screen with an error box.
+    $m('mergeDoneLightCheck').classList.add('hidden');
+    mergeRenderSlotBudget(sourceCount, false);
+  }
+}
+
+// Real, current light-plugin slot budget (2026-08-24, merge-light-slot-budget) -- see
+// lib/load-order-slot-count.js's own header for why this is a genuinely different number from the
+// per-plugin eligibility check above (system-wide slot count vs. this one file's own FormID range).
+// `savings` controls the second sentence: `true` = this merge is ALREADY flagged, so the slots are
+// freed for real (past tense); `'pending'` = eligible but not yet flagged, so flagging it WOULD free
+// them (still needs the Flag as Light click above); `false` = no savings claim at all (ineligible, or
+// the eligibility check itself failed) -- never promise a saving this merge hasn't actually earned.
+async function mergeRenderSlotBudget(sourceCount, savings) {
+  const el = $m('mergeDoneSlotBudget');
+  try {
+    const budget = await mergeApi('GET', '/api/merge/slot-budget');
+    if (!budget.configured) { el.classList.add('hidden'); return; }
+    const { light, lightLimit } = budget;
+    const overBudget = light > lightLimit;
+    const title = overBudget ? "⚠️ You're over your light-plugin budget" : '📊 Your light-plugin budget';
+    let body = overBudget
+      ? `You're using <strong>${light.toLocaleString()}</strong> of <strong>${lightLimit.toLocaleString()}</strong> light-plugin slots — <strong>${(light - lightLimit).toLocaleString()}</strong> over the limit.`
+      : `You're currently using <strong>${light.toLocaleString()}</strong> of <strong>${lightLimit.toLocaleString()}</strong> light-plugin slots.`;
+    if (savings && sourceCount > 1) {
+      const freed = sourceCount - 1;
+      body += savings === true
+        ? ` Merging these ${sourceCount} plugins into one and flagging it as Light just freed up <strong>${freed}</strong> of them.`
+        : ` Flagging this one would free up <strong>${freed}</strong> of them.`;
+    }
+    el.innerHTML = `<div class="callout__title">${title}</div><p>${body}</p>`;
+    el.classList.remove('hidden');
+  } catch {
+    // Non-fatal, same convention as the eligibility check above -- an optional informational box,
+    // never worth disrupting the rest of an already-successful Done screen over.
+    el.classList.add('hidden');
+  }
+}
+
+// Next Steps callout (2026-08-24, merge-done-screen-tighten) -- director's own exact copy shape, a
+// real <ol> not manual "1."/"2." text. `alreadyFlagged` picks the closing line: the light-headroom
+// celebration line is only accurate once this merge really IS light-flagged (auto-flagged at render
+// time, or a manual Flag as Light click that just succeeded) -- for a merge that's staying a full
+// .esp (ineligible, or eligible-but-not-yet-clicked), that line would be misleading, so it stays
+// neutral there instead. Called again from the Flag as Light success handler below so the closing
+// line updates live the moment a manual flag succeeds, not just at initial render.
+function mergeRenderNextSteps(outFile, sourceCount, alreadyFlagged) {
+  $m('mergeDoneNextStepsList').innerHTML = [
+    `Install and enable <code>${escMergeHtml(outFile)}</code> as a mod in Vortex.`,
+    `Go to the <strong>Plugins tab</strong> and verify the original ${sourceCount} plugin${sourceCount === 1 ? '' : 's'} ${sourceCount === 1 ? 'is' : 'are'} either disabled or deleted.`,
+    `Click <strong>Deploy Mods</strong> in Vortex.`,
+  ].map((step) => `<li>${step}</li>`).join('');
+  $m('mergeDoneNextStepsClosing').textContent = alreadyFlagged
+    ? "You're all set—enjoy the extra headroom on your light plugin limit!"
+    : "You're all set!";
+}
+
+$m('mergeFlagAsLightBtn').addEventListener('click', async () => {
+  if (!mergePendingLightFlag) return;
+  const { outputPath, fileName, sourceCount } = mergePendingLightFlag;
+  const ok = await window.showConfirmModal(`Flag "${fileName}" as a light plugin?\n\nThis modifies the file on disk. The plugin will free up one regular slot and use a light mod slot instead (up to 4,096 total).`);
+  if (!ok) return;
+  const btn = $m('mergeFlagAsLightBtn');
+  btn.disabled = true;
+  const resultEl = $m('mergeFlagAsLightResult');
+  resultEl.classList.remove('hidden');
+  resultEl.textContent = 'Flagging…';
+  try {
+    await mergeApi('POST', '/api/merge/flag-as-light', { outputPath });
+    // Update the SAME shared title/body the combined banner already uses, rather than writing a
+    // second title into resultEl below it -- otherwise the old "created" text never goes away and
+    // the box shows two titles stacked (real bug, caught live 2026-08-24).
+    $m('mergeDoneEslTitle').textContent = `🪶 ${fileName} — now flagged as Light`;
+    $m('mergeDoneEslBody').textContent = "It loads as a light plugin (an ESPFE) now — no longer uses one of your 254 full load-order slots, and instead shares the separate light-plugin pool (capped at 4,096 total).";
+    resultEl.classList.add('hidden');
+    resultEl.textContent = '';
+    $m('mergeDoneLightEligibleActions').classList.add('hidden'); // done -- nothing left to offer again on this Done screen
+    mergeRenderSlotBudget(sourceCount, true); // now actually flagged -- switch the savings line from "would free up" to "just freed up"
+    mergeRenderNextSteps(fileName, sourceCount, true); // now actually flagged -- switch the closing line to the light-headroom celebration
+  } catch (e) {
+    resultEl.classList.add('hidden');
+    resultEl.textContent = '';
+    mergeHandleError(e);
+    btn.disabled = false;
+  }
+});
 
 // Relink Scripts (2026-08-18) -- web/merge-routes.js's own /merge success handler already ran the
 // scan automatically (result.relinkCandidates), so this is purely about DISPLAYING what it already
@@ -1032,6 +1425,19 @@ $m('mergeOpenOutputBtn').addEventListener('click', async () => {
 $m('mergeAnotherBtn').addEventListener('click', () => {
   mergeState.searchResults = [];
   $m('mergeSearchInput').value = '';
+  // Real bug fix (2026-08-24, merge-another-full-reset): Step 0's collSelected and Step 1's cart
+  // never got cleared here, so every checkbox from the PREVIOUS merge stayed checked on a fresh
+  // "Merge another" -- collSelected/cart are Maps/Sets, clearing the state alone doesn't un-check
+  // the actual DOM checkboxes, so each clear is paired with the same re-render/refresh calls the
+  // existing Clear Selection buttons already use for the identical operation (mergeCollClearBtn's
+  // own handler; mergeClearSearchBtn's own handler for the cart) -- not a new reset mechanism.
+  // outputDir is deliberately left untouched -- re-picking an output folder for every merge in a
+  // batch session would be real friction, not a fix, and nothing asked for it to reset.
+  mergeState.collSelected.clear();
+  mergeRenderCollectionList();
+  mergeState.cart.clear();
+  mergeUpdateCartBar();
+  mergeRefreshCartWindow(); // keeps the separate "View chosen" popup window in sync, same as every other cart-clearing call site
   mergeGoToStep(0);
 });
 

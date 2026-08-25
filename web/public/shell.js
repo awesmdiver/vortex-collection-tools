@@ -287,6 +287,10 @@ async function navigateToArea(id, subTab) {
     const available = await checkHelperAvailableLive();
     return navigateToArea(available ? 'update-collection-v2' : 'sync', subTab);
   }
+  // Captured BEFORE showToolArea reassigns currentArea -- lets a per-area hook below tell "did I
+  // just arrive here from somewhere ELSE" apart from "was I already here" (2026-08-24,
+  // merge-step0-refresh's own auto-refresh-once-per-visit needs exactly this).
+  const previousArea = currentArea;
   showToolArea(id);
   if (id === 'book') markBookOpened();
   if (id === 'sync' && window.loadSyncProfiles) window.loadSyncProfiles();
@@ -303,6 +307,14 @@ async function navigateToArea(id, subTab) {
   // Same "don't fetch what nobody's looking at yet" convention -- remove-collection-app.js's own
   // rcLoadCollections() only ever fires once this area is actually visited.
   if (id === 'remove-collection' && window.rcLoadCollections) window.rcLoadCollections();
+  // Merge Plugins' own Step 0 auto-refresh (2026-08-24, merge-step0-refresh) -- fires once each time
+  // the user actually arrives at 'merge' from a DIFFERENT area (previousArea check above), never
+  // again from switching BROWSER tabs and back (no visibilitychange listener exists) or from
+  // internal step navigation within Merge Plugins itself (Back/Merge another call mergeGoToStep
+  // directly, never through here). Covers Vortex having changed while the user was already sitting
+  // on some other page before opening this one -- the loadMergeOnBoot() eager prefetch at script
+  // load covers a direct ?area=merge deep link the same way it always has.
+  if (id === 'merge' && previousArea !== 'merge' && window.mergeAutoRefreshCollectionsOnEntry) window.mergeAutoRefreshCollectionsOnEntry();
   // Book has no Vortex-gated data to worry about (it's static lore content), but still only loads
   // its own JSON the first time this area is actually visited, not eagerly on page load -- same
   // "don't fetch what nobody's looking at yet" convention as every other area's own lazy-load hook.
@@ -402,7 +414,7 @@ function setStarVisual(star, on) {
 const HOME_CANONICAL_ORDER = [
   'merge', 'rebuild', 'sync', 'rules-generator', 'removecollection',
   'missingmasters', 'scrub', 'archivefinder', 'missingfiles', 'cyclehelper', 'clearflags', 'pgpatcher',
-  'stats', 'workthrough', 'updatecompare', 'rulesgen', 'workshopreport', 'modexceptions',
+  'stats', 'workthrough', 'updatecompare', 'rulesgen', 'workshopreport', 'mergehistory', 'modexceptions',
 ];
 function pinKeyOf(wrap) {
   return wrap.querySelector('.home-card__star').dataset.pinKey;
@@ -503,7 +515,7 @@ for (const key of pinnedTools) applyPinState(key, true);
 // 2026-08-15 (queue: rebuild-missing-hand-pick-exceptions verification): 'rulesgen' was ALSO
 // missing from this map already, pre-existing and unrelated to that feature, caught incidentally
 // while confirming a direct-URL-reload lands on the right sub-tab for the new 'exceptions' entry.
-const REPORTS_SUB_TAB_URL_MAP = { 'work-through': 'workthrough', updatecompare: 'updatecompare', workshop: 'workshop', rulesgen: 'rulesgen', exceptions: 'exceptions' };
+const REPORTS_SUB_TAB_URL_MAP = { 'work-through': 'workthrough', updatecompare: 'updatecompare', workshop: 'workshop', rulesgen: 'rulesgen', mergehistory: 'mergehistory', exceptions: 'exceptions' };
 
 // Lets any OTHER page (the standalone log-view page's own header nav, in particular) link straight
 // into a specific area/sub-tab via ?area=rebuild|sync|settings|reports or

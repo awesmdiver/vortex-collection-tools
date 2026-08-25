@@ -57,6 +57,7 @@ config/work-through-state.json
 config/offsite-import-map.json
 config/backup-ratio-dismiss-state.json
 config/rebuild-missing-last-fixed-state.json
+config/workshop-report-fetch-state.json
 config/cycle-helper-snapshot.json
 config/rules-generator-anomaly-choices.json
 config/relink-scripts-cache.json
@@ -116,3 +117,9 @@ prompts/.session-log.json
 prompts/.run-current.*
 prompts/.run-last.*
 prompts/handoffs/
+
+# Hotfix patches handed to testers -- the .zip is build output, the README is the real source
+patch/*.zip
+
+# Per-item handoff snapshots (claude-workflow-board) -- which archived handoff belongs to which item
+prompts/.item-handoffs/

@@ -13,6 +13,8 @@
 // fs.watch/chokidar setup. No polling timer either, matching that same simplicity.
 
 let mmLastProblemMasters = [];
+// The scan's own active-plugin count, kept for the all-clear banner's "Checked N active plugins".
+let mmLastTotal = 0;
 let mmPendingDummyName = null;
 let mmPendingRebuild = null;
 // Current value of the global "Download missing archives automatically" Settings toggle, as of the
@@ -64,8 +66,12 @@ function mmHandleError(e, retryFn) {
   // that IS running. The raw TypeError message ("Failed to fetch") is a developer-facing browser
   // exception string, not something a user can act on -- swap in a real explanation instead.
   if (e instanceof TypeError) {
-    box.appendChild(el('div', { class: 'callout__title' }, '🛑 Can’t Reach the App’s Server'));
-    box.appendChild(el('p', {}, 'The local server that runs this app isn’t responding right now. If you closed the window running it (or it crashed), you’ll need to start it back up—clicking Refresh alone won’t fix it until the server itself is running again.'));
+    box.appendChild(el('div', { class: 'callout__title' }, '🛑 Can’t Reach Local Server'));
+    box.appendChild(el('p', {}, [
+      'The app’s local server isn’t responding. If the server window was closed or crashed, restart it to continue. Clicking ',
+      el('strong', {}, 'Refresh'),
+      ' won’t work until the server is running again.',
+    ]));
   } else {
     box.textContent = e.message;
   }
@@ -101,7 +107,7 @@ const MM_STATUS = {
 };
 
 function mmCopyNameBtn(name) {
-  const btn = el('button', { class: 'btn btn--ghost btn--small' }, 'Copy name');
+  const btn = el('button', { class: 'btn btn--ghost btn--small' }, 'Copy Name');
   btn.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(name);
@@ -170,6 +176,461 @@ function mmActionsSuppressed(master) {
   return master.readyToDeploy || mmIsEslifierSwap(master);
 }
 
+// Turns the plugin back on in Vortex, then moves the row into the state that already means exactly
+// this: ready-to-deploy. Deliberately does NOT re-run the scan -- /scan reads plugins.txt, which
+// Vortex only rewrites during a real deploy, so a re-scan would still report Disabled and look
+// broken. The route's own response is the truth (setPluginEnabled self-verifies against Vortex's own
+// before/after readback), so the row is updated from that.
+//
+// Only the BUTTON changes while in flight. An earlier draft also swapped the mod name for a status
+// line; the director cut it -- on a single-row action it says the same thing twice and costs you the
+// mod name while you're reading it.
+async function mmEnablePlugin(master, btn) {
+    btn.disabled = true;
+    btn.textContent = 'Enabling\u2026';
+    try {
+        await mmApi('POST', '/api/missing-masters/set-plugin-enabled', { name: master.name });
+        master.readyToDeploy = true;
+        mmLocallyFixed.set(master.name, 'enabled');
+        // Marks HOW this row reached ready-to-deploy, purely so its callout can open with an accurate
+        // sentence -- see the callout below. Nothing else branches on it.
+        master.enabledViaHelper = true;
+        mmRenderSummaryBadges(); // its counts are per display-status, which just changed for this row
+        mmRenderMasterList();
+        mmRenderDeployBanners(); // this row is now ready-to-deploy, so there's a deploy worth offering
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Enable';
+        mmShowRowEnableError(btn);
+    }
+}
+
+// On the row, where the user is already looking -- not a modal. Replaces any previous attempt's note
+// rather than stacking them up on repeated clicks.
+function mmShowRowEnableError(btn) {
+    // Same closest('.mm-row') idiom this file already uses elsewhere to get from a button back to its
+    // own row -- no data attribute needed. The button is still in the DOM here: the failure path
+    // deliberately doesn't re-render, so the row (and the user's place on the page) is untouched.
+    const row = btn.closest('.mm-row');
+    if (!row) return;
+    const existing = row.querySelector('.mm-row__enable-error');
+    if (existing) existing.remove();
+    row.appendChild(el('div', { class: 'callout callout--warning mm-row__enable-error' }, [
+        el('div', { class: 'callout__title' }, '\u26a0\ufe0f Couldn\u2019t enable plugin'),
+        el('p', {}, 'Vortex does not have this plugin in your load order yet. Make sure its parent mod is installed and deployed in Vortex, then try again.'),
+    ]));
+}
+
+// ---------- Deploy (2026-08-23) ----------
+// Fixing anything here updates staging and Vortex's own settings, but the GAME sees none of it until
+// a deploy runs. So this is the step that makes Enable (and, later, Restore) actually take effect --
+// not a convenience.
+//
+// "Pending fixes" is detected from the rows themselves: any master currently displaying as
+// ready-to-deploy. Nothing new is tracked -- that state already exists and already means precisely
+// "fixed, but Vortex hasn't deployed it yet", whether it got there from this session's own Enable or
+// from the scan finding a rebuilt-but-undeployed mod. Reuses mmDisplayStatus so it can never disagree
+// with what the badge on the row says.
+function mmPendingDeployCount() {
+  return mmLastProblemMasters.filter((m) => mmDisplayStatus(m) === 'ready-to-deploy').length;
+}
+
+// The three result-level banners are decided together, in one place, because they're mutually
+// exclusive and deciding them separately is how two of them end up on screen at once.
+function mmRenderDeployBanners() {
+  const allClear = $g('mmAllClear');
+  const pending = $g('mmPendingDeploy');
+  const tip = $g('mmDeployTip');
+  const helperUp = mmHelperStatus === MM_HELPER_AVAILABLE;
+  const pendingCount = mmPendingDeployCount();
+
+  // The fallback instruction, and ONLY when we genuinely know the Helper is missing -- not while the
+  // probe is still in flight ('unknown'), which would flash it and then pull it away.
+  tip.classList.toggle('hidden', mmHelperStatus !== MM_HELPER_UNAVAILABLE);
+
+  // Nothing wrong at all AND nothing waiting on a deploy.
+  const showAllClear = mmLastProblemMasters.length === 0 && pendingCount === 0;
+  allClear.classList.toggle('hidden', !showAllClear);
+  if (showAllClear) {
+    allClear.innerHTML = '';
+    allClear.appendChild(el('div', { class: 'callout__title' }, '\u2705 No more missing masters \u2014 happy gaming!'));
+    allClear.appendChild(el('p', {}, [
+      'Checked ',
+      el('strong', {}, mmLastTotal === 1 ? '1 active plugin' : `${mmLastTotal} active plugins`),
+      ' and found no missing or disabled masters. Everything is in place.',
+    ]));
+  }
+
+  // Only offered when the Helper can actually run it -- without it the tip above already says the
+  // same thing in the form the user can act on.
+  const showPending = pendingCount > 0 && helperUp && !mmDeployInFlight;
+  pending.classList.toggle('hidden', !showPending);
+  if (showPending) {
+    pending.innerHTML = '';
+    pending.appendChild(el('div', { class: 'callout__title' }, '\ud83d\ude80 Fixes applied \u2014 one step left'));
+    pending.appendChild(el('p', {}, 'Your missing masters are resolved and enabled in Vortex, but your game cannot see them yet. Deploy your mods to finish setup.'));
+    const btn = el('button', { class: 'btn btn--primary btn--small' }, 'Deploy Mods');
+    btn.addEventListener('click', () => mmDeployAll());
+    pending.appendChild(el('div', { class: 'row-actions' }, btn));
+  }
+}
+
+let mmDeployInFlight = false;
+let mmDeployPollInterval = null;
+
+function mmStopDeployPolling() {
+  if (mmDeployPollInterval) {
+    clearInterval(mmDeployPollInterval);
+    mmDeployPollInterval = null;
+  }
+}
+
+function mmShowDeployResult(kind) {
+  const box = $g('mmDeployResult');
+  box.classList.remove('hidden');
+  box.className = `callout callout--${kind === 'success' ? 'success' : 'warning'}`;
+  box.innerHTML = '';
+  if (kind === 'success') {
+    box.appendChild(el('div', { class: 'callout__title' }, '\u2705 Deploy complete \u2014 your game is ready to launch.'));
+    return;
+  }
+  box.appendChild(el('div', { class: 'callout__title' }, '\u26a0\ufe0f Deploy failed'));
+  box.appendChild(el('p', {}, 'Vortex could not complete the deployment. You can try again from here, or open Vortex and click Deploy Mods directly.'));
+  const retry = el('button', { class: 'btn btn--primary btn--small' }, 'Retry Deploy');
+  retry.addEventListener('click', () => mmDeployAll());
+  box.appendChild(el('div', { class: 'row-actions' }, retry));
+}
+
+// Real progress, polled from Vortex's own deploy status -- not a fake animation. A deploy on a large
+// setup is genuinely slow (minutes), which is exactly why this project's standing rule is that a real
+// action shows itself happening rather than freezing behind a static label.
+async function mmDeployAll() {
+  mmDeployInFlight = true;
+  $g('mmDeployResult').classList.add('hidden');
+  mmRenderDeployBanners(); // hides the "one step left" banner while its own action is running
+  $g('mmDeployProgress').classList.remove('hidden');
+  $g('mmDeployPhase').textContent = 'Starting\u2026';
+  $g('mmDeployBar').style.width = '0%';
+
+  try {
+    await mmApi('POST', '/api/missing-masters/deploy-all', {});
+  } catch (e) {
+    mmDeployInFlight = false;
+    $g('mmDeployProgress').classList.add('hidden');
+    mmShowDeployResult('error');
+    mmRenderDeployBanners();
+    return;
+  }
+
+  mmStopDeployPolling();
+  mmDeployPollInterval = setInterval(async () => {
+    let progress;
+    try {
+      progress = await mmApi('GET', '/api/missing-masters/deploy-all/progress');
+    } catch {
+      return; // one failed poll is not evidence the deploy failed -- try again next tick
+    }
+    if (progress && typeof progress.percent === 'number') {
+      $g('mmDeployBar').style.width = `${Math.round(progress.percent)}%`;
+    }
+    if (progress && progress.text) $g('mmDeployPhase').textContent = progress.text;
+    if (!progress || !progress.done) return;
+
+    mmStopDeployPolling();
+    mmDeployInFlight = false;
+    $g('mmDeployProgress').classList.add('hidden');
+    if (progress.error) {
+      mmShowDeployResult('error');
+      mmRenderDeployBanners();
+      return;
+    }
+    mmShowDeployResult('success');
+    mmLocallyFixed.clear(); // the deploy ran -- the scan is the authority again
+    // Unlike the Enable path (which deliberately doesn't re-scan), a re-scan here is both correct and
+    // necessary: a real deploy genuinely reconciles Data and plugins.txt, so the scan is now the
+    // authority, and rows that were only Pending are done. Without this the page would keep claiming
+    // a step remains after the step was taken.
+    runMissingMastersScan();
+  }, 1000);
+}
+
+// ---------- Restore a mod whose files are gone entirely (2026-08-23) ----------
+// The precise row this applies to. Everything else with status 'missing' has a more specific, better
+// fix already on the row: readyToDeploy is done, activeAlternate/deployedMisplaced are manual swaps,
+// and possibleHollowInstall is Rebuild This Mod's job (staging still exists there, and Vortex still
+// has the record to resolve an archive from). Restore is for the case where all of that is gone.
+function mmCanRestore(master) {
+  return master.status === 'missing'
+    && !master.readyToDeploy
+    && !master.activeAlternate
+    && !master.deployedMisplaced
+    && !master.possibleHollowInstall;
+}
+
+let mmRestorePending = null; // { master, match, btn }
+
+// Masters this SESSION fixed itself, by name -> how. Re-applied after every render, because the
+// 5s background poll replaces mmLastProblemMasters wholesale with fresh scan data and would
+// otherwise wipe the Pending state right back to a red "Missing" a few seconds after a successful
+// fix. That is not a cosmetic race: for a restore the scan genuinely still reports 'missing' until a
+// deploy runs (it reads Data, and the files are in staging), and it cannot set readyToDeploy itself
+// either -- the staging index only looks at a mod folder's root and a Data/ subfolder, so a plugin
+// restored into a FOMOD option folder like "00 Core\" is invisible to it. Confirmed live against a
+// real restore. Cleared only by a real deploy, which is when the scan finally agrees.
+const mmLocallyFixed = new Map();
+
+function mmApplyLocalFixes() {
+  for (const m of mmLastProblemMasters) {
+    const how = mmLocallyFixed.get(m.name);
+    if (!how) continue;
+    m.readyToDeploy = true;
+    if (how === 'restored') m.restoredViaHelper = true;
+    else m.enabledViaHelper = true;
+  }
+}
+
+function mmBytes(n) {
+  if (!n && n !== 0) return '—';
+  const mb = n / (1024 * 1024);
+  return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+}
+function mmDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+// Replaces any previous note on this row rather than stacking them across repeated attempts.
+function mmRowNote(btn, kind, title, bodyChildren, buttons) {
+  const row = btn.closest('.mm-row');
+  if (!row) return;
+  const existing = row.querySelector('.mm-row__restore-note');
+  if (existing) existing.remove();
+  const note = el('div', { class: `callout callout--${kind} mm-row__restore-note` }, [
+    el('div', { class: 'callout__title' }, title),
+    el('p', {}, bodyChildren),
+  ]);
+  if (buttons && buttons.length) note.appendChild(el('div', { class: 'row-actions' }, buttons));
+  row.appendChild(note);
+}
+
+// The four empty-index outcomes. Three of them are NOT "not found", and saying "not found" for any
+// of them would be a lie the user acts on -- the third especially: the index only covers file types
+// the user chose and defaults to .esp only, so a perfectly healthy index genuinely finds nothing for
+// a .esm master.
+function mmRenderRestoreSearchState(master, btn, data) {
+  if (data.state === 'not-configured') {
+    const open = el('button', { class: 'btn btn--primary btn--small' }, 'Open Settings');
+    open.addEventListener('click', () => window.navigateToArea && window.navigateToArea('settings'));
+    mmRowNote(btn, 'info', '\ud83d\udca1 Archive Finder isn\u2019t set up yet',
+      ['To search inside your downloaded archives, Archive Finder needs a folder to keep its index in. Set one in ', el('strong', {}, 'Settings'), ' and come back.'],
+      [open]);
+    return;
+  }
+  if (data.state === 'not-scanned') {
+    const scan = el('button', { class: 'btn btn--primary btn--small' }, 'Scan Downloads Now');
+    scan.addEventListener('click', () => mmStartArchiveScan(null));
+    mmRowNote(btn, 'info', '\ud83d\udca1 Archive index is empty',
+      ['The Archive Finder has not indexed your downloads folder yet. Run a scan so Missing Masters can search your archive contents. On larger download folders, this takes a few minutes.'],
+      [scan]);
+    return;
+  }
+  if (data.state === 'ext-not-indexed') {
+    const add = el('button', { class: 'btn btn--primary btn--small' }, 'Add File Type and Re-scan');
+    add.addEventListener('click', () => mmStartArchiveScan(data.ext));
+    const dismiss = el('button', { class: 'btn btn--ghost btn--small' }, 'Dismiss');
+    dismiss.addEventListener('click', () => {
+      const row = btn.closest('.mm-row');
+      const note = row && row.querySelector('.mm-row__restore-note');
+      if (note) note.remove();
+    });
+    mmRowNote(btn, 'info', '\ud83d\udca1 File type not included in archive index',
+      ['Your archive index only searches specific file types (like ', el('code', {}, '.esp'), '). This missing master is a ',
+        el('code', {}, data.ext), ' file, so it was skipped during your last scan. You can add this file type and re-scan your downloads folder now. On larger folders, this takes a few minutes.'],
+      [add, dismiss]);
+    return;
+  }
+  mmRowNote(btn, 'warning', '\u26a0\ufe0f Mod not found in downloaded archives',
+    ['We checked your archive index, but this file is not in any of your downloaded mods. You will need to download it again from Nexus Mods and install it through Vortex.'],
+    []);
+}
+
+// Adds the extension to Archive Finder's own configured list (when asked) and kicks off ITS scan,
+// then hands the user over to that tool to watch it. Deliberately not a second scan implementation --
+// Archive Finder owns indexing, and duplicating it here is how the two drift apart.
+async function mmStartArchiveScan(extToAdd) {
+  try {
+    if (extToAdd) {
+      const cfg = await mmApi('GET', '/api/archive-finder/config');
+      const extensions = [...new Set([...(cfg.extensions || []), extToAdd])];
+      await mmApi('POST', '/api/archive-finder/config', { outputFolder: cfg.outputFolder, extensions });
+    }
+    await mmApi('POST', '/api/archive-finder/scan', {});
+  } catch (e) {
+    mmHandleError(e);
+    return;
+  }
+  // Archive Finder is a Utilities SUB-area, not a top-level one -- navigateToArea(area, sub).
+  if (window.navigateToArea) window.navigateToArea('utilities', 'archivefinder');
+}
+
+async function mmStartRestore(master, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Searching your downloaded archives\u2026';
+  let data;
+  try {
+    data = await mmApi('GET', `/api/missing-masters/restore/search?name=${encodeURIComponent(master.name)}`);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Restore';
+    mmHandleError(e, () => mmStartRestore(master, btn));
+    return;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Restore';
+  if (data.state !== 'matches') {
+    mmRenderRestoreSearchState(master, btn, data);
+    return;
+  }
+  if (data.matches.length === 1) {
+    mmShowRestoreConfirm(master, data.matches[0], btn); // one match -- no chooser to show
+    return;
+  }
+  mmShowRestoreChooser(master, data.matches, btn);
+}
+
+function mmShowRestoreChooser(master, matches, btn) {
+  const list = $g('mmRestoreChooserList');
+  list.innerHTML = '';
+  matches.forEach((m, i) => {
+    const radio = el('input', { type: 'radio', name: 'mmRestoreChoice' });
+    radio.checked = i === 0; // newest first, per the sort server-side
+    radio._match = m;
+    const meta = [
+      m.version ? `v${m.version}` : null,
+      mmDate(m.downloadedAt),
+      mmBytes(m.size),
+      `${m.fileCount} file${m.fileCount === 1 ? '' : 's'}`,
+      m.onDisk ? null : 'no longer on disk',
+    ].filter(Boolean).join(' \u00b7 ');
+    list.appendChild(el('label', { class: 'mm-restore-choice' }, [
+      radio,
+      el('div', {}, [
+        el('div', { class: 'mm-restore-choice__name' }, [m.archiveName, i === 0 ? el('span', { class: 'badge badge--success' }, ' Newest') : null]),
+        el('div', { class: 'mm-restore-choice__meta' }, meta),
+      ]),
+    ]));
+  });
+  mmRestorePending = { master, match: matches[0], btn };
+  $g('mmRestoreChooserModal').classList.remove('hidden');
+}
+
+function mmShowRestoreConfirm(master, match, btn) {
+  mmRestorePending = { master, match, btn };
+  // The staging folder name a restored mod gets. Derived from the archive's own filename, matching
+  // how Vortex names a staging folder from the download it came from.
+  const targetFolderName = match.archiveName.replace(/\.(zip|7z|rar)$/i, '');
+  mmRestorePending.targetFolderName = targetFolderName;
+  const summary = $g('mmRestoreConfirmSummary');
+  summary.innerHTML = '';
+  summary.appendChild(el('dt', {}, 'From archive'));
+  summary.appendChild(el('dd', {}, match.archiveName));
+  summary.appendChild(el('dt', {}, 'Extract to'));
+  summary.appendChild(el('dd', {}, [targetFolderName, ' ', el('span', { class: 'badge badge--success' }, 'New folder')]));
+  summary.appendChild(el('dt', {}, 'Then'));
+  summary.appendChild(el('dd', {}, 'Added to Vortex and enabled'));
+  $g('mmRestoreConfirmModal').classList.remove('hidden');
+}
+
+async function mmDoRestore() {
+  $g('mmRestoreConfirmModal').classList.add('hidden');
+  const { master, match, targetFolderName } = mmRestorePending || {};
+  if (!master) return;
+  $g('mmRestoreResult').classList.add('hidden');
+  $g('mmRestoreProgress').classList.remove('hidden');
+  $g('mmRestoreProgressTitle').textContent = 'Extracting mod files from archive\u2026';
+  $g('mmRestorePhase').textContent = 'Starting\u2026';
+  $g('mmRestoreBar').style.width = '0%';
+  try {
+    await mmApi('POST', '/api/missing-masters/restore', { name: master.name, archivePath: match.archivePath, targetFolderName });
+  } catch (e) {
+    $g('mmRestoreProgress').classList.add('hidden');
+    mmHandleError(e, mmDoRestore);
+    return;
+  }
+  const poll = setInterval(async () => {
+    let p;
+    try {
+      p = await mmApi('GET', '/api/missing-masters/restore/progress');
+    } catch {
+      return; // one failed poll is not evidence the restore failed
+    }
+    if (typeof p.percent === 'number') $g('mmRestoreBar').style.width = `${p.percent}%`;
+    if (p.text) {
+      $g('mmRestoreProgressTitle').textContent = p.text;
+      $g('mmRestorePhase').textContent = p.text;
+    }
+    if (!p.done) return;
+    clearInterval(poll);
+    $g('mmRestoreProgress').classList.add('hidden');
+    mmShowRestoreResult(master, p.result || { ok: false, error: 'The restore ended without reporting a result.' });
+  }, 800);
+}
+
+function mmShowRestoreResult(master, result) {
+  const box = $g('mmRestoreResult');
+  box.classList.remove('hidden');
+  box.innerHTML = '';
+  if (!result.ok) {
+    box.className = 'callout callout--warning';
+    box.appendChild(el('div', { class: 'callout__title' }, '\u26a0\ufe0f Restore failed'));
+    // A rebuild-engine result gets this app's OWN existing wording for these cases -- in
+    // particular SKIP_OPEN_FOMOD ("this mod's installer requires choices that weren't saved"),
+    // which is exactly the situation Restore now refuses to guess at. Reused rather than
+    // reworded, so the same problem never gets two different explanations depending on which
+    // button you happened to press.
+    box.appendChild(el('p', {}, result.rebuild
+      ? mmDescribeRebuildFailure(result.rebuild)
+      : (result.error || 'The restore could not be completed.')));
+    return;
+  }
+  box.className = 'callout callout--success';
+  box.appendChild(el('div', { class: 'callout__title' }, '\ud83d\ude80 Mod restored and enabled in Vortex'));
+  box.appendChild(el('p', {}, 'All files were extracted to your staging folder and the mod has been switched on in Vortex. Run a deploy to apply these changes to your game.'));
+  // A ".ghost" sibling means the user deliberately turned that plugin off inside Vortex. Those files
+  // were left alone rather than silently re-enabled -- and saying so matters, because otherwise the
+  // restore looks like it quietly skipped part of the mod.
+  if (result.usedRecordedChoices) {
+    box.appendChild(el('p', { class: 'muted' }, [
+      'Installer choices were replayed from ',
+      el('strong', {}, result.collectionName || 'an installed collection'),
+      ', so only the options you originally picked were restored.',
+    ]));
+  }
+  if (result.ghostPreserved && result.ghostPreserved.length) {
+    box.appendChild(el('div', { class: 'callout callout--info' }, [
+      el('div', { class: 'callout__title' }, '\ud83d\udca1 Some optional files were left disabled'),
+      el('p', {}, 'The mod was restored, but plugins you previously turned off inside Vortex were kept disabled.'),
+    ]));
+  }
+  // Same landing state as Enable -- fixed, but Vortex hasn't deployed it yet. No new state invented.
+  master.readyToDeploy = true;
+  master.restoredViaHelper = true;
+  mmLocallyFixed.set(master.name, 'restored');
+  mmRenderSummaryBadges();
+  mmRenderMasterList();
+  mmRenderDeployBanners();
+}
+
+$g('mmRestoreChooserCancelBtn').addEventListener('click', () => $g('mmRestoreChooserModal').classList.add('hidden'));
+$g('mmRestoreChooserContinueBtn').addEventListener('click', () => {
+  const picked = [...document.querySelectorAll('#mmRestoreChooserList input[type=radio]')].find((r) => r.checked);
+  $g('mmRestoreChooserModal').classList.add('hidden');
+  if (!picked || !mmRestorePending) return;
+  mmShowRestoreConfirm(mmRestorePending.master, picked._match, mmRestorePending.btn);
+});
+$g('mmRestoreConfirmCancelBtn').addEventListener('click', () => $g('mmRestoreConfirmModal').classList.add('hidden'));
+$g('mmRestoreConfirmOkBtn').addEventListener('click', () => mmDoRestore());
+
 function mmRenderMasterRow(master) {
   const status = MM_STATUS[mmDisplayStatus(master)];
   const badge = el('span', { class: `badge ${status.badgeClass}` }, [status.icon + ' ', status.label]);
@@ -183,10 +644,10 @@ function mmRenderMasterRow(master) {
   // "—" stays meaningful THERE for the rare case it genuinely isn't.
   const modNameText = master.modName || (master.status === 'missing' ? '' : '—');
   const modNameEl = el('strong', { class: 'mm-modname' }, modNameText);
-  // Create Dummy Master goes BEFORE Copy name (not after) -- with the actions column right-aligned,
-  // this keeps Copy name as the LAST/rightmost element on every row regardless of status, so its
+  // Create Dummy Master goes BEFORE Copy Name (not after) -- with the actions column right-aligned,
+  // this keeps Copy Name as the LAST/rightmost element on every row regardless of status, so its
   // position lines up across "missing" rows (2 buttons) and "present-but-inactive" rows (1 button)
-  // alike (reported 2026-07-27: previously Copy name came first, so it visibly jumped position
+  // alike (reported 2026-07-27: previously Copy Name came first, so it visibly jumped position
   // between the two). Neither button applies once readyToDeploy is true -- the real fix (rebuild)
   // already happened; a dummy master would be actively unhelpful at that point (it would satisfy
   // Vortex's own missing-master check with a STUB instead of the real, already-restored file the
@@ -227,10 +688,41 @@ function mmRenderMasterRow(master) {
     });
     actions.push(openDeployedBtn);
   }
+  // Restore -- ONLY the "files are gone entirely" row: 'missing' with no readyToDeploy, no
+  // activeAlternate, no deployedMisplaced and no possibleHollowInstall. A hollow install is Rebuild
+  // This Mod's territory (its staging folder still exists and Vortex still has the record); Restore
+  // exists precisely because that record is gone, which is why it goes searching instead.
+  // Helper-gated on AVAILABLE, same reasoning as Enable: registering the restored mod needs it.
+  if (mmCanRestore(master) && mmHelperStatus === MM_HELPER_AVAILABLE) {
+    const restoreBtn = el('button', { class: 'btn btn--primary btn--small' }, 'Restore');
+    restoreBtn.addEventListener('click', () => mmStartRestore(master, restoreBtn));
+    actions.push(restoreBtn);
+  }
   if (!mmActionsSuppressed(master) && master.status === 'missing') {
-    const btn = el('button', { class: 'btn btn--primary btn--small' }, 'Create Dummy Master');
+    // Secondary, not primary, whenever Restore is also on this row: putting the real mod back is
+    // strictly the better fix, and two primary buttons side by side says neither is.
+    const dummyClass = mmCanRestore(master) && mmHelperStatus === MM_HELPER_AVAILABLE
+      ? 'btn btn--secondary btn--small'
+      : 'btn btn--primary btn--small';
+    const btn = el('button', { class: dummyClass }, 'Create Dummy Master');
     btn.addEventListener('click', () => mmShowCreateDummyConfirm(master.name));
     actions.push(btn);
+  }
+  // Enable (2026-08-23) -- the master's file is right there, Vortex just has it switched off. One
+  // click instead of going to Vortex to flip it by hand.
+  //
+  // Only when the Helper is genuinely AVAILABLE, not merely "not known to be unavailable": while the
+  // probe is still in flight mmHelperStatus is 'unknown', and rendering the button then would make it
+  // appear and vanish. That's the flicker the three-way state exists to prevent.
+  //
+  // Inserted BEFORE mmCopyNameBtn below, deliberately -- with the actions column right-aligned, Copy
+  // Name must stay last/rightmost on every row or it visibly jumps position between rows with
+  // different button counts (a real report, 2026-07-27; see the ordering comment above).
+  if (!mmActionsSuppressed(master) && master.status === 'present-but-inactive'
+      && mmHelperStatus === MM_HELPER_AVAILABLE) {
+    const enableBtn = el('button', { class: 'btn btn--primary btn--small' }, 'Enable');
+    enableBtn.addEventListener('click', () => mmEnablePlugin(master, enableBtn));
+    actions.push(enableBtn);
   }
   actions.push(mmCopyNameBtn(master.name));
   const header = el('div', { class: 'mm-row__header' }, [badge, nameEl, modNameEl, el('div', { class: 'mm-row__actions' }, actions)]);
@@ -264,29 +756,29 @@ function mmRenderMasterRow(master) {
       el('div', { class: 'callout__title' }, '🛑 Deployed to the Wrong Folder'),
       el('p', {}, [
         el('strong', {}, master.name),
-        ' already exists in your Data folder — just one level too deep, at ',
+        ' is inside your Data folder, but it’s one level too deep at ',
         el('strong', {}, misplacedDisplayPath),
-        '. Skyrim only reads files sitting directly in Data, not inside Data’s own subfolders, so this file (and anything else in that same folder) never actually made it into the game. Click ',
+        '. Skyrim only loads plugins sitting directly in Data, so this file never made it into the game. Click ',
         el('strong', {}, 'Open Deployed Folder'),
-        ' to see it, then move everything there up into Data directly.',
+        ' to view it, then move everything in that folder directly into Data.',
       ]),
     ]);
     children.push(callout);
   }
   if (master.activeAlternate && master.activeAlternate.sameModAsMaster) {
     const callout = el('div', { class: 'callout callout--critical' }, [
-      el('div', { class: 'callout__title' }, '🛑 Manual Action Needed: Wrong File Format Installed'),
+      el('div', { class: 'callout__title' }, '🛑 Wrong File Format Installed'),
       el('p', {}, [
         el('strong', {}, master.activeAlternate.name),
-        ' is currently installed and active — but this mod actually needs ',
+        ' is active right now, but this mod needs ',
         el('strong', {}, master.name),
-        ' instead. The mod author packaged both formats in the same staging folder, and the wrong one got deployed. Click ',
+        ' instead. The mod author packaged both formats together, and the wrong one was deployed. Click ',
         el('strong', {}, 'Open Staging Folder'),
-        ' to review it, then manually remove ',
+        ', remove ',
         el('strong', {}, master.activeAlternate.name),
-        ' and add ',
+        ', and enable ',
         el('strong', {}, master.name),
-        ' in its place.',
+        ' instead.',
       ]),
     ]);
     children.push(callout);
@@ -298,7 +790,7 @@ function mmRenderMasterRow(master) {
     // — same row, soft tier (see mmDisplayStatus/MM_STATUS), nothing left for the user to decide.
     if (mmIsEslifierSwap(master)) {
       const callout = el('div', { class: 'callout callout--info' }, [
-        el('div', { class: 'callout__title' }, 'ⓘ You swapped this one on purpose — nothing to fix.'),
+        el('div', { class: 'callout__title' }, 'ⓘ You swapped this plugin on purpose — nothing to fix.'),
         el('p', {}, [
           'A lighter, compressed copy of ',
           el('strong', {}, master.name),
@@ -310,20 +802,18 @@ function mmRenderMasterRow(master) {
       children.push(callout);
     } else {
       const callout = el('div', { class: 'callout callout--critical' }, [
-        el('div', { class: 'callout__title' }, '🛑 Manual Action Needed: Name Collides With a Different Mod'),
+        el('div', { class: 'callout__title' }, '🛑 Filename Shared by Another Mod'),
         el('p', {}, [
           el('strong', {}, master.activeAlternate.name),
-          ' is active right now, but it didn’t come from this mod — it was deployed by ',
+          ' is active right now, but it came from ',
           el('strong', {}, master.activeAlternate.modName),
-          ', a separate mod that happens to share the same file name. The actual missing file, ',
+          ', which uses the exact same filename. The version this mod needs (',
           el('strong', {}, master.name),
-          ', lives in ',
+          ') is sitting in ',
           el('strong', {}, master.modName),
-          '’s own staging folder. Click ',
+          '’s staging folder. Click ',
           el('strong', {}, 'Open Staging Folder'),
-          ' to find and restore it — we can’t tell whether ',
-          el('strong', {}, master.activeAlternate.modName),
-          '’s version is meant to replace it, so that decision is yours.',
+          ' to inspect it and decide which version you want to keep.',
         ]),
       ]);
       children.push(callout);
@@ -337,13 +827,13 @@ function mmRenderMasterRow(master) {
   // game -- a hard blocker, not just something to tread lightly around.
   if (master.possibleHollowInstall) {
     const callout = el('div', { class: 'callout callout--critical' }, [
-      el('div', { class: 'callout__title' }, '🛑 Missing Files in Staging Folder'),
+      el('div', { class: 'callout__title' }, '🛑 Staging Folder Missing Files'),
       el('p', {}, [
         'The staging folder for ',
         el('strong', {}, master.possibleHollowInstall.folderName),
-        ' is missing some or all of its files. You can restore it from your archive by clicking ',
+        ' is missing some or all of its files. Click ',
         el('strong', {}, 'Rebuild This Mod'),
-        '.',
+        ' to restore them from your saved archive.',
       ]),
     ]);
     children.push(callout);
@@ -360,11 +850,11 @@ function mmRenderMasterRow(master) {
   if (master.status === 'missing' && !master.readyToDeploy && !master.activeAlternate
     && !master.deployedMisplaced && !master.possibleHollowInstall) {
     const callout = el('div', { class: 'callout callout--critical' }, [
-      el('div', { class: 'callout__title' }, '🛑 This Mod’s Files Are Gone'),
+      el('div', { class: 'callout__title' }, '🛑 Mod Files Missing'),
       el('p', {}, [
         'We can’t find ',
         el('strong', {}, master.name),
-        ' anywhere — not in Data, staging, or download folders. This usually means the mod was removed completely from Vortex at some point, not just its files. If it’s part of a Vortex Collection, updating that collection should flag it as missing and offer to reinstall it for you. Otherwise, you’ll need to track it down and download it yourself from Nexus Mods, then install it through Vortex.',
+        ' anywhere in Data, staging, or downloads. This usually means the mod was removed from Vortex entirely. If it belongs to a collection, updating that collection should detect it and offer to reinstall it. Otherwise, download it again from Nexus Mods and install it through Vortex.',
       ]),
     ]);
     children.push(callout);
@@ -374,12 +864,17 @@ function mmRenderMasterRow(master) {
   // the badge override above.
   if (master.readyToDeploy) {
     const callout = el('div', { class: 'callout callout--success' }, [
-      el('div', { class: 'callout__title' }, '🚀 Ready to Deploy in Vortex'),
-      el('p', {}, [
-        'This mod’s files are back in staging! Open Vortex and click ',
-        el('strong', {}, 'Deploy Mods'),
-        ' to finish moving them into your game — this will clear automatically once that’s done.',
-      ]),
+      el('div', { class: 'callout__title' }, '🚀 Ready to Deploy'),
+      // Same state, same badge, same title -- but the opening sentence has to match how the row
+      // actually got here. "This mod's files are back in staging" is true after a rebuild and simply
+      // false after an Enable, where the file was never missing and nothing was restored; only
+      // Vortex's own plugin flag changed. The deploy half is identical either way, which is the part
+      // that matters. NEW COPY, flagged for a pass -- see the handoff.
+      el('p', {}, master.restoredViaHelper
+        ? 'This mod is restored and switched on in Vortex. Deploy your mods in Vortex to finish applying it — this will clear automatically once deployment finishes.'
+        : master.enabledViaHelper
+        ? 'This plugin is switched back on in Vortex — nothing else to do. This row clears itself in a moment.'
+        : 'This mod’s files are back in staging. Deploy your mods in Vortex to finish moving them into the game — this will clear automatically once deployment finishes.'),
     ]);
     children.push(callout);
   }
@@ -465,31 +960,146 @@ function mmRender(data) {
   if (!data.configured) {
     $g('mmHeaderRow').classList.add('hidden');
     $g('mmSummaryBadges').innerHTML = '';
-    $g('mmNotConfigured').textContent = 'Set up your Skyrim Data folder and Plugins.txt location under Settings first.';
+    $g('mmNotConfigured').textContent = 'Set your Skyrim Data folder and Plugins.txt paths in Settings to get started.';
     $g('mmNotConfigured').classList.remove('hidden');
     return;
   }
   $g('mmHeaderRow').classList.remove('hidden');
 
   mmDownloadMissingArchivesEnabled = !!data.downloadMissingArchivesEnabled;
+  // Rendered BEFORE the all-clear early return below on purpose -- a plugin we couldn't read matters
+  // MOST when nothing else is wrong, since that's when the summary line would otherwise say
+  // "all clear" about a scan that never looked at it.
+  mmRenderUnreadable(data.unreadable || []);
   mmLastProblemMasters = data.problemMasters || [];
+  mmApplyLocalFixes(); // before anything reads the list -- see mmLocallyFixed for why
+  // After mmLastProblemMasters is set (the note's own "is this worth showing" test reads it) and
+  // before the all-clear early return below, which would otherwise leave a stale note on screen.
+  mmRenderHelperNote();
+  mmLastTotal = data.total || 0;
+  mmRenderDeployBanners();
   if (mmLastProblemMasters.length === 0) {
-    $g('mmResultsMeta').textContent = `No missing or disabled masters found -- everything checked (${data.total} active plugin(s)) looks fine.`;
+    // Blank, not the old grey sentence -- #mmAllClear now says this properly, and having both
+    // would state the same thing twice on the same screen. Refresh still sits on this row.
+    $g('mmResultsMeta').textContent = '';
     $g('mmSummaryBadges').innerHTML = '';
     return;
   }
 
   const affectedPlugins = new Set();
   for (const m of mmLastProblemMasters) for (const p of m.neededBy) affectedPlugins.add(p);
+  const masterCount = mmLastProblemMasters.length;
+  const pluginCount = affectedPlugins.size;
   $g('mmResultsMeta').innerHTML = '';
-  $g('mmResultsMeta').appendChild(el('span', { class: 'accent-count' }, String(mmLastProblemMasters.length)));
-  $g('mmResultsMeta').appendChild(document.createTextNode(` problem master(s) are affecting `));
-  $g('mmResultsMeta').appendChild(el('span', { class: 'accent-count' }, String(affectedPlugins.size)));
-  $g('mmResultsMeta').appendChild(document.createTextNode(' plugin(s) total.'));
+  $g('mmResultsMeta').appendChild(el('span', { class: 'accent-count' }, String(masterCount)));
+  $g('mmResultsMeta').appendChild(document.createTextNode(masterCount === 1
+    ? ' missing or disabled master is affecting '
+    : ' missing or disabled masters are affecting '));
+  $g('mmResultsMeta').appendChild(el('span', { class: 'accent-count' }, String(pluginCount)));
+  $g('mmResultsMeta').appendChild(document.createTextNode(pluginCount === 1 ? ' plugin.' : ' plugins.'));
 
   mmRenderSummaryBadges();
   mmRenderMasterList();
   $g('mmResults').classList.remove('hidden');
+}
+
+// ---------- Vortex Collection Helper availability (2026-08-23) ----------
+// Groundwork for Enable and Restore (items 2 and 3), neither of which exists yet. Missing Masters had
+// zero Helper awareness: /rebuild-mod checks server-side and falls back to requiring Vortex closed,
+// but the frontend never knew either way.
+//
+// THREE-WAY, not a boolean. "Haven't found out yet" is genuinely different from "not there": the
+// probe is deliberately not awaited (see runMissingMastersScan), so a boolean defaulting to false
+// would render the note -- and later, hide the two buttons -- for the moment before the answer lands,
+// then flip. That flicker is the whole reason for the third state.
+const MM_HELPER_UNKNOWN = 'unknown';
+const MM_HELPER_AVAILABLE = 'available';
+const MM_HELPER_UNAVAILABLE = 'unavailable';
+let mmHelperStatus = MM_HELPER_UNKNOWN;
+
+// Reuses Settings' own GET /api/settings/helper-info rather than adding a second endpoint answering
+// the same question. Only `connected` matters here -- `outdated` is Settings' concern (it owns the
+// "your Helper is too old" warning); a connected-but-old Helper still answers these calls.
+//
+// A probe that fails outright resolves to UNAVAILABLE, not back to unknown: if we can't even ask,
+// Enable and Restore could not work either, so that's the honest answer. In practice the only way
+// this fails is our own server being unreachable, in which case the scan itself already failed and
+// mmHandleError has surfaced the real problem.
+async function mmProbeHelper() {
+  try {
+    const info = await mmApi('GET', '/api/settings/helper-info');
+    mmHelperStatus = info && info.connected ? MM_HELPER_AVAILABLE : MM_HELPER_UNAVAILABLE;
+  } catch {
+    mmHelperStatus = MM_HELPER_UNAVAILABLE;
+  }
+  mmRenderHelperNote();
+  // The tip and the Deploy button both key off Helper availability, so they re-decide here too.
+  mmRenderDeployBanners();
+}
+
+// Only worth saying when there's something to gain from it. Scoped by reusing this file's own
+// existing mmActionsSuppressed() rather than inventing a second notion of "can this row be acted
+// on": a row whose actions are already suppressed (readyToDeploy, or a deliberate ESLifier swap)
+// would never grow an Enable or Restore button either. Deliberately NOT modelled per-button --
+// neither button exists yet, and guessing their exact conditions now would just be wrong later.
+// Consequence worth knowing: an all-clear scan never shows this note, which is correct.
+function mmHelperNoteWorthShowing() {
+  return mmLastProblemMasters.some((m) => !mmActionsSuppressed(m));
+}
+
+function mmRenderHelperNote() {
+  const box = $g('mmHelperNote');
+  const show = mmHelperStatus === MM_HELPER_UNAVAILABLE && mmHelperNoteWorthShowing();
+  box.classList.toggle('hidden', !show);
+  if (!show) return;
+  box.innerHTML = '';
+  box.appendChild(el('div', { class: 'callout__title' }, '\ud83d\udca1 Enable and Restore need the Vortex Helper'));
+  box.appendChild(el('p', {}, [
+    'You can still inspect plugins and build dummy masters without it. To turn plugins back on or extract missing mods directly from this page, install the ',
+    el('strong', {}, 'Vortex Collection Helper'),
+    ' extension and keep Vortex open.',
+  ]));
+  // Its own right-justified row rather than inline after the prose -- an action button trailing a
+  // paragraph gets lost, which this project has hit before. .row-actions is the existing class for
+  // exactly this, so no new CSS.
+  const retry = el('button', { class: 'btn btn--ghost btn--small' }, 'Retry Connection');
+  retry.addEventListener('click', async () => {
+    retry.disabled = true;
+    retry.textContent = 'Checking\u2026';
+    await mmProbeHelper(); // a real re-probe -- never just hides the callout
+    retry.disabled = false;
+    retry.textContent = 'Retry Connection';
+  });
+  box.appendChild(el('div', { class: 'row-actions' }, retry));
+}
+
+// Plugins the scan couldn't parse (2026-08-23). Skipping them is correct -- we can't read them and
+// guessing would be worse -- but skipping them silently meant the user could be told "no missing or
+// disabled masters found" about a scan that never opened one of their plugins. Its own callout, not
+// a row in the problem list: none of the row actions (create a dummy, rebuild the mod, open staging)
+// can act on a plugin we never parsed.
+const MM_UNREADABLE_REASONS = {
+  'read-error': "couldn't be opened",
+  'invalid-header': "isn't a readable plugin file — it may be truncated or damaged",
+  'compressed-header': 'uses a compressed header, which this tool cannot read',
+};
+
+function mmRenderUnreadable(list) {
+  const box = $g('mmUnreadable');
+  box.classList.toggle('hidden', list.length === 0);
+  if (list.length === 0) return;
+  box.innerHTML = '';
+  box.appendChild(el('div', { class: 'callout__title' }, list.length === 1
+    ? "⚠️ 1 plugin couldn't be checked"
+    : `⚠️ ${list.length} plugins couldn't be checked`));
+  box.appendChild(el('p', {}, list.length === 1
+    ? "We couldn't read this plugin, so it wasn't included in the scan. If it has a missing master, we won't have caught it:"
+    : "We couldn't read these plugins, so they weren't included in the scan. If any of them has a missing master, we won't have caught it:"));
+  box.appendChild(el('ul', {}, list.map((u) => el('li', {}, [
+    el('strong', {}, u.name),
+    ` — ${MM_UNREADABLE_REASONS[u.reason] || 'could not be read'}.`,
+  ]))));
+  box.appendChild(el('p', {}, 'This usually means a damaged file. Reinstalling the mod through Vortex normally fixes it.'));
 }
 
 // JSON snapshot of the last response actually rendered -- lets the silent background poll below
@@ -508,6 +1118,10 @@ async function runMissingMastersScan() {
     const data = await mmApi('GET', '/api/missing-masters/scan');
     mmLastResponseJSON = JSON.stringify(data);
     mmRender(data);
+    // Deliberately NOT awaited -- the Helper probe is a real network round-trip that needs Vortex
+    // open, and the scan results must render (and stay fully usable) without waiting on it. It
+    // re-renders just the note when it lands; mmHelperStatus stays 'unknown' until then.
+    mmProbeHelper();
   } catch (e) {
     mmHandleError(e, runMissingMastersScan);
   }
@@ -527,6 +1141,10 @@ $g('mmRecognizeEslifierInput').addEventListener('change', async (e) => {
     mmRecognizeEslifierEnabled = enabled;
     mmRenderSummaryBadges();
     mmRenderMasterList();
+    // This toggle flips whether ESLifier-swap rows count as actionable, which is exactly the test
+    // mmHelperNoteWorthShowing() uses -- so the note can become relevant (or stop being) without a
+    // re-scan.
+    mmRenderHelperNote();
   } catch (err) {
     e.target.checked = !enabled; // revert -- the save didn't actually take
     // Re-clicking the (just-reverted-to-!enabled) checkbox flips it back to `enabled` and re-fires
@@ -565,10 +1183,14 @@ function mmShowCreateDummyConfirm(name) {
   mmPendingDummyName = name;
   const container = $g('mmCreateDummyConfirmModalText');
   container.innerHTML = '';
-  container.appendChild(document.createTextNode(`This creates a lightweight placeholder file named "${name}". To finish resolving this:`));
+  // Appended straight into the container (no <p> wrapper) -- same DOM shape this line has always
+  // had; the bolded plugin name is the only structural addition.
+  container.appendChild(document.createTextNode('This creates an empty placeholder plugin named '));
+  container.appendChild(el('strong', {}, name));
+  container.appendChild(document.createTextNode(' so Skyrim won’t crash on startup. To finish setting it up:'));
   container.appendChild(el('ol', {}, [
     el('li', {}, 'Install it as a mod in Vortex.'),
-    el('li', {}, "Make sure it's active."),
+    el('li', {}, 'Make sure it’s enabled.'),
   ]));
   $g('mmCreateDummyConfirmModal').classList.remove('hidden');
 }
@@ -613,11 +1235,11 @@ function mmShowRebuildConfirm(hollowInstall, triggerBtn) {
   if (mmDownloadMissingArchivesEnabled) {
     p.appendChild(document.createTextNode('This downloads '));
     p.appendChild(el('strong', {}, modName));
-    p.appendChild(document.createTextNode('’s archive and reinstalls it into your staging folder.'));
+    p.appendChild(document.createTextNode('’s archive and restores it to your staging folder.'));
   } else {
     p.appendChild(document.createTextNode('This restores '));
     p.appendChild(el('strong', {}, modName));
-    p.appendChild(document.createTextNode('’s files into your staging folder from its saved archive.'));
+    p.appendChild(document.createTextNode('’s files to your staging folder from your saved archive.'));
   }
   $g('mmRebuildConfirmModal').classList.remove('hidden');
 }
@@ -634,9 +1256,11 @@ $g('mmRebuildConfirmCancelBtn').addEventListener('click', () => {
 //      "not Premium," since the fix is different -- turn the setting on, not upgrade the account).
 //   3. plain "archive wasn't found" -- covers an off-site (non-Nexus) mod, which can never be
 //      auto-downloaded regardless of the setting.
+// Returns either a plain string or an el()-children array (when the copy needs a bolded button
+// name) -- both call sites pass the result straight to el('p', {}, ...), which accepts either.
 function mmDescribeRebuildFailure(result) {
   if (result.downloadSkipped === 'not-premium') {
-    return 'This mod’s archive is missing, and automatic downloading is turned on — but this Nexus account isn’t Premium, so automated downloads aren’t available (this respects Nexus’s ad-supported download model for free accounts). Download the archive yourself from either within Vortex or on Nexus’s website to reinstall it.';
+    return 'This mod’s archive is missing, and automatic downloads require a Nexus Mods Premium account. Download the archive manually from Nexus Mods or through Vortex, then try again.';
   }
   if (result.downloadError) {
     return `We tried downloading this mod’s archive from Nexus automatically, but it failed: ${result.downloadError}. This may just be a network hiccup — try Rebuild This Mod again, or download the archive yourself from Nexus and reinstall it through Vortex.`;
@@ -645,10 +1269,14 @@ function mmDescribeRebuildFailure(result) {
     return 'This mod’s archive is missing, and automatic downloading is turned off, so we couldn’t download it for you. Turn on Download missing archives automatically under Settings and try again, or download the archive yourself from Nexus and reinstall it through Vortex.';
   }
   if (result.kind === 'SKIP_NO_ARCHIVE' || result.status === 'SKIP_NO_ARCHIVE') {
-    return 'This mod’s archive wasn’t found in your Downloads folder. Reinstall the mod through Vortex to restore the archive, then try Rebuild This Mod again.';
+    return [
+      'Couldn’t find this mod’s archive in your Downloads folder. Reinstall the mod in Vortex to restore the archive, then click ',
+      el('strong', {}, 'Rebuild This Mod'),
+      ' again.',
+    ];
   }
   if (result.kind === 'SKIP_OPEN_FOMOD') {
-    return 'This mod’s installer needs choices that weren’t recorded. Reinstall it through Vortex instead.';
+    return 'This mod’s installer requires choices that weren’t saved. Reinstall it directly through Vortex.';
   }
   return result.detail || `We couldn’t finish this: ${result.status || result.kind}.`;
 }
@@ -662,7 +1290,7 @@ function mmResetRebuildBtn() {
 }
 
 // Shows a rebuild failure right on the row itself, ABOVE the existing critical callout that's
-// already sitting there ("Missing Files in Staging Folder") -- confirmed real 2026-07-28: a
+// already sitting there ("Staging Folder Missing Files") -- confirmed real 2026-07-28: a
 // top-of-page box was reported as "nothing happened" three separate times, since "Rebuild This Mod"
 // can sit far down a long problem-master list and the box rendered off-screen above the user's
 // scroll position. This mod's own row is exactly where the user is already looking, so the message
@@ -704,13 +1332,13 @@ async function mmDoRebuild() {
       // whatever we show here on its own very first line (confirmed real 2026-07-27: reported as
       // "clicked Rebuild This Mod, nothing happened, no error, no warning"). Return here instead of
       // falling through to that rescan -- there's nothing new to show anyway.
-      const shown = mmShowRebuildFailureOnRow(mmPendingRebuildBtn, '🛑 Rebuild Didn’t Complete', mmDescribeRebuildFailure(result));
+      const shown = mmShowRebuildFailureOnRow(mmPendingRebuildBtn, '🛑 Rebuild Failed', mmDescribeRebuildFailure(result));
       if (!shown) {
         // Fallback -- shouldn't normally happen, but never fail silently if the row's own callout
         // can't be found for some reason.
         const box = $g('mmCriticalError');
         box.textContent = '';
-        box.appendChild(el('div', { class: 'callout__title' }, '🛑 Rebuild Didn’t Complete'));
+        box.appendChild(el('div', { class: 'callout__title' }, '🛑 Rebuild Failed'));
         box.appendChild(el('p', {}, mmDescribeRebuildFailure(result)));
         box.classList.remove('hidden');
         box.scrollIntoView({ behavior: 'smooth', block: 'start' });

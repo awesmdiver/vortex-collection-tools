@@ -19,6 +19,40 @@ differently-licensed code (including this project's own code) in a "Larger Work"
 the combined work to relicense under MPL. The MPL-covered source must stay available under MPL
 terms -- already satisfied since it's public on GitHub at the link above.
 
+## zEdit / zMerge (merge engine algorithm)
+
+**License: MIT. Copyright (c) 2017 Colin Allen.**
+
+Merge Plugins' v2 engine (`lib/merge-v2-worker.js`, `lib/merge-v2-runner.js`) is a direct algorithmic
+port of the merge engine from [`z-edit/zedit`](https://github.com/z-edit/zedit) (zMerge), written by
+Colin Allen (matortheeternal) -- confirmed against that repo's own `LICENSE` file and its
+`package.json` (`"license": "MIT"`, v0.6.7). Built from `docs/plans/2026-08-24-merge-port-spec.md`,
+which traces every ported behaviour to file:line in that source. This project's own fork of it,
+`skyrim-modding/zedit-revised`, is a local copy under active modernization -- credit stays with the
+original author regardless of how much local rework sits on top (same standing rule this project
+already applies to BSA Browser and PGPatcher above).
+
+MIT requires the copyright notice and this permission text travel with any substantial portion of
+the software. Reproduced here in full:
+
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+> associated documentation files (the "Software"), to deal in the Software without restriction,
+> including without limitation the rights to use, copy, modify, merge, publish, distribute,
+> sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+> furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all copies or
+> substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+> NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+> NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+> DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
+> OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+`lib/merge-v2-worker.js`'s own header comment names the specific zedit-revised source files each
+phase was ported from, so the two stay traceable to each other for anyone reviewing either side later.
+
 ## xeditlib (Node.js wrapper)
 
 **License: MIT.**

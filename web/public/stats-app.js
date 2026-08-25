@@ -266,7 +266,7 @@ function loadStatsPageOnce() {
 // Reports area now has three inner sub-tabs -- still few enough that a small flat toggle is
 // simpler than shell.js's TOOL_AREAS-style array. Stats Report is the default on first entry,
 // matching this area's exact behavior before the Work Through Report/Update Compare Report splits.
-const REPORTS_SUB_TABS = ['stats', 'workthrough', 'updatecompare', 'rulesgen', 'workshop', 'exceptions'];
+const REPORTS_SUB_TABS = ['stats', 'workthrough', 'updatecompare', 'rulesgen', 'workshop', 'mergehistory', 'exceptions'];
 // English fallback (today's exact original literal, no theme loaded yet) + the real stable tool id
 // each sub-tab maps to, so themedToolName (theme.js) can swap in the active theme's own name for
 // the report itself -- "Reports" (the group) has no themed name of its own, see AREA_LABELS' own
@@ -280,6 +280,7 @@ const REPORTS_SUB_TAB_LABELS = {
   updatecompare: { fallback: 'Update Compare Report', toolId: 'report-updatecompare' },
   rulesgen: { fallback: 'Rules Generator Report', toolId: 'report-rulesgen' },
   workshop: { fallback: 'Workshop Report', toolId: 'report-workshop' },
+  mergehistory: { fallback: 'Merge History', toolId: 'report-mergehistory' },
   exceptions: { fallback: 'Mod Exceptions', toolId: 'report-exceptions' },
 };
 let currentReportsSubTabId = null;
@@ -304,6 +305,7 @@ function showReportsSubTab(id) {
   else if (id === 'workthrough' && typeof loadWorkThroughPageOnce === 'function') loadWorkThroughPageOnce();
   else if (id === 'rulesgen' && typeof loadRulesGenReportPageOnce === 'function') loadRulesGenReportPageOnce();
   else if (id === 'workshop' && typeof loadWorkshopReportPageOnce === 'function') loadWorkshopReportPageOnce();
+  else if (id === 'mergehistory' && typeof loadMergeHistoryPageOnce === 'function') loadMergeHistoryPageOnce();
   else if (id === 'exceptions' && typeof refreshModExceptionsReport === 'function') refreshModExceptionsReport();
 
   // Keeps the URL in sync so a browser refresh returns to this exact sub-tab, not just the Reports

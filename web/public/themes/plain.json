@@ -22,7 +22,7 @@
       "emoji": "🧬",
       "function": "Merge Plugins",
       "heroTitle": "Merge Many Plugins Into One",
-      "heroBody": "Skyrim's plugin slots fill up fast. Pick plugins from one or more collections and this tool bundles them into a single file&mdash;freeing up slots without touching xEdit. Review exactly what's going in first, and it'll flag the result as ESL automatically when it fits.",
+      "heroBody": "<p>Even with light mods, Skyrim's 4,096-plugin limit can sneak up on a large load order. Pick plugins across your collections to bundle them into a single file&mdash;freeing up light slots without opening xEdit.</p><p>You can preview everything going into the merge first, and the tool will automatically mark the new bundle as a light plugin whenever it fits.</p>",
       "cardDesc": "Bundle several plugins into one file and free up load-order slots."
     },
     "rebuild": {
@@ -105,6 +105,14 @@
       "heroBody": "Nexus's own collection page shows a date that never moves for a private collection&mdash;this pulls the real one, straight from each collection's revision history, so you can tell at a glance which ones you've actually worked on recently.",
       "cardDesc": "See when you actually last touched each Workshop collection, straight from Nexus."
     },
+    "report-mergehistory": {
+      "name": "Merge History",
+      "emoji": "🩹",
+      "function": "Merge History",
+      "heroTitle": "Check Past Merges for Drift",
+      "heroBody": "Compares every merge you've built against your live mod list. If a collection update quietly brought back an original file or your merged plugin went missing, you can put everything back in order with one click.",
+      "cardDesc": "Review past merges, spot drifted plugins, and cleanly Revert or Restore them when your mod list changes."
+    },
     "report-exceptions": {
       "name": "Mod Exceptions",
       "emoji": "🙅",
@@ -118,7 +126,7 @@
       "emoji": "🧩",
       "function": "Missing Masters",
       "heroTitle": "Triage Missing Masters in Seconds",
-      "heroBody": "Easily pinpoint missing master files and instantly see every mod relying on them&mdash;all in one clear view! Designed to streamline your troubleshooting, this tool takes the hassle out of tracking down broken dependencies so you can jump straight into Vortex and fix them with confidence.",
+      "heroBody": "Easily pinpoint missing master files and instantly see every mod relying on them&mdash;all in one clear view! Designed to streamline your troubleshooting, this tool takes the hassle out of tracking down broken dependencies so you can get everything sorted with confidence.",
       "cardDesc": "Pinpoint missing master files and every mod that depends on them."
     },
     "pgpatcher": {

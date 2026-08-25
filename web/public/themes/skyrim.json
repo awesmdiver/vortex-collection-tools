@@ -114,6 +114,14 @@
       "heroBody": "The painted trade sign out front only tells you when the shop first opened, not when a hammer last fell upon glowing steel&mdash;a true armorer looks to the fresh mark stamped into the anvil's own face instead. Nexus's own collection page shows a date that never moves for a private collection; this pulls the real one, straight from each collection's revision history, so you can tell at a glance which ones you've actually worked on recently.",
       "cardDesc": "The real date you last set hand to an unfinished work&mdash;not Nexus's frozen one."
     },
+    "report-mergehistory": {
+      "name": "The Crucible",
+      "emoji": "🫗",
+      "function": "Merge History",
+      "heroTitle": "The Crucible",
+      "heroBody": "A poured ingot may look sound on the cooling rack, but fresh shipments from the mine and the scrape of daily work have a way of muddling the cast&mdash;old slag creeps back onto the bench, or a finished piece goes missing entirely. The Crucible measures every merge the Forge has ever struck against what actually sits in your active load order today. It catches when an update has quietly slipped a separated plugin back into place or when a merged master has vanished, letting you see the drift at a glance and strike to Revert or Restore.",
+      "cardDesc": "The true state of every alloy you've poured&mdash;revealing what cooled true, what crept back, and what went missing."
+    },
     "report-exceptions": {
       "name": "The Shadowmarked",
       "emoji": "🕊️",
@@ -127,7 +135,7 @@
       "emoji": "🔮",
       "function": "Missing Masters",
       "heroTitle": "The Augur",
-      "heroBody": "An Augur foresees the danger before it arrives, not after. Pinpoint missing master files and instantly see every mod relying on them, all in one clear view&mdash;so instead of a sudden crash to desktop, you see the problem coming and can jump straight into Vortex to fix it with confidence.",
+      "heroBody": "An Augur foresees the danger before it arrives, not after. Pinpoint missing master files and instantly see every mod relying on them, all in one clear view&mdash;so instead of a sudden crash to desktop, you see the problem coming and can resolve it with confidence before you launch.",
       "cardDesc": "Reveals a missing master before you launch&mdash;no more sudden crash to desktop."
     },
     "pgpatcher": {

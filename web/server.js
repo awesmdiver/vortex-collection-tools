@@ -32,6 +32,7 @@ const { createArchiveFinderRouter } = require('./archive-finder-routes');
 const { createMergeRouter } = require('./merge-routes');
 const { createRebuildMissingRouter } = require('./rebuild-missing-routes');
 const { createWorkshopReportRouter } = require('./workshop-report-routes');
+const { createMergeHistoryRouter } = require('./merge-history-routes');
 const { createModExceptionsRouter } = require('./mod-exceptions-routes');
 const { createCycleHelperRouter } = require('./cycle-helper-routes');
 const { createUpdateCollectionV2Router } = require('./update-collection-v2-routes');
@@ -137,6 +138,7 @@ function main() {
     app.use('/api/merge', createMergeRouter(config));
     app.use('/api/rebuild-missing', createRebuildMissingRouter(config));
     app.use('/api/workshop-report', createWorkshopReportRouter(config));
+    app.use('/api/merge-history', createMergeHistoryRouter(config));
     app.use('/api/mod-exceptions', createModExceptionsRouter());
     app.use('/api/cycle-helper', createCycleHelperRouter(config));
     app.use('/api/update-collection-v2', createUpdateCollectionV2Router(config));
