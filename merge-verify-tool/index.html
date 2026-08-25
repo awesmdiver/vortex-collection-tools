@@ -110,30 +110,6 @@
   <div class="result" id="result">
     <div class="verdict" id="verdict"></div>
 
-    <div class="card">
-      <div class="section-title">Master files (.esm / .esp dependencies)</div>
-      <table id="masterTable"></table>
-    </div>
-
-    <details class="card">
-      <summary class="section-title">Record counts by type</summary>
-      <table id="recordTable"></table>
-    </details>
-
-    <div class="card" id="byteDiffCard" style="display:none">
-      <div class="section-title">Byte-level difference breakdown</div>
-      <table>
-        <tr><td>Plugin header (TES4)</td><td class="num" id="headerDiffCell"></td></tr>
-        <tr><td>Plugin record data (body)</td><td class="num" id="bodyDiffCell"></td></tr>
-      </table>
-      <div class="callout callout--info" id="regionsNote"></div>
-    </div>
-
-    <details class="card" id="reportCard">
-      <summary class="section-title">Full technical diff summary</summary>
-      <pre id="reportText"></pre>
-    </details>
-
     <div class="card" id="issueCard" style="display:none">
       <div class="section-title">Help us fix this mismatch</div>
       <div class="callout callout--warning">⚠️ <strong>What's inside the diagnostic bundle:</strong>
@@ -155,6 +131,30 @@
         <a class="btn" id="openIssueBtn" target="_blank" rel="noopener">🐙 Open Pre-Filled GitHub Issue</a>
       </div>
     </div>
+
+    <details class="card">
+      <summary class="section-title">Master files (.esm / .esp dependencies)</summary>
+      <table id="masterTable"></table>
+    </details>
+
+    <details class="card">
+      <summary class="section-title">Record counts by type</summary>
+      <table id="recordTable"></table>
+    </details>
+
+    <details class="card" id="byteDiffCard" style="display:none">
+      <summary class="section-title">Byte-level difference breakdown</summary>
+      <table>
+        <tr><td>Plugin header (TES4)</td><td class="num" id="headerDiffCell"></td></tr>
+        <tr><td>Plugin record data (body)</td><td class="num" id="bodyDiffCell"></td></tr>
+      </table>
+      <div class="callout callout--info" id="regionsNote"></div>
+    </details>
+
+    <details class="card" id="reportCard">
+      <summary class="section-title">Full technical diff summary</summary>
+      <pre id="reportText"></pre>
+    </details>
   </div>
 </div>
 
@@ -176,7 +176,7 @@ function pickPluginFile(fileList, label) {
     const depth = rel.split('/').length;
     return depth === 2 && /\.(esp|esm|esl)$/i.test(f.name);
   });
-  if (candidates.length === 0) throw new Error(`We couldn't find a valid merged plugin (.esp, .esm, or .esl) inside the ${label} folder. Please make sure you selected the root output folder of the merge.`);
+  if (candidates.length === 0) throw new Error(`No valid plugin (<code>.esp</code>, <code>.esm</code>, or <code>.esl</code>) found. Please select the root output folder of your merge.`);
   if (candidates.length > 1) {
     // Ambiguous -- pick the largest, plugins from a merge are rarely tiny, and warn in the report.
     candidates.sort((a, b) => b.size - a.size);
@@ -185,9 +185,9 @@ function pickPluginFile(fileList, label) {
 }
 
 function updateInfo(el, file, err) {
-  if (err) { el.textContent = err; el.classList.remove('found'); return; }
+  if (err) { el.innerHTML = err; el.classList.remove('found'); return; }
   const folderName = (file.webkitRelativePath || '').split('/')[0] || file.name;
-  el.textContent = `✓ Loaded: ${folderName} (${file.name}, ${(file.size / 1024).toFixed(1)} KB)`;
+  el.textContent = `✓ Loaded: ${folderName} (${(file.size / 1024).toFixed(1)} KB)`;
   el.classList.add('found');
 }
 
@@ -664,6 +664,8 @@ document.getElementById('openIssueBtn').addEventListener('click', (e) => {
     `**Masters:** ${v.mastersA} / ${v.mastersB} (set match: ${v.masterSetMatches}, order match: ${v.orderMatches})`,
     '',
     '**Full diagnostic report:** attached as a .zip below (downloaded from the verify tool — drag it in here before submitting).',
+    '',
+    '**Additional comments:** _(add anything else that might help resolve this, e.g. which mods were involved, steps to reproduce)_',
   ].join('\n');
   const body = encodeURIComponent(summary);
   const url = `https://github.com/${ISSUE_REPO}/issues/new?title=${title}&body=${body}&labels=bug`;
