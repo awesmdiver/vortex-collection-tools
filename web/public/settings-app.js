@@ -21,6 +21,7 @@ const REQUIRED_FIELDS = [
   { key: 'staging', inputId: 'settingsStagingInput', label: () => 'Vortex staging folder' },
   { key: 'downloads', inputId: 'settingsDownloadsInput', label: () => 'Vortex downloads folder' },
   { key: 'syncBackupRoot', inputId: 'settingsSyncBackupRootInput', label: () => `Backups folder (${themedName('sync', 'Update Collection')})` },
+  { key: 'ucv2TrackingDir', inputId: 'settingsUcv2TrackingDirInput', label: () => `Update tracking folder (${themedName('sync', 'Update Collection')})` },
   { key: 'cleanupExcludeListDir', inputId: 'settingsCleanupExcludeListDirInput', label: () => `Exclude list location (${themedName('scrub', 'Mod Scrub')})` },
   { key: 'skyrimDataDir', inputId: 'settingsSkyrimDataDirInput', label: () => `Skyrim Data folder (${themedName('missing-masters', 'Missing Masters')})` },
   { key: 'pluginsListDir', inputId: 'settingsPluginsListDirInput', label: () => `Plugins.txt location (${themedName('missing-masters', 'Missing Masters')})` },
@@ -152,8 +153,16 @@ function renderColorPickers() {
   bgGroup.style.display = hasHomeBackgroundWash ? '' : 'none';
   if (hasHomeBackgroundWash) {
     const bgOverride = window.getThemeColorOverride ? window.getThemeColorOverride(theme.id, 'bg') : null;
+    // Real fix (2026-08-27): this used to fall back to computedAccent/theme.accent when there was no
+    // override, which is the literal bug -- both swatches showing the identical accent hex. The
+    // computed --bg-tint custom property is now ALWAYS set to a real value by theme.js's own
+    // applyBackgroundTint (the theme's director-picked default, a derived default for a custom
+    // accent, or the user's own override) -- reading it here, same pattern the accent swatch above
+    // already uses for --accent, keeps this picker showing exactly what's actually rendered rather
+    // than re-deriving a second, potentially-drifting copy of that same logic.
+    const computedBgTint = getComputedStyle(document.documentElement).getPropertyValue('--bg-tint').trim();
     const bgInput = $g('settingsBgTintColorInput');
-    bgInput.value = bgOverride || computedAccent || theme.accent || '#000000';
+    bgInput.value = bgOverride || computedBgTint || theme.accent || '#000000';
     $g('settingsBgTintColorHex').textContent = bgInput.value;
   }
 }
@@ -184,6 +193,19 @@ $g('settingsBgTintColorReset').addEventListener('click', () => {
   localStorage.removeItem(`vct-color-bg-${theme.id}`);
   location.reload();
 });
+// "Reset to match accent" (2026-08-27) -- a genuinely SEPARATE choice from the plain reset above,
+// now that "no override" no longer means "= accent" (that was the bug this fix corrects). Sets the
+// bg-tint override directly to whichever accent is CURRENTLY ACTIVE (the computed --accent, so this
+// does the right thing under a custom accent override too, not just a theme's own default accent),
+// rather than clearing anything -- an explicit user choice this fix is not meant to take away.
+$g('settingsBgTintMatchAccent').addEventListener('click', () => {
+  const theme = window.activeTheme;
+  if (!theme) return;
+  const computedAccent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+  if (!computedAccent) return;
+  localStorage.setItem(`vct-color-bg-${theme.id}`, computedAccent);
+  location.reload();
+});
 
 // ---------- Two-pane category layout + rail pinning ----------
 // See DESIGN.md's "Settings -- two-pane category layout" and "Pinning" sections. Every field stays
@@ -194,7 +216,7 @@ $g('settingsBgTintColorReset').addEventListener('click', () => {
 // 'merge' is a real, pre-existing gap in this list (its rail row/pane exist, but it was never added
 // here) -- out of scope to fix as part of this change, flagged separately. 'cyclehelper' is added
 // correctly below so it doesn't repeat that gap.
-const SETTINGS_CATEGORY_ORDER = ['rebuild', 'update', 'missing', 'scrub', 'archive', 'cyclehelper', 'pgpatcher', 'paths', 'general'];
+const SETTINGS_CATEGORY_ORDER = ['rebuild', 'update', 'missing', 'scrub', 'archive', 'cyclehelper', 'pgpatcher', 'savecleaner', 'paths', 'general'];
 const SETTINGS_LAST_CATEGORY_KEY = 'settingsLastCategory';
 const SETTINGS_PINNED_KEY = 'settingsPinnedCategories';
 
@@ -416,14 +438,35 @@ async function loadSettings() {
   $g('settingsArchiveFinderOutputDirInput').value = cfg.archiveFinderOutputDir || '';
   $g('settingsEslifierOutputDirInput').value = cfg.eslifierOutputDir || '';
   $g('settingsMergeOutputDirInput').value = cfg.mergeOutputDir || '';
+  $g('settingsMergeStagingCopyDirInput').value = cfg.mergeStagingCopyDir || '';
   $g('settingsCycleHelperHistoryDirInput').value = cfg.cycleHelperHistoryDir || '';
   $g('settingsPgpatcherCfgDirInput').value = cfg.pgpatcherCfgDir || '';
   $g('settingsPgpatcherOutputBackupDirInput').value = cfg.pgpatcherOutputBackupDir || '';
+  $g('settingsSaveCleanerSavesDirInput').value = cfg.saveCleanerSavesDir || '';
+  // saveCleanerSavesDirAutoDetected (GET-only, never sent back on save) -- set by web/settings-
+  // routes.js's own GET / handler the first time this pane is ever opened with nothing configured
+  // yet, same "auto-fill but never silently persist" convention as the rest of this app's defaults.
+  $g('settingsSaveCleanerSavesDirAutoNote').textContent = cfg.saveCleanerSavesDirAutoDetected
+    ? 'Auto-detected from your Windows Documents folder. Save to confirm, or Browse... to point elsewhere.'
+    : '';
+  $g('settingsSaveCleanerBackupRootInput').value = cfg.saveCleanerBackupRoot || '';
+  $g('settingsSaveCleanerSavesDirFO4Input').value = cfg.saveCleanerSavesDirFO4 || '';
+  $g('settingsSaveCleanerSavesDirFO4AutoNote').textContent = cfg.saveCleanerSavesDirFO4AutoDetected
+    ? 'Auto-detected from your Windows Documents folder. Save to confirm, or Browse... to point elsewhere.'
+    : '';
+  $g('settingsSaveCleanerBackupRootFO4Input').value = cfg.saveCleanerBackupRootFO4 || '';
+  $g('settingsSaveCleanerSavesDirStarfieldInput').value = cfg.saveCleanerSavesDirStarfield || '';
+  $g('settingsSaveCleanerSavesDirStarfieldAutoNote').textContent = cfg.saveCleanerSavesDirStarfieldAutoDetected
+    ? 'Auto-detected from your Windows Documents folder. Save to confirm, or Browse... to point elsewhere.'
+    : '';
+  $g('settingsSaveCleanerBackupRootStarfieldInput').value = cfg.saveCleanerBackupRootStarfield || '';
+  $g('settingsMaxSaveCleanerBackupsInput').value = cfg.maxSaveCleanerBackupsToKeep != null ? cfg.maxSaveCleanerBackupsToKeep : '';
   const mergeAction = cfg.mergePostMergeAction || 'disable';
   document.querySelectorAll('input[name="settingsMergePostMergeAction"]').forEach((el) => {
     el.checked = el.value === mergeAction;
   });
   $g('settingsModExceptionListDirInput').value = cfg.modExceptionListDir || '';
+  $g('settingsUcv2TrackingDirInput').value = cfg.ucv2TrackingDir || '';
   $g('settingsMaxBackupsInput').value = cfg.maxBackupsToKeep != null ? cfg.maxBackupsToKeep : '';
   $g('settingsMaxStateBackupsInput').value = cfg.maxStateBackupsToKeep != null ? cfg.maxStateBackupsToKeep : '';
   $g('settingsConcurrencyInput').value = cfg.concurrentExtractions || 1;
@@ -433,6 +476,7 @@ async function loadSettings() {
   $g('settingsDownloadMissingInput').checked = cfg.downloadMissingArchives === true;
   $g('settingsForceExtractMismatchInput').checked = cfg.forceExtractOffSiteMismatches === true;
   $g('settingsHideVortexVersionWarningInput').checked = cfg.hideVortexVersionWarning === true;
+  $g('settingsAppLogInput').checked = cfg.appLogEnabled === true;
   $g('settingsNexusKeyStatus').textContent = cfg.hasNexusApiKey
     ? 'A key is already stored -- leave blank to keep it, or type a new one to replace it.'
     : 'No key stored yet.';
@@ -620,11 +664,20 @@ async function saveSettings() {
       archiveFinderOutputDir: $g('settingsArchiveFinderOutputDirInput').value,
       eslifierOutputDir: $g('settingsEslifierOutputDirInput').value,
       mergeOutputDir: $g('settingsMergeOutputDirInput').value,
+      mergeStagingCopyDir: $g('settingsMergeStagingCopyDirInput').value,
       mergePostMergeAction: document.querySelector('input[name="settingsMergePostMergeAction"]:checked')?.value || 'disable',
       cycleHelperHistoryDir: $g('settingsCycleHelperHistoryDirInput').value,
       pgpatcherCfgDir: $g('settingsPgpatcherCfgDirInput').value,
       pgpatcherOutputBackupDir: $g('settingsPgpatcherOutputBackupDirInput').value,
+      saveCleanerSavesDir: $g('settingsSaveCleanerSavesDirInput').value,
+      saveCleanerBackupRoot: $g('settingsSaveCleanerBackupRootInput').value,
+      saveCleanerSavesDirFO4: $g('settingsSaveCleanerSavesDirFO4Input').value,
+      saveCleanerBackupRootFO4: $g('settingsSaveCleanerBackupRootFO4Input').value,
+      saveCleanerSavesDirStarfield: $g('settingsSaveCleanerSavesDirStarfieldInput').value,
+      saveCleanerBackupRootStarfield: $g('settingsSaveCleanerBackupRootStarfieldInput').value,
+      maxSaveCleanerBackupsToKeep: $g('settingsMaxSaveCleanerBackupsInput').value === '' ? null : Number($g('settingsMaxSaveCleanerBackupsInput').value),
       modExceptionListDir: $g('settingsModExceptionListDirInput').value,
+      ucv2TrackingDir: $g('settingsUcv2TrackingDirInput').value,
       maxBackupsToKeep: $g('settingsMaxBackupsInput').value === '' ? null : Number($g('settingsMaxBackupsInput').value),
       maxStateBackupsToKeep: $g('settingsMaxStateBackupsInput').value === '' ? null : Number($g('settingsMaxStateBackupsInput').value),
       concurrentExtractions: Number($g('settingsConcurrencyInput').value) || 1,
@@ -634,6 +687,7 @@ async function saveSettings() {
       downloadMissingArchives: $g('settingsDownloadMissingInput').checked,
       forceExtractOffSiteMismatches: $g('settingsForceExtractMismatchInput').checked,
       hideVortexVersionWarning: $g('settingsHideVortexVersionWarningInput').checked,
+      appLogEnabled: $g('settingsAppLogInput').checked,
     };
     const keyInput = $g('settingsNexusKeyInput').value;
     if (keyInput.trim()) body.nexusApiKey = keyInput;
@@ -725,6 +779,36 @@ $g('settingsClearNexusKeyBtn').addEventListener('click', async () => {
   }
 });
 
+// Real SSE-streamed progress (2026-08-25, closes docs/UI-PATTERN-MAP.md's Settings findings -- a
+// static "Deleting…"/"Restoring…" text swap with no real feedback on genuinely slow filesystem work,
+// same shape as Safe Collection Removal's own fix). Shared by the four actions below rather than
+// duplicating the same kick-off-then-EventSource wiring four times -- see
+// web/public/rules-generator-app.js's own rgAnalyze/rgHandleAnalyzeEvent and
+// web/public/remove-collection-app.js's own rcRemoveCollection/rcHandleApplyEvent for the two real
+// shapes this composes (a real per-item count vs. a live elapsed-time tick, decided server-side by
+// which fields a given 'phase' frame carries).
+async function settingsRunWithProgress(postUrl, eventsUrl, statusEl, { onPhase, onDone }) {
+  try {
+    await settingsApi('POST', postUrl);
+  } catch (e) {
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+    return;
+  }
+  const es = new EventSource(eventsUrl);
+  es.onmessage = (msg) => {
+    const frame = JSON.parse(msg.data);
+    if (frame.type === 'phase') {
+      onPhase(frame);
+    } else if (frame.type === 'done') {
+      es.close();
+      onDone(frame);
+    } else if (frame.type === 'error') {
+      es.close();
+      if (!handleSettingsApiError(new Error(frame.message))) statusEl.textContent = `Failed: ${frame.message || 'Something went wrong.'}`;
+    }
+  };
+}
+
 // ---------- Delete all backups ----------
 $g('settingsDeleteBackupsBtn').addEventListener('click', async () => {
   const statusEl = $g('settingsDeleteBackupsStatus');
@@ -751,13 +835,13 @@ $g('settingsDeleteBackupsCancelBtn').addEventListener('click', () => {
 $g('settingsDeleteBackupsConfirmBtn').addEventListener('click', async () => {
   const statusEl = $g('settingsDeleteBackupsStatus');
   $g('settingsDeleteBackupsModal').classList.add('hidden');
-  statusEl.textContent = 'Deleting…';
-  try {
-    const { deletedCount } = await settingsApi('POST', '/api/settings/delete-backups');
-    statusEl.textContent = deletedCount > 0 ? `Deleted ${deletedCount} backup${deletedCount === 1 ? '' : 's'}.` : 'Nothing to delete.';
-  } catch (e) {
-    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
-  }
+  statusEl.textContent = 'Starting…';
+  await settingsRunWithProgress('/api/settings/delete-backups', '/api/settings/delete-backups/events', statusEl, {
+    onPhase: (frame) => { statusEl.textContent = frame.message; },
+    onDone: (frame) => {
+      statusEl.textContent = frame.deletedCount > 0 ? `Deleted ${frame.deletedCount} backup${frame.deletedCount === 1 ? '' : 's'}.` : 'Nothing to delete.';
+    },
+  });
 });
 
 // ---------- Logs (Open Logs Folder / Delete all logs) ----------
@@ -790,13 +874,13 @@ $g('settingsDeleteLogsCancelBtn').addEventListener('click', () => {
 $g('settingsDeleteLogsConfirmBtn').addEventListener('click', async () => {
   const statusEl = $g('settingsDeleteLogsStatus');
   $g('settingsDeleteLogsModal').classList.add('hidden');
-  statusEl.textContent = 'Deleting…';
-  try {
-    const { deletedCount } = await settingsApi('POST', '/api/settings/delete-logs');
-    statusEl.textContent = deletedCount > 0 ? `Deleted ${deletedCount} log file${deletedCount === 1 ? '' : 's'}.` : 'Nothing to delete.';
-  } catch (e) {
-    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
-  }
+  statusEl.textContent = 'Starting…';
+  await settingsRunWithProgress('/api/settings/delete-logs', '/api/settings/delete-logs/events', statusEl, {
+    onPhase: (frame) => { statusEl.textContent = frame.message; },
+    onDone: (frame) => {
+      statusEl.textContent = frame.deletedCount > 0 ? `Deleted ${frame.deletedCount} log file${frame.deletedCount === 1 ? '' : 's'}.` : 'Nothing to delete.';
+    },
+  });
 });
 
 // ---------- Delete all Update Collection backups (two separate stores, same pattern as above) ----------
@@ -825,13 +909,13 @@ $g('settingsSyncDeleteBackupsCancelBtn').addEventListener('click', () => {
 $g('settingsSyncDeleteBackupsConfirmBtn').addEventListener('click', async () => {
   const statusEl = $g('settingsSyncDeleteBackupsStatus');
   $g('settingsSyncDeleteBackupsModal').classList.add('hidden');
-  statusEl.textContent = 'Deleting…';
-  try {
-    const { deletedCount } = await settingsApi('POST', '/api/sync/delete-backups');
-    statusEl.textContent = deletedCount > 0 ? `Deleted ${deletedCount} backup${deletedCount === 1 ? '' : 's'}.` : 'Nothing to delete.';
-  } catch (e) {
-    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
-  }
+  statusEl.textContent = 'Starting…';
+  await settingsRunWithProgress('/api/sync/delete-backups', '/api/sync/delete-backups/events', statusEl, {
+    onPhase: (frame) => { statusEl.textContent = frame.message; },
+    onDone: (frame) => {
+      statusEl.textContent = frame.deletedCount > 0 ? `Deleted ${frame.deletedCount} backup${frame.deletedCount === 1 ? '' : 's'}.` : 'Nothing to delete.';
+    },
+  });
 });
 
 $g('settingsStateDeleteBackupsBtn').addEventListener('click', async () => {
@@ -855,13 +939,13 @@ $g('settingsStateDeleteBackupsCancelBtn').addEventListener('click', () => {
 $g('settingsStateDeleteBackupsConfirmBtn').addEventListener('click', async () => {
   const statusEl = $g('settingsStateDeleteBackupsStatus');
   $g('settingsStateDeleteBackupsModal').classList.add('hidden');
-  statusEl.textContent = 'Deleting…';
-  try {
-    const { deletedCount } = await settingsApi('POST', '/api/sync/delete-state-backups');
-    statusEl.textContent = deletedCount > 0 ? `Deleted ${deletedCount} backup${deletedCount === 1 ? '' : 's'}.` : 'Nothing to delete.';
-  } catch (e) {
-    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
-  }
+  statusEl.textContent = 'Starting…';
+  await settingsRunWithProgress('/api/sync/delete-state-backups', '/api/sync/delete-state-backups/events', statusEl, {
+    onPhase: (frame) => { statusEl.textContent = frame.message; },
+    onDone: (frame) => {
+      statusEl.textContent = frame.deletedCount > 0 ? `Deleted ${frame.deletedCount} backup${frame.deletedCount === 1 ? '' : 's'}.` : 'Nothing to delete.';
+    },
+  });
 });
 
 // ---------- Backup ratio warning: "Remind me for all collections again" ----------
@@ -914,19 +998,36 @@ $g('settingsStateRestoreConfirmBtn').addEventListener('click', async () => {
   if (!backupDir) return;
   $g('settingsStateRestoreModal').classList.add('hidden');
   $g('settingsStateRestoreResultActions').classList.add('hidden');
-  statusEl.textContent = 'Restoring…';
+  statusEl.textContent = 'Starting…';
+  // No real per-item count for a restore (a single opaque file-copy of Vortex's whole state.v2
+  // directory) -- onPhase ticks with real elapsed time instead, same "prove it's still alive"
+  // technique Rules Generator's own Analyze/Apply now use, matched on the server side by
+  // sync-routes.js's own tickingPhase.
   try {
-    const { restoredFrom, preRestoreBackupDir } = await settingsApi('POST', '/api/sync/restore-state', { backupDir });
-    // No raw paths in the status text -- the Reveal buttons below represent each location instead.
-    statusEl.textContent = 'Restored successfully. A safety backup from right before this restore was also saved.';
-    $g('settingsStateRevealRestoredBtn').dataset.path = restoredFrom;
-    $g('settingsStateRevealPreRestoreBtn').dataset.path = preRestoreBackupDir;
-    $g('settingsStateRestoreResultActions').classList.remove('hidden');
+    await settingsApi('POST', '/api/sync/restore-state', { backupDir });
   } catch (e) {
-    // Server already returns a clear, complete message either way (including the 409
-    // vortex-running case) -- no special-casing needed here.
     if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+    return;
   }
+  const es = new EventSource('/api/sync/restore-state/events');
+  es.onmessage = (msg) => {
+    const frame = JSON.parse(msg.data);
+    if (frame.type === 'phase') {
+      statusEl.textContent = `${frame.message}${frame.seconds ? ` (${frame.seconds}s)` : ''}`;
+    } else if (frame.type === 'done') {
+      es.close();
+      // No raw paths in the status text -- the Reveal buttons below represent each location instead.
+      statusEl.textContent = 'Restored successfully. A safety backup from right before this restore was also saved.';
+      $g('settingsStateRevealRestoredBtn').dataset.path = frame.restoredFrom;
+      $g('settingsStateRevealPreRestoreBtn').dataset.path = frame.preRestoreBackupDir;
+      $g('settingsStateRestoreResultActions').classList.remove('hidden');
+    } else if (frame.type === 'error') {
+      es.close();
+      // Server already returns a clear, complete message either way (including the
+      // vortex-running case) -- no special-casing needed here.
+      if (!handleSettingsApiError(new Error(frame.message))) statusEl.textContent = `Failed: ${frame.message}`;
+    }
+  };
 });
 $g('settingsStateRevealRestoredBtn').addEventListener('click', () => {
   const p = $g('settingsStateRevealRestoredBtn').dataset.path;
@@ -934,6 +1035,85 @@ $g('settingsStateRevealRestoredBtn').addEventListener('click', () => {
 });
 $g('settingsStateRevealPreRestoreBtn').addEventListener('click', () => {
   const p = $g('settingsStateRevealPreRestoreBtn').dataset.path;
+  if (p) settingsApi('POST', '/api/rebuild/reveal', { targetPath: p }).catch(() => {});
+});
+
+// ---------- Save Cleaner backups -- plain request/response, no SSE ----------
+// Unlike the Vortex-state backups above (a whole-directory copy, seconds-scale), a Save Cleaner
+// backup is one save's .ess+.skse pair -- lib/save-cleaner-backups.js's own delete/restore are
+// synchronous fs calls, done well under what a progress channel would be worth building for.
+$g('settingsSaveCleanerDeleteBackupsBtn').addEventListener('click', async () => {
+  const statusEl = $g('settingsSaveCleanerDeleteBackupsStatus');
+  try {
+    const { count } = await settingsApi('GET', '/api/save-cleaner/backups-info');
+    if (count === 0) {
+      statusEl.textContent = 'No backups found.';
+      return;
+    }
+    $g('settingsSaveCleanerDeleteBackupsModalText').textContent =
+      `This permanently deletes ${count} save backup${count === 1 ? '' : 's'}.`;
+    $g('settingsSaveCleanerDeleteBackupsModal').classList.remove('hidden');
+  } catch (e) {
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+  }
+});
+$g('settingsSaveCleanerDeleteBackupsCancelBtn').addEventListener('click', () => {
+  $g('settingsSaveCleanerDeleteBackupsModal').classList.add('hidden');
+});
+$g('settingsSaveCleanerDeleteBackupsConfirmBtn').addEventListener('click', async () => {
+  const statusEl = $g('settingsSaveCleanerDeleteBackupsStatus');
+  $g('settingsSaveCleanerDeleteBackupsModal').classList.add('hidden');
+  statusEl.textContent = 'Deleting…';
+  try {
+    const { deleted } = await settingsApi('POST', '/api/save-cleaner/delete-backups');
+    statusEl.textContent = deleted.length > 0 ? `Deleted ${deleted.length} backup${deleted.length === 1 ? '' : 's'}.` : 'Nothing to delete.';
+  } catch (e) {
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+  }
+});
+
+$g('settingsSaveCleanerRestoreBtn').addEventListener('click', async () => {
+  const statusEl = $g('settingsSaveCleanerDeleteBackupsStatus');
+  const select = $g('settingsSaveCleanerRestoreSelect');
+  try {
+    const { backups } = await settingsApi('GET', '/api/save-cleaner/backups');
+    select.innerHTML = '';
+    for (const b of backups) {
+      const opt = document.createElement('option');
+      opt.value = b.name;
+      opt.textContent = `${b.originalEssPath ? b.originalEssPath.split(/[\\/]/).pop() : b.name} — ${new Date(b.createdAt).toLocaleString()}`;
+      select.appendChild(opt);
+    }
+    const hasBackups = backups.length > 0;
+    select.classList.toggle('hidden', !hasBackups);
+    $g('settingsSaveCleanerRestoreEmpty').classList.toggle('hidden', hasBackups);
+    $g('settingsSaveCleanerRestoreConfirmBtn').disabled = !hasBackups;
+    $g('settingsSaveCleanerRestoreModal').classList.remove('hidden');
+  } catch (e) {
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+  }
+});
+$g('settingsSaveCleanerRestoreCancelBtn').addEventListener('click', () => {
+  $g('settingsSaveCleanerRestoreModal').classList.add('hidden');
+});
+$g('settingsSaveCleanerRestoreConfirmBtn').addEventListener('click', async () => {
+  const statusEl = $g('settingsSaveCleanerDeleteBackupsStatus');
+  const backupDir = $g('settingsSaveCleanerRestoreSelect').value;
+  if (!backupDir) return;
+  $g('settingsSaveCleanerRestoreModal').classList.add('hidden');
+  $g('settingsSaveCleanerRestoreResultActions').classList.add('hidden');
+  statusEl.textContent = 'Restoring…';
+  try {
+    const result = await settingsApi('POST', '/api/save-cleaner/restore-backup', { backupDir });
+    statusEl.textContent = 'Restored successfully.';
+    $g('settingsSaveCleanerRevealRestoredBtn').dataset.path = result.restoredEssPath;
+    $g('settingsSaveCleanerRestoreResultActions').classList.remove('hidden');
+  } catch (e) {
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+  }
+});
+$g('settingsSaveCleanerRevealRestoredBtn').addEventListener('click', () => {
+  const p = $g('settingsSaveCleanerRevealRestoredBtn').dataset.path;
   if (p) settingsApi('POST', '/api/rebuild/reveal', { targetPath: p }).catch(() => {});
 });
 

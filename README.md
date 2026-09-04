@@ -13,7 +13,7 @@
 
 Vortex works fine for smaller mod lists, but at scale (1,000+ mods) it can freeze, lose track of settings, and burn hours on installs and updates. Vortex Collection Tools runs alongside Vortex to take the pain out of managing large setups: rebuild broken or corrupted collections in a fraction of the time, update collections without resetting your Ignored or Disabled mods, keep custom mod-order rules intact across updates, and merge plugins to reclaim precious load-order slots.
 
-A collection of focused utilities rounds out the workspace — clearing leftover mod clutter, catching missing master files before they crash your game, and locating files inside archives without unpacking them. Everything lives on a single Home page so you're always one click away from the tool you need. Want to flavor your workspace? Flip on a Skyrim or Fallout 4 theme to give every tool a lore-friendly name and custom look — see **🎨 Make It Yours** below.
+A collection of focused utilities rounds out the workspace — clearing leftover mod clutter, catching missing master files before they crash your game, locating files inside archives without unpacking them, and pulling a specific mod file straight from Nexus without touching your install. Everything lives on a single Home page so you're always one click away from the tool you need. Want to flavor your workspace? Flip on a Skyrim, Fallout 4, or Starfield theme to give every tool a lore-friendly name and custom look — see **🎨 Make It Yours** below.
 
 ![The Arcaneum — the Skyrim-themed Home page, one click away from every tool](assets/readme-home-screenshot.png)
 
@@ -41,16 +41,19 @@ A collection of focused utilities rounds out the workspace — clearing leftover
 * **Rules Generator**: Collection updates often break custom "load after" rules when mods get renamed or replaced. This tool matches your old rules to their updated equivalents — even matching rules that point to older version numbers — so you don't have to rebuild your rule list from scratch.
 * **Merge Plugins**: Skyrim's plugin limit fills up fast. This tool bundles new-content plugins from your collections into a single merged file, ESL-flagging the result whenever possible (costing 0 load-order slots) while leaving your original files safe to disable. You can review all contents before merging.
 * **Safe Collection Removal**: Uninstalling a collection in Vortex can easily wipe out mods that your other collections still rely on. This tool scans your setup first, flags every shared mod, and lets you choose what to keep and what to delete — so you can clean up old collections without breaking anything else.
+* **Save Cleaner** *(placeholder name)*: Find and clear out orphaned scripts left behind by mods you removed, with the real mod names attached — for Skyrim, Fallout 4, and Starfield saves.
 
 ### 🧩 Utilities
 
 * **Missing Masters**: Instantly shows active plugins missing master files — the #1 cause of startup crashes — without making you run a slow manual scan. Fix problems on the spot with **Create Dummy Master** or re-extract missing files with **Rebuild This Mod**.
 * **Mod Scrub**: Scans staging folders and downloaded archives for leftover files that aren't linked to any active Vortex mod. Review and safely clean up orphaned clutter, with a permanent exclude list for anything you want to keep.
 * **Archive Finder**: Indexes your download archives up front without unpacking them. Search across all your archives by file or mod name and extract specific files instantly.
-* **Rebuild Missing Files**: Fixes individual missing staging files without rebuilding an entire collection. Scans your collections, pinpoints missing files per mod, and restores just those files straight from your archives.
+* **Rebuild Missing Files**: Fixes individual missing staging files without rebuilding an entire collection. Scans your collections, pinpoints missing files per mod, and restores just those files straight from your archives — select a batch of missing files and missing archives together and fix them all in one pass.
 * **Cycle Helper**: When Vortex detects a load-order cycle, it dumps every involved mod on screen at once without telling you which rule caused the loop. Snapshot your rules, pinpoint the exact conflicting rule, view it as a visual graph diagram, and test rule changes directly before returning to Vortex.
 * **Clear Update Flags**: Vortex's "Check for Updates" button often flags hundreds of mods with "Update Available" badges — even when a curated collection intentionally pins older, tested versions. This tool clears those stale badges in bulk directly from Vortex without touching your installed files, load order, or collection rules.
 * **PGPatcher Load Order Editor**: Replaces PGPatcher's bare-bones ordering screen with a full drag-and-drop load-order editor, reads your PGPatcher settings, and runs the command-line patcher behind the scenes with live phase-by-phase progress. *(Requires PGPatcher to be installed and configured once first — see Important Notes.)*
+* **File Retriever**: Enter a mod's Nexus ID and download specific files or older versions straight to your drive — no reinstalling or touching your collection required.
+* **Duplicate Version Cleanup** *(Beta)*: Vortex's own Version dropdown can end up showing the same mod more than once — sometimes a genuinely older version kept on purpose, sometimes just a leftover orphaned download. This tool finds every group, lets you tell the real duplicates apart from ones kept on purpose, and cleans them up for good.
 
 ### 📊 Reports
 
@@ -64,36 +67,39 @@ A dedicated tab for data views and checklists that don't fit into a single-actio
 
 ### 🎨 Make It Yours
 
-* **Skyrim or Fallout 4 themes:** Flip a switch in Settings to give every tool a lore-friendly name, custom icon, and color accent tailored to the game you're playing. Rebuild Collection becomes *Restoration* (Skyrim) or *Project Purity* (Fallout 4); Merge Plugins becomes *The Forge* or *Institute Sub-Assembly*. You can switch back to the standard theme anytime.
+* **Skyrim, Fallout 4, or Starfield themes:** Flip a switch in Settings to give every tool a lore-friendly name, custom icon, and color accent tailored to the game you're playing. Rebuild Collection becomes *Restoration* (Skyrim), *Project Purity* (Fallout 4), or *Grav Drive Jump* (Starfield); Merge Plugins becomes *The Forge*, *Institute Sub-Assembly*, or *Staryard Assembly Line*. You can switch back to the standard theme anytime.
 * **Custom accent and background colors:** Adjust accent colors and background tints in Settings. Preferences save separately for each theme.
-* **Dedicated theme fonts:** Choose from six Skyrim-style fonts (Cinzel by default) or five retro-terminal Fallout fonts in Settings for headings and lore text.
-* **Themed in-app guide:** Consult *The Arcaneum* (Skyrim) or *The Pip-Boy — A Survivor's Manual* (Fallout 4) for in-universe lore on what each tool does, plus its own built-in name-lookup guide. Open it via the book icon in the header or directly from Home.
+* **Dedicated theme fonts:** Choose from six Skyrim-style fonts (Cinzel by default), five retro-terminal Fallout fonts, or a set of Starfield-style fonts in Settings for headings and lore text.
+* **Themed in-app guide:** Consult *The Arcaneum* (Skyrim), *The Pip-Boy — A Survivor's Manual* (Fallout 4), or *The Eye — A Traveler's Field Guide* (Starfield) for in-universe lore on what each tool does, plus its own built-in name-lookup guide. Open it via the book icon in the header or directly from Home.
 
 #### 🏷️ Theme Name Reference
 
-![Standard, Skyrim, and Fallout 4 side by side](assets/theme-reference-banner.png)
+![Standard, Skyrim, Fallout 4, and Starfield side by side](assets/theme-reference-banner.png)
 
-Every tool above sticks to its plain, functional name across this README — here's what each one becomes once you switch on Skyrim or Fallout 4 theming (with Starfield up next!):
+Every tool above sticks to its plain, functional name across this README — here's what each one becomes once you switch on Skyrim, Fallout 4, or Starfield theming:
 
-| Standard | Skyrim | Fallout 4 |
-| :--- | :--- | :--- |
-| ⚡ Rebuild Collection | ✨ Restoration | 💧 Project Purity |
-| 🔄 Update Collection | 📯 The Herald | 🧠 Memory Den |
-| 🔗 Rules Generator | ✒️ The Scribe | 📡 Relay Tower Network |
-| 🧬 Merge Plugins | 🔨 The Forge | ⚙️ Institute Sub-Assembly |
-| 📦 Safe Collection Removal | 📦 The Quartermaster | 📦 Overseer's Inventory Quarantine |
-| 🧩 Missing Masters | 🔮 The Augur | ⚠️ Vault-Tec Diagnostic Prompt |
-| 🧽 Mod Scrub | 🔥 The Cleansing | 🤖 Greygarden Maintenance Protocol |
-| 📦 Archive Finder | 👁️ Clairvoyance | 📚 Boston Library Terminal |
-| 🩹 Rebuild Missing Files | 🗝️ The Vault-Keeper | 🩹 Auto-Doc Diagnostic & Repair |
-| 🔀 Cycle Helper | 🕸️ The Webweaver | 🔌 Circuit Breaker Diagnostics |
-| 🧹 Clear Update Flags | 💎 Cleansing Stone | 🟢 All-Clear Protocol |
-| ⚔️ PGPatcher Load Order Editor | 👑 Order of Succession | 🎚️ Vault-Tec Priority Protocol |
-| 📊 Stats | 📊 The Ledger | 📊 Overseer Performance Log |
-| ✅ Work Through | ✅ The Quest Log | ✅ Automated Correction Ledger |
-| 🔍 Update Compare | 🔍 Scroll of Retrospection | 🔍 Terminal Delta Log |
-| 🕒 Workshop Report | 📓 The Anvil's Mark | 🕒 Terminal Revision Timestamp |
-| 🙅 Mod Exceptions | 🕊️ The Shadowmarked | 🙅 Override Exemption Protocol |
+| Standard | Skyrim | Fallout 4 | Starfield |
+| :--- | :--- | :--- | :--- |
+| ⚡ Rebuild Collection | ✨ Restoration | 💧 Project Purity | 🚀 Grav Drive Jump |
+| 🔄 Update Collection | 📯 The Herald | 🧠 Memory Den | 📡 Memory Fragment |
+| 🔗 Rules Generator | ✒️ The Scribe | 📡 Relay Tower Network | 🌌 Quantum Entanglement |
+| 🧬 Merge Plugins | 🔨 The Forge | ⚙️ Institute Sub-Assembly | 🛰️ Staryard Assembly Line |
+| 📦 Safe Collection Removal | 📦 The Quartermaster | 📦 Overseer's Inventory Quarantine | 📦 Neon Red-Tape Audit |
+| 🧩 Missing Masters | 🔮 The Augur | ⚠️ Vault-Tec Diagnostic Prompt | ⚠️ Structural Hull Breach |
+| 🧽 Mod Scrub | 🔥 The Cleansing | 🤖 Greygarden Maintenance Protocol | 🛰️ Deimos Salvage Yard |
+| 📦 Archive Finder | 👁️ Clairvoyance | 📚 Boston Library Terminal | 🗃️ Akila City Archive |
+| 🩹 Rebuild Missing Files | 🗝️ The Vault-Keeper | 🩹 Auto-Doc Diagnostic & Repair | ⛏️ Cydonia Ore Extraction |
+| 📥 File Retriever | 🔮 Telekinesis | 📡 RobCo Requisition Protocol | 📦 Trade Authority Requisition |
+| 🔀 Cycle Helper | 🕸️ The Webweaver | 🔌 Circuit Breaker Diagnostics | 🐍 Serpent's Embrace |
+| 🧹 Clear Update Flags | 💎 Cleansing Stone | 🟢 All-Clear Protocol | 📡 False Beacon Jammer |
+| ⚔️ PGPatcher Load Order Editor | 👑 Order of Succession | 🎚️ Vault-Tec Priority Protocol | 🛰️ Modular Shipbuilder Matrix |
+| 📊 Stats | 📊 The Ledger | 📊 Overseer Performance Log | 📊 Starborn Telemetry |
+| ✅ Work Through | ✅ The Quest Log | ✅ Automated Correction Ledger | ✅ Constellation Mission Board |
+| 🔍 Update Compare | 🔍 Scroll of Retrospection | 🔍 Terminal Delta Log | 🔍 Star System Cartography |
+| 🕒 Workshop Report | 📓 The Anvil's Mark | 🕒 Terminal Revision Timestamp | 📓 Relic Chronology |
+| 🙅 Mod Exceptions | 🕊️ The Shadowmarked | 🙅 Override Exemption Protocol | 🙅 Constellation Quarantine Zone |
+
+> Duplicate Version Cleanup is new enough that it doesn't have themed names across all three worlds yet — it still shows its plain working title everywhere for now.
 
 ---
 
@@ -162,6 +168,33 @@ Once installed, supported tools detect the Helper automatically — no app resta
 
 ## ❓ Frequently Asked Questions
 
+### Why use this instead of doing it directly in Vortex?
+
+* **Q: Why not just click Rebuild in Vortex?**
+  > **Speed and control.** Rebuilding a large collection directly in Vortex can take hours and chew through your system RAM. Rebuild Collection extracts the exact same files — including your FOMOD choices — outside of Vortex. Parallel extraction cuts the processing time by 2–3x, and you can pause and resume whenever you want without losing progress on finished mods.
+
+---
+
+* **Q: Why not just click Update in Vortex?**
+  > **Because standard updates reset your Ignored and Disabled mods.** When you update directly in Vortex, those choices get wiped, leaving you to hunt down and re-disable dozens of mods manually afterward. Update Collection snapshots your settings first and restores them automatically once the update is done, with a step-by-step wizard previewing every change before it gets applied.
+
+---
+
+* **Q: Why not just fix my rules in Vortex's Conflict Editor?**
+  > **Because collection updates often rename the exact mods your rules point to.** When a mod's name or version changes, your custom "load after" rules break, leaving you to rebuild your conflict list from scratch. Rules Generator automatically reconnects your existing rules to their updated equivalents, even across version bumps and renamed files.
+
+---
+
+* **Q: Why not just dismiss the update badges in Vortex one at a time?**
+  > **Because Vortex can flag hundreds of mods at once.** Clicking "Check for Updates" often marks a huge chunk of your list with "Update Available," even when a curated collection intentionally relies on older, tested versions — and clicking through them one by one is a chore. Clear Update Flags wipes those badges in bulk without touching your installed files, load order, or collection rules.
+
+---
+
+* **Q: Why not just remove the collection in Vortex?**
+  > **Because standard removal doesn't check if your other collections share those mods.** Uninstalling directly in Vortex can easily wipe out files your other setups still depend on. Safe Collection Removal scans your whole setup first, flags every shared mod, and lets you choose exactly what to keep and what to delete.
+
+---
+
 * **Q: Does this tool modify my game save files?**
   > **No.** The app only interacts with your mod staging folder, archive downloads, and Vortex's own settings. It never touches your game saves.
 
@@ -202,6 +235,7 @@ Instructions for building from source, CLI commands, architecture overviews, and
 * **[xeditlib](https://github.com/WingedGuardian/xeditlib)** and **[koffi](https://koffi.dev/)** — Node.js bindings for direct execution of `XEditLib.dll`.
 * **[pex-parser](https://github.com/matortheeternal/pex-parser)** (Mator) — Papyrus script parser used by Merge Plugins' script relinking.
 * **[BSA Browser](https://github.com/AlexxEG/BSA_Browser)** (AlexxEG) — CLI utility used for Bethesda archive extraction (BSA/BA2).
+* **[FallrimTools ReSaver](https://github.com/mdfairch/FallrimTools)** (Mark Fairchild) — Save file parsing/editing engine powering Save Cleaner, via a modernized fork with headless CLI entry points.
 * **[7-Zip](https://www.7-zip.org/)** — Bundled archive extraction utility.
 * **[sharp](https://github.com/lovell/sharp)** and **[oxipng](https://github.com/oxipng/oxipng)** — Image optimization tools for release assets (`scripts/compress-image.js`).
 * **[Node.js](https://nodejs.org/)** — JavaScript runtime powering the application.

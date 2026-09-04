@@ -8,6 +8,25 @@ const syncLib = require('../lib/vortex-sync/lib');
 const cleanupScan = require('../lib/cleanup-scan');
 const excludeStore = require('../lib/cleanup-exclude-store');
 const helperClient = require('../lib/vortex-helper-client');
+const { createSseSession } = require('./sse-session');
+
+// Real SSE-streamed progress for scan-staging/scan-archives (2026-08-25, closes
+// docs/UI-PATTERN-MAP.md's "Mod Scrub / Clean Up -- scan-staging / scan-archives" finding: static
+// spinner, no SSE, not benchmarked-instant). Both scans are a single opaque
+// cleanupScan.scanStaging(FromLiveData)/scanArchives(FromLiveData) call under the hood, with no
+// internal per-item hook to report through -- same shape as Rules Generator's Analyze/Apply
+// (web/rules-generator-routes.js), so this streams real phase text plus a live elapsed-time tick
+// every second while the real call is in flight, rather than faking a percentage. Copied here (not
+// imported) per this project's own "own tiny helpers, self-contained per file" convention.
+function tickingPhase(emit, phase, message) {
+    let seconds = 0;
+    emit({ type: 'phase', phase, message, seconds });
+    const timer = setInterval(() => {
+        seconds += 1;
+        emit({ type: 'phase', phase, message, seconds });
+    }, 1000);
+    return () => clearInterval(timer);
+}
 
 function createCleanupRouter(config) {
     const router = express.Router();
@@ -33,54 +52,117 @@ function createCleanupRouter(config) {
     // other helper-integrated route: source the live mods data from
     // helperClient.getAllMods()/getAllDownloads() when reachable, fall through to the exact
     // original gated state.v2 path, untouched, when it's not.
-    router.get('/scan-staging', async (req, res) => {
+    const scanStagingSession = createSseSession();
+
+    router.get('/scan-staging/events', (req, res) => {
+        if (!scanStagingSession.get()) return res.status(404).end();
+        const afterSeq = Number(req.headers['last-event-id'] || 0);
+        scanStagingSession.subscribe(res, { afterSeq });
+    });
+
+    router.post('/scan-staging', async (req, res) => {
+        // Not-configured is a genuine instant no-op -- answered synchronously, same shape as before
+        // this task, no SSE session ever starts for it.
         if (!staging) return res.json({ configured: false, total: 0, exceptions: [], needsReview: [] });
-        try {
-            const { staging: ignoredStaging } = excludeStore.load(cleanupExcludeListDir);
-            const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-            const modsData = helperAvailable ? await helperClient.getAllMods() : null;
-            let source = 'state.v2';
-            let result;
-            if (modsData) {
-                source = 'helper-extension';
-                result = cleanupScan.scanStagingFromLiveData(modsData.mods, staging, ignoredStaging);
-            } else {
-                if (vortexRunningGate(res)) return;
-                result = await cleanupScan.scanStaging(state, staging, ignoredStaging);
-            }
-            res.json({ configured: true, ...result, source });
-        } catch (e) {
-            res.status(500).json({ error: e.message });
+        if (scanStagingSession.isActive()) {
+            return res.status(409).json({ error: 'A scan is already in progress.' });
         }
+        const mySession = scanStagingSession.start({ id: `cleanup-scan-staging-${Date.now()}` });
+        res.status(202).json({});
+        const emitIfCurrent = (event) => {
+            if (scanStagingSession.get() === mySession) scanStagingSession.emit(event);
+        };
+
+        (async () => {
+            const stopTicking = tickingPhase(emitIfCurrent, 'scanning', 'Scanning your staging folder…');
+            try {
+                const { staging: ignoredStaging } = excludeStore.load(cleanupExcludeListDir);
+                const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+                const modsData = helperAvailable ? await helperClient.getAllMods() : null;
+                let source = 'state.v2';
+                let result;
+                if (modsData) {
+                    source = 'helper-extension';
+                    result = cleanupScan.scanStagingFromLiveData(modsData.mods, staging, ignoredStaging);
+                } else {
+                    // vortexRunningGate can't be used here -- the 202 response has already gone out,
+                    // so a second res.status(...).json(...) would throw. Same inlined-check shape
+                    // rules-generator-routes.js's own /analyze uses for its identical fallback gate.
+                    if (syncLib.isVortexRunning()) {
+                        stopTicking();
+                        emitIfCurrent({
+                            type: 'error', done: true, error: true, errorCode: 'vortex-running',
+                            message: 'Vortex is currently running. Close it completely and try again.',
+                        });
+                        return;
+                    }
+                    result = await cleanupScan.scanStaging(state, staging, ignoredStaging);
+                }
+                stopTicking();
+                emitIfCurrent({ type: 'done', done: true, configured: true, ...result, source });
+            } catch (e) {
+                stopTicking();
+                emitIfCurrent({ type: 'error', done: true, error: true, message: e.message });
+            }
+        })();
     });
 
     // Needs BOTH getAllMods() (usedArchiveIds) and getAllDownloads() (the download-side lookups) --
     // only takes the helper path when BOTH calls succeed, so a "helper answered /mods but not
     // /downloads" moment falls all the way through to state.v2 rather than a partial/wrong result.
-    router.get('/scan-archives', async (req, res) => {
+    const scanArchivesSession = createSseSession();
+
+    router.get('/scan-archives/events', (req, res) => {
+        if (!scanArchivesSession.get()) return res.status(404).end();
+        const afterSeq = Number(req.headers['last-event-id'] || 0);
+        scanArchivesSession.subscribe(res, { afterSeq });
+    });
+
+    router.post('/scan-archives', async (req, res) => {
         if (!downloads) return res.json({ configured: false, total: 0, exceptions: [], needsReview: [], hasUninstalledArchives: false });
-        try {
-            const { archives: ignoredArchives } = excludeStore.load(cleanupExcludeListDir);
-            const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-            let modsData = null;
-            let downloadsData = null;
-            if (helperAvailable) {
-                modsData = await helperClient.getAllMods();
-                downloadsData = modsData ? await helperClient.getAllDownloads() : null;
-            }
-            let source = 'state.v2';
-            let result;
-            if (modsData && downloadsData) {
-                source = 'helper-extension';
-                result = cleanupScan.scanArchivesFromLiveData(modsData.mods, downloadsData.files, downloads, ignoredArchives);
-            } else {
-                if (vortexRunningGate(res)) return;
-                result = await cleanupScan.scanArchives(state, downloads, ignoredArchives);
-            }
-            res.json({ configured: true, ...result, source });
-        } catch (e) {
-            res.status(500).json({ error: e.message });
+        if (scanArchivesSession.isActive()) {
+            return res.status(409).json({ error: 'A scan is already in progress.' });
         }
+        const mySession = scanArchivesSession.start({ id: `cleanup-scan-archives-${Date.now()}` });
+        res.status(202).json({});
+        const emitIfCurrent = (event) => {
+            if (scanArchivesSession.get() === mySession) scanArchivesSession.emit(event);
+        };
+
+        (async () => {
+            const stopTicking = tickingPhase(emitIfCurrent, 'scanning', 'Scanning your downloaded archives…');
+            try {
+                const { archives: ignoredArchives } = excludeStore.load(cleanupExcludeListDir);
+                const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+                let modsData = null;
+                let downloadsData = null;
+                if (helperAvailable) {
+                    modsData = await helperClient.getAllMods();
+                    downloadsData = modsData ? await helperClient.getAllDownloads() : null;
+                }
+                let source = 'state.v2';
+                let result;
+                if (modsData && downloadsData) {
+                    source = 'helper-extension';
+                    result = cleanupScan.scanArchivesFromLiveData(modsData.mods, downloadsData.files, downloads, ignoredArchives);
+                } else {
+                    if (syncLib.isVortexRunning()) {
+                        stopTicking();
+                        emitIfCurrent({
+                            type: 'error', done: true, error: true, errorCode: 'vortex-running',
+                            message: 'Vortex is currently running. Close it completely and try again.',
+                        });
+                        return;
+                    }
+                    result = await cleanupScan.scanArchives(state, downloads, ignoredArchives);
+                }
+                stopTicking();
+                emitIfCurrent({ type: 'done', done: true, configured: true, ...result, source });
+            } catch (e) {
+                stopTicking();
+                emitIfCurrent({ type: 'error', done: true, error: true, message: e.message });
+            }
+        })();
     });
 
     // kind = the side that was just scanned/deleted ('staging' | 'archives'); this checks the

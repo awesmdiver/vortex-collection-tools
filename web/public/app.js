@@ -107,7 +107,11 @@ function showView(name) {
 // real, genuinely long error (the native-LevelDB-crash explanation, several sentences with its own
 // suggested recovery steps): alert()'s box is small, unstyled, and gives no control over sizing.
 function showErrorModal(message, title) {
-  $('errorModalTitle').textContent = title || 'Error';
+  // 🛑 prefix (2026-08-25, modal severity standardization) -- this modal is always critical (it only
+  // ever shows a real failure), so every caller's title gets the icon whether or not it remembered to
+  // include one itself -- never double-prefixes a title a caller already led with 🛑.
+  const t = title || 'Error';
+  $('errorModalTitle').textContent = t.startsWith('🛑') ? t : `🛑 ${t}`;
   $('errorModalText').textContent = message;
   $('errorModal').classList.remove('hidden');
 }
@@ -622,7 +626,7 @@ async function refreshVortexData() {
     if (frame.type === 'sync-state-progress') {
       statusEl.innerHTML = '';
       statusEl.appendChild(el('span', { class: 'spinner' }));
-      statusEl.appendChild(document.createTextNode(` Reading Vortex state — step ${frame.step} of ${frame.total}: ${frame.label}`));
+      statusEl.appendChild(document.createTextNode(` Reading Vortex — step ${frame.step} of ${frame.total}: ${frame.label}`));
       return;
     }
     if (frame.type === 'refresh-complete' || frame.type === 'refresh-error') {
@@ -663,7 +667,7 @@ async function openPlan(collectionModId, name, resumeLogPath, explicitResume = f
   $('planTitle').textContent = name;
   $('planLoading').classList.remove('hidden');
   $('planContent').classList.add('hidden');
-  $('planLoadingText').textContent = 'Reading Vortex state… Please wait as this can take some time for a large collection.';
+  $('planLoadingText').textContent = 'Reading Vortex… Please wait as this can take some time for a large collection.';
   $('planProgressBarWrap').classList.add('hidden');
   $('planProgressBar').style.width = '0%';
 
@@ -685,13 +689,13 @@ async function openPlan(collectionModId, name, resumeLogPath, explicitResume = f
 function handlePlanEvent(frame) {
   switch (frame.type) {
     case 'phase':
-      if (frame.phase === 'sync-state') $('planLoadingText').textContent = 'Reading Vortex state… Please wait as this can take some time for a large collection.';
+      if (frame.phase === 'sync-state') $('planLoadingText').textContent = 'Reading Vortex… Please wait as this can take some time for a large collection.';
       else if (frame.phase === 'sync-state-cached') $('planLoadingText').textContent = 'Using cached Vortex data (no database read needed)…';
       break;
     case 'sync-state-progress':
       $('planProgressBarWrap').classList.remove('hidden');
       $('planProgressBar').style.width = `${Math.round((frame.step / frame.total) * 100)}%`;
-      $('planLoadingText').textContent = `Reading Vortex state — step ${frame.step} of ${frame.total}: ${frame.label}`;
+      $('planLoadingText').textContent = `Reading Vortex — step ${frame.step} of ${frame.total}: ${frame.label}`;
       break;
     case 'classify-progress': {
       $('planProgressBarWrap').classList.remove('hidden');
@@ -919,6 +923,14 @@ function cancelPlan() {
 }
 for (const id of ['cancelPlanBtn', 'cancelPlanBtnTop']) $(id).addEventListener('click', cancelPlan);
 
+// Same reset as cancelPlan (2026-08-27, merge-entry-reset) -- fires once each time the user arrives
+// at 'rebuild' from a DIFFERENT area, never from switching BROWSER tabs or from internal navigation
+// like the Cancel button. Reuses cancelPlan's own real reset logic verbatim.
+function rebuildResetOnEntry() {
+  cancelPlan();
+}
+window.rebuildResetOnEntry = rebuildResetOnEntry;
+
 // ---------- Confirm modal ----------
 
 // Mirrors the exact backup gate the real run uses (web/rebuild-routes.js's `/runs` handler:
@@ -1048,7 +1060,7 @@ function truncatePhaseName(name, max = 40) {
 }
 
 const PHASE_TEXT = {
-  'sync-state': 'Reading Vortex state… Please wait as this can take some time for a large collection.',
+  'sync-state': 'Reading Vortex… Please wait as this can take some time for a large collection.',
   'plan-ready': 'Plan ready',
   'checking-premium': 'Checking Nexus Premium status…',
   'downloading-missing': 'Downloading missing archive(s)…',
@@ -1087,7 +1099,7 @@ function handleRunEvent(frame) {
       } else if (PHASE_TEXT[frame.phase]) setPhase(PHASE_TEXT[frame.phase]);
       break;
     case 'sync-state-progress':
-      setPhase(`Reading Vortex state — step ${frame.step} of ${frame.total}: ${frame.label}`);
+      setPhase(`Reading Vortex — step ${frame.step} of ${frame.total}: ${frame.label}`);
       break;
     case 'backup-progress':
       setPhase(`Backing up (${frame.index}/${frame.total}): ${truncatePhaseName(frame.modName)}`);

@@ -5,7 +5,7 @@
 // index.html; this only toggles which one is visible. app.js and sync-app.js each own their own
 // internal view-state exactly as before -- this file knows nothing about either.
 
-const TOOL_AREAS = ['home', 'rebuild', 'sync', 'settings', 'reports', 'rules-generator', 'utilities', 'merge', 'book', 'update-collection-v2', 'remove-collection', 'pgpatcher'];
+const TOOL_AREAS = ['home', 'rebuild', 'sync', 'settings', 'reports', 'rules-generator', 'utilities', 'merge', 'book', 'update-collection-v2', 'remove-collection', 'pgpatcher', 'save-cleaner'];
 let currentArea = null;
 
 // "What page am I on" was genuinely hard to tell across several of this app's pages -- confirmed
@@ -67,8 +67,19 @@ document.getElementById('serverUnreachableRetryBtn').addEventListener('click', (
 // action just succeeded (so any earlier "Vortex is running" modal from a prior failed attempt is
 // now stale) can dismiss it without waiting for the user to click Close themselves.
 let pendingVortexRunningRetry = null;
-function showVortexRunningModal(retryFn) {
+// Default title/body -- the genuine "we need a real write, Vortex must be fully closed" case (every
+// existing caller of this function, unchanged). override (2026-08-30, director-caught real false
+// alarm) lets a caller show a DIFFERENT, more accurate pair for the read-only-fallback case: Vortex
+// IS running, but the reason the Helper didn't answer is usually that Vortex is busy on its own main
+// thread (mid-deploy, still starting up -- see vortex-helper-client.js's own header comment), not
+// that anything needs closing. Optional and additive -- every caller that doesn't pass it keeps
+// showing exactly the same text as before this change.
+const VORTEX_RUNNING_DEFAULT_TITLE = '⚠️ Vortex is currently running';
+const VORTEX_RUNNING_DEFAULT_BODY = 'Close Vortex completely, then try again.';
+function showVortexRunningModal(retryFn, override) {
   pendingVortexRunningRetry = retryFn || null;
+  document.getElementById('vortexRunningTitle').textContent = (override && override.title) || VORTEX_RUNNING_DEFAULT_TITLE;
+  document.getElementById('vortexRunningBody').textContent = (override && override.body) || VORTEX_RUNNING_DEFAULT_BODY;
   document.getElementById('vortexRunningModal').classList.remove('hidden');
 }
 function hideVortexRunningModal() {
@@ -184,7 +195,7 @@ fetch('/api/settings')
 // "reports"/"utilities" are section GROUPS, not a real stable tool id (no themes/*.json entry for
 // them), so they stay a plain literal here even under a themed brand -- see DESIGN.md, group-level
 // naming is a known gap, not yet part of the schema.
-const AREA_LABELS = { home: 'Home', rebuild: 'Rebuild Collection', sync: 'Update Collection (Classic)', settings: 'Settings', reports: 'Reports', 'rules-generator': 'Rules Generator', utilities: 'Utilities', merge: 'Merge Plugins', book: 'Get Started', 'update-collection-v2': 'Update Collection', 'remove-collection': 'Safe Collection Removal' };
+const AREA_LABELS = { home: 'Home', rebuild: 'Rebuild Collection', sync: 'Update Collection (Classic)', settings: 'Settings', reports: 'Reports', 'rules-generator': 'Rules Generator', utilities: 'Utilities', merge: 'Merge Plugins', book: 'Get Started', 'update-collection-v2': 'Update Collection', 'remove-collection': 'Safe Collection Removal', 'save-cleaner': 'Save Cleaner' };
 
 function showToolArea(id) {
   currentArea = id;
@@ -293,34 +304,63 @@ async function navigateToArea(id, subTab) {
   const previousArea = currentArea;
   showToolArea(id);
   if (id === 'book') markBookOpened();
-  if (id === 'sync' && window.loadSyncProfiles) window.loadSyncProfiles();
   if (id === 'reports' && subTab && window.showReportsSubTab) window.showReportsSubTab(subTab);
+  // Clears cleanup-app.js's own currentUtilitiesSubTab tracking when arriving from a DIFFERENT
+  // top-level area (previousArea check, same convention as every other area's reset hook below), so
+  // re-entering the SAME Utilities sub-tab after a Home round-trip still re-fires its reset-on-entry
+  // hook instead of looking like "no change" (2026-09-01, utilities-reentry-reset-bugfix).
+  if (id === 'utilities' && previousArea !== 'utilities' && window.utilitiesClearSubTabTracking) window.utilitiesClearSubTabTracking();
   if (id === 'utilities' && subTab && window.showUtilitiesSubTab) window.showUtilitiesSubTab(subTab);
-  // Same "load Vortex-gated data only when this area is actually visited" fix as the 'sync' case
-  // above (queue: rules-generator-eager-load-collision) -- rules-generator-app.js used to call this
-  // unconditionally on every page load regardless of the active area, which could pop the shared
-  // Vortex-running modal on a totally unrelated page and silently steal any OTHER page's own retry.
-  if (id === 'rules-generator' && window.rgLoadPickers) window.rgLoadPickers();
   // Same "don't fetch what nobody's looking at yet" convention -- update-collection-v2-app.js's own
-  // ucv2LoadCollections() only ever fires once this area is actually visited.
-  if (id === 'update-collection-v2' && window.ucv2LoadCollections) window.ucv2LoadCollections();
-  // Same "don't fetch what nobody's looking at yet" convention -- remove-collection-app.js's own
-  // rcLoadCollections() only ever fires once this area is actually visited.
-  if (id === 'remove-collection' && window.rcLoadCollections) window.rcLoadCollections();
-  // Merge Plugins' own Step 0 auto-refresh (2026-08-24, merge-step0-refresh) -- fires once each time
+  // ucv2LoadCollections() only ever fires once this area is actually visited. Arriving fresh from a
+  // DIFFERENT area (previousArea check, same convention as Merge Plugins' own entry-refresh below)
+  // does a full reset back to "Pick a collection" first -- confirmed real, 2026-08-26: without this,
+  // leaving mid-review for the home menu and coming back left the tool sitting on whatever
+  // screen/review was left behind instead of starting fresh.
+  if (id === 'update-collection-v2') {
+    if (previousArea !== 'update-collection-v2' && window.ucv2ResetOnEntry) window.ucv2ResetOnEntry();
+    else if (window.ucv2LoadCollections) window.ucv2LoadCollections();
+  }
+  // Merge Plugins' own full reset-to-Step-0 + collections refresh (2026-08-27, merge-entry-reset;
+  // originally just a collections refresh, 2026-08-24 merge-step0-refresh) -- fires once each time
   // the user actually arrives at 'merge' from a DIFFERENT area (previousArea check above), never
   // again from switching BROWSER tabs and back (no visibilitychange listener exists) or from
   // internal step navigation within Merge Plugins itself (Back/Merge another call mergeGoToStep
-  // directly, never through here). Covers Vortex having changed while the user was already sitting
-  // on some other page before opening this one -- the loadMergeOnBoot() eager prefetch at script
-  // load covers a direct ?area=merge deep link the same way it always has.
-  if (id === 'merge' && previousArea !== 'merge' && window.mergeAutoRefreshCollectionsOnEntry) window.mergeAutoRefreshCollectionsOnEntry();
+  // directly, never through here). Also covers Vortex having changed while the user was already
+  // sitting on some other page before opening this one -- the loadMergeOnBoot() eager prefetch at
+  // script load covers a direct ?area=merge deep link the same way it always has.
+  if (id === 'merge' && previousArea !== 'merge' && window.mergeResetOnEntry) window.mergeResetOnEntry();
+  // PGPatcher's own full reset to the Idle screen when arriving from a DIFFERENT area (same
+  // previousArea guard pattern as Merge Plugins). Discards any unsaved changes in the in-progress
+  // editor state (pgpDirty, pgpModsByName, pgpSelected, etc.) same as Merge Plugins already does
+  // unconditionally on entry.
+  if (id === 'pgpatcher' && previousArea !== 'pgpatcher' && window.pgpResetToIdle) window.pgpResetToIdle();
   // Book has no Vortex-gated data to worry about (it's static lore content), but still only loads
   // its own JSON the first time this area is actually visited, not eagerly on page load -- same
   // "don't fetch what nobody's looking at yet" convention as every other area's own lazy-load hook.
   // subTab here is a chapter's toolId (e.g. Home's own banner/title link straight to the "home"
   // chapter instead of the table of contents -- same subTab convention as reports/utilities above).
   if (id === 'book' && window.bookLoadOnce) window.bookLoadOnce(subTab);
+  // Rebuild Collection's own full reset to picker (2026-08-27, merge-entry-reset) -- fires once
+  // each time the user arrives at 'rebuild' from a DIFFERENT area (previousArea check above), never
+  // from switching BROWSER tabs or internal Cancel clicks.
+  if (id === 'rebuild' && previousArea !== 'rebuild' && window.rebuildResetOnEntry) window.rebuildResetOnEntry();
+  // Update Collection (Classic)'s own full reset to Step 0 (2026-08-27, merge-entry-reset) -- fires
+  // once each time arriving from a DIFFERENT area. Replaces the old line-296 loadSyncProfiles-only
+  // call for arriving visits, same "load-on-every-visit" pattern but now with full state reset included.
+  if (id === 'sync' && previousArea !== 'sync' && window.syncResetOnEntry) window.syncResetOnEntry();
+  // Rules Generator's own full reset to Step 0 (2026-08-27, merge-entry-reset) -- replaces the
+  // old line-303 rgLoadPickers-only call, now with state reset included. Fires only when arriving
+  // from a DIFFERENT area.
+  if (id === 'rules-generator' && previousArea !== 'rules-generator' && window.rgResetOnEntry) window.rgResetOnEntry();
+  // Safe Collection Removal's own reset to Screen 1 (2026-08-27, merge-entry-reset) -- replaces
+  // the old line-316 rcLoadCollections-only call, now with full review state reset included. Fires
+  // only when arriving from a DIFFERENT area.
+  if (id === 'remove-collection' && previousArea !== 'remove-collection' && window.rcResetOnEntry) window.rcResetOnEntry();
+  // Save Cleaner's own reset to Step 1 (2026-08-27, merge-entry-reset) -- replaces the old line-339
+  // scLoadSaves-only call, now with full step state reset included. Fires only when arriving from a
+  // DIFFERENT area.
+  if (id === 'save-cleaner' && previousArea !== 'save-cleaner' && window.scResetOnEntry) window.scResetOnEntry();
 }
 window.navigateToArea = navigateToArea;
 
@@ -413,7 +453,7 @@ function setStarVisual(star, on) {
 // already just a sub-sequence of this same list.
 const HOME_CANONICAL_ORDER = [
   'merge', 'rebuild', 'sync', 'rules-generator', 'removecollection',
-  'missingmasters', 'scrub', 'archivefinder', 'missingfiles', 'cyclehelper', 'clearflags', 'pgpatcher',
+  'missingmasters', 'scrub', 'archivefinder', 'fileretriever', 'missingfiles', 'cyclehelper', 'clearflags', 'duplicateversions', 'pgpatcher',
   'stats', 'workthrough', 'updatecompare', 'rulesgen', 'workshopreport', 'mergehistory', 'modexceptions',
 ];
 function pinKeyOf(wrap) {
@@ -515,7 +555,7 @@ for (const key of pinnedTools) applyPinState(key, true);
 // 2026-08-15 (queue: rebuild-missing-hand-pick-exceptions verification): 'rulesgen' was ALSO
 // missing from this map already, pre-existing and unrelated to that feature, caught incidentally
 // while confirming a direct-URL-reload lands on the right sub-tab for the new 'exceptions' entry.
-const REPORTS_SUB_TAB_URL_MAP = { 'work-through': 'workthrough', updatecompare: 'updatecompare', workshop: 'workshop', rulesgen: 'rulesgen', mergehistory: 'mergehistory', exceptions: 'exceptions' };
+const REPORTS_SUB_TAB_URL_MAP = { 'work-through': 'workthrough', updatecompare: 'updatecompare', workshop: 'workshop', rulesgen: 'rulesgen', mergehistory: 'mergehistory', mergeupdatereport: 'mergeupdatereport', exceptions: 'exceptions' };
 
 // Lets any OTHER page (the standalone log-view page's own header nav, in particular) link straight
 // into a specific area/sub-tab via ?area=rebuild|sync|settings|reports or
@@ -566,6 +606,8 @@ if (reportsSubTab) {
     // Same reasoning as the cases above -- a direct "?area=remove-collection" link/refresh needs
     // this too.
     if (jumpArea === 'remove-collection') window.rcLoadCollections?.();
+    // Same reasoning as the cases above -- a direct "?area=save-cleaner" link/refresh needs this too.
+    if (jumpArea === 'save-cleaner') window.scLoadSaves?.();
     // ?area=book&chapter=<toolId> jumps straight to one chapter instead of the table of contents --
     // book-app.js's own bookLoadOnce() reads params.get('chapter') itself once its data is ready.
     if (jumpArea === 'book') { markBookOpened(); window.bookLoadOnce?.(); }

@@ -33,6 +33,46 @@
     return (t && t.name) || fallback;
   };
 
+  // Home-card standard-name tooltip (2026-08-25) -- how long a hover has to hold before it shows.
+  // Tune this one constant to change the feel app-wide; everything else derives from it.
+  const HOME_CARD_TOOLTIP_DELAY_MS = 400;
+
+  // One shared tooltip element for every home card (created lazily, reused) -- cheaper than one
+  // per card, and there's only ever one visible at a time anyway (a mouseleave always fires before
+  // the next card's mouseenter). Plain fixed-position div, not the native `title` attribute --
+  // see applyTheme's own call site for why.
+  let homeCardTooltipEl = null;
+  let homeCardTooltipTimer = null;
+  function showHomeCardTooltip(card, text) {
+    if (!homeCardTooltipEl) {
+      homeCardTooltipEl = document.createElement('div');
+      homeCardTooltipEl.className = 'home-card-tooltip';
+      document.body.appendChild(homeCardTooltipEl);
+    }
+    homeCardTooltipEl.textContent = text;
+    const rect = card.getBoundingClientRect();
+    homeCardTooltipEl.style.left = `${rect.left + rect.width / 2}px`;
+    homeCardTooltipEl.style.top = `${rect.top}px`;
+    homeCardTooltipEl.classList.add('visible');
+  }
+  function hideHomeCardTooltip() {
+    clearTimeout(homeCardTooltipTimer);
+    if (homeCardTooltipEl) homeCardTooltipEl.classList.remove('visible');
+  }
+  // aria-label carries the same info for screen readers immediately (no hover/delay involved) --
+  // the custom tooltip below is a purely visual, mouse-hover affordance on top of that, not a
+  // replacement for it.
+  function wireHomeCardTooltip(card, text) {
+    card.setAttribute('aria-label', text);
+    card.addEventListener('mouseenter', () => {
+      homeCardTooltipTimer = setTimeout(() => showHomeCardTooltip(card, text), HOME_CARD_TOOLTIP_DELAY_MS);
+    });
+    card.addEventListener('mouseleave', hideHomeCardTooltip);
+    // A card is also a real navigation target -- clicking it should never leave a stale tooltip
+    // lingering on whatever page loads next.
+    card.addEventListener('click', hideHomeCardTooltip);
+  }
+
   fetch(`/themes/${THEME_ID}.json`)
     .then((r) => r.json())
     .then((theme) => {
@@ -76,6 +116,66 @@
     const hoverHex = '#' + [lighten(r), lighten(g), lighten(b)]
       .map((c) => c.toString(16).padStart(2, '0')).join('');
     return { hover: hoverHex, bg: `rgba(${r}, ${g}, ${b}, 0.12)` };
+  }
+
+  // Home-wash background-tint DEFAULT derivation (2026-08-27 fix) -- sibling to deriveAccentShades
+  // above, not a rewrite of it: that function's lighten-toward-white math for --accent-hover is
+  // untouched. This is a SEPARATE need -- a genuinely DARKER variant of the accent for the Home
+  // background wash, which nothing in this file ever produced before (confirmed live: the picker's
+  // own two swatches showed the identical accent hex with no override set, because the CSS fallback
+  // chain (styles.css's `var(--bg-tint, var(--accent))`) resolves straight to accent with nothing
+  // else in between).
+  //
+  // clamp/hexToHsl/hslToHex are plain color-math primitives, not brand-specific -- HSL is the right
+  // space for "same hue, darker" (RGB has no direct lightness axis to move along).
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
+  function hexToHsl(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min;
+    const l = (max + min) / 2;
+    let h = 0, s = 0;
+    if (delta !== 0) {
+      s = delta / (1 - Math.abs(2 * l - 1));
+      if (max === r) h = 60 * (((g - b) / delta) % 6);
+      else if (max === g) h = 60 * ((b - r) / delta + 2);
+      else h = 60 * ((r - g) / delta + 4);
+      if (h < 0) h += 360;
+    }
+    return { h, s: s * 100, l: l * 100 };
+  }
+
+  function hslToHex(h, s, l) {
+    s /= 100; l /= 100;
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    const m = l - c / 2;
+    let r = 0, g = 0, b = 0;
+    if (h < 60) { r = c; g = x; b = 0; }
+    else if (h < 120) { r = x; g = c; b = 0; }
+    else if (h < 180) { r = 0; g = c; b = x; }
+    else if (h < 240) { r = 0; g = x; b = c; }
+    else if (h < 300) { r = x; g = 0; b = c; }
+    else { r = c; g = 0; b = x; }
+    const toHex = (v) => Math.round((v + m) * 255).toString(16).padStart(2, '0');
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  }
+
+  // Fallback formula, used ONLY for a genuinely CUSTOM accent (the color picker's own accent
+  // override) -- the four themes that actually ship each carry a director-picked EXACT bg-tint hex
+  // literally in their own theme JSON (theme.bgTint) instead; this function never runs for those.
+  // Calibrated against the director's own real pairing (accent #5b8def -> bg-tint #0055ff: hue
+  // unchanged ~220, lightness ~65%->~46%, saturation pushed toward 100%), but this only ever needs
+  // to produce something reasonable for an arbitrary custom accent, not reproduce a specific target.
+  function deriveDefaultBgTint(hex) {
+    const hsl = hexToHsl(hex);
+    if (!hsl) return null;
+    const newSat = clamp(Math.max(hsl.s, 95), 95, 100);
+    const newLightness = clamp(hsl.l - 19, 35, 50);
+    return hslToHex(hsl.h, newSat, newLightness);
   }
 
   function accentBlock(accent, hoverOverride, bgOverride) {
@@ -135,15 +235,32 @@
     styleEl.textContent = css;
   }
 
-  // Background tint (the Home gradient wash) -- separate override from accent, even though it
-  // defaults to deriving from --accent (styles.css's own color-mix(var(--accent)...)). Setting
-  // --bg-tint here gives styles.css's own var(--bg-tint, var(--accent)) fallback chain something to
-  // prefer; leaving it unset (the common case -- most people won't touch this) costs nothing, the
-  // CSS fallback already produces today's exact behavior.
+  // Background tint (the Home gradient wash) -- separate override from accent. Real fix (2026-08-27):
+  // this used to leave --bg-tint UNSET whenever there was no explicit user override, relying on
+  // styles.css's own `var(--bg-tint, var(--accent))` fallback -- which resolves straight to accent,
+  // producing the exact bug reported (both Settings swatches showing the identical accent hex, not
+  // a darker variant). The real default now always comes from here, same as --accent-hover already
+  // does; the CSS fallback chain stays in place as a last-resort safety net (e.g. if this fetch ever
+  // fails), not as the everyday source of truth.
+  //
+  // Priority: (1) an explicit user override always wins outright. (2) No override, but the user DID
+  // pick a custom accent (not this theme's own default) -- the bg-tint default has to be derived off
+  // THAT active accent, not the theme's original, or picking a custom accent would leave the
+  // background paired with a color that's no longer even showing. (3) No override, theme's own
+  // accent still active -- the theme's own director-picked exact default (theme.bgTint), falling
+  // back to the formula only if a theme genuinely doesn't carry one yet.
   function applyBackgroundTint(theme) {
     const bgOverride = getColorOverride(theme.id, 'bg');
     if (bgOverride) {
       document.documentElement.style.setProperty('--bg-tint', bgOverride);
+      return;
+    }
+    const accentOverride = getColorOverride(theme.id, 'accent');
+    const defaultTint = accentOverride
+      ? deriveDefaultBgTint(accentOverride)
+      : (theme.bgTint || deriveDefaultBgTint(theme.accent));
+    if (defaultTint) {
+      document.documentElement.style.setProperty('--bg-tint', defaultTint);
     } else {
       document.documentElement.style.removeProperty('--bg-tint');
     }
@@ -220,6 +337,19 @@
     // handles multiple same-slot occurrences sharing one container correctly (e.g. a page's own
     // breadcrumb AND a later inline mention of its own name) -- each element is looked up
     // independently, not "first match only".
+    // Home-card hover tooltip showing the plain/standard name+icon (2026-08-25, director's own
+    // request: "hover over The Forge, get the standard naming"). Captured HERE, right before the
+    // loop below overwrites each card's name/emoji text -- safe to treat as the genuine plain
+    // baseline because theme.js only ever runs applyTheme once per page load (switching Style does
+    // a location.reload(), never a live re-theme), so the DOM's current text at this exact point
+    // can never already be a previously-applied theme's own text.
+    const plainByHomeCard = new Map();
+    document.querySelectorAll('.home-card[data-tool-id]').forEach((card) => {
+      const nameEl = card.querySelector('[data-brand-slot="name"]');
+      const emojiEl = card.querySelector('[data-brand-slot="emoji"]');
+      plainByHomeCard.set(card, { name: nameEl ? nameEl.textContent : null, emoji: emojiEl ? emojiEl.textContent : null });
+    });
+
     document.querySelectorAll('[data-brand-slot]').forEach((el) => {
       const container = el.closest('[data-tool-id]');
       if (!container) return;
@@ -243,6 +373,32 @@
       else if (slot === 'heroBody' && t.heroBody != null) el.innerHTML = t.heroBody;
       else if (slot === 'landingHint' && t.landingHint != null) el.textContent = t.landingHint;
       else if (slot === 'bannerImage') applyBannerImage(el, t.bannerImage);
+    });
+
+    // Apply the hover tooltip captured above -- only for a card the theme actually renamed/re-iconed
+    // (Plain, or a theme with no entry for this particular tool, leaves plain === themed and gets no
+    // tooltip at all; hovering to be told the name you're already looking at would be pointless).
+    // A small CUSTOM tooltip, not the native `title` attribute -- the native one's own show delay is
+    // entirely browser-controlled with no CSS/JS hook to adjust it, and the director specifically
+    // asked to tune the hover delay (2026-08-25), which is only possible by owning the show/hide
+    // timing ourselves. wireHomeCardTooltip (below) does the actual hover-timer + positioning work;
+    // this loop only decides WHICH cards get one and what text to show.
+    plainByHomeCard.forEach((plain, card) => {
+      const id = card.getAttribute('data-tool-id');
+      const t = theme.tools && theme.tools[id];
+      if (!t) return;
+      const themedName = t.name != null ? t.name : plain.name;
+      const themedEmoji = t.emoji != null ? t.emoji : plain.emoji;
+      if (themedName === plain.name && themedEmoji === plain.emoji) return;
+      wireHomeCardTooltip(card, [plain.emoji, plain.name].filter(Boolean).join(' '));
+    });
+
+    // Premium badge tooltip (Nexus Orange "N" mark) -- reuses the same tooltip mechanism as
+    // home-card branded names above, but on a sibling badge element rather than the card itself.
+    document.querySelectorAll('.home-card__premium-badge').forEach((badge) => {
+      const cardWrap = badge.closest('.home-card-wrap');
+      if (!cardWrap) return;
+      wireHomeCardTooltip(badge, 'Works best with Nexus Premium');
     });
 
     // Section-GROUP banners (Home's "Main tools"/"Reports"/"Utilities" dividers) are a DIFFERENT

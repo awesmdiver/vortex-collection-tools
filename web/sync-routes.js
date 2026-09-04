@@ -13,6 +13,50 @@ const runner = require('../lib/sync-runner');
 const { buildHtmlReport } = require('../lib/vortex-sync/report');
 const syncLock = require('./sync-lock');
 const backupRatioDismissState = require('../lib/backup-ratio-dismiss-state');
+const { createSseSession } = require('./sse-session');
+
+// Real SSE-streamed progress for a plain "delete every item in this list" action (2026-08-25, closes
+// docs/UI-PATTERN-MAP.md's Settings findings -- a static "Deleting…" text swap with no real feedback
+// on genuinely slow filesystem work, same shape as Safe Collection Removal's own fix). Each item is a
+// synchronous fs.rmSync -- fast per-file, but a real, possibly-long loop on a large backup folder --
+// so this reports a REAL current/total count per item, same technique as
+// remove-collection-runner.js's own "deleting-archives" phase and settings-routes.js's own
+// deleteWithProgress (not shared across files -- this project's own convention, see every *-app.js
+// file's header comment). Shared by /delete-backups and /delete-state-backups below.
+function deleteWithProgress(session, res, itemLabel, items, deleteOne) {
+    if (session.isActive()) {
+        return res.status(409).json({ error: `A ${itemLabel} deletion is already in progress.` });
+    }
+    const mySession = session.start({ id: `${itemLabel}-${Date.now()}` });
+    res.status(202).json({});
+    const emitIfCurrent = (event) => {
+        if (session.get() === mySession) session.emit(event);
+    };
+    (async () => {
+        try {
+            for (let i = 0; i < items.length; i++) {
+                emitIfCurrent({ type: 'phase', current: i + 1, total: items.length, message: `Deleting ${itemLabel} ${i + 1} of ${items.length}…` });
+                deleteOne(items[i]);
+            }
+            emitIfCurrent({ type: 'done', done: true, deletedCount: items.length });
+        } catch (e) {
+            emitIfCurrent({ type: 'error', done: true, error: true, message: e.message });
+        }
+    })();
+}
+
+// Same "no real per-item count, live elapsed-time tick instead" shape as
+// rules-generator-routes.js's own tickingPhase -- restoreState is a single opaque file-copy call
+// (Vortex's whole state.v2 directory), no per-item hook to report through.
+function tickingPhase(emit, phase, message) {
+    let seconds = 0;
+    emit({ type: 'phase', phase, message, seconds });
+    const timer = setInterval(() => {
+        seconds += 1;
+        emit({ type: 'phase', phase, message, seconds });
+    }, 1000);
+    return () => clearInterval(timer);
+}
 
 function escHtml(s) {
     return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -109,7 +153,11 @@ function createSyncRouter(config) {
         // No staging folder configured yet (fresh install) -- expected, not an error.
         if (!staging) return res.json({ collections: [], configured: false });
         try {
-            res.json({ collections: runner.listInstalledCollections(staging) });
+            // ExcludingWorkshop (2026-08-27) -- a stale Workshop-draft folder for a collection you're
+            // also really installed can otherwise leak in indistinguishably from the real install
+            // (same bug class Update Collection v2/Merge Plugins already hit for real -- see
+            // lib/sync-runner.js's own header comment on this function).
+            res.json({ collections: runner.listInstalledCollectionsExcludingWorkshop(staging) });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
@@ -205,7 +253,7 @@ function createSyncRouter(config) {
         // not in Vortex's state. Caught HERE, before ever touching the state DB, so it surfaces as
         // its own clear, distinct error instead of falling into getRules()'s generic "mod not found"
         // message (which reads as a possible crash/transient issue, not "this id is simply gone").
-        const matchedCollection = runner.listInstalledCollections(staging).find((c) => c.modId === collectionModId);
+        const matchedCollection = runner.listInstalledCollectionsExcludingWorkshop(staging).find((c) => c.modId === collectionModId);
         if (!matchedCollection) {
             return res.status(409).json({
                 error: 'collection-stale',
@@ -346,25 +394,51 @@ function createSyncRouter(config) {
         }
     });
 
+    const restoreStateSession = createSseSession();
+
+    router.get('/restore-state/events', (req, res) => {
+        if (!restoreStateSession.get()) return res.status(404).end();
+        const afterSeq = Number(req.headers['last-event-id'] || 0);
+        restoreStateSession.subscribe(res, { afterSeq });
+    });
+
     // The actual restore -- same live-state safety wrapper (Vortex-closed gate, write lock) as
-    // apply-ignores/apply-disables above, since this also writes to the live state.v2 directory.
+    // apply-ignores/apply-disables above, since this also writes to the live state.v2 directory. Both
+    // gates are fast/synchronous, so they still run BEFORE the 202 goes out, same ordering as every
+    // other route here; only the real (possibly slow) file copy itself moves to the background,
+    // streamed over SSE (2026-08-25, see deleteWithProgress's own comment above for why).
     router.post('/restore-state', async (req, res) => {
         const { backupDir } = req.body || {};
         if (!backupDir) return res.status(400).json({ error: 'backupDir is required.' });
         if (vortexRunningGate(res)) return;
+        if (restoreStateSession.isActive()) {
+            return res.status(409).json({ error: 'A restore is already in progress.' });
+        }
         try {
             syncLock.acquire('restore-state');
         } catch (e) {
             return res.status(409).json({ error: 'write-active', message: e.message });
         }
-        try {
-            const result = await runner.restoreState({ stateDir: state, backupDir });
-            res.json({ ok: true, ...result });
-        } catch (e) {
-            res.status(500).json({ error: e.message });
-        } finally {
-            syncLock.release();
-        }
+
+        const mySession = restoreStateSession.start({ id: `restore-state-${Date.now()}` });
+        res.status(202).json({});
+        const emitIfCurrent = (event) => {
+            if (restoreStateSession.get() === mySession) restoreStateSession.emit(event);
+        };
+
+        (async () => {
+            const stopTicking = tickingPhase(emitIfCurrent, 'restoring', "Restoring Vortex's database…");
+            try {
+                const result = await runner.restoreState({ stateDir: state, backupDir });
+                stopTicking();
+                emitIfCurrent({ type: 'done', done: true, ok: true, ...result });
+            } catch (e) {
+                stopTicking();
+                emitIfCurrent({ type: 'error', done: true, error: true, message: e.message });
+            } finally {
+                syncLock.release();
+            }
+        })();
     });
 
     // ---------- Settings page: backup cleanup ----------
@@ -379,11 +453,20 @@ function createSyncRouter(config) {
         if (!syncBackupRoot) return res.json({ backupRoot: null, count: 0 });
         res.json({ backupRoot: syncBackupRoot, count: runner.listBackups(syncBackupRoot).length });
     });
+    const deleteSyncBackupsSession = createSseSession();
+
+    router.get('/delete-backups/events', (req, res) => {
+        if (!deleteSyncBackupsSession.get()) return res.status(404).end();
+        const afterSeq = Number(req.headers['last-event-id'] || 0);
+        deleteSyncBackupsSession.subscribe(res, { afterSeq });
+    });
+
     router.post('/delete-backups', (req, res) => {
         if (!syncBackupRoot) return res.status(400).json({ error: 'No Update Collection backups folder is configured.' });
         const backups = runner.listBackups(syncBackupRoot);
-        for (const b of backups) fs.rmSync(b.filePath, { force: true });
-        res.json({ deletedCount: backups.length });
+        deleteWithProgress(deleteSyncBackupsSession, res, 'backup', backups, (b) => {
+            fs.rmSync(b.filePath, { force: true });
+        });
     });
 
     // State.v2 safety backups (lib/vortex-sync/state-backups/, gitignored, fixed location -- not
@@ -398,14 +481,24 @@ function createSyncRouter(config) {
             res.status(500).json({ error: e.message });
         }
     });
+    const deleteStateBackupsSession = createSseSession();
+
+    router.get('/delete-state-backups/events', (req, res) => {
+        if (!deleteStateBackupsSession.get()) return res.status(404).end();
+        const afterSeq = Number(req.headers['last-event-id'] || 0);
+        deleteStateBackupsSession.subscribe(res, { afterSeq });
+    });
+
     router.post('/delete-state-backups', (req, res) => {
+        let backups;
         try {
-            const backups = runner.listStateBackups();
-            for (const b of backups) fs.rmSync(b.dir, { recursive: true, force: true });
-            res.json({ deletedCount: backups.length });
+            backups = runner.listStateBackups();
         } catch (e) {
-            res.status(500).json({ error: e.message });
+            return res.status(500).json({ error: e.message });
         }
+        deleteWithProgress(deleteStateBackupsSession, res, 'Vortex backup', backups, (b) => {
+            fs.rmSync(b.dir, { recursive: true, force: true });
+        });
     });
 
     // ---------- Backup ratio warning dismissals ("This is normal for this collection") ----------

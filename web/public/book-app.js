@@ -169,7 +169,8 @@ $bk('bookBackToTocFromRef').addEventListener('click', bookGoToToc);
 // ToC) -- a plain lookup table, not a "chapter" about any single tool, so it gets its own view
 // rather than being squeezed into the chapter page's parchment layout.
 function bookRenderReference() {
-  $bk('bookRefRows').innerHTML = bookData.chapters.map((ch) => {
+  const sorted = bookData.chapters.slice().sort((a, b) => bookToolFunction(a.toolId).localeCompare(bookToolFunction(b.toolId)));
+  $bk('bookRefRows').innerHTML = sorted.map((ch) => {
     const emoji = bookToolEmoji(ch.toolId);
     const themedName = (emoji ? emoji + ' ' : '') + bookToolName(ch.toolId);
     return `<tr><td>${bookToolFunction(ch.toolId)}</td><td>${themedName}</td></tr>`;

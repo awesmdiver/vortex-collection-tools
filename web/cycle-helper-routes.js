@@ -10,6 +10,23 @@ const chRunner = require('../lib/cycle-helper-runner');
 const chSnapshot = require('../lib/cycle-helper-snapshot');
 const chHistory = require('../lib/cycle-helper-history');
 const helperClient = require('../lib/vortex-helper-client');
+const { createSseSession } = require('./sse-session');
+
+// Real SSE-streamed progress for Scan for cycles (2026-08-25, closes docs/UI-PATTERN-MAP.md's
+// "Cycle Helper — Scan for cycles" finding: static spinner, no SSE). chRunner.scan(ViaHelper) is a
+// single opaque helperClient/isolated-worker call with no internal per-item hook to report through
+// -- same shape as Rules Generator's Analyze/Apply (web/rules-generator-routes.js), which this
+// mirrors exactly: a real phase tick every second (with real elapsed seconds) while the call is in
+// flight, proving the connection is alive rather than a frozen spinner.
+function tickingPhase(emit, phase, message) {
+    let seconds = 0;
+    emit({ type: 'phase', phase, message, seconds });
+    const timer = setInterval(() => {
+        seconds += 1;
+        emit({ type: 'phase', phase, message, seconds });
+    }, 1000);
+    return () => clearInterval(timer);
+}
 
 function createCycleHelperRouter(config) {
     const router = express.Router();
@@ -65,20 +82,54 @@ function createCycleHelperRouter(config) {
     // Same opportunistic helper-extension path as /snapshot above -- checked before
     // vortexRunningGate so a real Scan can run with Vortex still open when the helper answers,
     // falling through to the exact original state.v2 path, untouched, otherwise.
+    const scanSession = createSseSession();
+
+    router.get('/scan/events', (req, res) => {
+        if (!scanSession.get()) return res.status(404).end();
+        const afterSeq = Number(req.headers['last-event-id'] || 0);
+        scanSession.subscribe(res, { afterSeq });
+    });
+
     router.post('/scan', async (req, res) => {
-        try {
-            const { rulesByModKey: snapshotRulesByModKey } = chSnapshot.loadSnapshot();
-            const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-            if (helperAvailable) {
-                const liveResult = await chRunner.scanViaHelper(snapshotRulesByModKey);
-                if (liveResult) return res.json({ ...liveResult, source: 'helper-extension' });
-            }
-            if (vortexRunningGate(res)) return;
-            const result = await chRunner.scan(state, snapshotRulesByModKey);
-            res.json({ ...result, source: 'state.v2' });
-        } catch (e) {
-            res.status(500).json({ error: e.message });
+        if (scanSession.isActive()) {
+            return res.status(409).json({ error: 'A scan is already in progress.' });
         }
+        // vortexRunningGate only applies to the state.v2 fallback path, and that path is only known
+        // once the (fast) helper-availability check below resolves -- checked inside the background
+        // task, same as rules-generator-routes.js's own /analyze.
+        const mySession = scanSession.start({ id: `ch-scan-${Date.now()}` });
+        res.status(202).json({});
+        const emitIfCurrent = (event) => {
+            if (scanSession.get() === mySession) scanSession.emit(event);
+        };
+
+        (async () => {
+            const stopTicking = tickingPhase(emitIfCurrent, 'scanning', "Scanning Vortex's rules for cycles…");
+            try {
+                const { rulesByModKey: snapshotRulesByModKey } = chSnapshot.loadSnapshot();
+                const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+                let liveResult = helperAvailable ? await chRunner.scanViaHelper(snapshotRulesByModKey) : null;
+                if (liveResult) {
+                    stopTicking();
+                    emitIfCurrent({ type: 'done', done: true, ...liveResult, source: 'helper-extension' });
+                    return;
+                }
+                if (syncLib.isVortexRunning()) {
+                    stopTicking();
+                    emitIfCurrent({
+                        type: 'error', done: true, error: true, errorCode: 'vortex-running',
+                        message: 'Vortex is currently running. Close it completely and try again.',
+                    });
+                    return;
+                }
+                const result = await chRunner.scan(state, snapshotRulesByModKey);
+                stopTicking();
+                emitIfCurrent({ type: 'done', done: true, ...result, source: 'state.v2' });
+            } catch (e) {
+                stopTicking();
+                emitIfCurrent({ type: 'error', done: true, error: true, message: e.message });
+            }
+        })();
     });
 
     // Best-effort ONLY -- self-contained (re-reads Vortex's live state.v2 fresh every call), so the

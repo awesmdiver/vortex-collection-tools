@@ -725,6 +725,7 @@ function rgRenderRelList() {
   });
 
   rgRenderRelStatRow(rgLastResult);
+  $rg('rgRelWarningBanner').classList.toggle('hidden', directCandidates.length === 0);
   $rg('rgRelList').innerHTML = directCandidates.length
     ? directCandidates.map(rgRenderRelationshipItem).join('')
     : '<p class="muted">Nothing flagged here &mdash; every newly added mod either already has a rule (on both sides) or doesn\'t conflict with anything in your collection.</p>';
@@ -1024,65 +1025,104 @@ function rgRender(result) {
 // re-analyze rgConfirmApply runs after a successful Apply -- being bounced back to Step 1 every
 // time after iterating on more fixes would be annoying, and there's nothing new to re-check there
 // that a fresh Scan-equivalent already didn't just resolve.
+// Real SSE-streamed progress (2026-08-25) -- POST /analyze now only starts the real comparison, then
+// returns as soon as it's genuinely running server-side; GET /analyze/events streams a live tick
+// every second while it's in flight (rules-generator-routes.js's own tickingPhase) plus the final
+// 'done' event carrying the exact same result shape this function used to get back directly. No real
+// per-item count exists here (a single opaque helperClient/isolated-worker call, see that file's own
+// comment), so rgLoading's text ticks with real elapsed time instead of a percentage -- still a real,
+// live signal, not a frozen spinner.
+let rgAnalyzeEventSource = null;
+
+function rgFinishAnalyzeStream() {
+  if (rgAnalyzeEventSource) { rgAnalyzeEventSource.close(); rgAnalyzeEventSource = null; }
+  $rg('rgLoading').classList.add('hidden');
+  rgUpdateAnalyzeButton();
+}
+
+function rgRenderAnalyzeResult(result, landStep) {
+  rgApplyCompleted = false; // a genuine fresh analysis -- clears any stale Complete state from a previous Apply
+  $rg('rgApplyDoneInfo').classList.add('hidden');
+  $rg('rgExcSaveDoneInfo').classList.add('hidden');
+  rgRender(result);
+  // Step 3's own content, populated so it's reachable via the stepper pill even on a plain scan
+  // (e.g. mismatches that already existed in Vortex from an earlier manual edit, independent of
+  // whether Apply gets clicked again this session) -- but landing there automatically only ever
+  // happens right after a real Apply (see rgConfirmApply's own comment), never here.
+  if (result.exceptions) rgRenderExceptionsStep(result.exceptions);
+  $rg('rgStepper').classList.remove('hidden');
+
+  // Auto-skip Step 1 if IT has nothing actionable -- gated ONLY on Step 1's own "flagged for a
+  // decision" stat (relationshipCandidates missing/ambiguous, the same count rgRenderRelStatRow
+  // shows as its first box), NOT on result.anomalies/result.mapping -- those are Step 2's (the
+  // Report's) own "Needs your input"/"Ready to copy" badges and can be non-zero for reasons that
+  // have nothing to do with Step 1's screen (confirmed live 2026-08-16: a real repro landed on
+  // Step 1 with all four of ITS OWN stats reading 0/0/0/6, but was blocked from skipping because
+  // the Report tab had unrelated ready-to-copy/anomaly content). incomplete/inferred candidates
+  // don't block the skip either -- they're auto-fixed, not a user decision (see rgRenderRelStatRow).
+  let stepToShow = landStep;
+  // All-clear banner (2026-08-17): a genuinely clean FIRST scan -- Step 1 has nothing flagged
+  // (the same missingCount the auto-skip above already computes) AND Step 2 has nothing pending
+  // to copy (pendingMapping, from the zero-rule-bucketing fix -- rgRender already computed this
+  // onto result) and nothing needing a pick (anomalies). Scoped to landStep === 0 alongside the
+  // auto-skip itself, for the same reason: a post-Apply re-analyze (landStep === 1) isn't a "first
+  // scan" and gets rgApplyDoneInfo's own completion banner instead, never this one. Also never
+  // shown if the user had to actually resolve anything on Step 1 first -- this is a property of
+  // the FRESH, unedited result, not "everything's fine now that you fixed it".
+  let isFullyClean = false;
+  if (landStep === 0) { // only auto-skip for a fresh analysis, not when re-analyzing after Apply
+    const relationshipCandidates = result.relationshipCandidates || [];
+    const missingCount = relationshipCandidates.filter((c) => c.kind === 'missing' || c.kind === 'ambiguous').length;
+
+    if (missingCount === 0) {
+      stepToShow = 1; // nothing requires a user decision on Step 1 -- skip to Report
+    }
+    isFullyClean = missingCount === 0 && result.pendingMapping.length === 0 && result.anomalies.length === 0;
+  }
+  $rg('rgAllClearBanner').classList.toggle('hidden', !isFullyClean);
+  rgGoToStep(stepToShow);
+}
+
+function rgHandleAnalyzeEvent(frame, landStep) {
+  if (frame.type === 'phase') {
+    $rg('rgLoading').lastChild.textContent = ` ${frame.message}${frame.seconds ? ` (${frame.seconds}s)` : ''}`;
+  } else if (frame.type === 'done') {
+    rgFinishAnalyzeStream();
+    rgRenderAnalyzeResult(frame, landStep);
+  } else if (frame.type === 'error') {
+    rgFinishAnalyzeStream();
+    if (frame.errorCode === 'vortex-running') {
+      window.showVortexRunningModal(() => rgAnalyze(landStep));
+    } else {
+      rgHandleError(new Error(frame.message || 'The analysis failed.'), () => rgAnalyze(landStep));
+    }
+  }
+}
+
 async function rgAnalyze(landStep = 0) {
   rgHideCriticalError();
   $rg('rgStepper').classList.add('hidden');
   $rg('rgScreenRelCheck').classList.add('hidden');
   $rg('rgResults').classList.add('hidden');
   $rg('rgScreenExceptions').classList.add('hidden');
+  $rg('rgLoading').lastChild.textContent = " Reading Vortex's database…";
   $rg('rgLoading').classList.remove('hidden');
   $rg('rgAnalyzeBtn').disabled = true;
   try {
-    const result = await rgApi('POST', '/api/rules-generator/analyze', {
+    await rgApi('POST', '/api/rules-generator/analyze', {
       oldCollectionKey: $rg('rgOldCollectionSelect').value,
       newCollectionKey: $rg('rgNewCollectionSelect').value,
     });
-    rgApplyCompleted = false; // a genuine fresh analysis -- clears any stale Complete state from a previous Apply
-    $rg('rgApplyDoneInfo').classList.add('hidden');
-    $rg('rgExcSaveDoneInfo').classList.add('hidden');
-    rgRender(result);
-    // Step 3's own content, populated so it's reachable via the stepper pill even on a plain scan
-    // (e.g. mismatches that already existed in Vortex from an earlier manual edit, independent of
-    // whether Apply gets clicked again this session) -- but landing there automatically only ever
-    // happens right after a real Apply (see rgConfirmApply's own comment), never here.
-    if (result.exceptions) rgRenderExceptionsStep(result.exceptions);
-    $rg('rgStepper').classList.remove('hidden');
-
-    // Auto-skip Step 1 if IT has nothing actionable -- gated ONLY on Step 1's own "flagged for a
-    // decision" stat (relationshipCandidates missing/ambiguous, the same count rgRenderRelStatRow
-    // shows as its first box), NOT on result.anomalies/result.mapping -- those are Step 2's (the
-    // Report's) own "Needs your input"/"Ready to copy" badges and can be non-zero for reasons that
-    // have nothing to do with Step 1's screen (confirmed live 2026-08-16: a real repro landed on
-    // Step 1 with all four of ITS OWN stats reading 0/0/0/6, but was blocked from skipping because
-    // the Report tab had unrelated ready-to-copy/anomaly content). incomplete/inferred candidates
-    // don't block the skip either -- they're auto-fixed, not a user decision (see rgRenderRelStatRow).
-    let stepToShow = landStep;
-    // All-clear banner (2026-08-17): a genuinely clean FIRST scan -- Step 1 has nothing flagged
-    // (the same missingCount the auto-skip above already computes) AND Step 2 has nothing pending
-    // to copy (pendingMapping, from the zero-rule-bucketing fix -- rgRender already computed this
-    // onto result) and nothing needing a pick (anomalies). Scoped to landStep === 0 alongside the
-    // auto-skip itself, for the same reason: a post-Apply re-analyze (landStep === 1) isn't a "first
-    // scan" and gets rgApplyDoneInfo's own completion banner instead, never this one. Also never
-    // shown if the user had to actually resolve anything on Step 1 first -- this is a property of
-    // the FRESH, unedited result, not "everything's fine now that you fixed it".
-    let isFullyClean = false;
-    if (landStep === 0) { // only auto-skip for a fresh analysis, not when re-analyzing after Apply
-      const relationshipCandidates = result.relationshipCandidates || [];
-      const missingCount = relationshipCandidates.filter((c) => c.kind === 'missing' || c.kind === 'ambiguous').length;
-
-      if (missingCount === 0) {
-        stepToShow = 1; // nothing requires a user decision on Step 1 -- skip to Report
-      }
-      isFullyClean = missingCount === 0 && result.pendingMapping.length === 0 && result.anomalies.length === 0;
-    }
-    $rg('rgAllClearBanner').classList.toggle('hidden', !isFullyClean);
-    rgGoToStep(stepToShow);
   } catch (e) {
-    rgHandleError(e, () => rgAnalyze(landStep));
-  } finally {
     $rg('rgLoading').classList.add('hidden');
     rgUpdateAnalyzeButton();
+    rgHandleError(e, () => rgAnalyze(landStep));
+    return;
   }
+  if (rgAnalyzeEventSource) rgAnalyzeEventSource.close();
+  const es = new EventSource('/api/rules-generator/analyze/events');
+  rgAnalyzeEventSource = es;
+  es.onmessage = (msg) => rgHandleAnalyzeEvent(JSON.parse(msg.data), landStep);
 }
 
 // ---- Apply to Vortex -- writes the currently-reviewed rules (Ready to copy + any resolved
@@ -1175,55 +1215,93 @@ async function rgContinueToReport() {
   }
 }
 
+// Real SSE-streamed progress (2026-08-25) -- same ticking-phase shape as rgAnalyze above (POST
+// /apply now only starts the real write, GET /apply/events streams a live elapsed-time tick plus the
+// final 'done' event carrying exactly the same result shape this function used to get back
+// directly). Shared verbatim by both rgApplyConfirmSource cases (Step 1's own scoped write and Step
+// 2's real "Apply to Vortex"), same as before this task.
+let rgApplyEventSource = null;
+
+function rgFinishApplyStream() {
+  if (rgApplyEventSource) { rgApplyEventSource.close(); rgApplyEventSource = null; }
+}
+
+async function rgHandleApplyDone(result) {
+  const statusEl = $rg('rgApplyStatus');
+  statusEl.textContent = '';
+  $rg('rgApplyDoneText').textContent =
+    `${result.totalRulesWritten} rule(s) written across ${result.totalModsChanged} mod(s).`;
+  $rg('rgApplyDoneInfo').classList.remove('hidden');
+  // The overrides that were just applied no longer describe anything meaningful -- rendering
+  // result.freshAnalysis below re-derives current state from scratch (rules just written now show
+  // up as already-resolved, so those mods naturally drop out of Ready to copy / Needs your input).
+  Object.keys(rgRuleOverrides).forEach((k) => delete rgRuleOverrides[k]);
+  Object.keys(rgAnomalyOverrides).forEach((k) => delete rgAnomalyOverrides[k]);
+  Object.keys(rgRelationshipOverrides).forEach((k) => delete rgRelationshipOverrides[k]);
+  // Only the real Step 2 Apply marks the "Ready to copy"/Apply-button-stale Complete state --
+  // Step 1's own scoped write (rgApplyConfirmSource === 'step1') still has real Ready-to-copy/
+  // Needs-your-input work pending that this write never touched. See rgApplyConfirmSource's own
+  // comment.
+  if (rgApplyConfirmSource === 'apply') rgApplyCompleted = true;
+  if (result.freshAnalysis) {
+    // Use the server's own just-written, in-memory-patched analysis directly -- NOT a fresh
+    // /analyze call. Confirmed real 2026-08-16: a separate /analyze right after a real write reads
+    // through withStateDb, which can legitimately show stale, pre-write data for an unbounded time
+    // (LevelDB doesn't flush the WAL to compacted SST files on close -- see vortex-sync/lib.js's
+    // own "Staleness" comment). result.freshAnalysis carries zero staleness risk by construction.
+    rgRender(result.freshAnalysis);
+    $rg('rgStepper').classList.remove('hidden');
+    // Step 3 (Exceptions) -- refreshed regardless of source (harmless, keeps it accurate if the
+    // user navigates there manually either way), but auto-NAVIGATION only ever happens for the
+    // real Step 2 "Apply to Vortex" write (rgApplyConfirmSource === 'apply'), never Step 1's own
+    // scoped relationship-pick write -- that write only ever touches brand-new relationships, never
+    // the already-set-differently/disabled/no-conflict cases Step 3 covers, so there's no reason a
+    // Step 1 write would newly reveal Step 3 content. Same "this only makes sense to check AFTER
+    // the real Apply has run" reasoning the task itself specifies, mirroring Step 1's own auto-skip
+    // gate shape (rgAnalyze's landStep === 0 check) just applied to a different trigger moment.
+    const hasExceptions = result.freshExceptions ? rgRenderExceptionsStep(result.freshExceptions) : false;
+    if (rgApplyConfirmSource === 'apply' && hasExceptions) {
+      rgGoToStep(2); // something needs a second look -- straight to Exceptions
+    } else {
+      rgGoToStep(1); // straight back to Report -- see rgAnalyze's own comment on why
+    }
+  } else {
+    await rgAnalyze(1); // defensive fallback -- should never trigger against a current server
+  }
+}
+
+function rgHandleApplyEvent(frame) {
+  if (frame.type === 'phase') {
+    $rg('rgApplyStatus').textContent = `${frame.message}${frame.seconds ? ` (${frame.seconds}s)` : ''}`;
+  } else if (frame.type === 'done') {
+    rgFinishApplyStream();
+    rgHandleApplyDone(frame);
+  } else if (frame.type === 'error') {
+    rgFinishApplyStream();
+    $rg('rgApplyStatus').textContent = '';
+    if (frame.errorCode === 'vortex-running') {
+      window.showVortexRunningModal(rgConfirmApply);
+    } else {
+      rgHandleError(new Error(frame.message || 'The write failed.'), rgConfirmApply);
+    }
+  }
+}
+
 async function rgConfirmApply() {
   $rg('rgApplyConfirmModal').classList.add('hidden');
   const statusEl = $rg('rgApplyStatus');
   statusEl.textContent = "Writing to Vortex's database…";
   try {
-    const result = await rgApi('POST', '/api/rules-generator/apply', rgApplyRequestBody());
-    statusEl.textContent = '';
-    $rg('rgApplyDoneText').textContent =
-      `${result.totalRulesWritten} rule(s) written across ${result.totalModsChanged} mod(s).`;
-    $rg('rgApplyDoneInfo').classList.remove('hidden');
-    // The overrides that were just applied no longer describe anything meaningful -- rendering
-    // result.freshAnalysis below re-derives current state from scratch (rules just written now show
-    // up as already-resolved, so those mods naturally drop out of Ready to copy / Needs your input).
-    Object.keys(rgRuleOverrides).forEach((k) => delete rgRuleOverrides[k]);
-    Object.keys(rgAnomalyOverrides).forEach((k) => delete rgAnomalyOverrides[k]);
-    Object.keys(rgRelationshipOverrides).forEach((k) => delete rgRelationshipOverrides[k]);
-    // Only the real Step 2 Apply marks the "Ready to copy"/Apply-button-stale Complete state --
-    // Step 1's own scoped write (rgApplyConfirmSource === 'step1') still has real Ready-to-copy/
-    // Needs-your-input work pending that this write never touched. See rgApplyConfirmSource's own
-    // comment.
-    if (rgApplyConfirmSource === 'apply') rgApplyCompleted = true;
-    if (result.freshAnalysis) {
-      // Use the server's own just-written, in-memory-patched analysis directly -- NOT a fresh
-      // /analyze call. Confirmed real 2026-08-16: a separate /analyze right after a real write reads
-      // through withStateDb, which can legitimately show stale, pre-write data for an unbounded time
-      // (LevelDB doesn't flush the WAL to compacted SST files on close -- see vortex-sync/lib.js's
-      // own "Staleness" comment). result.freshAnalysis carries zero staleness risk by construction.
-      rgRender(result.freshAnalysis);
-      $rg('rgStepper').classList.remove('hidden');
-      // Step 3 (Exceptions) -- refreshed regardless of source (harmless, keeps it accurate if the
-      // user navigates there manually either way), but auto-NAVIGATION only ever happens for the
-      // real Step 2 "Apply to Vortex" write (rgApplyConfirmSource === 'apply'), never Step 1's own
-      // scoped relationship-pick write -- that write only ever touches brand-new relationships, never
-      // the already-set-differently/disabled/no-conflict cases Step 3 covers, so there's no reason a
-      // Step 1 write would newly reveal Step 3 content. Same "this only makes sense to check AFTER
-      // the real Apply has run" reasoning the task itself specifies, mirroring Step 1's own auto-skip
-      // gate shape (rgAnalyze's landStep === 0 check) just applied to a different trigger moment.
-      const hasExceptions = result.freshExceptions ? rgRenderExceptionsStep(result.freshExceptions) : false;
-      if (rgApplyConfirmSource === 'apply' && hasExceptions) {
-        rgGoToStep(2); // something needs a second look -- straight to Exceptions
-      } else {
-        rgGoToStep(1); // straight back to Report -- see rgAnalyze's own comment on why
-      }
-    } else {
-      await rgAnalyze(1); // defensive fallback -- should never trigger against a current server
-    }
+    await rgApi('POST', '/api/rules-generator/apply', rgApplyRequestBody());
   } catch (e) {
+    statusEl.textContent = '';
     rgHandleError(e, rgConfirmApply);
+    return;
   }
+  if (rgApplyEventSource) rgApplyEventSource.close();
+  const es = new EventSource('/api/rules-generator/apply/events');
+  rgApplyEventSource = es;
+  es.onmessage = (msg) => rgHandleApplyEvent(JSON.parse(msg.data));
 }
 
 // ---- Step 3 (Exceptions)'s own writes -- "Save my picks" (per-mod, only the mods actually flipped
@@ -1321,6 +1399,22 @@ async function rgExcConfirmSwitch() {
 // its own header comment on resetting both selects first).
 window.rgLoadPickers = rgLoadPickers;
 
+// Same "fires once each time arriving from a DIFFERENT area" reset pattern (2026-08-27,
+// merge-entry-reset) -- resets rgStep/rgLastResult/rgLastExceptions/rgExceptionPicks/
+// rgApplyCompleted/rgSectionFilter back to their defaults, then re-fetches the collections
+// pickers fresh via rgLoadPickers (same as shell.js's existing navigation call, just with the
+// state reset added in first).
+function rgResetOnEntry() {
+  rgGoToStep(0);
+  rgLastResult = null;
+  rgLastExceptions = null;
+  Object.keys(rgExceptionPicks).forEach(k => delete rgExceptionPicks[k]);
+  rgApplyCompleted = false;
+  rgSectionFilter.clear();
+  rgLoadPickers();
+}
+window.rgResetOnEntry = rgResetOnEntry;
+
 document.addEventListener('DOMContentLoaded', () => {
   $rg('rgOldCollectionSelect').addEventListener('change', rgUpdateAnalyzeButton);
   $rg('rgNewCollectionSelect').addEventListener('change', rgUpdateAnalyzeButton);
@@ -1343,6 +1437,13 @@ document.addEventListener('DOMContentLoaded', () => {
     rgGoToStep(1);
   });
   $rg('rgRelContinueBtn').addEventListener('click', rgContinueToReport);
+
+  // Back/Next footer (2026-08-25) -- plain rgGoToStep jumps, identical to what clicking the
+  // corresponding pill already does; this is just the same universal Back/Next control every other
+  // full-stepper tool has, alongside the pills, not a replacement for them.
+  $rg('rgResultsBackBtn').addEventListener('click', () => rgGoToStep(0));
+  $rg('rgResultsNextBtn').addEventListener('click', () => rgGoToStep(2));
+  $rg('rgExcBackBtn').addEventListener('click', () => rgGoToStep(1));
 
   // Same delegation pattern as rgReviewList below, for the relationship-check cards.
   $rg('rgRelList').addEventListener('click', (e) => {

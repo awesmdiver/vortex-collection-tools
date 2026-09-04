@@ -51,8 +51,16 @@ const MERGE_ITEM_KEY = (item) => item.fullPath;
 
 const mergeState = {
   step: 0,
-  collections: [], // every installed collection, from the server
-  collSelected: new Set(), // chosen modIds (Step 0)
+  collections: [], // EVERY pickable collection, installed + workshop combined (flat) -- selection/
+  // counting/name-lookup logic doesn't care which section a collection came from, only rendering
+  // does (see collectionsBySection below). Populated from collectionsBySection right after every
+  // fetch, never independently.
+  collectionsBySection: { installed: [], workshop: [] }, // 2026-08-27 -- the server's own real
+  // Installed/Workshop split (lib/missing-files-scan.js's listPickableCollections), used only by
+  // mergeRenderCollectionList to build the two labeled sections. mergeState.collections above is
+  // the flat union of both, for everything else.
+  collSelected: new Set(), // chosen modIds (Step 0) -- ONE set shared across both sections; nothing
+  // about picking from either section needs to differ once both are visible and labeled.
   extensions: ['.esp', '.esl', '.esm'],
   searchResults: [], // the CURRENT search's full result set (flat, across all its pages)
   // Fingerprint (sorted, order-independent) of collSelected as of the last SUCCESSFUL search
@@ -74,6 +82,13 @@ const mergeState = {
   page: 1,
   reviewItems: [], // after analyze(): cart items + {recordCount, newRecordCount, containsOverrides, masters, status}
   outputDir: '',
+  // Merge Update Report hand-off (2026-08-25, mergeStartWithSourceMerge) -- lowercased filenames of
+  // the source merge's own plugins whose owning mod has since updated, so mergeBuildResultRow can
+  // badge those specific Step 1 rows. Empty unless a "Create a new version" jump just happened --
+  // mergeEnterStep1 resets this (and hides mergeSourceMergeBanner) at the START of every ORDINARY
+  // Step 1 entry, so a later, unrelated Back-to-Step-0-and-search-again visit in the same session
+  // never carries a stale badge over onto a coincidentally-matching filename in different results.
+  sourceMergeUpdatedFilenamesLower: new Set(),
   // Masters-dependency reverse-index (2026-08-17) -- lowercased plugin filename -> [{fileName,
   // resolvedItem}] for every OTHER active plugin that declares it as a master. Fetched once on
   // boot (drives the "(master)" label everywhere a plugin name is shown) and re-fetched fresh right
@@ -178,18 +193,84 @@ async function loadMergeOnBoot() {
 // sync.
 $m('mergeCollRefreshBtn').addEventListener('click', () => mergeLoadCollections());
 
-// Auto-refresh: called from shell.js's navigateToArea, ONLY when actually arriving at 'merge' from a
-// DIFFERENT area (that check lives in shell.js, using its own currentArea tracking, since this file
-// has no visibility into area-level navigation on its own) -- so this fires once per genuine "opened
-// Merge Plugins" and never again just from switching BROWSER tabs and back (no visibilitychange
-// listener anywhere touches this) or from internal step navigation within Merge Plugins itself
-// (Back/Merge another use mergeGoToStep directly, never navigateToArea, so they never re-trigger
-// this). Reuses the exact same mergeLoadCollections() as the button and the original boot-time load
-// -- one real fetch/render implementation, not a second copy.
-function mergeAutoRefreshCollectionsOnEntry() {
+// Full reset back to Step 0, PLUS a fresh collections refetch (2026-08-27, merge-entry-reset) --
+// called from shell.js's navigateToArea, ONLY when actually arriving at 'merge' from a DIFFERENT
+// area (that check lives in shell.js, using its own currentArea tracking, since this file has no
+// visibility into area-level navigation on its own) -- so this fires once per genuine "opened Merge
+// Plugins" and never again just from switching BROWSER tabs and back (no visibilitychange listener
+// anywhere touches this) or from internal step navigation within Merge Plugins itself (Back/Merge
+// another use mergeGoToStep directly, never navigateToArea, so they never re-trigger this).
+//
+// Replaces the old mergeAutoRefreshCollectionsOnEntry (2026-08-24, merge-step0-refresh), which only
+// ever re-fetched the collections LIST -- it never touched mergeState.step or any of Step 1/2's own
+// accumulated search/cart/review state, so the wizard itself just sat exactly where it was. Confirmed
+// real, 2026-08-27: leave Merge Plugins for Home, visit another tool, come back -- it was still
+// sitting on whatever step you left it on (e.g. Step 2's own Review table), instead of a fresh start
+// like every other tool's own entry behavior (same convention as update-collection-v2-app.js's own
+// ucv2ResetOnEntry). Reuses mergeAnotherBtn's own reset body verbatim (same real, already-tested
+// clear-state-then-re-render-then-clear-DOM sequence, not a new mechanism), plus the original
+// mergeLoadCollections() fetch this function is replacing -- one real fetch/render implementation,
+// not a second copy. outputDir is deliberately left untouched here too, same reasoning as that
+// handler's own comment: it's a sticky preference (pre-filled from Settings' own mergeOutputDir on
+// boot), not wizard progress, so there's nothing stale about carrying it across a Home-and-back visit.
+function mergeResetOnEntry() {
+  mergeState.searchResults = [];
+  $m('mergeSearchInput').value = '';
+  mergeState.collSelected.clear();
+  mergeRenderCollectionList();
+  mergeState.cart.clear();
+  mergeUpdateCartBar();
+  mergeRefreshCartWindow();
+  mergeGoToStep(0);
   mergeLoadCollections();
 }
-window.mergeAutoRefreshCollectionsOnEntry = mergeAutoRefreshCollectionsOnEntry;
+window.mergeResetOnEntry = mergeResetOnEntry;
+
+// Merge Update Report's own "Create a new version →" hand-off (2026-08-25,
+// design/mockup-merge-plugins-new-features.html section 7) -- lands on Step 1 with every one of the
+// source merge's own original plugins already checked (real, editable checkboxes -- unchecking one
+// or adding more is ordinary Step 1 behavior underneath, nothing new), and the ones whose owning mod
+// has since updated visibly badged. Auto-selects whichever collection(s) those plugins actually came
+// from at Step 0 (mergeState.collSelected) rather than making the user reconstruct that by hand --
+// still just an ordinary Step 0 selection underneath, so Back still works normally from here.
+async function mergeStartWithSourceMerge(sourceMergeId) {
+  mergeHideError();
+  try {
+    const data = await mergeApi('GET', `/api/merge-update-report/merge?id=${encodeURIComponent(sourceMergeId)}`);
+    if (!mergeState.collections.length) await mergeLoadCollections();
+    const collectionNames = new Set((data.plugins || []).map((p) => p.collectionName).filter(Boolean));
+    mergeState.collSelected = new Set(mergeState.collections.filter((c) => collectionNames.has(c.name)).map((c) => c.modId));
+    mergeRenderCollectionList();
+
+    mergeGoToStep(1);
+    // Explicit, AWAITED search of our own -- mergeEnterStep1's own internal call (triggered by the
+    // collSelected change above) is fire-and-forget, so it's not a reliable signal that
+    // mergeState.searchResults is actually ready to pre-check against. Calling mergeRunSearch again
+    // here is idempotent (a second, harmless re-fetch+re-render) -- simpler than threading a
+    // completion callback through mergeEnterStep1 for what's a rare, user-initiated jump, not a hot
+    // path.
+    await mergeRunSearch();
+
+    const wantedLower = new Set((data.plugins || []).map((p) => p.filename.toLowerCase()));
+    mergeState.sourceMergeUpdatedFilenamesLower = new Set((data.plugins || []).filter((p) => p.updated).map((p) => p.filename.toLowerCase()));
+    for (const item of mergeState.searchResults) {
+      if (wantedLower.has(item.fileName.toLowerCase())) mergeSetCartMembership(item, true);
+    }
+    mergeRenderResultsPage();
+    mergeUpdateCartBar();
+    mergeRefreshCartWindow();
+
+    const updatedCount = mergeState.sourceMergeUpdatedFilenamesLower.size;
+    $m('mergeSourceMergeBannerTitle').textContent = `🔄 Rebuilding ${data.filename} — ${data.plugins.length} plugin${data.plugins.length === 1 ? '' : 's'} pre-selected from your last build`;
+    $m('mergeSourceMergeBannerBody').textContent = updatedCount > 0
+      ? `Take a quick look below before merging — ${updatedCount} flagged plugin${updatedCount === 1 ? '' : 's'} ${updatedCount === 1 ? 'has' : 'have'} been updated in Vortex since this merge was last built.`
+      : 'Review the list below before merging.';
+    $m('mergeSourceMergeBanner').classList.remove('hidden');
+  } catch (e) {
+    mergeHandleError(e);
+  }
+}
+window.mergeStartWithSourceMerge = mergeStartWithSourceMerge;
 
 async function mergeLoadMasterDependents() {
   try {
@@ -219,17 +300,25 @@ function mergeMasterBadgeHtml(fileName) {
 async function mergeLoadCollections() {
   mergeHideError();
   $m('mergeCollLoading').classList.remove('hidden');
-  $m('mergeCollList').classList.add('hidden');
+  $m('mergeCollListWrap').classList.add('hidden');
   try {
-    const { collections } = await mergeApi('GET', '/api/merge/collections');
-    mergeState.collections = collections;
+    // {installed, workshop} (2026-08-27, superseding the previous flat-array shape) -- director's
+    // own live correction: excluding Workshop entirely was the wrong fix for the real bug (a stale
+    // Workshop draft's own mod count/plugin list leaking into the picker indistinguishably from a
+    // real install) -- the right fix is showing both, clearly labeled, same shared split
+    // Rebuild Missing Files/Workshop Report already use (lib/missing-files-scan.js's
+    // listPickableCollections). mergeState.collections stays the flat union for everything that
+    // doesn't care about the split (selection, counting, Merge Update Report's own name lookup).
+    const { installed, workshop } = await mergeApi('GET', '/api/merge/collections');
+    mergeState.collectionsBySection = { installed, workshop };
+    mergeState.collections = [...installed, ...workshop];
     $m('mergeCollLoading').classList.add('hidden');
-    if (!collections.length) {
+    if (!mergeState.collections.length) {
       $m('mergeCollEmpty').textContent = 'No installed collections found. Set up your staging folder under Settings, or install a collection in Vortex first.';
       $m('mergeCollEmpty').classList.remove('hidden');
       return;
     }
-    $m('mergeCollList').classList.remove('hidden');
+    $m('mergeCollListWrap').classList.remove('hidden');
     mergeRenderCollectionList();
   } catch (e) {
     $m('mergeCollLoading').classList.add('hidden');
@@ -247,25 +336,46 @@ function mergeUpdateCollCount() {
   $m('mergeStep0NextBtnTop').disabled = n === 0;
 }
 
-function mergeRenderCollectionList() {
-  const list = $m('mergeCollList');
+// One real .coll-card per collection (2026-08-27, director's own live ask: "I wanted to use the
+// same UI as the other tools -- so they are all look the same and I don't have a long scroll with a
+// long list of collections") -- the EXACT shared card shape clear-update-flags-app.js's own
+// cufCollectionCard/rebuild-missing-app.js's own rmfCollectionCard already establish (checkbox +
+// .meta block with .name/.sub, dense .picker-grid layout), not this tool's own former .merge-chk-row
+// row (which is what made a real 33-collection staging folder a long, tall scroll -- confirmed live,
+// the actual repro this ask came from). No flagged-count concept applies here the way it does for
+// Clear Update Flags -- the sub-line is just the real mod count.
+function mergeCollectionCard(c) {
+  const checkbox = el('input', { type: 'checkbox' });
+  checkbox.checked = mergeState.collSelected.has(c.modId);
+  const card = el('label', { class: checkbox.checked ? 'coll-card sel' : 'coll-card' }, [
+    checkbox,
+    el('div', { class: 'meta' }, [
+      el('div', { class: 'name' }, c.name),
+      el('div', { class: 'sub' }, `${c.modCount.toLocaleString()} mod${c.modCount === 1 ? '' : 's'}`),
+    ]),
+  ]);
+  checkbox.addEventListener('change', () => {
+    if (checkbox.checked) mergeState.collSelected.add(c.modId);
+    else mergeState.collSelected.delete(c.modId);
+    card.classList.toggle('sel', checkbox.checked);
+    mergeUpdateCollCount();
+  });
+  return card;
+}
+
+// Mirrors clear-update-flags-app.js's own cufRenderPickerGroup SHAPE exactly (section hidden
+// entirely when its own items are empty, a live "N collection(s)" count next to the header).
+function mergeRenderCollectionGroup(sectionId, countId, listId, items) {
+  $m(sectionId).classList.toggle('hidden', items.length === 0);
+  $m(countId).textContent = items.length ? `${items.length} collection${items.length === 1 ? '' : 's'}` : '';
+  const list = $m(listId);
   list.innerHTML = '';
-  for (const c of mergeState.collections) {
-    const checkbox = el('input', { type: 'checkbox' });
-    checkbox.checked = mergeState.collSelected.has(c.modId);
-    const row = el('label', { class: `merge-chk-row${checkbox.checked ? ' on' : ''}` }, [
-      checkbox,
-      el('span', { class: 'merge-chk-row__name' }, c.name),
-      el('span', { class: 'merge-chk-row__meta' }, `${c.modCount.toLocaleString()} mods`),
-    ]);
-    checkbox.addEventListener('change', () => {
-      if (checkbox.checked) mergeState.collSelected.add(c.modId);
-      else mergeState.collSelected.delete(c.modId);
-      row.classList.toggle('on', checkbox.checked);
-      mergeUpdateCollCount();
-    });
-    list.appendChild(row);
-  }
+  for (const c of items) list.appendChild(mergeCollectionCard(c));
+}
+
+function mergeRenderCollectionList() {
+  mergeRenderCollectionGroup('mergeCollInstalledSection', 'mergeCollInstalledCount', 'mergeCollInstalledList', mergeState.collectionsBySection.installed);
+  mergeRenderCollectionGroup('mergeCollWorkshopSection', 'mergeCollWorkshopCount', 'mergeCollWorkshopList', mergeState.collectionsBySection.workshop);
   mergeUpdateCollCount();
 }
 
@@ -283,6 +393,11 @@ $m('mergeStep0NextBtnTop').addEventListener('click', () => mergeGoToStep(1));
 // ---------- Step 1: find & select plugins ----------
 
 function mergeEnterStep1() {
+  // Reset the Merge Update Report hand-off's own leftover state (2026-08-25) -- every ORDINARY entry
+  // starts clean; mergeStartWithSourceMerge re-applies its own badge/banner state right after calling
+  // mergeGoToStep(1), which runs this function synchronously first, so that override always lands.
+  mergeState.sourceMergeUpdatedFilenamesLower = new Set();
+  $m('mergeSourceMergeBanner').classList.add('hidden');
   const names = mergeState.collections.filter((c) => mergeState.collSelected.has(c.modId)).map((c) => c.name);
   $m('mergeStep1Sub').textContent = `Searching plugins across your selected collection${names.length === 1 ? '' : 's'}. Search and pick as many times as you like—every selection is added to the merge and saved in your queue.`;
   mergeRenderExtensionTags();
@@ -470,9 +585,14 @@ function mergeBuildResultRow(item) {
   const checkbox = el('input', { type: 'checkbox' });
   checkbox.checked = mergeState.cart.has(key);
   const typeClass = item.extension === '.esl' ? 'status-pill--info' : 'status-pill--neutral';
+  // Merge Update Report hand-off badge (2026-08-25) -- see mergeStartWithSourceMerge's own comment.
+  // Empty set on any normal Step 1 visit, so this is a no-op outside that jump.
+  const updatedBadge = mergeState.sourceMergeUpdatedFilenamesLower.has(item.fileName.toLowerCase())
+    ? el('span', { class: 'badge badge--warning badge--sm' }, 'Updated')
+    : null;
   const tr = el('tr', {}, [
     el('td', { class: 'col-check' }, [checkbox]),
-    el('td', {}, [item.fileName, mergeMasterBadge(item.fileName)]),
+    el('td', {}, [item.fileName, mergeMasterBadge(item.fileName), updatedBadge]),
     el('td', { class: 'muted' }, item.modName),
     el('td', { class: 'muted' }, item.collectionName),
     el('td', {}, [el('span', { class: `status-pill ${typeClass}` }, item.extension.slice(1).toUpperCase())]),
@@ -793,9 +913,12 @@ async function mergeEnterStep2() {
     mergeState.reviewItems = items.map((item) => {
       const info = byPath.get(item.fileName) || {};
       // 'override' is informational only (2026-08-17) -- overriding plugins merge just like any
-      // other now, see lib/merge-worker.js's runMerge for why "contains overrides" stopped meaning
-      // "can't be merged". Priority unchanged from before: an item with both overrides AND its own
-      // declared masters still shows as 'override' first (the more specific/interesting fact).
+      // other now (see lib/merge-v2-worker.js's copyRecords/isOverrideInMerge for the real, live
+      // handling; the original "contains overrides -> can't be merged" scope decision this replaced
+      // lived in the old engine's own runMerge, removed 2026-08-25 -- see TECHNICAL.md's "Merge
+      // Plugins: v1 engine retired" section). Priority unchanged from before: an item with both
+      // overrides AND its own declared masters still shows as 'override' first (the more
+      // specific/interesting fact).
       let status;
       if (info.containsOverrides) status = 'override';
       else if ((info.masters || []).length > 0) status = 'master';
@@ -836,7 +959,7 @@ function mergeRenderReviewStep() {
   }
 
   // Informational only (2026-08-17) -- these plugins merge fine now, see
-  // lib/merge-worker.js's runMerge for how their overrides carry over correctly.
+  // lib/merge-v2-worker.js's copyRecords for how their overrides carry over correctly.
   const overrideCallout = $m('mergeOverrideCallout');
   if (nOverride > 0) {
     overrideCallout.classList.remove('hidden');
@@ -949,8 +1072,9 @@ $m('mergeStep2BackBtn').addEventListener('click', () => mergeGoToStep(1));
 // anything actually going into it.
 //
 // Takes `items` (the plugins actually going into THIS build -- mergeStartMerge's own `included`,
-// which as of 2026-08-17 is just reviewItems in full: 'override' no longer excludes anything, see
-// runMerge's own header comment in lib/merge-worker.js). Kept as an explicit parameter rather than
+// which as of 2026-08-17 is just reviewItems in full: 'override' no longer excludes anything --
+// see mergeRenderReviewStep's own comment above for where that live handling actually runs now).
+// Kept as an explicit parameter rather than
 // reading mergeState.reviewItems directly, since the exact "what's actually going into the build"
 // set is exactly what this check needs to be scoped to -- if that set is ever narrowed again for
 // some other reason in the future, this stays correct without another audit.
@@ -1079,6 +1203,16 @@ async function mergeConfirmOverwrite(outputDir) {
   }
 }
 
+// mergeGetSelectedMethod (2026-08-25, per-build picker) -- reads the mergeMethod radio group fresh
+// every time, straight off the DOM, rather than tracking it in mergeState -- deliberately NOT a
+// persisted/remembered value (director's own explicit call: this is a per-build choice, not a
+// Settings default that silently applies to every future merge). Falls back to 'Clean' if nothing's
+// checked, which should never happen given the radio's own `checked` default in index.html.
+function mergeGetSelectedMethod() {
+  const checked = document.querySelector('input[name="mergeMethod"]:checked');
+  return checked ? checked.value : 'Clean';
+}
+
 async function mergeStartMerge() {
   const included = mergeState.reviewItems; // 'override' no longer excludes (2026-08-17) -- everything in the cart goes into the build
   if (!included.length) return;
@@ -1139,6 +1273,10 @@ async function mergeProceedWithMerge(included, outputDir, overwrite) {
       items: included.map((it) => ({ fullPath: it.fullPath, fileName: it.fileName, modName: it.modName, collectionName: it.collectionName })),
       outputName: mergeOutputFileName(),
       outputDir,
+      // method (2026-08-25, per-build picker) -- a real per-request field read fresh off the radio
+      // group on every build, never cached in mergeState or persisted -- see mergeGetSelectedMethod's
+      // own header for why.
+      method: mergeGetSelectedMethod(),
       // overwrite (2026-08-24, merge-overwrite-warning) -- explicit confirmed-intent signal, never
       // just "the client didn't error out." See /merge's own comment for why this is required, not
       // advisory: it refuses outright when a real existing file is found and this isn't exactly true.
@@ -1213,7 +1351,7 @@ function mergeRenderDoneStep(result, included) {
   }
   mergeRenderNextSteps(outFile, included.length, result.eslFlagged);
 
-  // textContent, not innerHTML -- logContent is plain text from lib/merge-worker.js's buildMergeLog
+  // textContent, not innerHTML -- logContent is plain text from lib/merge-v2-worker.js's own logger
   // (real plugin/mod names embedded in it, never sanitized for HTML).
   const logDetails = $m('mergeDoneLogDetails');
   if (result.logContent) {
@@ -1225,6 +1363,67 @@ function mergeRenderDoneStep(result, included) {
   }
 
   mergeRenderRelinkSection(result, included.length);
+  mergeRenderFailedRecordsResult(result);
+  mergeRenderStringFilesResult(result);
+  mergeRenderStagingCopyResult(result);
+}
+
+// Failed-to-copy records (2026-08-25, merge-v2-failedtocopy-case) -- result.failedToCopy already
+// travels end to end (lib/merge-v2-worker.js's copyRecords -> web/merge-routes.js's own /merge
+// response -> here) with zero backend changes needed; this is purely the missing render step. Each
+// entry is { plugin, name, error } (see copyRecords' own header). Hidden entirely when the array is
+// empty or absent -- the overwhelming majority of real merges.
+function mergeRenderFailedRecordsResult(result) {
+  const callout = $m('mergeDoneFailedRecordsCallout');
+  const failed = result.failedToCopy || [];
+  if (!failed.length) {
+    callout.classList.add('hidden');
+    return;
+  }
+  $m('mergeDoneFailedRecordsTitle').textContent = `⚠️ ${failed.length} record${failed.length === 1 ? '' : 's'} couldn't be copied`;
+  const names = failed.map((f) => `${f.name} (from ${f.plugin})`).join(', ');
+  $m('mergeDoneFailedRecordsText').textContent = `Everything else in this merge copied over fine, but ${names} couldn't be added and ${failed.length === 1 ? 'was' : 'were'} left out. Open the merge log below for the full detail.`;
+  callout.classList.remove('hidden');
+}
+
+// Unhandled string files (2026-08-25, merge-results-screen-asset-gap) -- result.unhandledStringFiles
+// is a plain count (see lib/merge-v2-worker.js's own runMergeV2 comment), not a details array like
+// failedToCopy above -- the log line string-file-handler.js now writes already names every affected
+// file, so this callout points there rather than duplicating the list. DRAFT COPY -- not yet run
+// through a Gemini pass, see this task's own handoff.
+function mergeRenderStringFilesResult(result) {
+  const callout = $m('mergeDoneStringFilesCallout');
+  const count = result.unhandledStringFiles || 0;
+  if (!count) {
+    callout.classList.add('hidden');
+    return;
+  }
+  $m('mergeDoneStringFilesTitle').textContent = `⚠️ ${count} localized string file${count === 1 ? '' : 's'} not rebuilt`;
+  $m('mergeDoneStringFilesText').textContent = `This merge included ${count} localized string file${count === 1 ? '' : 's'}. Merge Plugins does not rebuild string files as part of the merge process. If any of the merged plugins rely on localized in-game text, check ${count === 1 ? 'it' : 'them'} manually. See the merge log below for the full list.`;
+  callout.classList.remove('hidden');
+}
+
+// Staging folder auto-copy result (2026-08-25) -- web/merge-routes.js only ever sets
+// stagingCopyPath/stagingCopyError when settingsMergeStagingCopyDirInput is actually configured (see
+// its own comment), so this callout stays hidden entirely for anyone who hasn't set that up. A real
+// copy failure gets its own visible warning, matching this app's own "never hide a real problem"
+// convention -- the merge itself already succeeded either way, so this is ⚠️ (tread lightly, nothing
+// is actually blocked), never 🛑.
+function mergeRenderStagingCopyResult(result) {
+  const callout = $m('mergeDoneStagingCopyCallout');
+  if (result.stagingCopyPath) {
+    callout.className = 'callout callout--success';
+    $m('mergeDoneStagingCopyTitle').textContent = '🎉 Copied to your staging folder';
+    $m('mergeDoneStagingCopyText').textContent = `${mergeOutputFileName()} is now sitting in ${result.stagingCopyPath} too, ready for Vortex to pick up as its own mod.`;
+    callout.classList.remove('hidden');
+  } else if (result.stagingCopyError) {
+    callout.className = 'callout callout--warning';
+    $m('mergeDoneStagingCopyTitle').textContent = "⚠️ Couldn't copy to your staging folder";
+    $m('mergeDoneStagingCopyText').textContent = `Your merge finished fine, but we couldn't copy ${mergeOutputFileName()} into your configured staging folder (${result.stagingCopyError}). Move it there yourself before Vortex can pick it up.`;
+    callout.classList.remove('hidden');
+  } else {
+    callout.classList.add('hidden');
+  }
 }
 
 // Flag as Light (2026-08-24, merge-flag-as-light) -- mirrors Vortex's own real "Mark as Light"
@@ -1423,22 +1622,15 @@ $m('mergeOpenOutputBtn').addEventListener('click', async () => {
   }
 });
 $m('mergeAnotherBtn').addEventListener('click', () => {
-  mergeState.searchResults = [];
-  $m('mergeSearchInput').value = '';
-  // Real bug fix (2026-08-24, merge-another-full-reset): Step 0's collSelected and Step 1's cart
-  // never got cleared here, so every checkbox from the PREVIOUS merge stayed checked on a fresh
-  // "Merge another" -- collSelected/cart are Maps/Sets, clearing the state alone doesn't un-check
-  // the actual DOM checkboxes, so each clear is paired with the same re-render/refresh calls the
-  // existing Clear Selection buttons already use for the identical operation (mergeCollClearBtn's
-  // own handler; mergeClearSearchBtn's own handler for the cart) -- not a new reset mechanism.
-  // outputDir is deliberately left untouched -- re-picking an output folder for every merge in a
-  // batch session would be real friction, not a fix, and nothing asked for it to reset.
-  mergeState.collSelected.clear();
-  mergeRenderCollectionList();
-  mergeState.cart.clear();
-  mergeUpdateCartBar();
-  mergeRefreshCartWindow(); // keeps the separate "View chosen" popup window in sync, same as every other cart-clearing call site
-  mergeGoToStep(0);
+  // Shares its real reset body with mergeResetOnEntry (2026-08-27, merge-entry-reset) -- same
+  // "clear state, re-render, clear DOM" sequence either way (real bug fix from 2026-08-24,
+  // merge-another-full-reset: collSelected/cart are Maps/Sets, so clearing the state alone doesn't
+  // un-check the actual DOM checkboxes). outputDir is deliberately left untouched by that shared
+  // function -- re-picking an output folder for every merge in a batch session would be real
+  // friction, not a fix.
+  mergeResetOnEntry();
+  $m('mergeOutputNameInput').value = '';
+  mergeUpdateOutputPreview();
 });
 
 // ---------- Init ----------

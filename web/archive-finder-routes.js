@@ -15,10 +15,18 @@
 //     streaming convention (POST starts a session + responds 202, GET .../events subscribes),
 //     instead of the standalone tool's own bespoke raw-http SSE implementation.
 //
-// The archive/file index database itself is opened ONCE here at router-creation time (same
-// "path field, needs a restart to take effect" treatment every other configured folder in this
-// project gets) -- if archiveFinderDbDir isn't configured yet, every route below responds with a
-// plain "not configured" message instead of touching a nonexistent database.
+// The archive/file index database is opened LAZILY (on first real use) and closed again after a
+// period of inactivity -- see getDb()/dbHandle below (lib/idle-close-handle.js). archiveFinderDbDir/downloads are
+// still real Settings path fields needing a restart to pick up a CHANGE (same treatment every other
+// configured folder in this project gets); what changed (2026-08-27, GitHub issue #4) is that the
+// database connection itself is no longer opened once at router-creation time and held for the
+// entire life of the server -- that handle was a real WAL-locked file sitting inside whatever
+// folder the user configured, for as long as the server ran, with nothing ever closing it. If that
+// folder is one Vortex itself actively manages (its downloads folder, its staging/mods folder), the
+// held-open handle can produce a genuine "File busy" error FOR VORTEX. See
+// lib/vortex-managed-paths.js and this file's own settings-side validation
+// (web/settings-routes.js) for the other half of that fix -- this file's job is only to stop
+// holding the handle open for the process's whole lifetime.
 
 const fs = require('fs');
 const path = require('path');
@@ -29,24 +37,77 @@ const scanner = require('../lib/archive-finder-scanner');
 const sevenzip = require('../lib/sevenzip');
 const { buildTree } = require('../lib/archive-finder-tree');
 const { createSseSession } = require('./sse-session');
+const { createIdleCloseHandle } = require('../lib/idle-close-handle');
 
 const scanSession = createSseSession();
 
+// How long the database connection is allowed to sit open with no activity before it's closed --
+// generous enough that a user actively poking around (typing a search, browsing an archive tree)
+// never sees it churn open/closed between clicks, short enough that "closed the app tab an hour
+// ago" doesn't mean "held a handle in Vortex's folder for the rest of the day." Deliberately NOT
+// configurable -- this is an implementation detail, not something a user should ever need to think
+// about (same reasoning as this project not exposing e.g. HTTP keep-alive timeouts).
+const DB_IDLE_CLOSE_MS = 5 * 60 * 1000;
+
 function createArchiveFinderRouter(config) {
     const router = express.Router();
-    const { downloads, archiveFinderDbDir } = config;
+    const { downloads, staging, archiveFinderDbDir } = config;
 
-    const archiveDb = archiveFinderDbDir ? createDb(archiveFinderDbDir) : null;
+    // The idle-close TIMING logic itself lives in lib/idle-close-handle.js -- a small, independently
+    // unit-tested (with a short delay, since production's real 5-minute wait can't practically be
+    // exercised in a test) module, rather than inline here. isBusy: never close mid-scan -- a scan
+    // can run far longer than the idle window and holds its OWN direct reference to whatever
+    // instance open() returns (see /scan below); closing out from under it would break the
+    // in-progress writes. scanSession.isActive() is true for the scan's whole duration (start
+    // through 'done'/'error'), so the handle checks again after the same window instead of closing
+    // while it's still true.
+    const dbHandle = createIdleCloseHandle({
+        idleMs: DB_IDLE_CLOSE_MS,
+        isBusy: () => scanSession.isActive(),
+        open: () => {
+            try {
+                const db = createDb(archiveFinderDbDir, { downloads, staging });
+                if (db.migration && db.migration.status !== 'none') {
+                    console.log(`[archive-finder] legacy database migration: ${JSON.stringify(db.migration)}`);
+                }
+                return db;
+            } catch (e) {
+                // Logged HERE (inside open(), which createIdleCloseHandle only calls once per
+                // failure cycle -- it caches the error and skips retrying open() on every
+                // subsequent get() until the next idle-close cycle clears it) rather than in
+                // getDb() below, which runs on EVERY request -- logging there would spam the
+                // console once per request while genuinely misconfigured.
+                console.error(`[archive-finder] could not open the database: ${e.message}`);
+                throw e;
+            }
+        },
+        close: (db) => db.close(),
+    });
+
+    // Opens (or returns the already-open) database connection, resetting the idle-close timer on
+    // every call so genuine activity keeps it alive. Returns null (never throws) if
+    // archiveFinderDbDir isn't configured at all, or if the last open attempt failed --
+    // requireConfigured()/notConfiguredMessage() below surface the real reason via
+    // dbHandle.getError().
+    function getDb() {
+        if (!archiveFinderDbDir) return null;
+        return dbHandle.get();
+    }
 
     function notConfiguredMessage() {
         const missing = [];
         if (!downloads) missing.push('Vortex downloads folder');
         if (!archiveFinderDbDir) missing.push('Archive Finder database folder');
-        return `Set up the ${missing.join(' and ')} under Settings first.`;
+        if (missing.length > 0) return `Set up the ${missing.join(' and ')} under Settings first.`;
+        // Both fields ARE set, so getDb() must have hit a real open failure -- surface its own
+        // message (e.g. the Vortex-managed-folder refusal, or a foreign-database refusal) directly,
+        // rather than the generic "set these up" wording, which would be actively misleading here.
+        const err = dbHandle.getError();
+        return err ? err.message : 'Archive Finder database is not available right now.';
     }
 
     function requireConfigured(res) {
-        if (archiveDb && downloads) return true;
+        if (getDb() && downloads) return true;
         res.status(400).json({ error: 'not-configured', message: notConfiguredMessage() });
         return false;
     }
@@ -57,7 +118,8 @@ function createArchiveFinderRouter(config) {
     router.get('/config', (req, res) => {
         const { archiveFinderOutputDir, archiveFinderExtensions } = appConfig.loadConfig();
         res.json({
-            configured: !!(archiveDb && downloads),
+            configured: !!(getDb() && downloads),
+            configError: !getDb() && archiveFinderDbDir && downloads ? notConfiguredMessage() : null,
             downloads: downloads || null,
             outputFolder: archiveFinderOutputDir || '',
             extensions: archiveFinderExtensions || ['.esp'],
@@ -78,11 +140,12 @@ function createArchiveFinderRouter(config) {
 
     router.get('/stats', (req, res) => {
         if (!requireConfigured(res)) return;
-        res.json(archiveDb.stats());
+        res.json(getDb().stats());
     });
 
     router.get('/search', (req, res) => {
         if (!requireConfigured(res)) return;
+        const archiveDb = getDb();
         const q = (req.query.q || '').trim();
         const mode = req.query.mode === 'archives' ? 'archives' : 'files';
         if (!q) return res.json([]);
@@ -95,7 +158,7 @@ function createArchiveFinderRouter(config) {
     router.get('/archive-tree', async (req, res) => {
         if (!requireConfigured(res)) return;
         const id = Number(req.query.id);
-        const archive = archiveDb.getArchiveById(id);
+        const archive = getDb().getArchiveById(id);
         if (!archive) return res.status(404).json({ error: 'Unknown archive id' });
         try {
             const exePath = sevenzip.findSevenZip();
@@ -123,22 +186,36 @@ function createArchiveFinderRouter(config) {
         const mySession = scanSession.start({ id: `scan-${Date.now()}` });
         res.status(202).json({});
 
-        const emitter = scanner.scan({ scanFolder: downloads, extensions, archiveDb });
+        // getDb() called explicitly here (not just via requireConfigured() above) -- this is the ONE
+        // reference the scanner keeps and calls repeatedly across the whole scan's lifetime (many
+        // async ticks, potentially many minutes for a large downloads folder), so it must resolve to
+        // an already-open, idle-timer-reset instance before scanning starts. scanSession.isActive()
+        // (true from scanSession.start() above until 'done'/'error' fires) is what keeps the idle
+        // handle's own timer from pulling this same instance out from under the scan mid-run -- see
+        // lib/idle-close-handle.js's own isBusy comment.
+        const emitter = scanner.scan({ scanFolder: downloads, extensions, archiveDb: getDb() });
         const emitIfCurrent = (event) => {
             if (scanSession.get() === mySession) scanSession.emit(event);
         };
         emitter.on('progress', (d) => emitIfCurrent({ type: 'progress', ...d }));
-        emitter.on('done', (d) => emitIfCurrent({ type: 'done', ...d, done: true }));
-        emitter.on('error', (d) => emitIfCurrent({ type: 'error', ...d, done: true, error: true }));
+        emitter.on('done', (d) => {
+            emitIfCurrent({ type: 'done', ...d, done: true });
+            dbHandle.touch(); // restart the idle clock from NOW, not from whenever getDb() last happened to be called mid-scan
+        });
+        emitter.on('error', (d) => {
+            emitIfCurrent({ type: 'error', ...d, done: true, error: true });
+            dbHandle.touch();
+        });
     });
 
     router.get('/failed-archives', (req, res) => {
         if (!requireConfigured(res)) return;
-        res.json(archiveDb.getFailedArchives());
+        res.json(getDb().getFailedArchives());
     });
 
     router.post('/failed-archives/untrack', (req, res) => {
         if (!requireConfigured(res)) return;
+        const archiveDb = getDb();
         const archiveIds = Array.isArray(req.body?.archiveIds) ? req.body.archiveIds : [];
         const results = archiveIds.map((id) => {
             const archive = archiveDb.getArchiveById(id);
@@ -153,6 +230,7 @@ function createArchiveFinderRouter(config) {
     // "cheap defense-in-depth" reasoning as every other folder-scoped write in this project.
     router.post('/failed-archives/delete-file', (req, res) => {
         if (!requireConfigured(res)) return;
+        const archiveDb = getDb();
         const archiveIds = Array.isArray(req.body?.archiveIds) ? req.body.archiveIds : [];
         const downloadsResolved = path.resolve(downloads);
         const results = archiveIds.map((id) => {

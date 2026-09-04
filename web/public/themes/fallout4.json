@@ -4,6 +4,7 @@
   "appName": "The Pip-Boy",
   "accent": "#00D400",
   "hasHomeBackgroundWash": true,
+  "bgTint": "#017901",
   "hasBook": true,
   "palette": {},
   "fontStylesheet": "theme-assets/fallout4/fonts/fallout4-fonts.css",
@@ -59,7 +60,7 @@
     "sync": {
       "name": "Memory Den",
       "emoji": "🧠",
-      "function": "Update Collection",
+      "function": "Update Collection (Classic)",
       "heroTitle": "Memory Den",
       "heroBody": "Dr. Amari's whole practice runs on one rule: you can pull a memory out, look at it closely, even work on it — but the person it belongs to walks out exactly who they walked in as, nothing about their real identity lost in the process. An update to your collection works the same risky-sounding way. Things get touched, rearranged, refreshed — but the choices that make your setup *yours*, which mods you'd quietly Ignored or Disabled, come back out intact, exactly as you left them.",
       "cardDesc": "Update your collection without losing yourself — your Ignored and Disabled choices come back out intact."
@@ -169,6 +170,14 @@
       "heroBody": "The Boston Public Library's own card-catalog terminals never made anyone dig through boxes of loose pages to find one document — you queried the system, and it told you exactly where the thing you wanted actually was, without you ever having to open a single box you didn't need. Your downloads folder is that same room full of boxes, except every box is a packed archive. This tool is the terminal: search once, across everything, and it points straight at the file — no unpacking required.",
       "cardDesc": "Queries every archive at once and points straight to the file you need — no unpacking required."
     },
+    "file-retriever": {
+      "name": "RobCo Requisition Protocol",
+      "emoji": "💾",
+      "function": "File Retriever",
+      "heroTitle": "RobCo Requisition Protocol",
+      "heroBody": "Nexus not letting you download a file? Is that Archive not available? It is now. Punch in any mod's ID to pull up its complete inventory manifest, check off the specific revisions or legacy files you need, and skip the usual web terminal runaround.",
+      "cardDesc": "Punch in a mod's numeric ID to inspect its full manifest and pull specific or legacy files straight to your folder."
+    },
     "cycle-helper": {
       "name": "Circuit Breaker Diagnostics",
       "emoji": "🔌",
@@ -194,12 +203,44 @@
       "cardDesc": "Scans for exactly what's damaged or missing, and repairs just that — nothing else touched."
     },
     "settings": {
-      "name": "Settings",
-      "emoji": "⚙️",
+      "name": "Central Calibration Console",
+      "emoji": "🎛️",
       "function": "Settings",
-      "heroTitle": "Set It Up Once, Use It Everywhere",
-      "heroBody": "Set your Vortex paths and preferences here just once, and every tool picks them up automatically! Designed to keep all your setup in one place, this saves you from entering the same folders and options over and over&mdash;so you can spend your time on the actual work, not the configuration.",
-      "cardDesc": "Set your paths and preferences once, and every tool picks them up automatically."
+      "heroTitle": "Central Calibration Console",
+      "heroBody": "Vault-Tec standard operating procedure 108-B requires comprehensive hardware calibration before running high-yield diagnostic subroutines. A technician does not calibrate water scrubbers, reactor valves, and defense turrets on separate manual dials every morning; you set master grid parameters at the central terminal once and let the network broadcast downstream. This console locks in your staging directories, download archives, and system-level preferences so every other tool operates from a unified baseline.",
+      "cardDesc": "Configure central directories and system preferences once across all connected subroutines."
+    },
+    "report-mergeupdatereport": {
+      "name": "Sub-Assembly Diagnostic",
+      "emoji": "📊",
+      "function": "Merge Update Status Report",
+      "heroTitle": "Sub-Assembly Diagnostic",
+      "heroBody": "A synthetic chassis is only as reliable as the revision specs of its internal relays&mdash;swapping in an upgraded capacitor at the supply depot does nothing for a circuit board already sealed in resin. The Sub-Assembly Diagnostic scans your mod staging inventory against all active merges to isolate component drift. It flags every mod that has received a firmware update and pinpoints the exact compiled packages running obsolete source files, so you know which assemblies need a clean re-tool.",
+      "cardDesc": "Isolates component drift in compiled packages&mdash;showing precisely which sub-assemblies require a clean re-tool."
+    },
+    "report-mergehistory": {
+      "name": "Assembly Integrity Audit",
+      "emoji": "🔬",
+      "function": "Merge History",
+      "heroTitle": "Assembly Integrity Audit",
+      "heroBody": "A completed synth frame may leave the synthesis bay in pristine condition, but unmonitored maintenance cycles and automated supply requisitions have a nasty habit of silently re-introducing discarded legacy parts or misplacing integral structural units. This protocol scans your active load manifest against historical sub-assembly records, flagging any loose components that slipped back into deployment or unified modules that have gone missing. Once discrepancies are identified, a single command lets you re-assert the sub-assembly or restore the original component layout.",
+      "cardDesc": "Audits active manifests against past sub-assemblies to resolve drift, missing modules, and reinstated components."
+    },
+    "duplicate-version-cleanup": {
+      "name": "RobCo Revision Arbitration",
+      "emoji": "💾",
+      "function": "Duplicate Version Cleanup",
+      "heroTitle": "RobCo Revision Arbitration",
+      "heroBody": "Mod updates frequently leave retired version records cluttering your Pip-Boy dropdowns long after you've moved on to newer files. This utility identifies orphaned builds versus versions actively required by other collections, then executes a fresh download and reinstall to leave you with one working copy.",
+      "cardDesc": "Arbitrates duplicate mod version entries down to a single clean reinstallation while keeping active variants intact."
+    },
+    "save-cleaner": {
+      "name": "RobCo Holotape Defrag",
+      "emoji": "💾",
+      "function": "Save Cleaner",
+      "heroTitle": "💾 RobCo Holotape Defrag",
+      "heroBody": "Long treks through the Commonwealth leave your Pip-Boy log clogged with phantom subroutines from discarded gear and abandoned mods. This diagnostic scans your save tape sector by sector, identifying dead Papyrus threads by name so you can lighten your character's record without touching active game data.",
+      "cardDesc": "Scans your save file for orphaned Papyrus routines, defragmenting your character's recorded state."
     }
   },
   "sections": {

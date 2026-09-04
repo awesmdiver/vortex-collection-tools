@@ -8,7 +8,37 @@
   "accentLight": "#3568c9",
   "accentHoverLight": "#4a7bd6",
   "accentBgLight": "rgba(53, 104, 201, 0.12)",
+  "hasHomeBackgroundWash": true,
+  "bgTint": "#0055ff",
   "palette": {},
+  "fontStylesheet": null,
+  "defaultFont": "system",
+  "fonts": {
+    "system": {
+      "label": "System default",
+      "cssFamily": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif"
+    },
+    "arial": {
+      "label": "Arial",
+      "cssFamily": "Arial, sans-serif"
+    },
+    "georgia": {
+      "label": "Georgia",
+      "cssFamily": "Georgia, serif"
+    },
+    "verdana": {
+      "label": "Verdana",
+      "cssFamily": "Verdana, sans-serif"
+    },
+    "trebuchet": {
+      "label": "Trebuchet MS",
+      "cssFamily": "'Trebuchet MS', sans-serif"
+    },
+    "courier": {
+      "label": "Courier New",
+      "cssFamily": "'Courier New', monospace"
+    }
+  },
   "tools": {
     "home": {
       "name": "Home",
@@ -34,9 +64,9 @@
       "cardDesc": "Re-extract an installed collection straight into staging&mdash;same result, dramatically faster."
     },
     "sync": {
-      "name": "Update Collection",
+      "name": "Update Collection (Classic)",
       "emoji": "🔄",
-      "function": "Update Collection",
+      "function": "Update Collection (Classic)",
       "heroTitle": "Update Without Redoing Your Mod Cleanup",
       "heroBody": "Updating a collection in Vortex often resets your carefully-set <strong>Ignored</strong> and <strong>Disabled</strong> mods back to their defaults. This tool remembers exactly how you had things set and restores it after the update, so that cleanup work never has to happen twice. Work through the steps below in order &mdash; you'll hop over to Vortex between some of them, and your place here is saved while you do.",
       "cardDesc": "Keep your Ignored and Disabled mods exactly as you set them after an update."
@@ -109,9 +139,17 @@
       "name": "Merge History",
       "emoji": "🩹",
       "function": "Merge History",
-      "heroTitle": "Check Past Merges for Drift",
-      "heroBody": "Compares every merge you've built against your live mod list. If a collection update quietly brought back an original file or your merged plugin went missing, you can put everything back in order with one click.",
+      "heroTitle": "Check Merges for Re-enabled Original Files",
+      "heroBody": "Compares your built merges against your active mod list. If a collection update re-enabled an original plugin or your merge went missing, fix your load order with a single click.",
       "cardDesc": "Review past merges, spot drifted plugins, and cleanly Revert or Restore them when your mod list changes."
+    },
+    "report-mergeupdatereport": {
+      "name": "Merge Update Status Report",
+      "emoji": "🔄",
+      "function": "Merge Update Status Report",
+      "heroTitle": "Check Your Merges for Source Updates",
+      "heroBody": "Highlights mods updated in Vortex or via collection updates that affect your existing merges. It lists each updated mod, the new version, and which merged plugins contain outdated files, making it easy to rebuild and replace your older merge files.",
+      "cardDesc": "See which mods updated in Vortex or via a collection update, and which of your merges need a rebuild because of it."
     },
     "report-exceptions": {
       "name": "Mod Exceptions",
@@ -146,6 +184,22 @@
       "heroBody": "Easily spot staging folders and archives that Vortex has quietly stopped tracking&mdash;no digging through anything by hand! Designed to take the guesswork out of cleanup, this tool shows you exactly what's safe to remove so you can reclaim disk space with confidence.",
       "cardDesc": "Spot staging folders and archives Vortex stopped tracking, and reclaim the space."
     },
+    "clear-update-flags": {
+      "name": "Clear Update Flags",
+      "emoji": "🧹",
+      "function": "Clear Update Flags",
+      "heroTitle": "Dismiss Accidental Update Flags in Seconds",
+      "heroBody": "Accidentally clicked Check for Updates in Vortex and now your mod list is full of orange update badges? This tool clears those flags across your installed mods so your list goes back to a clean state. It's especially useful when playing curated collections, where the collection curator manages tested mod versions&mdash;saving you from seeing distracting update notifications for files you shouldn't update manually.",
+      "cardDesc": "Dismiss false \"Update Available\" badges so you can stick with the exact mod versions your collection needs."
+    },
+    "duplicate-version-cleanup": {
+      "name": "Duplicate Version Cleanup",
+      "emoji": "♻️",
+      "function": "Duplicate Version Cleanup",
+      "heroTitle": "Working title: \"Duplicate Version Cleanup\"",
+      "heroBody": "Placeholder hero copy &mdash; the whole thing (name, tagline, hero text) still needs a Gemini pass before this is final. What it actually does: Vortex's own Version dropdown can show the same mod more than once &mdash; sometimes a genuinely older archived version kept on purpose, sometimes a leftover orphaned download that's really just clutter. This tool finds every group, lets you tell them apart, and cleans up the real duplicates for good: remove, redownload, reinstall, replay any FOMOD choices, and reassign it back to every collection it belonged to.",
+      "cardDesc": "Find every mod with more than one version showing in Vortex, tell the real duplicates apart from ones kept on purpose, and clean them up for good."
+    },
     "archive-finder": {
       "name": "Archive Finder",
       "emoji": "📦",
@@ -153,6 +207,14 @@
       "heroTitle": "Find Any File Inside Any Archive",
       "heroBody": "Stop extracting archives just to see what's inside! This tool indexes every zipped mod archive's contents up front&mdash;no unpacking needed&mdash;so you can instantly search across all of them by file or mod name, and pull out exactly the patch you need.",
       "cardDesc": "Search inside every mod archive without extracting a thing."
+    },
+    "file-retriever": {
+      "name": "File Retriever",
+      "emoji": "📥",
+      "function": "File Retriever",
+      "heroTitle": "Download Specific Mod Files, Even Older Ones",
+      "heroBody": "Nexus not letting you download a file? Is that archive not available? It is now. Enter a mod's Nexus ID, check off the exact files and versions you need -- including older, archived ones -- and download them straight to a folder of your choosing.",
+      "cardDesc": "Enter a mod's Nexus ID and download specific files or older versions straight to your drive."
     },
     "cycle-helper": {
       "name": "Cycle Helper",
@@ -167,7 +229,7 @@
       "emoji": "🩹",
       "function": "Rebuild Missing Files",
       "heroTitle": "Fix Just the Files That Are Actually Missing",
-      "heroBody": "Whether a collection removed straight in Vortex (skipping Safe Collection Removal) wiped out shared files, a few mods quietly went missing from your staging folder, or rebuilding the entire collection feels like overkill&mdash;this tool has you covered. It scans your chosen collections, highlights exactly which files are missing, and restores only what's needed directly from the archive.",
+      "heroBody": "Whether a Vortex removal wiped out shared files, staging folder mods went missing, or rebuilding an entire collection feels like overkill&mdash;this tool has you covered. It scans your collections, pinpoints missing files or archives, and restores only what you need directly from the local archive or a fresh download.",
       "cardDesc": "Check your collections for missing staging files, then fix just the ones that need it."
     },
     "settings": {
@@ -176,6 +238,14 @@
       "function": "Settings",
       "heroTitle": "Set It Up Once, Use It Everywhere",
       "heroBody": "Set your Vortex paths and preferences here just once, and every tool picks them up automatically! Designed to keep all your setup in one place, this saves you from entering the same folders and options over and over&mdash;so you can spend your time on the actual work, not the configuration."
+    },
+    "save-cleaner": {
+      "name": "Save Cleaner",
+      "emoji": "💾",
+      "function": "Save Cleaner",
+      "heroTitle": "💾 Clean Bloated & Corrupted Saves",
+      "heroBody": "When you remove mods, leftover scripts and orphan references stay baked into your save file&mdash;slowly piling up until your game stutters, crashes, or fails to load. This tool scans for leftover data, pinpoints the removed mods responsible, and purges the junk cleanly (with an automatic backup created first, every time).",
+      "cardDesc": "Find and clear out orphaned scripts left behind by mods you removed, with the real mod names attached."
     }
   }
 }

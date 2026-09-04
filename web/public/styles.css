@@ -24,6 +24,10 @@
      what Vortex itself is doing right now," not a generic in-progress grey. */
   --vortex-orange: #c87b28;
   --vortex-orange-bg: rgba(200, 123, 40, 0.14);
+  /* Nexus Mods' own real brand orange (their site/download-button accent) -- used ONLY for the
+     Premium badge itself, not adopted as this app's general accent. Fixed across all themes. */
+  --nexus-orange: #da8e35;
+  --nexus-orange-bg: rgba(218, 142, 53, 0.14);
   --radius: 10px;
   --shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
   /* Standard vertical gap between stacked cards/sections app-wide -- see DESIGN.md's "Spacing --
@@ -382,38 +386,53 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 /* Themed Home background (Theming: visual flourishes, approved mockup design/vortex-visual-
    flourishes-mockup.html) -- a faint, non-competing gradient wash behind Home's own content, scoped
    to whichever brand theme is active via [data-brand] (set by theme.js, a generic per-brand hook --
-   not the same as Appearance's own [data-theme]). Plain has no rule here at all, so it stays exactly
-   as before -- this only ever fires for a themed brand. color-mix() derives the tint from
+   not the same as Appearance's own [data-theme]). color-mix() derives the tint from
    var(--bg-tint, var(--accent)) -- --bg-tint is the color picker's own background-tint override
    (theme.js's applyBackgroundTint), unset by default so the fallback resolves straight to --accent,
    same behavior as before the color picker existed. Kept CSS-only per the director's own call in
    the mockup review -- no new Gemini art needed for this piece, it just needs to stay quiet, not
    decorative.
 
-   ONE rule, one selector list per themed brand (2026-08-19) -- Fallout 4 shares it rather than
+   ONE rule, one selector list per themed brand (2026-08-19) -- every brand shares it rather than
    getting a copy, because the tint color already comes from the theme's own --accent (Pip-Boy green
-   #00D400 here, purple under Skyrim), so a duplicate rule would differ in nothing but its selector
-   and would be one more place to forget when the next theme lands. A theme that wants this wash
-   adds itself here AND sets "hasHomeBackgroundWash": true in its own JSON -- that flag is what makes
-   the background-tint color picker appear in Settings (settings-app.js's renderColorPickers), and
-   the two have to move together or the picker either hides a real control or offers a no-op one. */
+   under Fallout 4, purple under Skyrim, Plain's own blue here), so a duplicate rule would differ in
+   nothing but its selector and would be one more place to forget when the next theme lands. A theme
+   that wants this wash adds itself here AND sets "hasHomeBackgroundWash": true in its own JSON --
+   that flag is what makes the background-tint color picker appear in Settings (settings-app.js's
+   renderColorPickers), and the two have to move together or the picker either hides a real control
+   or offers a no-op one. (Starfield had the flag set without a selector here for a while -- a real
+   instance of exactly that mismatch, caught and fixed 2026-08-25 alongside adding Plain.) */
 [data-brand="skyrim"] #area-home,
-[data-brand="fallout4"] #area-home {
+[data-brand="fallout4"] #area-home,
+[data-brand="starfield"] #area-home,
+[data-brand="plain"] #area-home {
   background-image:
     radial-gradient(ellipse at 15% 0%, color-mix(in srgb, var(--bg-tint, var(--accent)) 12%, transparent), transparent 45%),
     radial-gradient(ellipse at 85% 60%, color-mix(in srgb, var(--bg-tint, var(--accent)) 8%, transparent), transparent 50%);
   background-attachment: fixed;
 }
+/* Pill-styled section divider (2026-09-01, director-caught: "Utilities" was sitting flush against
+   the panel above it with no real breathing room). Two real fixes, not just a style tweak:
+   (1) the OLD plain-text version's own 30px top margin was silently collapsing to 0 anyway --
+   .home-section-banner-img + .home-section-title (below) matches on DOM adjacency, not computed
+   visibility, so it fired even while the banner img was .hidden (Plain theme has no section banner
+   at all, yet the img element is still present in the DOM right before the title). Rescoped to
+   :not(.hidden) so the zero-margin override only applies when a banner image is ACTUALLY showing.
+   (2) Reuses the same .badge/.badge--info pill shape Settings' own section headers already picked up
+   this session (see that CSS block's own header comment) rather than a bespoke shape -- one pill
+   convention app-wide. Bumped from 12px to 13.5px and given real top margin so it reads as a real
+   section break, not a stray label. */
 .home-section-title {
-  font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted);
-  font-weight: 600; margin: 30px 0 12px;
+  display: inline-flex; align-items: center; font-size: 13.5px; font-weight: 600;
+  background: var(--accent-bg); color: var(--accent); padding: 5px 14px; border-radius: 999px;
+  margin: 22px 0 14px;
 }
 /* Themed section-divider banner (theme.js's data-brand-slot="bannerImage" scoped to [data-section-id],
    a shallow wide strip -- not the taller .home-banner-img treatment above, which is Home's own hero).
    Plain has none, stays .hidden. Sits above the section's own title/grid, same top margin as the
    title it's replacing visually so a themed vs. unthemed section takes the same vertical space. */
 .home-section-banner-img { display: block; width: 100%; height: auto; border-radius: var(--radius); margin: 30px 0 12px; }
-.home-section-banner-img + .home-section-title { margin-top: 0; }
+.home-section-banner-img:not(.hidden) + .home-section-title { margin-top: 0; }
 /* No :first-of-type zero-margin override -- which section/the Pinned row visually ends up first
    changes at runtime now (pinning can hide a whole section, see the Pinning note below), so a
    static "first" rule can't track it. Matches design/vortex-home-mockup.html, which accepts the
@@ -435,6 +454,30 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 }
 .home-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow); }
 .home-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Custom hover tooltip showing a themed card's standard name (theme.js's wireHomeCardTooltip) --
+   fixed position (JS sets left/top from the hovered card's own real-time bounding rect), centered
+   above the card, translateY(-100%) so its own bottom edge sits at that top coordinate rather than
+   growing downward into the card. Hidden via opacity+visibility (not display:none) so the
+   opacity transition below actually animates instead of popping. */
+.home-card-tooltip {
+  position: fixed;
+  transform: translate(-50%, calc(-100% - 8px));
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+  z-index: 60;
+}
+.home-card-tooltip.visible { opacity: 1; visibility: visible; }
 .home-card__icon {
   width: 44px; height: 44px; border-radius: 10px; background: var(--accent-bg);
   display: grid; place-items: center; font-size: 24px;
@@ -468,6 +511,25 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 }
 .home-card__star:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 .home-card__star.on { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+
+/* Nexus Premium badge -- icon-only, bottom-right corner (2026-09-01, director-caught: sitting in the
+   SAME top-right corner as .home-card__star put it directly on top of the pin/star button, even with
+   a taller z-index to win the overlap -- moved to the opposite corner instead of fighting for the
+   same one). Hover changes background/text color for visual feedback. Custom tooltip handled by
+   theme.js's wireHomeCardTooltip() rather than native title="" attribute. A real link (not just a
+   visual mark) -- clicking it opens nexusmods.com/premium in a new tab, director's own ask, so
+   someone without Premium has an immediate way to fix that instead of just being told about it. */
+.home-card__premium-badge {
+  position: absolute; bottom: 14px; right: 14px; z-index: 3;
+  width: 24px; height: 24px; border-radius: 7px;
+  background: var(--nexus-orange-bg); color: var(--nexus-orange);
+  display: grid; place-items: center;
+  font-size: 12px; font-weight: 800; font-family: Georgia, serif;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.home-card__premium-badge:hover { background: var(--nexus-orange); color: var(--bg); }
 
 /* Settings page header -- Restart/Stop Server sit in their own small row ABOVE the tool-hero title
    now (director's own call, 2026-08-15; was previously laid out beside the full title+body block
@@ -528,6 +590,14 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    `disabled` in markup/JS (the done state is sticky -- re-running Preview is what re-arms it). */
 .btn--done { background: var(--success-bg); color: var(--success); border-color: var(--success); cursor: not-allowed; }
 .btn--small { padding: 5px 12px; font-size: 13px; }
+/* Small, icon-only action (Merge History's Rename/Delete, 2026-08-25) -- fixed square footprint so a
+   row of these never staggers a trailing action group's start x depending on how many controls are
+   present (see .btn--state below, same fix for the opposite case: same slot, different labels). */
+.btn--icon { width: 30px; height: 30px; padding: 0; font-size: 15px; line-height: 1; text-align: center; }
+/* Fixed-width state button (Merge History's Restore/Revert/Undo Merge) -- the label text differs
+   ("Restore" vs "Revert" vs "↩ Undo Merge") but the SLOT must not, or the row's trailing group
+   staggers left/right depending on which state a given merge happens to be in. */
+.btn--state { width: 118px; text-align: center; }
 /* A distinct blue for navigation ("back to collections") -- deliberately NOT the same shade as
    .btn--primary's --accent, so a nav button never reads as "an action to take" at a glance. */
 .btn--nav {
@@ -671,6 +741,38 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    `display:flex` (a block-level box) would stretch the pill across the whole section. This override
    keeps it shrink-to-fit, and restores heading-scale text size over .badge's smaller default. */
 h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
+/* Every settings-page card's own section headers get the identical pill treatment (2026-09-01,
+   director-caught: "the section headers inside a settings card... currently blend into the
+   surrounding body text"). `badge--neutral` was chosen over a severity color since a section label
+   isn't reporting a status. Unlike the h2 case above, these <h3> headers all live inside
+   .settings-group -- which ALREADY styles .settings-section-title with its own older, pre-pill
+   typography (12px uppercase accent-colored text, .settings-group .settings-section-title, two
+   classes = higher specificity than a bare .badge/.badge--neutral rule) -- so a plain
+   `h3.settings-section-title.badge` rule loses that fight on every property it doesn't explicitly
+   restate (confirmed by working out the cascade, not guessed): the pill would get the right
+   background shape but keep the OLD uppercase/letter-spaced/accent-colored text sitting on top of
+   it. This scopes the override to .settings-group specifically (three classes, wins outright) and
+   explicitly resets every property the old rule set, small/compact per the director's own "small...
+   pill/tag" framing (NOT the h2 rule's heading-scale 16px -- these sit inside a already-compact
+   settings-group list, not standing alone as their own section like Rules Generator's own header
+   row). Left un-genericized on purpose (not folded into the h2 rule, not applied blanket to
+   .settings-section-title) so a FUTURE section header that deliberately opts out of the pill look
+   still gets the plain original heading style.
+
+   Per-variant color restated below for the SAME reason -- each single-class .badge--* rule (line
+   ~680) loses the specificity fight against the two-class `.settings-group .settings-section-title`
+   rule two blocks up, which sets color:var(--accent) unconditionally. Left unrestated originally,
+   this silently forced every section-header pill (including the intentionally warning/success-toned
+   ones) to plain accent, and a neutral-only fix in its place left the majority (info/default) pill
+   permanently gray instead of picking up the active theme's own accent color -- director-caught,
+   2026-09-01: "looks like we lost the theming colors for the header titles in the pills". */
+.settings-group .settings-section-title.badge {
+  display: inline-flex; text-transform: none; letter-spacing: normal; margin: 18px 0 8px;
+}
+.settings-group .settings-section-title.badge--info { color: var(--accent); }
+.settings-group .settings-section-title.badge--success { color: var(--success); }
+.settings-group .settings-section-title.badge--warning { color: var(--warning); }
+.settings-group .settings-section-title.badge:first-of-type { margin-top: 4px; }
 /* Rules Generator section header + "Expand all" button on the same line, button right-justified.
    The header row now owns the vertical rhythm (the standard --stack-gap above, 10px below) instead
    of the bare h2 -- wrapping the h2 in this row would otherwise confuse .settings-section-title's
@@ -697,6 +799,51 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .status-pill--neutral { background: var(--neutral-bg); color: var(--neutral); }
 .table-empty-note { color: var(--text-muted); font-style: italic; padding: 20px; text-align: center; }
 
+/* File Retriever (2026-09-01) -- from the approved design/mockup-file-retriever.html, lifted here
+   as genuinely reusable rather than scoped/prefixed to this one tool: a "confirm the thing you're
+   about to act on" summary row (.mod-info-row, same shape Safe Collection Removal/Update
+   Collection's own .name-row already establishes for that exact purpose, just not yet
+   consolidated), and a plain text-link button (.link-btn) -- every OTHER tool in this app currently
+   defines its own prefixed copy of this exact button (.af-inline-link-btn/.rc-link-btn/
+   .pgp-link-btn), never consolidated; this is the first genuinely shared one, worth reusing
+   directly rather than adding a fourth prefix. The file LIST itself now uses the app's own shared
+   .plan-table (real columns + sortable headers), not a bespoke checkbox-list shape -- see
+   .fr-files-table below for the one File-Retriever-specific piece (fixed column widths). */
+.section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-muted); margin: 0 0 12px; }
+.actions { display: flex; gap: 12px; margin-top: 8px; align-items: center; justify-content: flex-end; }
+.lookup-row { display: flex; gap: 10px; max-width: 460px; }
+.lookup-row .input { flex: 1; }
+.mod-info-row {
+  display: flex; gap: 14px; align-items: center; padding: 14px; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--surface); margin-bottom: var(--stack-gap);
+}
+.mod-info-row__thumb { width: 64px; height: 64px; border-radius: 8px; object-fit: cover; background: var(--surface-2); flex: none; }
+.mod-info-row__name { font-size: 15.5px; font-weight: 700; margin-bottom: 2px; }
+.mod-info-row__meta { font-size: 12.5px; color: var(--text-muted); }
+.mod-info-row__meta a { color: var(--accent); text-decoration: none; }
+.link-btn { background: none; border: none; color: var(--accent); font-size: 12.5px; cursor: pointer; padding: 2px 4px; font-family: inherit; }
+.link-btn:hover { color: var(--accent-hover); }
+.selection-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.selection-bar__count { font-size: 12.5px; color: var(--text-muted); }
+/* Fixed column widths (2026-09-01, director-caught: sorting re-shuffled row content and every
+   column's own auto-sized width jumped along with it, since table-layout:auto -- this app's own
+   .plan-table default elsewhere -- sizes each column from whatever's CURRENTLY visible). Scoped to
+   File Retriever's own table via .fr-files-table specifically -- table-layout:fixed on the shared
+   .plan-table class globally would risk the exact long-content overflow this app already hit and
+   fixed elsewhere for OTHER tables (see the "Mod name column never wraps" comment above, and the
+   off-site-URL .extraction-cell comment) -- neither applies to File Retriever's own bounded
+   content, but a global change would still risk it for those other tables. Name is the only
+   flexible column; Date/File size/Version get fixed, generous-but-bounded widths so they never move
+   regardless of sort or row content. A long file name truncates with ellipsis (+ a title tooltip)
+   instead of reflowing anything. */
+.fr-files-table { table-layout: fixed; }
+.fr-files-table th[data-col="date"], .fr-files-table td.file-row__date { width: 185px; white-space: nowrap; }
+.fr-files-table th[data-col="size"], .fr-files-table td.file-row__size { width: 110px; }
+.fr-files-table th[data-col="version"], .fr-files-table td.file-row__version { width: 100px; }
+.fr-files-table td.file-row__name, .fr-files-table th[data-col="name"] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fr-files-table .file-row__version { color: var(--accent); font-weight: 600; }
+.fr-files-table .file-row__name { font-weight: 600; }
+
 /* Callouts */
 .callout {
   border-radius: var(--radius);
@@ -722,10 +869,24 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    right by the same amount, so wrapped lines land exactly under the first line's actual text start
    (verified within 0.02px for all four). Applies everywhere .callout__title is used, not a one-off. */
 .callout__title { font-weight: 700; margin-bottom: 6px; text-indent: -1.65em; padding-left: 1.65em; }
+/* Body content directly under a titled callout (a paragraph, an instructions block, a list) --
+   same 1.65em offset as the title's own hanging indent above, so it lines up under the TITLE TEXT,
+   not the icon. Director's own catch (2026-08-28) on Update Collection's curator-instructions box:
+   unindented body read as visually disconnected from its own title. See DESIGN.md's "Body content
+   under a titled callout also indents to match". */
+.callout__body { padding-left: 1.65em; }
 .callout ul, .callout ol { margin: 8px 0 0; padding-left: 20px; }
 .callout p { margin: 4px 0; font-size: 13.5px; }
 .callout ol li { font-size: 13.5px; margin: 4px 0; }
 .callout .callout { margin: 12px 0 8px; }
+/* Retry button inside the critical-error callout (2026-08-28) -- a small gap so it doesn't sit flush
+   against the message paragraph above it. */
+#ucv2CriticalErrorRetry { margin-top: 6px; }
+/* Instructions callout (2026-08-28) -- .screen-head has no margin-bottom of its own (nothing needed
+   one before this), so the callout sat flush against the title/revision-picker row above it. Same
+   14px gap .mm-row__header + .callout already uses for the same "callout right after a header row"
+   shape elsewhere in this file. */
+#ucv2RemovedInstructions, #ucv2ReviewInstructions { margin-top: 14px; }
 /* An off-site mismatch (a same-size candidate file exists but fails the md5 check) is a more
    alarming case than a plain "nothing here yet" -- danger-colored so it stands out inside the
    yellow off-site-missing callout instead of reading the same as every other list item. */
@@ -971,6 +1132,21 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 /* Small label above an input, e.g. the workshop-fetch slug/revision fields -- otherwise those
    two boxes give no clue what they're for beyond a placeholder that vanishes on typing. */
 .field-group { display: flex; flex-direction: column; gap: 5px; }
+/* A field-group with nothing else between it and the one above (no .settings-section-title pill in
+   between) can sit flush against it -- e.g. a checkbox directly under the path field it modifies,
+   Rebuild Collection's own "Automatically force-extract..." toggle right below Backup root folder.
+   Director-caught, 2026-09-01: reads as one cramped block without a little air between them. Opt-in
+   utility rather than a blanket .field-group + .field-group margin (deliberately avoided elsewhere in
+   this file -- see the #afSearchCard comment below -- since that would ripple into the other 30+
+   .field-group uses across Settings/modals, several of which are meant to read as one tight group). */
+.field-group--gap-top { margin-top: 12px; }
+/* A bare <p> still carries the browser's own 1em default margin on top of the flex gap above --
+   invisible almost everywhere else in .field-group (most children are <label>/<input>/<div>, which
+   have no default margin of their own), but two stacked <p>s (a description + a below-it link, e.g.
+   Merge Plugin Verifier / ESLifier's "Learn more" pattern) stack BOTH margins plus the gap into a gap
+   nearly 3x every other row's. .field-group already deliberately owns all its own spacing via that
+   gap (see the #afSearchCard comment below) -- this makes that true for <p> too. */
+.field-group p { margin: 0; }
 .field-label { font-size: 12px; color: var(--text-muted); }
 /* Marks a Settings field that has no valid blank state (e.g. staging/downloads/Update Collection's
    backups folder) -- distinct from fields like backupRoot/state that have a real, working default
@@ -1084,12 +1260,71 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .status-pill--failed_extraction_no_prior_data { background: var(--danger-bg); color: var(--danger); }
 .status-pill--critical_manual_restore_needed { background: var(--danger); color: #fff; }
 .status-pill--pending { background: var(--surface-2); color: var(--text-muted); }
-/* Update Collection Apply's own live per-mod "actively in progress" states (Working/Downloading/
-   Installing) -- Vortex's own real brand color (confirmed against its source, not guessed), so this
-   specific state visually reads as "this is what Vortex itself is doing right now." Kept distinct
-   from the plain grey status-pill--pending above, which other tools' own progress tables still use
-   for their generic in-progress row (director's own earlier call not to touch those). */
-.status-pill--vortex-progress { background: var(--vortex-orange-bg); color: var(--vortex-orange); }
+/* Update Collection Apply Progress's own real status vocabulary (2026-08-28, director's own explicit
+   build spec -- design/vortex-update-collection-v2-mockup.html's own APPLY_PILLS, a deliberate
+   override of real Vortex's own same-color-for-both convention: Vortex itself shows Downloading and
+   Installing in the identical brand color, confirmed against its own source; this app's word-of-truth
+   spec distinguishes them -- blue vs. amber -- so which stage a mod is in reads at a glance instead of
+   just "something's in progress." Supersedes the earlier single status-pill--vortex-progress state
+   this used to share with Removing (that class is gone -- every apply-progress pill now goes through
+   ONE shared render function/lookup table, ucv2ApplyPillHtml, not per-call-site pill classes). --info/
+   --warning above already give Downloading/Installing their real color; --removing (danger-red, same
+   visual weight as a failure since removal really is the one destructive step in this table) and the
+   spinner treatment are the only genuinely new pieces. */
+.status-pill--removing { background: var(--danger-bg); color: var(--danger); }
+/* Duplicate Version Cleanup's own "Version(s) to remove" cell (2026-09-01) -- one pill per
+   non-survivor entry in a duplicate group. --version is a plain, neutral label (a safe orphan);
+   --version-flagged marks one this tool refuses to touch (a genuinely different file another
+   collection still needs, or a second real install) -- distinct border/color so it reads as
+   "leave alone," not just another removable item, right next to plain ones in the same cell. */
+.status-pill--version { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); margin: 0 6px 4px 0; }
+.status-pill--version-flagged { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning); margin: 0 6px 4px 0; cursor: help; }
+/* Same tool's "Mod" column -- a long mod name must never blow out the table's own layout (this table
+   can run to dozens of rows across a whole-install scan); truncate with an ellipsis and rely on the
+   native title tooltip for the full name, same "don't reflow the table for one long value" reasoning
+   status-pill's own fixed-width Status column comment documents above. */
+.mod-name-cell { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+/* Same tool's "Collections" column -- one collection name per line, not comma-joined, so a mod
+   belonging to several collections at once (a real, legitimate case -- see this tool's own
+   diagnostics doc) stays scannable rather than wrapping into a run-on sentence. */
+.collections-cell { font-size: 12.5px; color: var(--text-muted); }
+.collections-cell div { margin-bottom: 2px; }
+.collections-cell div:last-child { margin-bottom: 0; }
+/* Same tool's Screen 1 scope row (a plain select + its own Scan button) -- .lookup-row above is close
+   but fixes a max-width for an input+button pair; this one has no input, just wraps its two controls
+   with normal spacing, so it isn't reused directly. */
+.scope-row { display: flex; align-items: center; gap: 10px; margin-bottom: var(--stack-gap); flex-wrap: wrap; }
+/* Same tool's Review-screen legend line, right above the plan table -- explains what a checked group
+   actually does (and what it never touches) in one place, rather than repeating that in every row's
+   own tooltip. */
+.selection-legend { font-size: 12.5px; color: var(--text-muted); margin: 0 0 14px; line-height: 1.5; }
+/* Same tool's destructive confirm modal -- a real acknowledgment checkbox gating the go button, same
+   "type to confirm"-adjacent pattern this app's other destructive confirms use, just a checkbox
+   instead of typed text (this action's own name is long enough that typing it back would be more
+   friction than it's worth). Generic name (not tool-prefixed) since this modal-acknowledgment-check
+   shape is reusable by any future destructive-confirm modal in this app, same as .modal-overlay/
+   .modal-actions already are. */
+.modal-check { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; color: var(--text); margin: 14px 0; cursor: pointer; }
+.modal-check input { margin-top: 2px; accent-color: var(--danger); }
+/* Locked Status-column width (2026-08-28, director's own catch, matching the mockup's own
+   #applyTableBody .apply-status rule) -- "Downloading…" vs "Enabled" vs "Removing…" are all different
+   lengths; without a fixed width, later rows finishing at different times shove the Mod/Version
+   columns sideways as their own pill text changes length. Scoped to the table body's own cells
+   (matches the mockup exactly) rather than the header, since a table's column width is driven by its
+   widest real cell either way. */
+#ucv2ApplyProgressTableBody .ucv2-apply-status-col { width: 170px; min-width: 170px; }
+/* A Remove row fades and vanishes once its removal genuinely completes, rather than lingering with a
+   "Removed"/"Enabled" pill that doesn't really apply to a removal -- matches the mockup's own real
+   behavior + comment ("once a Remove actually completes, that row disappears entirely"). A FAILED
+   remove stays visible instead (ucv2UpdateApplyProgressRow never adds this class for ok:false), so a
+   real problem is never silently hidden. Ported verbatim from the mockup's own keyframes. */
+tr.apply-row--leaving { animation: rowLeave .5s ease forwards; }
+@keyframes rowLeave { 0% { opacity: 1; transform: translateY(0); } 70% { opacity: 0; } 100% { opacity: 0; transform: translateY(-6px); } }
+.status-pill--spin { display: inline-flex; align-items: center; gap: 6px; }
+.status-pill__spinner {
+  width: 11px; height: 11px; border: 2px solid rgba(255, 255, 255, .25); border-top-color: currentColor;
+  border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; flex: none;
+}
 /* Update Collection's Ignored/Disabled report -- same color convention as the Rebuild Collection
    pills above (neutral for a plain informational status, warning for one that needs attention). */
 .status-pill--ignored { background: var(--neutral-bg); color: var(--neutral); }
@@ -1097,8 +1332,12 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .detail-cell { color: var(--text-muted); font-size: 13px; overflow-wrap: anywhere; white-space: pre-line; }
 .detail-cell .file-list { margin: 4px 0 0; overflow-wrap: anywhere; }
 .detail-cell .detail-group { margin-top: 10px; }
+/* One path per line (2026-09-01) -- was a single comma-joined run-on line; director's own direct ask
+   to make a long path list actually scannable instead of wrapping into one dense paragraph. */
+.detail-cell .file-list-item { margin-top: 2px; }
+.detail-cell .file-list-item:first-child { margin-top: 0; }
 .detail-cell .file-list-extra.hidden { display: none; }
-.detail-cell .file-list-toggle { display: inline-block; margin-top: 2px; color: var(--accent); cursor: pointer; text-decoration: underline; }
+.detail-cell .file-list-toggle { display: inline-block; margin-top: 4px; color: var(--accent); cursor: pointer; text-decoration: underline; }
 .detail-cell .file-list-toggle:hover { color: var(--accent-hover); }
 
 /* Resume box -- warning-colored (like .callout--warning) so a resumable incomplete run stands out
@@ -1120,6 +1359,14 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    below. .view-actions is reused by 28 other rows in this app; changing the shared class would shift
    all of them. */
 .view-actions #mergeStep0NextBtnTop { margin-left: auto; }
+/* Confirmed real 2026-09-02: Rebuild Missing Files' own Back/Cancel/Back-to-Collections control
+   (rmfBackToPickerBtn) sat left-justified inside its own .view-actions row on the Scan Results/Done
+   screen -- this app's real, established convention is that a screen's own primary nav control is
+   always right-justified (see DESIGN.md's "Button-row alignment" section). Same scoped-override
+   pattern as #mergeStep0NextBtnTop just above, not a swap to .actions -- .view-actions's own 20px
+   margin-bottom is the right amount of breathing room above the loading spinner/results directly
+   below this row on that screen; .actions has no bottom margin at all. */
+.view-actions #rmfBackToPickerBtn { margin-left: auto; }
 
 /* Keeps Pause anchored on the same row as the phase text regardless of whether the backup/download
    notice rows below it are shown -- those rows appearing/disappearing must not shift the button. */
@@ -1143,6 +1390,16 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
   font-size: 14px;
   font-weight: 500;
   margin-top: 4px;
+  min-width: 0; /* lets the text child below actually shrink/ellipsize instead of forcing this flex row wider */
+}
+/* A long dynamic mod name (2026-08-30, director's own catch: a long name wrapping onto a second
+   line shifted everything below it every time the text changed) truncates with an ellipsis instead
+   of wrapping -- no visible layout jump as the phase text cycles through different mod names. */
+.phase-indicator > span:last-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80vw;
 }
 
 /* Modal */
@@ -1163,7 +1420,7 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 }
 .modal {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--accent);
   border-radius: var(--radius);
   padding: 26px 28px;
   max-width: 440px;
@@ -1174,11 +1431,31 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 /* .select's own flex:1 only applies inside a flex row -- a bare <select> dropped straight into a
    modal (e.g. the Restore Backup picker) needs its own full-width rule instead. */
 .modal .select { display: block; width: 100%; }
+/* Same reasoning as .modal .select above -- a fixed-width input class (.input--wide is 480px) can be
+   wider than .modal's own 440px max-width, overflowing the modal. Confirmed real 2026-08-25 (Merge
+   History's Rename modal). Any width utility class loses to this once nested inside a modal. */
+.modal .input { display: block; width: 100%; }
 .modal--wide { max-width: 640px; }
-/* Severity variants for a blocking modal -- same color tokens/icon as the callout severities above
-   (see TECHNICAL.md's "Callout severity conventions"), just applied to a modal's border/title
-   instead of a full-width callout box. Use warning for a gate the user can resolve and retry
-   ("Vortex is running"), critical for a real failure ("Can't reach the server"). */
+/* Severity variants for a modal (2026-08-25, standardized across the app -- confirmed real via the
+   Merge History delete-confirm modal, which the director explicitly asked to make the standard look).
+   Border + title color ONLY, same tokens as the callout severities above (TECHNICAL.md's "Callout
+   severity conventions") -- deliberately border-only, NEVER a filled/tinted background like
+   .callout--warning/.callout--critical use. A modal is already the whole screen's own focal point
+   (dimmed overlay behind it); filling its background too would be redundant emphasis a callout
+   (competing for attention against ordinary page content) genuinely needs and a modal doesn't.
+   Use info for a neutral heads-up, warning for "proceed with caution" (a gate that can be resolved
+   and retried, or a real-but-not-blocking consequence like an irreversible delete), critical for a
+   hard blocker or genuine failure ("Can't reach the server"). Pair with the matching emoji at the
+   START of the <h2> text itself (ℹ️/⚠️/🛑, this app's established colored-icon convention) --
+   these CSS classes color the chrome, they don't add the icon.
+   ONLY apply this to a modal whose entire reason for existing IS the severity message (a pure
+   destructive confirm, a pure blocking notice). A modal that's mainly about performing some ACTION
+   and separately has one specific blocking precondition mixed in keeps its own plain tool/action
+   icon on the title instead (see DESIGN.md's "Confirm-modal structure" section, mmRebuildConfirmModal
+   as the reference) -- that precondition gets its own nested `.callout--critical`/`.callout--warning`
+   INSIDE the modal, not the outer chrome; don't apply BOTH treatments to the same modal. */
+.modal--info { border-color: var(--accent); }
+.modal--info h2 { color: var(--accent); }
 .modal--warning { border-color: var(--warning); }
 .modal--warning h2 { color: var(--warning); }
 .modal--critical { border-color: var(--danger); }
@@ -1331,7 +1608,7 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    DESIGN.md's "Selectable results tables" section). First used by Archive Finder's search results
    (2026-07-28); reuse this for any future selectable .plan-table rather than inventing a second
    selection-bar/row-state pattern. */
-.af-selection-bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin: 8px 0 4px; }
+.af-selection-bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin: 8px 0 14px; }
 .af-selection-bar__left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 /* The "Select all M results?" offer -- Gmail/GitHub pattern: the header checkbox only ever selects
    the current PAGE; when the full result set is bigger than one page, this banner offers to extend
@@ -1503,18 +1780,28 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 
 .merge-navrow { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; }
 
-/* Collection-picker rows (Step 1) -- a small, rarely-more-than-a-handful list, so a full
-   .plan-table is unwarranted; a clickable checkbox row that highlights when checked, same visual
-   language (accent-bg wash) as a selected table row elsewhere in this app. */
-.merge-chk-row {
-  display: flex; align-items: center; gap: 12px; padding: 11px 12px; border: 1px solid var(--border);
+/* .name-row -- the "Bordered name row" shape DESIGN.md's own "Consolidating the checkbox-selection
+   variants" section documents (design/vortex-bordered-row-mockup.html is the canonical reference,
+   markup mirrored exactly). Used when a plain .sync-result-list row reads too thin (the item needs a
+   badge or a two-line label) but a full .picker-grid card is overkill. Replaces this file's own former
+   .merge-chk-row (dead by the time this consolidation actually happened -- Merge Plugins' Step 0
+   picker had already independently moved to .coll-card/.picker-grid, see merge-app.js's own
+   mergeCollectionCard header comment) and Remove Collection's own former .rc-mod-row (the one real,
+   live call site actually repointed here -- see remove-collection-app.js's own rcModRowHtml). */
+.name-row {
+  display: flex; align-items: center; gap: 12px; padding: 11px 14px; border: 1px solid var(--border);
   border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: background 0.12s ease, border-color 0.12s ease;
 }
-.merge-chk-row:hover { border-color: var(--accent); }
-.merge-chk-row.on { background: var(--accent-bg); border-color: var(--accent); }
-.merge-chk-row input { width: 16px; height: 16px; accent-color: var(--accent); flex-shrink: 0; }
-.merge-chk-row .merge-chk-row__name { font-weight: 600; }
-.merge-chk-row .merge-chk-row__meta { color: var(--text-muted); font-size: 13px; margin-left: auto; }
+.name-row:hover { border-color: var(--accent); }
+.name-row.on { background: var(--accent-bg); border-color: var(--accent); }
+.name-row input { width: 16px; height: 16px; accent-color: var(--accent); flex-shrink: 0; }
+.name-row .nm { font-weight: 600; font-size: 13.5px; }
+.name-row .sub2 { color: var(--text-muted); font-size: 12.5px; margin-top: 1px; }
+.name-row .spacer { flex: 1; }
+.name-row .badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--success); color: #0b1220; flex: none; }
+/* A caution-toned badge variant -- e.g. Remove Collection's "required by N others" tag, a real
+   heads-up rather than a neutral status like the base .badge's success-green default. */
+.name-row .badge--warning { background: var(--warning-bg); color: var(--warning); }
 
 /* The running "chosen for merge" cart bar -- always visible on Step 2 (Find & select plugins),
    accumulating across every search. Accent-tinted like a callout--info, but its own class since it
@@ -1552,6 +1839,28 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 }
 .rmf-cartbar b { color: var(--accent); }
 .rmf-cartbar__spacer { flex: 1; }
+/* Duplicate Version Cleanup's own cart bar (2026-09-02) -- reuses .rmf-cartbar's markup/visuals
+   verbatim, but overrides the sticky DIRECTION. Root cause, confirmed live in a real browser (not
+   guessed): a `top: 65px` sticky element needs genuine remaining height in its own direct parent
+   AFTER itself for the browser to have room to hold it at that offset -- confirmed by temporarily
+   inserting a large spacer after #dvcCartBar and watching it correctly pin at top:65 for the first
+   time. #dvcScreen1 has nothing real after the cart bar (just a display:none scanning-state div), so
+   there's no room -- it never gets to stick, no matter how long the picker grids above it are.
+   #rmfCartBar has the exact same structural shape (also the last real content in its own parent) and
+   -- confirmed with the same live test -- has the identical latent problem; RMF's own collection
+   lists just haven't been long enough in practice to expose it. Out of scope to fix RMF here, so only
+   THIS id is overridden, not the shared .rmf-cartbar class. The real, correct fix for "an action bar
+   sitting after a long list, unreachable without scrolling" is sticky to the BOTTOM, not the top --
+   the same already-established pattern .settings-save-bar uses (see its own comment) and the one
+   DVC's own Screen 2 actions bar adopts right below. */
+#dvcCartBar { top: auto; bottom: 0; }
+/* Rebuild Missing Files' own cart bar (2026-09-02) -- the exact same latent bug #dvcCartBar had, per
+   this rule's own comment just above: #rmfPickerView has nothing real after the cart bar either (just
+   a <p class="muted"> explainer line, no expanding content), so it's the last real content in its
+   parent and never actually gets room to stick at top:65. Confirmed the only two users of
+   .rmf-cartbar are this one and #dvcCartBar (grepped index.html) -- both have the identical
+   last-in-parent shape, so both get the same scoped override; no shared-class change needed. */
+#rmfCartBar { top: auto; bottom: 0; }
 .rmf-cartbar__toggle {
   background: none; border: none; color: var(--accent); font-size: 12.5px; cursor: pointer;
   text-decoration: underline; padding: 0;
@@ -1650,6 +1959,13 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    spacing) rather than reusing .summary-badges itself (that's a row of pill filters, a different
    shape from a stat tally). */
 .merge-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 8px 0 var(--stack-gap); }
+/* Update Collection v2's own Apply Result summary (2026-08-28, director's own catch: "1 Updated"
+   alone stretched to fill the whole row's width, since auto-fit's own 1fr made every present card
+   share the full row). Fixed-width cards instead -- a real, non-scaling number, whether 1 or 4 show
+   up -- so the row's own width never changes the size of what's actually IN it. Scoped to this one
+   ID rather than changing .merge-stat-grid itself, which Merge Plugins/Save Cleaner also use with
+   their own, unrelated stretch-to-fill layouts. */
+#ucv2ApplyResultStats { grid-template-columns: repeat(auto-fill, 150px); justify-content: start; }
 .merge-stat { background: var(--surface-2); border-radius: 8px; padding: 14px; }
 .merge-stat .merge-stat__n { font-size: 24px; font-weight: 600; }
 .merge-stat .merge-stat__l { font-size: 12.5px; color: var(--text-muted); }
@@ -1703,37 +2019,19 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .coll-card--unfetched { cursor: default; border-style: dashed; }
 
 /* Safe Collection Removal's Screen 2 mod list -- a multi-select, act-on-the-rest list (DESIGN.md's
-   "Selectable lists" pattern), not a single-pick list like .merge-chk-row/.coll-card above, so it
-   gets its own small classes rather than reusing either. Same visual language as .af-selection-bar's
-   own select-all/invert/clear row (Archive Finder), scoped here since no single shared component for
-   this pattern exists yet app-wide (see DESIGN.md's own note that this should eventually be one
-   reusable helper). */
+   "Selectable lists" pattern). The rows themselves are .name-row (see that class's own definition,
+   above the .merge-navrow rule) -- this select-all/invert/clear bar is its own small classes, same
+   visual language as .af-selection-bar's own row (Archive Finder), scoped here since no single shared
+   component for THIS part of the pattern exists yet app-wide (see DESIGN.md's own note that this
+   should eventually be one reusable helper). */
 .rc-selection-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 0 0 8px; }
 .rc-selection-bar__left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .rc-link-btn { background: none; border: none; padding: 0; font: inherit; font-size: 12.5px; color: var(--accent); text-decoration: underline; cursor: pointer; }
 .rc-link-btn:hover { color: var(--accent-hover); }
-.rc-mod-row {
-  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
-  border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); margin-bottom: 6px;
-}
-.rc-mod-row:hover { background: var(--surface-2); }
-.rc-mod-row.checked { background: var(--accent-bg); border-color: var(--accent); }
-.rc-mod-row label { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; cursor: pointer; }
-.rc-mod-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); flex: none; }
-.rc-mod-row__name { font-size: 13.5px; font-weight: 600; }
-.rc-mod-row__meta { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
-.rc-mod-row--shared { border-color: rgba(245, 185, 66, .35); }
-.rc-shared-tag {
-  font-size: 11px; color: var(--warning); background: var(--warning-bg);
-  border-radius: 999px; padding: 2px 8px; font-weight: 600; flex: none;
-}
 
-/* A mod row whose archive isn't on disk -- warning-colored (not danger; the row itself isn't a
-   failure, it's a "here's what to do next" note), matching the small-note treatment .mismatch-note
-   uses for a different (danger) case. */
-.archive-missing-note { color: var(--warning); font-size: 11.5px; margin-top: 3px; }
-/* Acknowledged tier's own small-note treatment -- same shape as .archive-missing-note above, --neutral
-   instead of --warning (this isn't a severity, so it doesn't get a warning color). */
+/* Acknowledged tier's own small-note treatment, matching the small-note shape .mismatch-note uses
+   for a different (danger) case -- --neutral instead of --warning (this isn't a severity, so it
+   doesn't get a warning color). */
 .ignored-note { color: var(--neutral); font-size: 11.5px; margin-top: 3px; }
 .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
 /* Workshop Report's own Actions column has a genuinely variable button count row to row (0, 1, or
@@ -1859,6 +2157,50 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .ucv2-card__revision { background: var(--surface-2); border-radius: 8px; padding: 2px 8px; font-weight: 600; color: var(--text); }
 .ucv2-card__actions { padding: 10px 14px 14px; }
 
+/* Revision picker (2026-08-27) -- styled like Nexus's own real revision picker (director's own
+   addendum, a Nexus screenshot as reference): a two-line trigger + a two-line-per-row scrollable
+   panel. A plain <select>'s <option> is text-only in every browser, so this is a real custom
+   component (button trigger + absolutely-positioned panel), not a <select> restyle -- see
+   update-collection-v2-app.js's own ucv2RenderRevisionPicker. Reuses this project's own existing
+   surface/border/radius tokens throughout, no new colors invented.
+   Widened to full richness (2026-08-28, director's own follow-up, "go ahead and pay it") -- file
+   size + game version + a red "Adult" tag now share the SAME two-line content
+   (ucv2RevisionContentHtml) between the trigger and every panel row, so __num/__date/__size/
+   __adult-tag below apply to both contexts uniformly (the old __row-num/__row-date duplicates are
+   gone). Widened min-width -- "Revision 52" + a real file size on one line needs more room than the
+   original number-and-date-only design did. */
+.ucv2-rev-picker { position: relative; display: flex; align-items: center; font-size: 13px; }
+.ucv2-rev-picker__trigger {
+  display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%; min-width: 250px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 6px 10px; color: inherit; font: inherit; text-align: left;
+}
+.ucv2-rev-picker__trigger:hover { border-color: var(--accent); }
+.ucv2-rev-picker__trigger-text { flex: 1; min-width: 0; }
+.ucv2-rev-picker__line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ucv2-rev-picker__num { font-weight: 600; }
+.ucv2-rev-picker__size { font-size: 11.5px; color: var(--text-muted); flex-shrink: 0; }
+.ucv2-rev-picker__date { font-size: 11.5px; color: var(--text-muted); margin-top: 1px; }
+.ucv2-rev-picker__gameversion { font-size: 11.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ucv2-rev-picker__adult-tag {
+  display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 4px; font-size: 10px;
+  font-weight: 700; text-transform: uppercase; letter-spacing: .02em; color: var(--danger); background: var(--danger-bg);
+}
+.ucv2-rev-picker__chevron { color: var(--text-muted); font-size: 10px; flex-shrink: 0; transition: transform .15s ease; }
+.ucv2-rev-picker--open .ucv2-rev-picker__chevron { transform: rotate(180deg); }
+.ucv2-rev-picker__panel {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; min-width: 260px; max-height: 300px;
+  overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 10px 28px rgba(0,0,0,.4);
+}
+.ucv2-rev-picker__row {
+  display: block; width: 100%; text-align: left; cursor: pointer; padding: 8px 12px;
+  background: none; border: none; border-bottom: 1px solid var(--border); color: inherit; font: inherit;
+}
+.ucv2-rev-picker__row:last-child { border-bottom: none; }
+.ucv2-rev-picker__row:hover { background: var(--surface-2); }
+.ucv2-rev-picker__row--selected { background: var(--accent-bg); }
+
 .ucv2-op-section { margin-bottom: 22px; }
 /* Small collection banner next to a review screen's own title -- matches the approved mockup
    (design/vortex-update-collection-v2-mockup.html) this real build had dropped. */
@@ -1867,28 +2209,83 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .ucv2-op-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); margin-bottom: 8px; }
 .ucv2-op-row--remove { border-color: rgba(240, 84, 107, .3); }
 /* "Shared with another collection" (2026-08-21) -- same warning-tinted treatment Safe Collection
-   Removal's own .rc-mod-row--shared/.rc-shared-tag use for the identical situation, reusing that
+   Removal's own .name-row .badge--warning tag uses for the identical situation (that class renamed
+   2026-09-01 from .rc-mod-row--shared/.rc-shared-tag, same visual language kept), reusing that
    proven visual language rather than inventing a new color/shape for the same meaning. .ucv2-op-row
    only ever holds Removed-mods rows (confirmed: no other screen in this file reuses these classes),
    so --shared can safely override --remove's own border tint when both apply. __main wraps
    __name/__detail in a column so the shared-tag badge can sit as a proper flex:none sibling at the
-   row's end, matching .rc-mod-row's own label+badge split. */
+   row's end, matching .name-row's own label+badge split. */
 .ucv2-op-row--shared { border-color: rgba(245, 185, 66, .35); }
-.ucv2-op-row__main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-.ucv2-op-row__name { font-size: 13.5px; font-weight: 600; }
-.ucv2-op-row__detail { font-size: 12px; color: var(--text-muted); }
+/* Single line (2026-08-26, director's own call): name left, muted version/author detail
+   right-justified on the SAME line -- same tightened-row treatment Save Cleaner's own save-picker
+   rows already use, instead of the old two-line stack. */
+.ucv2-op-row__main { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+.ucv2-op-row__name { font-size: 13.5px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ucv2-op-row__detail { font-size: 12px; color: var(--text-muted); flex-shrink: 0; text-align: right; }
+/* Scrollable list, header/lead/action-row above it stay put -- same max-height/overflow-y shape
+   .plan-table-wrap--scrollable already uses for the review screen's own table. */
+.ucv2-op-section--scrollable { max-height: 60vh; overflow-y: auto; padding-right: 2px; }
 .ucv2-shared-tag {
   font-size: 11px; color: var(--warning); background: var(--warning-bg);
   border-radius: 999px; padding: 2px 8px; font-weight: 600; flex: none;
 }
 
-.ucv2-instr-btn { width: 22px; height: 22px; border-radius: 6px; border: none; background: var(--warning); color: #0b1220;
+/* Info-severity color (2026-08-30, director's own catch: looked "older" than the rest of the app) --
+   was var(--warning)/amber, but this is a plain "has instructions" indicator, not a warning. DESIGN.md's
+   color system reserves amber for Warning severity specifically; a plain info icon is var(--accent), same
+   as every other informational icon in the app. Hover state was also a hardcoded hex (#f7c665) -- fixed
+   to reuse the existing --accent-hover token instead, per this file's own "never hardcode a color
+   literal" rule. */
+.ucv2-instr-btn { width: 22px; height: 22px; border-radius: 6px; border: none; background: var(--accent); color: #0b1220;
   font-size: 11px; font-weight: 700; cursor: pointer; flex: none; display: inline-flex; align-items: center; justify-content: center; }
-.ucv2-instr-btn:hover { background: #f7c665; }
+.ucv2-instr-btn:hover { background: var(--accent-hover); }
+
+/* Status filter pills on the Review table (2026-08-28, director's own catch: "we don't have our pill
+   filters, like our other tools"). A SEPARATE class from .hidden -- the Unchanged section already uses
+   .hidden for its own collapse/expand toggle (ucv2ReviewTableBody's own click listener), and reusing
+   the same class here would fight that: expanding "Show unchanged mods" removes .hidden from those
+   rows unconditionally, which would silently override an active filter's own hide. Two independent
+   classes compose safely (either one hidden keeps the row hidden), so a row stays correctly hidden by
+   whichever mechanism (or both) currently applies. */
+.ucv2-row-filtered-out { display: none; }
+
+/* Merge-history flag on a Review row's own name cell (2026-08-25) -- an Updated/Added mod whose
+   plugin is on record as merged away by Merge Plugins. Same warning color as .ucv2-shared-tag above,
+   inline text rather than a pill since this sits under the mod name in a plain table cell, not a
+   flex row with room for a trailing badge. cursor:help + focus-visible ring (2026-08-27) since it's
+   now a real hover/focus popover trigger, not just static text. */
+.ucv2-merged-flag { display: inline-block; margin-top: 2px; font-size: 11.5px; font-weight: 600; color: var(--warning); cursor: help; }
+.ucv2-merged-flag:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+/* Merged-plugin flag popover (2026-08-27) -- replaces the old native title="" tooltip, which could
+   only ever show plain text and so repeated the same filename once per merge RECORD it was on record
+   in. A real, app-themed popover instead: grouped by distinct file, bulleted merge names underneath.
+   One shared fixed-position element (ucv2ShowMergedFlagPopover in update-collection-v2-app.js),
+   positioned from the hovered/focused flag's own getBoundingClientRect -- fixed rather than absolute
+   so it isn't clipped by the Review table's own scrollable wrapper (.plan-table-wrap--scrollable,
+   overflow-y: auto), same escape-the-scroll-container approach .rg-conflict-popover above already
+   uses for Rules Generator's conflict list. */
+.ucv2-merged-flag-popover {
+  position: fixed; z-index: 60;
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--warning);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  font-size: 12.5px; line-height: 1.5; padding: 10px 14px; max-width: 340px;
+  opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 0.12s ease;
+}
+.ucv2-merged-flag-popover.visible { opacity: 1; visibility: visible; }
+.ucv2-merged-flag-popover__file { color: var(--text-muted); font-weight: 600; margin: 8px 0 4px; }
+.ucv2-merged-flag-popover__file:first-child { margin-top: 0; }
+.ucv2-merged-flag-popover ul { margin: 0 0 0 4px; padding-left: 16px; }
+.ucv2-merged-flag-popover li { margin: 2px 0; }
+.ucv2-merged-flag-popover__note {
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);
+  color: var(--text-muted); font-style: italic;
+}
 
 .ucv2-modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, .6); display: none; align-items: center; justify-content: center; z-index: 50; }
 .ucv2-modal-backdrop.open { display: flex; }
-.ucv2-modal { width: min(480px, 90vw); max-height: 80vh; overflow: auto; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: 0 20px 60px rgba(0, 0, 0, .5); }
+.ucv2-modal { width: min(480px, 90vw); max-height: 80vh; overflow: auto; background: var(--surface); border: 1px solid var(--accent); border-radius: var(--radius); box-shadow: 0 20px 60px rgba(0, 0, 0, .5); }
 .ucv2-modal__head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
 .ucv2-modal__head strong { font-size: 14px; }
 .ucv2-modal__close { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; line-height: 1; }
@@ -1933,7 +2330,10 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .ucv2-fomod-option__preset { color: var(--accent); font-weight: 500; }
 
 .ucv2-fomod-preview { background: var(--bg); border-left: 1px solid var(--border); padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; flex: none; min-width: 40%; max-width: 60%; overflow-y: auto; }
-.ucv2-fomod-preview__image { width: 100%; aspect-ratio: 16 / 10; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 11.5px; padding: 8px; text-align: center; overflow-wrap: break-word; }
+.ucv2-fomod-preview__image { width: 100%; aspect-ratio: 16 / 10; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 11.5px; padding: 8px; text-align: center; overflow-wrap: break-word; overflow: hidden; }
+/* Real image (2026-08-28) -- object-fit:contain so a real archive screenshot (often a different
+   real aspect ratio than this box's own fixed 16:10) never gets stretched/distorted to fill it. */
+.ucv2-fomod-preview__image img { width: 100%; height: 100%; object-fit: contain; border-radius: 6px; }
 .ucv2-fomod-preview__desc { font-size: 12.5px; color: var(--text); line-height: 1.6; white-space: normal; }
 .ucv2-fomod-preview__empty { color: var(--text-muted); font-size: 12.5px; font-style: italic; }
 

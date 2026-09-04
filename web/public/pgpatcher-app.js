@@ -140,7 +140,9 @@ function pgpShowError(e) {
     }
     box.appendChild(list);
   } else {
-    box.textContent = e && e.message ? e.message : String(e);
+    box.innerHTML = '';
+    box.appendChild(el('div', { class: 'callout__title' }, '🛑 Couldn\'t complete that'));
+    box.appendChild(el('p', {}, e && e.message ? e.message : String(e)));
   }
   box.classList.remove('hidden');
 }
@@ -1038,6 +1040,8 @@ $g('pgpatcherReloadBtn').addEventListener('click', async () => {
   if (pgpDirty && !(await showConfirmModal('You have unsaved changes that will be lost. Reset anyway?'))) return;
   pgpatcherLoad();
 });
+
+window.pgpResetToIdle = pgpResetToIdle;
 
 async function pgpatcherSaveOrder() {
   pgpHideError();

@@ -78,6 +78,28 @@ with no C++ compilation step required. See [koffi.dev](https://koffi.dev/).
 compiled Papyrus (`.pex`) scripts -- used by Merge Plugins' Relink Scripts feature to find and patch
 script references to plugins that got merged away.
 
+## ini-api
+
+**License: MIT. Copyright Colin Allen (matortheeternal).**
+
+[`matortheeternal/ini-api`](https://github.com/matortheeternal/ini-api) (npm `ini-api`) parses,
+merges, and re-serializes per-plugin MCM `.ini` files for Merge Plugins v2's own INI Files asset
+handler (`lib/merge/asset-handlers/ini-file-handler.js`) -- the SAME real library zMerge's own
+`iniFileHandler.js` uses (its own `package.json` pins `ini-api: ^1.0.0`; this project uses the
+current `^2.0.2`), same author as zMerge itself (see the "zEdit / zMerge" entry above).
+
+## minimatch
+
+**License: Blue Oak Model License 1.0.0** (confirmed against the installed package's own
+`LICENSE.md` -- its `package.json` `"license"` field already says so too, not ISC as older
+minimatch releases used).
+
+[`isaacs/minimatch`](https://github.com/isaacs/minimatch) (npm `minimatch`) provides the real glob
+matching the merge v2 asset handlers use throughout `lib/merge/asset-fs.js`/`asset-helpers.js`/
+`bsa-container.js` -- the same library zMerge's own `fileHelpers.js`/`bsaHelpers.js` build their own
+asset-discovery patterns on (its own `package.json` pins the older `minimatch: ^3.0.4`, itself ISC --
+this project uses the current `^10.2.6`).
+
 ## BSA Browser (CLI)
 
 **License: GPLv3.**
@@ -142,6 +164,21 @@ lossless -- not one pixel changes) with a slower/better DEFLATE strategy for ext
 also in `scripts/compress-image.js`. The Windows binary is auto-downloaded from oxipng's GitHub
 releases on first use and lives at `tools/oxipng/oxipng.exe`, gitignored -- not vendored in the repo,
 same pattern this project already uses for `tools/7-Zip/7z.exe`.
+
+## FallrimTools ReSaver (ReSaver_Renewed.exe)
+
+**License: Apache 2.0.**
+
+`ReSaver_Renewed.exe` (the save-parsing/editing engine behind Save Cleaner) is compiled from a
+community-maintained, modernized fork of [`mdfairch/FallrimTools`](https://github.com/mdfairch/FallrimTools)
+by Mark Fairchild -- the original save-file editor for Skyrim (LE/SE/VR) and Fallout 4. This project's
+own fork, `fallrimtools-resaver-renewed` (source lives alongside this project's workspace at
+`skyrim-modding/fallrimtools-resaver-renewed`), adds headless CLI entry points this app calls directly.
+Same shape as PGPatcher above -- the compiled binary is bundled directly inside this project's own
+release zip (`tools/resaver-renewed/`) rather than downloaded fresh at runtime -- but Apache 2.0 is
+permissive, not copyleft, so there's no license-compatibility concern to note beyond crediting the
+original author, which stays with Mark Fairchild regardless of how much local modernization sits on
+top.
 
 ## Node.js
 

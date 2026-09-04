@@ -9,6 +9,27 @@ const syncRunner = require('../lib/sync-runner');
 const rgRunner = require('../lib/rules-generator-runner');
 const rgLib = require('../lib/rules-generator');
 const helperClient = require('../lib/vortex-helper-client');
+const { createSseSession } = require('./sse-session');
+
+// Real SSE-streamed progress for Analyze and Apply to Vortex (2026-08-25, closes
+// docs/UI-PATTERN-MAP.md's "Rules Generator — Analyze"/"Apply to Vortex" findings: static text, no
+// SSE, on an action that writes to potentially many mods). Both are a single opaque
+// helperClient/isolated-worker call under the hood -- rgRunner.analyze(ViaHelper)/apply(ViaHelper)
+// has no internal per-item hook to report through (unlike Clear Update Flags' own real per-mod
+// for-loop), so there's no honest numeric count to show mid-flight. Rather than fake one, this
+// streams real phase text plus a live elapsed-time tick every second while the real call is
+// genuinely in flight -- the same "prove it's still alive, not frozen" technique PGPatcher's own
+// live elapsed timer already uses in this app, just without a percentage. tickingPhase() is shared
+// by both routes below rather than duplicated.
+function tickingPhase(emit, phase, message) {
+    let seconds = 0;
+    emit({ type: 'phase', phase, message, seconds });
+    const timer = setInterval(() => {
+        seconds += 1;
+        emit({ type: 'phase', phase, message, seconds });
+    }, 1000);
+    return () => clearInterval(timer);
+}
 
 function createRulesGeneratorRouter(config) {
     const router = express.Router();
@@ -105,28 +126,60 @@ function createRulesGeneratorRouter(config) {
     // Opportunistic helper-extension path (2026-08-18, Tier 2) -- same pattern as /workshop-collections
     // above: checked before vortexRunningGate, falls through to the exact original gated path when
     // the helper isn't reachable.
+    const analyzeSession = createSseSession();
+
+    router.get('/analyze/events', (req, res) => {
+        if (!analyzeSession.get()) return res.status(404).end();
+        const afterSeq = Number(req.headers['last-event-id'] || 0);
+        analyzeSession.subscribe(res, { afterSeq });
+    });
+
     router.post('/analyze', async (req, res) => {
         const { oldCollectionKey, newCollectionKey } = req.body || {};
         if (!oldCollectionKey || !newCollectionKey) {
             return res.status(400).json({ error: 'oldCollectionKey and newCollectionKey are both required.' });
         }
-        try {
-            const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-            let result = helperAvailable ? await rgRunner.analyzeViaHelper(oldCollectionKey, newCollectionKey) : null;
-            let source = 'helper-extension';
-            if (!result) {
-                source = 'state.v2';
-                if (vortexRunningGate(res)) return;
-                result = await rgRunner.analyze(state, oldCollectionKey, newCollectionKey);
-            }
-            // computeRelationshipCandidates handles a missing staging root internally (the
-            // noLinkFound/file-conflict half needs it, the incompleteLinks half doesn't) -- always
-            // called, never gated on `staging` here.
-            const relationshipCandidates = rgLib.computeRelationshipCandidates(result, staging);
-            res.json({ ...result, relationshipCandidates, source });
-        } catch (e) {
-            res.status(500).json({ error: e.message });
+        if (analyzeSession.isActive()) {
+            return res.status(409).json({ error: 'An analysis is already in progress.' });
         }
+        // vortexRunningGate only applies to the state.v2 fallback path, and that path is only known
+        // once the (fast) helper-availability check below resolves -- checked inside the background
+        // task, same as every other route here, rather than duplicated up front.
+        const mySession = analyzeSession.start({ id: `rg-analyze-${Date.now()}` });
+        res.status(202).json({});
+        const emitIfCurrent = (event) => {
+            if (analyzeSession.get() === mySession) analyzeSession.emit(event);
+        };
+
+        (async () => {
+            const stopTicking = tickingPhase(emitIfCurrent, 'analyzing', 'Comparing your two collections…');
+            try {
+                const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+                let result = helperAvailable ? await rgRunner.analyzeViaHelper(oldCollectionKey, newCollectionKey) : null;
+                let source = 'helper-extension';
+                if (!result) {
+                    source = 'state.v2';
+                    if (syncLib.isVortexRunning()) {
+                        stopTicking();
+                        emitIfCurrent({
+                            type: 'error', done: true, error: true, errorCode: 'vortex-running',
+                            message: 'Vortex is currently running. Close it completely and try again.',
+                        });
+                        return;
+                    }
+                    result = await rgRunner.analyze(state, oldCollectionKey, newCollectionKey);
+                }
+                stopTicking();
+                // computeRelationshipCandidates handles a missing staging root internally (the
+                // noLinkFound/file-conflict half needs it, the incompleteLinks half doesn't) -- always
+                // called, never gated on `staging` here.
+                const relationshipCandidates = rgLib.computeRelationshipCandidates(result, staging);
+                emitIfCurrent({ type: 'done', done: true, ...result, relationshipCandidates, source });
+            } catch (e) {
+                stopTicking();
+                emitIfCurrent({ type: 'error', done: true, error: true, message: e.message });
+            }
+        })();
     });
 
     // Completed/Exceptions report -- read-only, same shape/gate as /analyze, including the same
@@ -183,35 +236,71 @@ function createRulesGeneratorRouter(config) {
 
     // The real write -- opens Vortex's LIVE state.v2 directly (full backup taken first, refuses if
     // Vortex is running). Same params as /apply-preview. Same opportunistic helper-extension path as
-    // above -- see its own comment.
+    // above -- see its own comment. Real SSE-streamed progress (2026-08-25) -- same ticking-phase
+    // shape as /analyze above, same reasoning (a single opaque write call, writes to potentially many
+    // mods, no per-item hook to report through).
+    const applySession = createSseSession();
+
+    router.get('/apply/events', (req, res) => {
+        if (!applySession.get()) return res.status(404).end();
+        const afterSeq = Number(req.headers['last-event-id'] || 0);
+        applySession.subscribe(res, { afterSeq });
+    });
+
     router.post('/apply', async (req, res) => {
         const { oldCollectionKey, newCollectionKey, ruleOverrides, anomalyOverrides, relationshipOverrides } = req.body || {};
         if (!oldCollectionKey || !newCollectionKey) {
             return res.status(400).json({ error: 'oldCollectionKey and newCollectionKey are both required.' });
         }
-        try {
-            const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-            let result = helperAvailable
-                ? await rgRunner.applyViaHelper(oldCollectionKey, newCollectionKey, ruleOverrides, anomalyOverrides, relationshipOverrides)
-                : null;
-            let source = 'helper-extension';
-            if (!result) {
-                source = 'state.v2';
-                if (vortexRunningGate(res)) return;
-                result = await rgRunner.apply(state, oldCollectionKey, newCollectionKey, ruleOverrides, anomalyOverrides, relationshipOverrides);
-            }
-            // freshAnalysis/freshExceptions (rules-generator-worker.js's own apply-write mode, or its
-            // helper-backed equivalent) are computed from the SAME in-memory modIndex the write
-            // itself just patched -- zero staleness risk, no second read. relationshipCandidates
-            // still needs computing here (filesystem work, same reasoning as /analyze), fed this
-            // fresh, just-written analysis rather than a possibly-stale one. freshExceptions passes
-            // through untouched -- Step 3 (Exceptions)'s own trigger, see rgConfirmApply's own comment.
-            const { freshAnalysis, freshExceptions, ...writeSummary } = result;
-            const relationshipCandidates = freshAnalysis ? rgLib.computeRelationshipCandidates(freshAnalysis, staging) : undefined;
-            res.json({ ...writeSummary, source, freshAnalysis: freshAnalysis ? { ...freshAnalysis, relationshipCandidates } : undefined, freshExceptions });
-        } catch (e) {
-            res.status(500).json({ error: e.message });
+        if (applySession.isActive()) {
+            return res.status(409).json({ error: 'An apply is already in progress.' });
         }
+        const mySession = applySession.start({ id: `rg-apply-${Date.now()}` });
+        res.status(202).json({});
+        const emitIfCurrent = (event) => {
+            if (applySession.get() === mySession) applySession.emit(event);
+        };
+
+        (async () => {
+            const stopTicking = tickingPhase(emitIfCurrent, 'applying', 'Writing rules to Vortex…');
+            try {
+                const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+                let result = helperAvailable
+                    ? await rgRunner.applyViaHelper(oldCollectionKey, newCollectionKey, ruleOverrides, anomalyOverrides, relationshipOverrides)
+                    : null;
+                let source = 'helper-extension';
+                if (!result) {
+                    source = 'state.v2';
+                    if (syncLib.isVortexRunning()) {
+                        stopTicking();
+                        emitIfCurrent({
+                            type: 'error', done: true, error: true, errorCode: 'vortex-running',
+                            message: 'Vortex is currently running. Close it completely and try again.',
+                        });
+                        return;
+                    }
+                    result = await rgRunner.apply(state, oldCollectionKey, newCollectionKey, ruleOverrides, anomalyOverrides, relationshipOverrides);
+                }
+                stopTicking();
+                // freshAnalysis/freshExceptions (rules-generator-worker.js's own apply-write mode, or
+                // its helper-backed equivalent) are computed from the SAME in-memory modIndex the
+                // write itself just patched -- zero staleness risk, no second read.
+                // relationshipCandidates still needs computing here (filesystem work, same reasoning
+                // as /analyze), fed this fresh, just-written analysis rather than a possibly-stale
+                // one. freshExceptions passes through untouched -- Step 3 (Exceptions)'s own trigger,
+                // see rgConfirmApply's own comment.
+                const { freshAnalysis, freshExceptions, ...writeSummary } = result;
+                const relationshipCandidates = freshAnalysis ? rgLib.computeRelationshipCandidates(freshAnalysis, staging) : undefined;
+                emitIfCurrent({
+                    type: 'done', done: true, ...writeSummary, source,
+                    freshAnalysis: freshAnalysis ? { ...freshAnalysis, relationshipCandidates } : undefined,
+                    freshExceptions,
+                });
+            } catch (e) {
+                stopTicking();
+                emitIfCurrent({ type: 'error', done: true, error: true, message: e.message });
+            }
+        })();
     });
 
     // Exception report's "Clear all rules" -- read-only dry run for the confirm dialog. Same

@@ -276,7 +276,7 @@ function cufRenderResult(data) {
     // Success pill is now real green (DESIGN.md's Color & severity system) -- the bare, uncolored
     // `.callout` read as grey/nothing-happened, confirmed wrong for a genuinely completed action.
     result.className = allOk ? 'callout callout--success' : 'callout callout--warning';
-    cufG('cufResultTitle').textContent = allOk ? '✓ Update flags cleared' : '⚠️ Cleared with some problems';
+    cufG('cufResultTitle').textContent = allOk ? '🎉 Update flags cleared' : '⚠️ Cleared with some problems';
     // Full-success copy is the director's own exact words (2026-08-23) -- used verbatim, comma-format
     // the count. Partial-failure keeps its own existing, still-accurate framing -- just drops its
     // "A backup..." clause the same way full-success does, now that the backup path is never shown on
@@ -319,7 +319,7 @@ function cufRenderRestoreResult(results) {
   const allOk = failed.length === 0;
   const result = cufG('cufResult');
   result.className = allOk ? 'callout callout--success' : 'callout callout--warning';
-  cufG('cufResultTitle').textContent = allOk ? '✓ Backup restored' : '⚠️ Restored with some problems';
+  cufG('cufResultTitle').textContent = allOk ? '🎉 Backup restored' : '⚠️ Restored with some problems';
   cufG('cufResultSummary').textContent = allOk
     ? `Restored the original update flags for ${succeeded.toLocaleString()} mods.`
     : `Restored ${succeeded} of ${results.length} mods -- ${failed.length} couldn't be restored (see below).`;

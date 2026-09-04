@@ -53,6 +53,36 @@ let rcCollections = [];
 let rcCurrentReview = null; // { collectionModId, collectionName, shared: [...], only: [...] }
 let rcSelection = { shared: new Set(), only: new Set() }; // keys of the mods checked to remove
 
+// ---- Stepper (2026-09-01) -- mirrored directly from Update Collection v2's own ucv2Steps/
+// ucv2RenderStepper (web/public/update-collection-v2-app.js), not a second implementation. Fixed
+// 3-pill list (no conditional steps the way Update Collection's Removed/Optional Installs pills are) --
+// Review, the live removal progress, and the final result all fold into the "Remove" pill's own
+// active state throughout, same reasoning ucv2ScreenStep's own header comment documents for Apply
+// Progress + Apply Result staying pinned to "Apply" (no separate pill would otherwise get stuck
+// reading "in progress" once the removal has actually finished, since there's no 4th step to mark it
+// "done" relative to).
+function rcSteps() { return ['Pick a collection', 'Review', 'Remove']; }
+function rcRenderStepper(activeIdx) {
+  const steps = rcSteps();
+  $rc('rcStepper').innerHTML = steps.map((label, i) => {
+    const cls = i < activeIdx ? 'done' : i === activeIdx ? 'active' : '';
+    const num = i < activeIdx ? '✓' : String(i + 1);
+    return `<div class="merge-step ${cls}"><b>${num}</b>${label}</div>`;
+  }).join('');
+}
+// rcScreen1 is visible by default (no "hidden" class in the markup) and nothing else calls
+// rcGoScreen('rcScreen1') on a first visit -- same real gap ucv2RenderStepper(0)'s own header comment
+// documents -- so step 1 needs its own explicit initial render here or it never shows as active until
+// the user starts a review.
+rcRenderStepper(0);
+// True once rcRemoveCollection's own POST has actually started a real removal server-side (the
+// "Remove" step, index 2) -- false while rcScreen2 is showing the Review sub-section (index 1). Reset
+// on every fresh rcOpenReview so re-entering a review after a prior removal doesn't stay pinned at
+// step 3. rcScreen2 itself hosts all three of Review/Progress/Result as sub-sections (no separate
+// screen ids the way Update Collection v2 has for Apply Progress/Apply Result), so this flag is what
+// actually distinguishes "Review" from "Remove" for the stepper -- the screen id alone can't.
+let rcRemovalPhaseActive = false;
+
 // ---- Screen 1: pick a collection ----
 
 function rcRenderCollections() {
@@ -65,10 +95,18 @@ function rcRenderCollections() {
     return;
   }
   empty.classList.add('hidden');
-  grid.innerHTML = rcCollections.map((c) => `<div class="ucv2-card">
+  grid.innerHTML = rcCollections.map((c) => {
+    // Rev badge (2026-08-29, director's own direct ask) -- same "checked = /check-updates has run"
+    // convention and markup as Update Collection v2's own ucv2RenderCollections badge, just against
+    // this screen's own collections list.
+    const badge = c.installedRevision !== undefined
+      ? `<span class="ucv2-card__badge">Rev ${escHtmlRc(c.installedRevision ?? '?')}</span>`
+      : '';
+    return `<div class="ucv2-card">
     <div class="ucv2-card__image" style="background:linear-gradient(135deg,var(--surface-2),var(--bg))">
       ${c.pictureUrl ? `<img src="${escHtmlRc(c.pictureUrl)}" alt="">` : ''}
       <div class="ucv2-card__scrim"></div>
+      ${badge}
       <div class="ucv2-card__body">
         <div class="ucv2-card__title">${escHtmlRc(c.name)}</div>
         <div class="ucv2-card__author">by ${escHtmlRc(c.author || 'unknown')}</div>
@@ -78,7 +116,8 @@ function rcRenderCollections() {
     <div class="ucv2-card__actions">
       <button class="btn btn--danger btn--small" style="width:100%" onclick="rcOpenReview('${escHtmlRc(c.modId)}')">Remove collection</button>
     </div>
-  </div>`).join('');
+  </div>`;
+  }).join('');
 }
 
 // Same server-side-cache polling pattern as Update Collection v2's own ucv2LoadCollections -- the
@@ -111,23 +150,39 @@ async function rcLoadCollections() {
 }
 window.rcLoadCollections = rcLoadCollections;
 
+// Same "fires once each time arriving from a DIFFERENT area" reset pattern (2026-08-27,
+// merge-entry-reset) -- resets rcCurrentReview and rcSelection back to their defaults, goes back to
+// Screen 1, and re-loads the collections list fresh. Reuses rcCancelReview's own reset logic plus the
+// collections reload it already does.
+function rcResetOnEntry() {
+  rcCancelReview();
+}
+window.rcResetOnEntry = rcResetOnEntry;
+
 // ---- Screen 2: review shared mods, then remove ----
 
+// .name-row (2026-09-01) -- the shared "Bordered name row" class DESIGN.md's own "Consolidating the
+// checkbox-selection variants" section documents, replacing this tool's former .rc-mod-row. Mirrors
+// design/vortex-bordered-row-mockup.html's own canonical markup exactly (label IS the row -- checkbox,
+// name/meta block, spacer, trailing badge, all directly inside one clickable <label>), not the old
+// div-wrapping-a-label shape. See that mockup's own file for why: DESIGN.md's original plan named
+// TWO call sites to consolidate (.merge-chk-row alongside this one), but Merge Plugins' own Step 0
+// collection picker had already independently migrated to the .coll-card/.picker-grid pattern by the
+// time this was actually built -- .merge-chk-row was dead CSS with zero real call sites left, removed
+// rather than "repointed." This is the one real, live consolidation.
 function rcModRowHtml(m, group) {
   const checked = rcSelection[group].has(m.key);
-  const tag = m.shared
-    ? `<span class="rc-shared-tag">required by ${m.usedBy.length} other${m.usedBy.length === 1 ? '' : 's'}</span>`
+  const badge = m.shared
+    ? `<div class="spacer"></div><span class="badge badge--warning">required by ${m.usedBy.length} other${m.usedBy.length === 1 ? '' : 's'}</span>`
     : '';
-  return `<div class="rc-mod-row ${m.shared ? 'rc-mod-row--shared' : ''}${checked ? ' checked' : ''}">
-    <label>
-      <input type="checkbox" data-group="${group}" data-key="${escHtmlRc(m.key)}" ${checked ? 'checked' : ''}>
-      <span>
-        <div class="rc-mod-row__name">${escHtmlRc(m.name)}</div>
-        <div class="rc-mod-row__meta">${escHtmlRc(m.version || '')}${m.shared ? ` &middot; also required by: ${escHtmlRc(m.usedBy.join(', '))}` : ''}</div>
-      </span>
-    </label>
-    ${tag}
-  </div>`;
+  return `<label class="name-row${checked ? ' on' : ''}">
+    <input type="checkbox" data-group="${group}" data-key="${escHtmlRc(m.key)}" ${checked ? 'checked' : ''}>
+    <div>
+      <div class="nm">${escHtmlRc(m.name)}</div>
+      <div class="sub2">${escHtmlRc(m.version || '')}${m.shared ? ` &middot; also required by: ${escHtmlRc(m.usedBy.join(', '))}` : ''}</div>
+    </div>
+    ${badge}
+  </label>`;
 }
 
 function rcUpdateCounts() {
@@ -136,14 +191,14 @@ function rcUpdateCounts() {
   $rc('rcOnlyCount').textContent = `${rcSelection.only.size} of ${r.only.length} selected to remove`;
 }
 
-// Set a single checkbox's checked state, keep rcSelection and the row's ".checked" accent
-// (DESIGN.md's "Selectable lists" core pattern -- checked rows get a faint accent wash) in sync.
+// Set a single checkbox's checked state, keep rcSelection and the row's ".on" accent
+// (.name-row's own state class -- see design/vortex-bordered-row-mockup.html) in sync.
 function rcSetRowChecked(cb, checked) {
   cb.checked = checked;
   const group = cb.dataset.group;
   if (checked) rcSelection[group].add(cb.dataset.key); else rcSelection[group].delete(cb.dataset.key);
-  const row = cb.closest('.rc-mod-row');
-  if (row) row.classList.toggle('checked', checked);
+  const row = cb.closest('.name-row');
+  if (row) row.classList.toggle('on', checked);
 }
 
 // Per-group last-clicked checkbox, for shift-click range select (DESIGN.md's "Selectable lists"
@@ -197,10 +252,16 @@ function rcRenderReviewScreen() {
   removeBtn.classList.remove('hidden');
   removeBtn.disabled = false;
   removeBtn.textContent = 'Remove collection →';
-  $rc('rcCancelBtn').textContent = 'Cancel';
+  // "Back", not "Cancel" (2026-09-01, DESIGN.md's own decided rule: Cancel is only right when going
+  // back is genuinely impossible -- nothing destructive has happened yet at this point, rcCancelReview
+  // just returns to Screen 1, same shape Update Collection v2's own ucv2CancelReview already got
+  // renamed for). rcRenderApplyResult below still correctly sets this to "Back to collections" once a
+  // real removal has actually run.
+  $rc('rcCancelBtn').textContent = 'Back';
 }
 
 async function rcOpenReview(modId) {
+  rcRemovalPhaseActive = false;
   rcGoScreen('rcScreen2');
   rcHideCriticalError('rcCriticalError2');
   $rc('rcReviewBody').classList.add('hidden');
@@ -225,6 +286,7 @@ window.rcOpenReview = rcOpenReview;
 function rcGoScreen(id) {
   $rc('rcScreen1').classList.toggle('hidden', id !== 'rcScreen1');
   $rc('rcScreen2').classList.toggle('hidden', id !== 'rcScreen2');
+  rcRenderStepper(id === 'rcScreen1' ? 0 : (rcRemovalPhaseActive ? 2 : 1));
   window.scrollTo(0, 0);
 }
 
@@ -252,8 +314,8 @@ function rcRenderApplyResult(result) {
   const allArchivesOk = (result.deletedArchiveResults || []).every((r) => r.ok !== false);
   const allOk = result.ok && allModsOk && allArchivesOk;
 
-  let html = `<div class="callout${allOk ? '' : ' callout--warning'}">`
-    + `<div class="callout__title">${allOk ? `✓ &ldquo;${escHtmlRc(result.collectionName)}&rdquo; removed` : '⚠️ Removed with some problems'}</div>`
+  let html = `<div class="callout${allOk ? ' callout--success' : ' callout--warning'}">`
+    + `<div class="callout__title">${allOk ? `🎉 "${escHtmlRc(result.collectionName)}" removed` : '⚠️ Removed with some problems'}</div>`
     + (result.error ? `<p>${escHtmlRc(result.error)}</p>` : '')
     + `</div>`;
   if (result.modResults.length > 0) {
@@ -271,6 +333,55 @@ function rcRenderApplyResult(result) {
   box.classList.remove('hidden');
 }
 
+// Real SSE-streamed progress (2026-08-25) -- POST /apply now only validates + starts the removal,
+// then returns as soon as it's genuinely running server-side; GET /apply/events streams real phase
+// updates (some with a per-item count, some phase-text-only -- see remove-collection-runner.js's own
+// applyRemoval comment for why). Same consumption shape as Workshop Report's own
+// wrHandleCheckEvent/EventSource pairing, reused rather than inventing a second one.
+let rcApplyEventSource = null;
+
+// Phase label copy, plain language, matches what's actually happening at each real step (DESIGN.md's
+// "say what's actually happening in plain language" rule) -- falls back to the server's own message
+// when a phase isn't one of these (forward-compatible, never shows a blank line).
+function rcSetApplyProgress(frame) {
+  const bar = $rc('rcApplyProgressBar');
+  const text = $rc('rcApplyProgressText');
+  if (frame.phase === 'deleting-archives' && frame.total) {
+    bar.style.width = `${Math.round((frame.current / frame.total) * 100)}%`;
+    text.textContent = `${frame.current} / ${frame.total} — Deleting archives…`;
+  } else {
+    // No real per-item count exists for 'resolving'/'removing' (a single atomic Helper call, no
+    // progress possible from this side) -- an indeterminate-looking, mostly-full bar plus the real
+    // status text is honest about that, same "Starting…" phase-only treatment Clear Update Flags
+    // already uses before its own first per-mod event arrives.
+    bar.style.width = '90%';
+    text.textContent = frame.message || 'Working…';
+  }
+}
+
+function rcFinishApplyStream() {
+  if (rcApplyEventSource) { rcApplyEventSource.close(); rcApplyEventSource = null; }
+  $rc('rcApplyProgress').classList.add('hidden');
+}
+
+function rcHandleApplyEvent(frame) {
+  if (frame.type === 'phase') {
+    rcSetApplyProgress(frame);
+  } else if (frame.type === 'done') {
+    rcFinishApplyStream();
+    rcRenderApplyResult(frame);
+    // A real removal happened (even a partial one) -- the collections grid may now be stale, so the
+    // next visit to Screen 1 should reload rather than show a card for something already gone.
+    rcCollections = [];
+  } else if (frame.type === 'error') {
+    rcFinishApplyStream();
+    const btn = $rc('rcRemoveBtn');
+    btn.disabled = false;
+    btn.textContent = 'Remove collection →';
+    rcHandleError(new Error(frame.message || 'The removal failed.'), 'rcCriticalError2', rcRemoveCollection);
+  }
+}
+
 async function rcRemoveCollection() {
   const r = rcCurrentReview;
   const selectedModIds = [...rcSelection.shared, ...rcSelection.only];
@@ -279,27 +390,38 @@ async function rcRemoveCollection() {
   btn.textContent = 'Removing…';
   rcHideCriticalError('rcCriticalError2');
   try {
-    const result = await rcApi('POST', '/api/remove-collection/apply', {
+    await rcApi('POST', '/api/remove-collection/apply', {
       collectionModId: r.collectionModId,
       selectedModIds,
       deleteArchives: $rc('rcDeleteArchivesCheckbox').checked,
     });
-    rcRenderApplyResult(result);
-    // A real removal happened (even a partial one) -- the collections grid may now be stale, so the
-    // next visit to Screen 1 should reload rather than show a card for something already gone.
-    rcCollections = [];
   } catch (e) {
     btn.disabled = false;
     btn.textContent = 'Remove collection →';
     rcHandleError(e, 'rcCriticalError2', rcRemoveCollection);
+    return;
   }
+
+  // A real removal is now genuinely running server-side -- only now switch to the progress view and
+  // start streaming it. rcRemovalPhaseActive pins the stepper at index 2 ("Remove") from here through
+  // both the live progress bar and the final result -- see that flag's own declaration comment.
+  rcRemovalPhaseActive = true;
+  rcRenderStepper(2);
+  $rc('rcApplyProgressBar').style.width = '0%';
+  $rc('rcApplyProgressText').textContent = 'Starting…';
+  $rc('rcApplyProgress').classList.remove('hidden');
+
+  if (rcApplyEventSource) rcApplyEventSource.close();
+  const es = new EventSource('/api/remove-collection/apply/events');
+  rcApplyEventSource = es;
+  es.onmessage = (msg) => rcHandleApplyEvent(JSON.parse(msg.data));
 }
 $rc('rcRemoveBtn').addEventListener('click', rcRemoveCollection);
 
 function rcCancelReview() {
   rcCurrentReview = null;
+  rcRemovalPhaseActive = false;
   rcGoScreen('rcScreen1');
   if (rcCollections.length === 0) rcLoadCollections();
 }
 $rc('rcCancelBtn').addEventListener('click', rcCancelReview);
-$rc('rcBackLink').addEventListener('click', (e) => { e.preventDefault(); rcCancelReview(); });

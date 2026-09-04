@@ -33,12 +33,16 @@ const { createMergeRouter } = require('./merge-routes');
 const { createRebuildMissingRouter } = require('./rebuild-missing-routes');
 const { createWorkshopReportRouter } = require('./workshop-report-routes');
 const { createMergeHistoryRouter } = require('./merge-history-routes');
+const { createMergeUpdateReportRouter } = require('./merge-update-report-routes');
 const { createModExceptionsRouter } = require('./mod-exceptions-routes');
 const { createCycleHelperRouter } = require('./cycle-helper-routes');
 const { createUpdateCollectionV2Router } = require('./update-collection-v2-routes');
 const { createRemoveCollectionRouter } = require('./remove-collection-routes');
 const { createPgpatcherRouter } = require('./pgpatcher-routes');
 const { createClearUpdateFlagsRouter } = require('./clear-update-flags-routes');
+const { createSaveCleanerRouter } = require('./save-cleaner-routes');
+const { createFileRetrieverRouter } = require('./file-retriever-routes');
+const { createDuplicateVersionCleanupRouter } = require('./duplicate-version-cleanup-routes');
 const { loadSyncLib } = require('../lib/collection-runner');
 const appConfig = require('../lib/app-config');
 const helperClient = require('../lib/vortex-helper-client');
@@ -84,6 +88,18 @@ function main() {
     }
 
     const fileConfig = appConfig.loadConfig();
+
+    // Application-level log (2026-08-26, lib/app-logger.js) -- opt-in, off by default. Initialized
+    // as early as possible in main() (right after config is readable at all) so it captures as much
+    // of real startup as it can, including the resolved-config dump right below. Genuinely can't be
+    // any earlier than this -- the decision itself comes from config.json, which isn't loaded until
+    // the line above.
+    let appLogPath = null;
+    if (fileConfig.appLogEnabled) {
+        appLogPath = require('../lib/app-logger').initAppLogger();
+        console.log(`[startup] Application log enabled -- writing to ${appLogPath}`);
+    }
+
     const config = {
         port: cliArgs.port || fileConfig.serverPort || 4321,
         host: cliArgs.host || fileConfig.serverHost || '127.0.0.1',
@@ -114,6 +130,10 @@ function main() {
         // own comment). No CLI flag, config.json/Settings only.
         pgpatcherCfgDir: fileConfig.pgpatcherCfgDir || null,
         pgpatcherOutputBackupDir: fileConfig.pgpatcherOutputBackupDir || null,
+        // Save Cleaner -- optional, blank is a supported state (auto-detected on Settings load
+        // instead; see web/settings-routes.js). No CLI flag, config.json/Settings only.
+        saveCleanerSavesDir: fileConfig.saveCleanerSavesDir || null,
+        saveCleanerBackupRoot: fileConfig.saveCleanerBackupRoot || null,
         // maxBackupsToKeep is NOT included here deliberately -- unlike the paths above, it's read
         // fresh from config.json at the moment each rebuild run actually needs it (see
         // rebuild-routes.js), not baked in at startup, so changing it never needs a restart.
@@ -139,12 +159,16 @@ function main() {
     app.use('/api/rebuild-missing', createRebuildMissingRouter(config));
     app.use('/api/workshop-report', createWorkshopReportRouter(config));
     app.use('/api/merge-history', createMergeHistoryRouter(config));
+    app.use('/api/merge-update-report', createMergeUpdateReportRouter(config));
     app.use('/api/mod-exceptions', createModExceptionsRouter());
     app.use('/api/cycle-helper', createCycleHelperRouter(config));
     app.use('/api/update-collection-v2', createUpdateCollectionV2Router(config));
     app.use('/api/remove-collection', createRemoveCollectionRouter(config));
     app.use('/api/pgpatcher', createPgpatcherRouter(config));
     app.use('/api/clear-update-flags', createClearUpdateFlagsRouter(config));
+    app.use('/api/save-cleaner', createSaveCleanerRouter(config));
+    app.use('/api/file-retriever', createFileRetrieverRouter());
+    app.use('/api/duplicate-version-cleanup', createDuplicateVersionCleanupRouter(config));
 
     // Shared, whole-app route (not scoped to any one tool area) -- shell.js's Home "Update
     // Collection" card uses this to decide LIVE, on every click, whether to open Update Collection
@@ -216,6 +240,18 @@ function main() {
         const isLoopback = config.host === '127.0.0.1' || config.host === 'localhost';
         const browseUrl = `http://${isLoopback ? config.host : '127.0.0.1'}:${config.port}`;
         console.log(`Vortex Collection Tools running at ${browseUrl}`);
+        // Real PID + how this process was started -- both come up directly in real debugging
+        // (GitHub issue #4's own investigation had to guess at exactly this). VCT_STARTED_BY is set
+        // by launcher/src-tauri/src/main.rs's own spawn_node() right before it spawns node.exe --
+        // absent (undefined) means this was started some other way (a terminal, start-server.ps1/
+        // .bat, sandbox-test-rebuild.js, etc.), which is itself useful to know.
+        console.log(`[startup] PID ${process.pid}, started via ${process.env.VCT_STARTED_BY || 'terminal/direct (not the tray launcher)'}`);
+        // Full resolved config dump -- every actual path value, not just "configured"/"not
+        // configured" (task's own explicit ask, motivated by issue #4's own remaining guesswork).
+        // Safe to dump whole: `config` here is main()'s own local resolved-startup object, which
+        // never copies nexusApiKey out of fileConfig in the first place (see its construction above)
+        // -- no redaction needed, nothing sensitive is in it.
+        console.log('[startup] Resolved config:', JSON.stringify(config, null, 2));
         if (config.staging && config.downloads) {
             console.log(`Staging: ${config.staging}`);
             console.log(`Downloads: ${config.downloads}`);

@@ -176,23 +176,62 @@ function renderResults(kind, data) {
   $g('cleanupResults').classList.remove('hidden');
 }
 
+// Real SSE-streamed progress (2026-08-25) -- POST kicks off the real scan, then GET .../events
+// streams a live elapsed-time tick (server has no per-item count to report, a single opaque
+// cleanupScan.scanStaging/scanArchives call -- see cleanup-routes.js's own comment) plus the final
+// 'done' event carrying exactly the same result shape this used to get back directly. Same
+// consumption shape as rules-generator-app.js's own rgAnalyze/rgHandleAnalyzeEvent. One shared
+// EventSource var is fine -- staging/archives scans are mutually exclusive in this UI (one button
+// active at a time), even though each has its own SSE session server-side.
+let cleanupScanEventSource = null;
+
+function cleanupHandleScanEvent(kind, frame) {
+  if (frame.type === 'phase') {
+    $g('cleanupLoading').lastChild.textContent = ` ${frame.message}${frame.seconds ? ` (${frame.seconds}s)` : ''}`;
+  } else if (frame.type === 'done') {
+    if (cleanupScanEventSource) { cleanupScanEventSource.close(); cleanupScanEventSource = null; }
+    renderResults(kind, frame);
+  } else if (frame.type === 'error') {
+    if (cleanupScanEventSource) { cleanupScanEventSource.close(); cleanupScanEventSource = null; }
+    $g('cleanupLoading').classList.add('hidden');
+    if (frame.errorCode === 'vortex-running') {
+      window.showVortexRunningModal(() => runScan(kind));
+    } else {
+      cleanupHandleError(new Error(frame.message || 'The scan failed.'), () => runScan(kind));
+    }
+  }
+}
+
 async function runScan(kind) {
   $g('cleanupCriticalError').classList.add('hidden');
   $g('cleanupNotConfigured').classList.add('hidden');
   $g('cleanupEmpty').classList.add('hidden');
   $g('cleanupResults').classList.add('hidden');
   $g('cleanupUninstalledNotice').classList.add('hidden');
+  $g('cleanupLoading').lastChild.textContent = ' Starting…';
   $g('cleanupLoading').classList.remove('hidden');
   $g('cleanupScanArchivesBtn').classList.toggle('btn--primary', kind === 'archives');
   $g('cleanupScanArchivesBtn').classList.toggle('btn--ghost', kind !== 'archives');
   $g('cleanupScanStagingBtn').classList.toggle('btn--primary', kind === 'staging');
   $g('cleanupScanStagingBtn').classList.toggle('btn--ghost', kind !== 'staging');
+  const kickoffUrl = kind === 'archives' ? '/api/cleanup/scan-archives' : '/api/cleanup/scan-staging';
+  let data;
   try {
-    const data = await cleanupApi('GET', kind === 'archives' ? '/api/cleanup/scan-archives' : '/api/cleanup/scan-staging');
-    renderResults(kind, data);
+    data = await cleanupApi('POST', kickoffUrl);
   } catch (e) {
     cleanupHandleError(e, () => runScan(kind));
+    return;
   }
+  // Not configured -- the server answered synchronously with the full (empty) result, no real scan
+  // ever started, so there's nothing to subscribe to.
+  if (data.configured === false) {
+    renderResults(kind, data);
+    return;
+  }
+  if (cleanupScanEventSource) cleanupScanEventSource.close();
+  const es = new EventSource(`${kickoffUrl}/events`);
+  cleanupScanEventSource = es;
+  es.onmessage = (msg) => cleanupHandleScanEvent(kind, JSON.parse(msg.data));
 }
 
 $g('cleanupScanArchivesBtn').addEventListener('click', () => runScan('archives'));
@@ -381,8 +420,17 @@ $g('cleanupCrossCheckDeleteAllBtn').addEventListener('click', () => {
 // missing-masters-app.js manages its own refresh timing; this just calls its exposed hook via the
 // same "deliberate seam" pattern reports-rulesgen-app.js already uses (a plain `typeof === function`
 // check, since missing-masters-app.js loads after this file and can't be referenced directly here).
-const UTILITIES_SUB_TABS = ['missingmasters', 'scrub', 'archivefinder', 'missingfiles', 'cyclehelper', 'clearflags'];
+const UTILITIES_SUB_TABS = ['missingmasters', 'scrub', 'archivefinder', 'fileretriever', 'missingfiles', 'cyclehelper', 'clearflags', 'duplicateversions'];
+let currentUtilitiesSubTab = null; // track previous sub-tab for cyclehelper reset on entry
+// Called by shell.js's navigateToArea right before re-entering Utilities from a DIFFERENT top-level
+// area, so the upcoming showUtilitiesSubTab call sees previousSubTab as null and re-fires that
+// sub-tab's own reset-on-entry hook even when it's the SAME sub-tab as last time (2026-09-01,
+// utilities-reentry-reset-bugfix) -- without this, currentUtilitiesSubTab never clears on a Home
+// round-trip, so returning to the same sub-tab looks like "no change" and skips the reset.
+window.utilitiesClearSubTabTracking = () => { currentUtilitiesSubTab = null; };
 function showUtilitiesSubTab(id) {
+  const previousSubTab = currentUtilitiesSubTab;
+  currentUtilitiesSubTab = id;
   for (const tab of UTILITIES_SUB_TABS) {
     $g(`utilities-sub-area-${tab}`).classList.toggle('hidden', tab !== id);
     $g(`utilities-sub-${tab}`).classList.toggle('btn--primary', tab === id);
@@ -392,18 +440,41 @@ function showUtilitiesSubTab(id) {
   // Same "deliberate seam" pattern as missing-masters-app.js above -- loads config/stats once per
   // visit to this tab (archive-finder-app.js loads after this file).
   if (id === 'archivefinder' && typeof loadArchiveFinderPageOnce === 'function') loadArchiveFinderPageOnce();
-  // Same seam again -- rebuild-missing-app.js loads after this file.
-  if (id === 'missingfiles' && typeof loadRebuildMissingPageOnce === 'function') loadRebuildMissingPageOnce();
+  // Same seam again -- file-retriever-app.js loads after this file. No load-once fetch (there's
+  // nothing to refresh on tab-open -- the flow always starts at "enter a mod ID"), just the same
+  // reset-on-arriving-from-elsewhere convention every other multi-step Utilities tool follows, so
+  // switching away mid-flow and back doesn't leave a stale mod/selection sitting on screen.
+  if (id === 'fileretriever' && previousSubTab !== 'fileretriever' && typeof window.frResetOnEntry === 'function') window.frResetOnEntry();
+  // Same seam again -- rebuild-missing-app.js loads after this file. Rebuild Missing Files' own
+  // full reset to Step 0 (2026-08-27, merge-entry-reset) -- fires only when arriving from a
+  // DIFFERENT sub-tab (previousSubTab check, same pattern as Cycle Helper's own chStartOver above),
+  // closing any lingering SSE connections and resetting state.
+  if (id === 'missingfiles') {
+    if (typeof loadRebuildMissingPageOnce === 'function') loadRebuildMissingPageOnce();
+    if (previousSubTab !== 'missingfiles' && typeof window.rmfResetOnEntry === 'function') window.rmfResetOnEntry();
+  }
   // Same seam again -- cycle-helper-app.js loads after this file. Only checks the LOCAL
   // snapshot-status file here (no Vortex/DB dependency, safe every visit) -- the actual Scan stays a
   // deliberate button click, same "never touch Vortex's live state just from opening a tab"
-  // discipline rgLoadPickers documents for Rules Generator.
-  if (id === 'cyclehelper' && typeof loadCycleHelperPageOnce === 'function') loadCycleHelperPageOnce();
+  // discipline rgLoadPickers documents for Rules Generator. Cycle Helper's own full reset-to-Prep
+  // (chStartOver) fires only when arriving from a DIFFERENT sub-tab (previousSubTab check), never
+  // from internal step navigation within Cycle Helper itself or from browser tab switching. Discards
+  // any unsaved in-progress state (chIsValidating, chSelectedFix) same as mergeResetOnEntry does
+  // unconditionally.
+  if (id === 'cyclehelper') {
+    if (typeof loadCycleHelperPageOnce === 'function') loadCycleHelperPageOnce();
+    if (previousSubTab !== 'cyclehelper' && typeof window.chStartOver === 'function') window.chStartOver();
+  }
   // Same seam again -- clear-update-flags-app.js loads after this file. Re-fetches every visit
   // (not load-once) -- same "state changes constantly, a stale cached list would mislead" reasoning
   // missingmasters' own runMissingMastersScan already follows above, since a mod's update-available
   // flag can flip at any time Vortex is used, not just from actions this tool itself takes.
   if (id === 'clearflags' && typeof runClearUpdateFlagsList === 'function') runClearUpdateFlagsList();
+  // Same seam again -- duplicate-version-cleanup-app.js loads after this file. Full reset to Screen 1
+  // fires only when arriving from a DIFFERENT sub-tab (same previousSubTab-guarded pattern as File
+  // Retriever/Rebuild Missing Files/Cycle Helper above) -- this is a real destructive tool, so a stale
+  // Screen 2/3 selection sitting on screen after switching away and back would be actively misleading.
+  if (id === 'duplicateversions' && previousSubTab !== 'duplicateversions' && typeof window.dvcResetOnEntry === 'function') window.dvcResetOnEntry();
 
   // Keeps the URL in sync so a browser refresh returns to this exact sub-tab, not just the
   // Utilities area generically -- same fix as showReportsSubTab (stats-app.js) / showToolArea

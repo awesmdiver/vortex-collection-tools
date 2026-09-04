@@ -629,8 +629,8 @@ async function handleBackupRatioDismissClick(collectionName) {
   try {
     await syncApi('POST', '/api/sync/backup-ratio-dismiss', { collectionName });
     el.className = 'callout callout--success';
-    el.innerHTML = `<p>${mdBold(escHtml(
-      `Got it — we won't flag this again for **${collectionName || 'this collection'}**. Turn these reminders back on anytime in Settings.`
+    el.innerHTML = `<div class="callout__title">🎉 Got it!</div><p>${mdBold(escHtml(
+      `We won't flag this again for **${collectionName || 'this collection'}**. Turn these reminders back on anytime in Settings.`
     ))}</p>`;
   } catch (e) {
     el.className = 'callout callout--critical';
@@ -1040,6 +1040,18 @@ async function boot() {
 // "deliberate seam, function defined by a later-loaded script" technique already used for
 // window.showUpdateCompareReport in this same file.
 window.loadSyncProfiles = loadSyncProfiles;
+
+// Same "fires once each time the user arrives from a DIFFERENT area" reset pattern Merge Plugins
+// established (2026-08-27, merge-entry-reset) -- resets all step state back to Step 0 using
+// resetSyncStepsForNewCollection's own already-tested logic, exactly as if the user had just picked
+// a different collection (which is what arriving from Home/another tool reads like from the tool's
+// own perspective). Then calls loadSyncProfiles to re-fetch the current profile list fresh.
+function syncResetOnEntry() {
+  syncGoToStep(0);
+  resetSyncStepsForNewCollection();
+  loadSyncProfiles();
+}
+window.syncResetOnEntry = syncResetOnEntry;
 
 // Re-checks Vortex-gated profile data specifically when the user actually visits Update Collection
 // -- every time, whether arriving via a Home card or already here -- matching the same

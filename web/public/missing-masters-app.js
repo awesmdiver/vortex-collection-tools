@@ -73,7 +73,9 @@ function mmHandleError(e, retryFn) {
       ' won’t work until the server is running again.',
     ]));
   } else {
-    box.textContent = e.message;
+    box.innerHTML = '';
+    box.appendChild(el('div', { class: 'callout__title' }, '🛑 Couldn\'t load missing masters'));
+    box.appendChild(el('p', {}, e.message));
   }
   box.classList.remove('hidden');
   box.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -421,7 +423,7 @@ function mmRenderRestoreSearchState(master, btn, data) {
   if (data.state === 'not-configured') {
     const open = el('button', { class: 'btn btn--primary btn--small' }, 'Open Settings');
     open.addEventListener('click', () => window.navigateToArea && window.navigateToArea('settings'));
-    mmRowNote(btn, 'info', '\ud83d\udca1 Archive Finder isn\u2019t set up yet',
+    mmRowNote(btn, 'info', '\u2139\ufe0f Archive Finder isn\u2019t set up yet',
       ['To search inside your downloaded archives, Archive Finder needs a folder to keep its index in. Set one in ', el('strong', {}, 'Settings'), ' and come back.'],
       [open]);
     return;
@@ -429,7 +431,7 @@ function mmRenderRestoreSearchState(master, btn, data) {
   if (data.state === 'not-scanned') {
     const scan = el('button', { class: 'btn btn--primary btn--small' }, 'Scan Downloads Now');
     scan.addEventListener('click', () => mmStartArchiveScan(null));
-    mmRowNote(btn, 'info', '\ud83d\udca1 Archive index is empty',
+    mmRowNote(btn, 'info', '\u2139\ufe0f Archive index is empty',
       ['The Archive Finder has not indexed your downloads folder yet. Run a scan so Missing Masters can search your archive contents. On larger download folders, this takes a few minutes.'],
       [scan]);
     return;
@@ -443,7 +445,7 @@ function mmRenderRestoreSearchState(master, btn, data) {
       const note = row && row.querySelector('.mm-row__restore-note');
       if (note) note.remove();
     });
-    mmRowNote(btn, 'info', '\ud83d\udca1 File type not included in archive index',
+    mmRowNote(btn, 'info', '\u2139\ufe0f File type not included in archive index',
       ['Your archive index only searches specific file types (like ', el('code', {}, '.esp'), '). This missing master is a ',
         el('code', {}, data.ext), ' file, so it was skipped during your last scan. You can add this file type and re-scan your downloads folder now. On larger folders, this takes a few minutes.'],
       [add, dismiss]);
@@ -608,7 +610,7 @@ function mmShowRestoreResult(master, result) {
   }
   if (result.ghostPreserved && result.ghostPreserved.length) {
     box.appendChild(el('div', { class: 'callout callout--info' }, [
-      el('div', { class: 'callout__title' }, '\ud83d\udca1 Some optional files were left disabled'),
+      el('div', { class: 'callout__title' }, '\u2139\ufe0f Some optional files were left disabled'),
       el('p', {}, 'The mod was restored, but plugins you previously turned off inside Vortex were kept disabled.'),
     ]));
   }
@@ -790,7 +792,7 @@ function mmRenderMasterRow(master) {
     // — same row, soft tier (see mmDisplayStatus/MM_STATUS), nothing left for the user to decide.
     if (mmIsEslifierSwap(master)) {
       const callout = el('div', { class: 'callout callout--info' }, [
-        el('div', { class: 'callout__title' }, 'ⓘ You swapped this plugin on purpose — nothing to fix.'),
+        el('div', { class: 'callout__title' }, 'ℹ️ You swapped this plugin on purpose — nothing to fix.'),
         el('p', {}, [
           'A lighter, compressed copy of ',
           el('strong', {}, master.name),
@@ -1053,7 +1055,7 @@ function mmRenderHelperNote() {
   box.classList.toggle('hidden', !show);
   if (!show) return;
   box.innerHTML = '';
-  box.appendChild(el('div', { class: 'callout__title' }, '\ud83d\udca1 Enable and Restore need the Vortex Helper'));
+  box.appendChild(el('div', { class: 'callout__title' }, '\u2139\ufe0f Enable and Restore need the Vortex Helper'));
   box.appendChild(el('p', {}, [
     'You can still inspect plugins and build dummy masters without it. To turn plugins back on or extract missing mods directly from this page, install the ',
     el('strong', {}, 'Vortex Collection Helper'),

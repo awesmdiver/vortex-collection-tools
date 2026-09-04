@@ -274,7 +274,7 @@ function createMissingMastersRouter(config) {
         const extensions = archiveFinderExtensions || ['.esp'];
         let db;
         try {
-            db = createDb(archiveFinderDbDir);
+            db = createDb(archiveFinderDbDir, { downloads, staging });
         } catch (e) {
             return res.status(500).json({ error: e.message });
         }

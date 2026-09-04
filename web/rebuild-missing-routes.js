@@ -26,6 +26,7 @@ const express = require('express');
 
 const { listPickableCollections, scanCollections, scanOneMod } = require('../lib/missing-files-scan');
 const { loadCollection } = require('../lib/collection-parser');
+const { resolveDomainDownloadsDir } = require('../lib/archive-locator');
 const { findSevenZip, extractMany } = require('../lib/sevenzip');
 const { existsPlainOrGhosted } = require('../lib/ghost-files');
 const modExceptionStore = require('../lib/mod-exception-store');
@@ -175,7 +176,13 @@ function createRebuildMissingRouter(config) {
         // resolveSlugForCollection's own Helper-vs-state.v2 branch makes the gate genuinely
         // unnecessary in that case. Untouched (same message, same shape) for the no-Helper fallback.
         if (!(await helperClient.checkHelperAvailable(syncLib.GAME_ID)) && syncLib.isVortexRunning()) {
-            return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
+            // "Currently busy", not "close it" -- this gate only ever trips when the Helper (which
+            // this router always prefers) didn't answer while Vortex is running; there's no genuine
+            // "must be closed" path here. Same wording/reasoning update-collection-v2-runner.js's own
+            // checkForUpdates/reviewUpdate fallback already established for the identical condition
+            // (2026-08-30) -- this router just never got the same fix. Matched by the frontend's own
+            // /currently busy/i check (rmfHandleError) to show the correct modal variant.
+            return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently busy. Please wait for Vortex to finish its current activity, then try again.' });
         }
         const { collectionModId } = req.body || {};
         if (!collectionModId || typeof collectionModId !== 'string') {
@@ -223,7 +230,13 @@ function createRebuildMissingRouter(config) {
         // no-Helper fallback.
         const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
         if (!helperAvailable && syncLib.isVortexRunning()) {
-            return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
+            // "Currently busy", not "close it" -- this gate only ever trips when the Helper (which
+            // this router always prefers) didn't answer while Vortex is running; there's no genuine
+            // "must be closed" path here. Same wording/reasoning update-collection-v2-runner.js's own
+            // checkForUpdates/reviewUpdate fallback already established for the identical condition
+            // (2026-08-30) -- this router just never got the same fix. Matched by the frontend's own
+            // /currently busy/i check (rmfHandleError) to show the correct modal variant.
+            return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently busy. Please wait for Vortex to finish its current activity, then try again.' });
         }
         try {
             const { workshopOnlyCollections: found } = helperAvailable
@@ -391,7 +404,13 @@ function createRebuildMissingRouter(config) {
         // every time, whenever Vortex is open -- a real correctness regression, not a neutral no-op.
         const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
         if (!helperAvailable && syncLib.isVortexRunning()) {
-            return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
+            // "Currently busy", not "close it" -- this gate only ever trips when the Helper (which
+            // this router always prefers) didn't answer while Vortex is running; there's no genuine
+            // "must be closed" path here. Same wording/reasoning update-collection-v2-runner.js's own
+            // checkForUpdates/reviewUpdate fallback already established for the identical condition
+            // (2026-08-30) -- this router just never got the same fix. Matched by the frontend's own
+            // /currently busy/i check (rmfHandleError) to show the correct modal variant.
+            return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently busy. Please wait for Vortex to finish its current activity, then try again.' });
         }
 
         const mySession = scanSession.start({ id: `scan-${Date.now()}` });
@@ -559,9 +578,14 @@ function createRebuildMissingRouter(config) {
     // frame instead of the POST response body.
     router.post('/extract', (req, res) => {
         if (!requireConfigured(res)) return;
-        if (syncLib.isVortexRunning()) {
-            return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
-        }
+        // "Vortex must be closed" gate removed 2026-08-25 -- live-tested with the director (real
+        // extract, Vortex open): no "External Changes" dialog, no issues. That dialog only fires at
+        // Deploy time (Vortex's own classifyExternalChange, mod_management\util\externalChanges.ts),
+        // never from files merely appearing in staging -- same reasoning Update Collection v2 already
+        // relies on (see its own externalChangesNote in update-collection-v2-app.js), which has never
+        // gated this at all. See rmfExtractConfirmModal's own comment in index.html for the full
+        // writeup. Do not re-add without a real, new reason -- this was a deliberate removal, not an
+        // oversight.
         const items = Array.isArray(req.body?.items) ? req.body.items : [];
         if (items.length === 0) return res.status(400).json({ error: 'Nothing selected to extract.' });
         if (extractSession.isActive()) return res.status(409).json({ error: 'An extraction is already in progress.' });
@@ -584,7 +608,27 @@ function createRebuildMissingRouter(config) {
                 const total = items.length;
                 for (let index = 0; index < items.length; index += 1) {
                     const item = items[index];
-                    const result = await extractOneMod(item);
+                    let result;
+                    if (item.kind === 'archive-missing') {
+                        // Checked alongside ordinary 'missing' rows (2026-09-02 v5 addendum) -- goes
+                        // through the exact same download-then-extract chain the single-row Download
+                        // Archive button uses, not a second copy of that logic.
+                        try {
+                            const outcome = await downloadThenExtract({ collectionModId: item.collectionModId, modId: item.modId, fileId: item.fileId });
+                            result = outcome.extractResult
+                                // extractResult already has {name, ok, extracted, error} -- reuse verbatim.
+                                ? outcome.extractResult
+                                // No extraction was attempted -- either the download alone already
+                                // resolved everything (rare) or the re-scan still couldn't place it
+                                // (still archive-missing/some other bucket); reflect the real outcome
+                                // instead of assuming success.
+                                : { name: outcome.mod.name, ok: outcome.result?.bucket === 'ok', extracted: [], error: outcome.result?.bucket !== 'ok' ? (outcome.result?.reason || 'Downloaded, but still not resolved -- try re-scanning.') : undefined };
+                        } catch (e) {
+                            result = { name: item.name, ok: false, error: e.message };
+                        }
+                    } else {
+                        result = await extractOneMod(item);
+                    }
                     results.push(result);
                     if (result.ok && result.extracted?.length > 0 && item.collectionModId) {
                         fixedCollectionIds.add(item.collectionModId);
@@ -599,47 +643,165 @@ function createRebuildMissingRouter(config) {
         })();
     });
 
-    // Downloads ONE mod's archive from Nexus (Premium-only, same policy as Rebuild Collection's own
-    // "download missing archives" -- see lib/nexus-mod-download.js's header), then immediately
-    // re-scans that one mod so the report row can update in place without a full re-scan.
-    router.post('/download-archive', async (req, res) => {
-        if (!requireConfigured(res)) return;
-        const { collectionModId, modId, fileId } = req.body || {};
+    // Resolves a mod entry from a collection and does the real Nexus download for it (Premium-only,
+    // same policy as Rebuild Collection's own "download missing archives" -- see
+    // lib/nexus-mod-download.js's header). Throws a structured error ({.code, .message}) on any
+    // failure the caller should surface distinctly (bad-request/not-found/not-nexus/not-premium/
+    // download-failed) -- never partially downloads. Factored out (2026-09-02 v5 addendum) so both
+    // /download-archive (one mod) and /extract's batch loop (a whole checked selection, mixed with
+    // ordinary 'missing' items) share this exact real-download logic instead of it existing twice.
+    async function resolveAndDownloadArchive({ collectionModId, modId, fileId }) {
         if (!collectionModId || modId == null || fileId == null) {
-            return res.status(400).json({ error: 'collectionModId, modId, and fileId are required.' });
+            const err = new Error('collectionModId, modId, and fileId are required.'); err.code = 'bad-request'; throw err;
         }
         let collection;
         try {
             collection = loadCollection(path.join(staging, collectionModId, 'collection.json'));
         } catch (e) {
-            return res.status(400).json({ error: `Could not read this collection's collection.json: ${e.message}` });
+            const err = new Error(`Could not read this collection's collection.json: ${e.message}`); err.code = 'bad-request'; throw err;
         }
         const mod = collection.mods.find((m) => m.source?.modId === modId && m.source?.fileId === fileId);
-        if (!mod) return res.status(404).json({ error: 'That mod was not found in this collection anymore -- try re-scanning.' });
-        if (mod.source?.type !== 'nexus') return res.status(400).json({ error: 'This mod is not hosted on Nexus -- download its archive manually.' });
+        if (!mod) { const err = new Error('That mod was not found in this collection anymore -- try re-scanning.'); err.code = 'not-found'; throw err; }
+        if (mod.source?.type !== 'nexus') { const err = new Error('This mod is not hosted on Nexus -- download its archive manually.'); err.code = 'not-nexus'; throw err; }
 
-        try {
-            const apiKey = nexusModDownload.resolveApiKey();
-            const premium = await nexusModDownload.checkPremiumStatus(apiKey);
-            if (!premium.isPremium) {
-                return res.status(400).json({
-                    error: 'not-premium',
-                    message: "Nexus only allows automated downloads for Premium accounts -- this respects Nexus's ad-supported download model for free users. Download this archive manually from Nexus instead.",
-                });
-            }
-            await nexusModDownload.downloadModArchive({ apiKey, gameDomain: collection.info?.domainName, source: mod.source, destDir: downloads });
-        } catch (e) {
-            return res.status(500).json({ error: e.message });
+        // Logged (2026-09-01, director's own ask -- a real live incident: 4 items had Download Archive
+        // clicked, only 1 actually came back downloaded, and this route had ZERO logging anywhere --
+        // both the failure path (an error was caught and turned into a JSON response, but never
+        // written to console) and the "downloaded, but the file still doesn't resolve everything" path
+        // were completely silent.
+        console.log(`[rebuild-missing-routes] downloading: "${mod.name}" (modId=${modId}, fileId=${fileId}, collection="${collectionModId}")`);
+        const apiKey = nexusModDownload.resolveApiKey();
+        const premium = await nexusModDownload.checkPremiumStatus(apiKey);
+        if (!premium.isPremium) {
+            console.warn(`[rebuild-missing-routes] downloading: "${mod.name}" refused -- account is not Premium.`);
+            const err = new Error("Nexus only allows automated downloads for Premium accounts -- this respects Nexus's ad-supported download model for free users. Download this archive manually from Nexus instead.");
+            err.code = 'not-premium'; throw err;
         }
-
+        // mod.domainName (a real, per-mod field Nexus/Vortex's own collection.json schema carries --
+        // confirmed live 2026-08-25, "TES Arena Bikini Armor"/modId 106393: collection info.domainName
+        // is "skyrimspecialedition", but this ONE mod's own entry carries domainName "skyrim" -- a
+        // real cross-listed mod, hosted on Nexus under Legacy Skyrim's own domain even though it's a
+        // member of an SE collection) takes priority over the collection-wide default. Using the
+        // collection's domain unconditionally asked the Nexus API for modId 106393 under the WRONG
+        // game, which genuinely doesn't exist there -- that's the real cause of the "Mod not
+        // available" 403, not a Nexus-side problem.
+        const gameDomain = mod.domainName || collection.info?.domainName;
+        // Same per-mod resolution on the FILESYSTEM side as gameDomain is for the API side -- a
+        // cross-listed mod's archive belongs in ITS OWN domain's downloads folder (a sibling of the
+        // configured one), not the collection-wide one. See resolveDomainDownloadsDir's own header
+        // comment -- this is the other half of the same real bug (confirmed live 2026-08-25).
+        const destDir = resolveDomainDownloadsDir(downloads, mod.domainName);
+        try {
+            await nexusModDownload.downloadModArchive({ apiKey, gameDomain, source: mod.source, destDir });
+            console.log(`[rebuild-missing-routes] downloading: "${mod.name}" downloaded successfully to ${destDir}.`);
+        } catch (e) {
+            console.warn(`[rebuild-missing-routes] downloading: "${mod.name}" FAILED: ${e.message}`);
+            const err = new Error(e.message); err.code = 'download-failed'; throw err;
+        }
         // "Last dealt with" (queue: rebuild-missing-last-fixed) -- the download itself already
-        // succeeded by this point (an earlier throw would have returned 500 above), so this counts
-        // as a real fix regardless of what the re-scan below finds (the archive is genuinely new on
-        // disk now, even if its contents still don't fully resolve every missing file).
+        // succeeded by this point, so this counts as a real fix regardless of what the re-scan below
+        // finds (the archive is genuinely new on disk now, even if its contents still don't fully
+        // resolve every missing file).
         lastFixedState.markFixed(collectionModId);
+        return mod;
+    }
 
-        const result = await scanOneMod(mod, { downloadsDir: downloads, stagingDir: staging, sevenZipExe });
-        res.json({ result });
+    // The shared download-then-extract chain (2026-09-02 v5 addendum): a freshly-downloaded Nexus
+    // archive is definitionally the correct file (fetched by modId/fileId, not a guessed local
+    // candidate), so there's nothing left to verify before extracting -- always re-scans then
+    // extracts in the same call. Used by BOTH /download-archive (one mod) and /extract's batch loop
+    // (archive-missing items checked alongside ordinary 'missing' ones), so this chain exists in
+    // exactly one place, not duplicated per caller. Returns { mod, result, extractResult } --
+    // `result` matches scanOneMod's own bucket contract (with bucket flipped to 'ok' on a successful
+    // chained extraction, same as before this was factored out) for /download-archive's own
+    // unchanged response shape; `extractResult` (null if no extraction was attempted) carries
+    // extractOneMod's own {name, ok, extracted, error} shape for the batch route to reuse directly.
+    async function downloadThenExtract({ collectionModId, modId, fileId }) {
+        const mod = await resolveAndDownloadArchive({ collectionModId, modId, fileId }); // throws on failure
+        let result = await scanOneMod(mod, { downloadsDir: downloads, stagingDir: staging, sevenZipExe });
+        let extractResult = null;
+        // The download itself can succeed while the re-scan STILL reports this mod as missing
+        // something (e.g. the freshly-downloaded archive doesn't actually contain what collection.json
+        // expects, or scanOneMod's own re-classification still can't resolve it for some other reason
+        // -- bucket 'missing' and 'archive-missing' are genuinely different failure shapes, see
+        // missing-files-scan.js's own scanOneMod).
+        if (result?.bucket === 'ok') {
+            console.log(`[rebuild-missing-routes] downloadThenExtract: "${mod.name}" re-scan confirms fully resolved.`);
+        } else if (result?.bucket === 'missing') {
+            console.warn(`[rebuild-missing-routes] downloadThenExtract: "${mod.name}" downloaded, but re-scan still reports ${result.missing.length} missing file(s) -- extracting now.`);
+            extractResult = await extractOneMod({
+                name: result.name, targetFolderName: result.targetFolderName,
+                archivePath: result.archivePath, files: result.missing,
+            });
+            if (extractResult.ok) {
+                console.log(`[rebuild-missing-routes] downloadThenExtract: "${mod.name}" auto-extract after download succeeded (${extractResult.extracted.length} file(s)).`);
+                result = { bucket: 'ok', name: result.name };
+            } else {
+                console.warn(`[rebuild-missing-routes] downloadThenExtract: "${mod.name}" auto-extract after download FAILED: ${extractResult.error}`);
+                result = { ...result, error: extractResult.error };
+            }
+        } else {
+            console.warn(`[rebuild-missing-routes] downloadThenExtract: "${mod.name}" downloaded, but re-scan came back bucket="${result?.bucket}" (${result?.reason || 'no reason given'}) -- not resolved.`);
+        }
+        return { mod, result, extractResult };
+    }
+
+    // Downloads ONE mod's archive from Nexus, then immediately extracts via the shared chain above,
+    // so the report row can update in place without a full re-scan. Response shape unchanged from
+    // before this was factored out (2026-09-02) -- rmfDownloadArchive's own frontend handling needs
+    // no changes.
+    router.post('/download-archive', async (req, res) => {
+        if (!requireConfigured(res)) return;
+        const { collectionModId, modId, fileId } = req.body || {};
+        try {
+            const outcome = await downloadThenExtract({ collectionModId, modId, fileId });
+            res.json({ result: outcome.result });
+        } catch (e) {
+            const statusByCode = { 'bad-request': 400, 'not-found': 404, 'not-nexus': 400, 'not-premium': 400, 'download-failed': 500 };
+            const status = statusByCode[e.code] || 500;
+            res.status(status).json(e.code === 'not-premium' ? { error: 'not-premium', message: e.message } : { error: e.message });
+        }
+    });
+
+    // Real Deploy step (2026-09-01, replacing the old static "External Changes" warning on the Done
+    // screen -- director's own ask: "add Deploy button... replace with our standard deploy modal
+    // used elsewhere (Update collection)"). Same fire-and-poll shape and the exact same generic
+    // helperClient.deployAllMods()/getDeployAllProgress() pair Missing Masters' own /deploy-all
+    // already established (web/missing-masters-routes.js) -- deliberately not a per-mod-scoped
+    // deploy (this tool restores plain files into staging rather than tracking specific mod ids the
+    // way Update Collection does), same reasoning that route's own header comment gives. Module-scoped
+    // single-flight, same as that precedent: this is a real, out-of-band, whole-install Vortex
+    // operation, not something scoped to one scan.
+    let deployAllInProgress = false;
+    router.post('/deploy-all', async (req, res) => {
+        if (deployAllInProgress) {
+            return res.status(409).json({ error: 'A deploy is already in progress.' });
+        }
+        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+        if (!helperAvailable) {
+            return res.status(409).json({
+                error: 'helper-unavailable',
+                message: 'The Vortex Collection Helper extension must be reachable (Vortex genuinely open) to deploy from here.',
+            });
+        }
+        deployAllInProgress = true;
+        res.status(202).json({});
+        (async () => {
+            try {
+                await helperClient.deployAllMods();
+            } catch {
+                // deployAllMods never throws by contract; the progress endpoint below is what
+                // actually reports a real failure, so there is nothing useful to do here.
+            }
+        })().finally(() => { deployAllInProgress = false; });
+    });
+
+    router.get('/deploy-all/progress', async (req, res) => {
+        const progress = await helperClient.getDeployAllProgress();
+        // A null here means "no fresh update right now", NOT that the deploy failed -- the same
+        // event-loop congestion that makes a deploy slow can also time out this poll. Falls back to
+        // this route's own in-flight flag rather than reporting a false "not active".
+        res.json(progress || { active: deployAllInProgress, done: !deployAllInProgress });
     });
 
     // Same "navigate straight into it" pattern as Missing Masters' own /open-staging-folder --

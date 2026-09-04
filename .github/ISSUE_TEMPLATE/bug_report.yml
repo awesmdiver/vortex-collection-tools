@@ -81,6 +81,8 @@ body:
       description: |
         Most tools write a log during their run—this is often the single most helpful thing for tracking down what went wrong. You can paste the text here or drag and drop the `.log`/`.txt` file right into this box.
 
+        Don't have one? Turn on **Write a log file for this session** in Settings under "Log Storage Location," restart, and reproduce the issue—then use **Open Logs Folder** right next to it to grab the file from the `app` folder. It captures everything happening behind the scenes, which is often exactly what we need for a tricky bug.
+
         Screenshots of errors or stuck screens are super helpful too!
       render: text
 

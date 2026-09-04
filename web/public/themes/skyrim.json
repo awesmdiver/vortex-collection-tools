@@ -4,17 +4,36 @@
   "appName": "The Arcaneum",
   "accent": "#9b72d1",
   "hasHomeBackgroundWash": true,
+  "bgTint": "#5c1bb1",
   "hasBook": true,
   "palette": {},
   "fontStylesheet": "theme-assets/skyrim/fonts/skyrim-fonts.css",
   "defaultFont": "cinzel",
   "fonts": {
-    "cinzel": { "label": "Cinzel (default)", "cssFamily": "'Cinzel', serif" },
-    "cinzeldecorative": { "label": "Cinzel Decorative", "cssFamily": "'Cinzel Decorative', serif" },
-    "uncialantiqua": { "label": "Uncial Antiqua", "cssFamily": "'Uncial Antiqua', serif" },
-    "medievalsharp": { "label": "MedievalSharp", "cssFamily": "'MedievalSharp', serif" },
-    "marcellus": { "label": "Marcellus", "cssFamily": "'Marcellus', serif" },
-    "metamorphous": { "label": "Metamorphous", "cssFamily": "'Metamorphous', serif" }
+    "cinzel": {
+      "label": "Cinzel (default)",
+      "cssFamily": "'Cinzel', serif"
+    },
+    "cinzeldecorative": {
+      "label": "Cinzel Decorative",
+      "cssFamily": "'Cinzel Decorative', serif"
+    },
+    "uncialantiqua": {
+      "label": "Uncial Antiqua",
+      "cssFamily": "'Uncial Antiqua', serif"
+    },
+    "medievalsharp": {
+      "label": "MedievalSharp",
+      "cssFamily": "'MedievalSharp', serif"
+    },
+    "marcellus": {
+      "label": "Marcellus",
+      "cssFamily": "'Marcellus', serif"
+    },
+    "metamorphous": {
+      "label": "Metamorphous",
+      "cssFamily": "'Metamorphous', serif"
+    }
   },
   "tools": {
     "home": {
@@ -45,7 +64,7 @@
     "sync": {
       "name": "The Herald",
       "emoji": "📯",
-      "function": "Update Collection",
+      "function": "Update Collection (Classic)",
       "heroTitle": "The Herald",
       "heroBody": "A Herald announces what's coming before it arrives &mdash; and makes sure nothing you've already chosen gets undone along the way. Updating a collection in Vortex often resets your carefully-set <strong>Ignored</strong> and <strong>Disabled</strong> mods back to their defaults&mdash;this tool remembers exactly how you had things set and restores it once the update lands, so that cleanup work never has to happen twice. Work through the steps below in order; you'll hop over to Vortex between some of them, and your place here is saved while you do.",
       "cardDesc": "Shields your Ignored and Disabled choices so an update can't wipe out your setup."
@@ -114,6 +133,14 @@
       "heroBody": "The painted trade sign out front only tells you when the shop first opened, not when a hammer last fell upon glowing steel&mdash;a true armorer looks to the fresh mark stamped into the anvil's own face instead. Nexus's own collection page shows a date that never moves for a private collection; this pulls the real one, straight from each collection's revision history, so you can tell at a glance which ones you've actually worked on recently.",
       "cardDesc": "The real date you last set hand to an unfinished work&mdash;not Nexus's frozen one."
     },
+    "report-mergeupdatereport": {
+      "name": "The Ingot Assay",
+      "emoji": "📋",
+      "function": "Merge Update Status Report",
+      "heroTitle": "The Ingot Assay",
+      "heroBody": "A forged blade holds only the temper of the ore melted into it, no matter how pure the fresh shipments arriving at the warehouse door may be&mdash;refining a single batch of iron does not magically sharpen a sword already hammered cold. The Ingot Assay cross-references every active merge against the latest mod revisions in your staging yard. It flags newly updated source mods and pinpoints exactly which finished plugins harbor stale ore, showing you precisely which ingots must return to the Forge for a recast.",
+      "cardDesc": "Pinpoints stale ore in finished alloys&mdash;revealing exactly which poured merges need to return to the Forge."
+    },
     "report-mergehistory": {
       "name": "The Crucible",
       "emoji": "🫗",
@@ -163,6 +190,14 @@
       "heroBody": "Clairvoyance lights the path to what's hidden, without ever having to open the door yourself. Stop extracting archives just to see what's inside&mdash;this indexes every zipped mod archive's contents up front, no unpacking needed, so you can instantly search across all of them by file or mod name and pull out exactly the patch you need.",
       "cardDesc": "Sees straight through any archive to the exact file you need&mdash;without unpacking a single byte."
     },
+    "file-retriever": {
+      "name": "Telekinesis",
+      "emoji": "📜",
+      "function": "File Retriever",
+      "heroTitle": "Telekinesis",
+      "heroBody": "Nexus not letting you download a file? Is that Archive not available? It is now. Enter any mod ID to pull up its full library, check off the exact versions or archived files you need, and pull them directly to your drive without sifting through the website's maze of tabs and timers.",
+      "cardDesc": "Enter any mod ID to review its full catalog and pull specific or archived files directly to your drive."
+    },
     "cycle-helper": {
       "name": "The Webweaver",
       "emoji": "🕸️",
@@ -194,6 +229,22 @@
       "heroTitle": "The Standing Stones",
       "heroBody": "Choose a Standing Stone once, and its blessing shapes your entire journey from then on. Set your Vortex paths and preferences here just once, and every other tool in The Arcaneum picks them up automatically&mdash;so you can spend your time on the actual work, not re-entering the same folders over and over.",
       "cardDesc": "Choose your paths and preferences once; every tool draws on them."
+    },
+    "duplicate-version-cleanup": {
+      "name": "Arcane Concordance",
+      "emoji": "📜",
+      "function": "Duplicate Version Cleanup",
+      "heroTitle": "Arcane Concordance",
+      "heroBody": "Routine mod updates often leave older version records lingering in your dropdowns alongside the files you actually use. Arcane Concordance cross-references your active collections, separates true clutter from intentionally preserved variants, and cleanly reinstalls the surviving files so your loadout stays neat and dependable.",
+      "cardDesc": "Resolves cluttered mod version dropdowns into a single clean, reinstalled copy while protecting needed variants."
+    },
+    "save-cleaner": {
+      "name": "Azura's Star",
+      "emoji": "⭐",
+      "function": "Save Cleaner",
+      "heroTitle": "⭐ Azura's Star",
+      "heroBody": "Over a long adventure, your save file quietly collects the ghosts of mods you've long since uninstalled. Azura's Star opens your character's personal record, groups orphaned Papyrus scripts by the exact mod they came from, and safely banishes them so your world runs light and responsive again.",
+      "cardDesc": "Inspects your save file to banish orphaned scripts and lift accumulated bloat off your playthrough."
     }
   },
   "sections": {

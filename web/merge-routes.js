@@ -5,8 +5,18 @@
 // new-record-only scope, the ESPFE qualification pipeline).
 //
 // Reuses this project's existing pieces rather than duplicating them:
-//   - lib/sync-runner.js's listInstalledCollections (the exact same "installed collections" list
-//     Rebuild Collection/Rules Generator already show).
+//   - lib/missing-files-scan.js's listPickableCollections (2026-08-27, superseding the previous
+//     commit's own listInstalledCollectionsExcludingWorkshop fix -- see that function's own header
+//     comment for why it's the right one here). The real bug: a Workshop-tab draft folder for a
+//     collection you're also really installed can leak indistinguishably into the picker with its
+//     own, potentially stale, mod list (confirmed live: "Merge Plugins Test" showed 5 mods from a
+//     stale Workshop draft instead of the real installed collection's actual 1 mod). Excluding
+//     Workshop entirely (the first fix) turned out to be the WRONG call, director's own live
+//     correction -- merging FROM a Workshop-authored collection's own staged content is a real,
+//     legitimate use case (curating/testing a collection before it's ever installed for real). The
+//     right fix is disambiguation: show BOTH "Installed Collections" and "Workshop Collections" as
+//     clearly separate, labeled sections -- exactly what Rebuild Missing Files/Workshop Report
+//     already do with this same shared function, reused here rather than reinvented a third time.
 //   - The generic `/api/settings/browse-folder` endpoint for the output-folder picker -- no
 //     dedicated pick-folder route here.
 //   - web/sse-session.js for merge progress, matching Archive Finder's/Rebuild Collection's own
@@ -27,20 +37,18 @@ const { spawn } = require('child_process');
 const express = require('express');
 const appConfig = require('../lib/app-config');
 const syncLib = require('../lib/vortex-sync/lib');
-const syncRunner = require('../lib/sync-runner');
+const { listPickableCollections } = require('../lib/missing-files-scan');
 const helperClient = require('../lib/vortex-helper-client');
 const missingMastersScan = require('../lib/missing-masters-scan');
 const { scanCollectionPlugins, scanEslifierOutputPlugins, computeMasterDependents, buildHelperModNameIndex, attributeWithHelperNames } = require('../lib/merge-plugin-scan');
+const { buildModFromLiveData, readModFromOpenDb } = require('../lib/build-mod-from-vortex-state');
 const { checkLoadList } = require('../lib/merge-preflight');
-const mergeRunner = require('../lib/merge-runner');
 const mergeRunnerV2 = require('../lib/merge-v2-runner');
 const relinkScripts = require('../lib/relink-scripts');
 const { scanLightPluginValidity, setLightFlag } = require('../lib/esp-light-flag');
 const { readPluginHeader, FLAG_LIGHT_MASTER } = require('../lib/esp-header');
 const { countActivePluginSlots } = require('../lib/load-order-slot-count');
 const { createSseSession } = require('./sse-session');
-
-const LIGHT_PLUGIN_LIMIT = 4096; // hardcoded per the Part A spike sign-off -- requires SSE 1.6.1130+
 
 const mergeSession = createSseSession();
 
@@ -94,10 +102,67 @@ function computeMergeOutputPaths(outputDir, outputName) {
 // source of truth for each plugin's backupPath, rather than that step re-deriving the same
 // path.join(outputDir, 'Backup', fileName) formula a second time and risking the two silently
 // drifting apart if this logic ever changes.
+// Shared by BOTH branches below (2026-08-24, merge-remove-also-disables) -- 'disable' is where this
+// was first written; 'remove'/'backup-remove' need the exact same Vortex-side write, not a
+// second copy of it. Helper-first, Plugins.txt-fallback -- when the Helper is reachable,
+// setPluginEnabled flips each source plugin's own live flag directly -- the SAME precisely-scoped
+// endpoint Missing Masters' own Enable button already uses, self-verified against Vortex's own
+// before/after readback, so its true/false is the truth, not an assumption. Only an in-memory flag:
+// Plugins.txt on disk (what the game actually reads) is rewritten by Vortex during a real deploy,
+// not by this call -- said explicitly in the result line so it doesn't read as "already done" when
+// a deploy is still the step that finishes it.
+//
+// Falls through to a direct Plugins.txt write, gate and all, when the Helper isn't available --
+// that direct-file path takes effect immediately (no deploy needed) and still requires Vortex
+// closed, exactly as it always has. Only THIS fallback path re-checks isVortexRunning() immediately
+// before writing (not just trusting the route's own request-start gate) -- the same live-write
+// caution lib/vortex-sync/lib.js's own withLiveStateDb applies to every LevelDB write applies here
+// too, since this is still, on that path, a direct edit to a load-order file the game itself reads.
+// The Helper path is a live in-memory flag flip through Vortex's own process, not a direct file
+// write, so that caution doesn't transfer to it the same way.
+async function disableSourcePluginsInVortex(items, pluginsTxtPath) {
+    const lines = [];
+    const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+    if (helperAvailable) {
+        const disabled = [];
+        const failed = [];
+        for (const item of items) {
+            const ok = await helperClient.setPluginEnabled(item.fileName, false);
+            (ok ? disabled : failed).push(item.fileName);
+        }
+        if (disabled.length) lines.push(`Disabled ${disabled.length} plugin${disabled.length === 1 ? '' : 's'} in Vortex: ${disabled.join(', ')}. Deploy mods in Vortex to apply these changes to your game.`);
+        if (failed.length) lines.push(`Could not disable ${failed.length} plugin${failed.length === 1 ? '' : 's'} in Vortex (they may already be disabled or missing from the current load order): ${failed.join(', ')}`);
+    } else if (!pluginsTxtPath) {
+        lines.push('Could not disable the source plugins -- no Plugins.txt location is configured (set it under Settings > Missing Masters).');
+    } else if (syncLib.isVortexRunning()) {
+        lines.push('Could not disable the source plugins -- Vortex was running at the moment of the write. Close Vortex and use its own Plugins page to disable them manually, or re-run a merge with Vortex closed next time.');
+    } else {
+        try {
+            const { disabled, notFound } = missingMastersScan.disablePluginsInPluginsTxt(pluginsTxtPath, items.map((it) => it.fileName));
+            if (disabled.length) lines.push(`Disabled ${disabled.length} plugin${disabled.length === 1 ? '' : 's'} in Plugins.txt: ${disabled.join(', ')}`);
+            if (notFound.length) lines.push(`Could not find ${notFound.length} of these plugins active in Plugins.txt, so they were left as-is: ${notFound.join(', ')}`);
+        } catch (e) {
+            lines.push(`Could not disable the source plugins in Plugins.txt: ${e.message}`);
+        }
+    }
+    return lines;
+}
+
 async function runPostMergeCleanup({ items, action, outputDir, pluginsTxtPath }) {
     const lines = [];
     const backupPaths = {};
     if (action === 'remove' || action === 'backup-remove') {
+        // Disable-in-Vortex FIRST (2026-08-24, merge-remove-also-disables, live-testing gap: these
+        // two branches deleted/backed-up the files but never touched Vortex's own live state, unlike
+        // 'disable' -- so the source plugins kept showing enabled on Vortex's own Plugins page until
+        // a manual deploy). Ordered before the file delete/backup below on purpose: item.fileName is
+        // still known even once its file is gone, so disabling first (rather than after) means a
+        // failed delete still leaves Vortex's state correctly updated -- the delete failing shouldn't
+        // also leave the disable undone. The two result lines below are still assembled file-summary-
+        // first (removed/backed-up), disable-summary-second, matching this action's own established
+        // reading order (see the fs work just below) -- only the WRITE order changed, not the summary.
+        const disableLines = await disableSourcePluginsInVortex(items, pluginsTxtPath);
+
         let backupDir = null;
         if (action === 'backup-remove') {
             backupDir = path.join(outputDir, 'Backup');
@@ -121,43 +186,9 @@ async function runPostMergeCleanup({ items, action, outputDir, pluginsTxtPath })
         if (backupDir && removed.length) lines.push(`Backed up ${removed.length} source plugin file${removed.length === 1 ? '' : 's'} to: ${backupDir}`);
         if (removed.length) lines.push(`Removed ${removed.length} source plugin file${removed.length === 1 ? '' : 's'} from staging.`);
         for (const f of failed) lines.push(`Could not remove "${f.fileName}": ${f.message}`);
+        lines.push(...disableLines);
     } else if (action === 'disable') {
-        // Helper-first (2026-08-24) -- a real write, not a read, so this is deliberately NOT covered
-        // by the /analyze and /merge gate removal above (a separate judgment call, flagged in the
-        // handoff rather than silently extended here). When the Helper is reachable,
-        // setPluginEnabled flips each source plugin's own live flag directly -- the SAME precisely-
-        // scoped endpoint Missing Masters' own Enable button already uses, self-verified against
-        // Vortex's own before/after readback, so its true/false is the truth, not an assumption.
-        // Only an in-memory flag: Plugins.txt on disk (what the game actually reads) is rewritten by
-        // Vortex during a real deploy, not by this call -- said explicitly in the result line so it
-        // doesn't read as "already done" when a deploy is still the step that finishes it.
-        //
-        // Falls through to the EXISTING Plugins.txt write, gate and all, completely unchanged, when
-        // the Helper isn't available -- that direct-file path takes effect immediately (no deploy
-        // needed) and still requires Vortex closed, exactly as it always has.
-        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-        if (helperAvailable) {
-            const disabled = [];
-            const failed = [];
-            for (const item of items) {
-                const ok = await helperClient.setPluginEnabled(item.fileName, false);
-                (ok ? disabled : failed).push(item.fileName);
-            }
-            if (disabled.length) lines.push(`Disabled ${disabled.length} plugin${disabled.length === 1 ? '' : 's'} in Vortex: ${disabled.join(', ')}. Deploy mods in Vortex to apply these changes to your game.`);
-            if (failed.length) lines.push(`Could not disable ${failed.length} plugin${failed.length === 1 ? '' : 's'} in Vortex (they may already be disabled or missing from the current load order): ${failed.join(', ')}`);
-        } else if (!pluginsTxtPath) {
-            lines.push('Could not disable the source plugins -- no Plugins.txt location is configured (set it under Settings > Missing Masters).');
-        } else if (syncLib.isVortexRunning()) {
-            lines.push('Could not disable the source plugins -- Vortex was running at the moment of the write. Close Vortex and use its own Plugins page to disable them manually, or re-run a merge with Vortex closed next time.');
-        } else {
-            try {
-                const { disabled, notFound } = missingMastersScan.disablePluginsInPluginsTxt(pluginsTxtPath, items.map((it) => it.fileName));
-                if (disabled.length) lines.push(`Disabled ${disabled.length} plugin${disabled.length === 1 ? '' : 's'} in Plugins.txt: ${disabled.join(', ')}`);
-                if (notFound.length) lines.push(`Could not find ${notFound.length} of these plugins active in Plugins.txt, so they were left as-is: ${notFound.join(', ')}`);
-            } catch (e) {
-                lines.push(`Could not disable the source plugins in Plugins.txt: ${e.message}`);
-            }
-        }
+        lines.push(...(await disableSourcePluginsInVortex(items, pluginsTxtPath)));
     }
     return { lines, backupPaths };
 }
@@ -191,6 +222,16 @@ function enrichMergeJsonForRestore({ mergeFolder, mergeName, action, items, back
             ...p,
             collectionName: item?.collectionName ?? null,
             stagingFolderName: item ? path.relative(staging, item.fullPath).split(path.sep)[0] : null,
+            // version/fileId/fileMD5 (2026-08-25, Merge Update Report) -- the OWNING MOD's own live
+            // attrs at build time (resolved by the /merge route above, before this ever runs -- see
+            // its own comment for the Helper/state.v2 resolution), not the .esp file's own -- a
+            // plugin has no version of its own; the mod it comes from does. null when the lookup
+            // couldn't resolve this item's mod (Helper+state.v2 both unavailable, or a genuine
+            // MOD_NOT_FOUND) -- the report's own "Can't check" treatment covers that per-plugin, not
+            // just for whole merges built before this field existed.
+            version: item?.version ?? null,
+            fileId: item?.fileId ?? null,
+            fileMD5: item?.fileMD5 ?? null,
         };
         if (action === 'backup-remove' && item && backupPaths[item.fileName]) {
             augmented.backupPath = backupPaths[item.fileName];
@@ -203,7 +244,7 @@ function enrichMergeJsonForRestore({ mergeFolder, mergeName, action, items, back
 
 function createMergeRouter(config) {
     const router = express.Router();
-    const { staging } = config;
+    const { staging, state } = config;
 
     function vortexRunningGate(res) {
         if (syncLib.isVortexRunning()) {
@@ -235,10 +276,12 @@ function createMergeRouter(config) {
     router.get('/collections', (req, res) => {
         if (!requireStaging(res)) return;
         try {
-            const collections = syncRunner.listInstalledCollections(staging).map((c) => ({
-                modId: c.modId, name: c.name, author: c.author, modCount: c.modCount,
-            }));
-            res.json({ collections });
+            // { installed, workshop } (2026-08-27) -- see this file's own header comment. No .map()
+            // trimming the shape down anymore -- the client now needs the real split, and
+            // listPickableCollections' own items already carry exactly the fields the picker cares
+            // about (modId/name/modCount), no author field to drop the way the old shape did either.
+            const { installed, workshop } = listPickableCollections(staging);
+            res.json({ installed, workshop });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
@@ -276,7 +319,11 @@ function createMergeRouter(config) {
         const q = String(req.query.q || '').trim().toLowerCase();
         const extensions = String(req.query.extensions || '.esp,.esl,.esm').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
         try {
-            const allCollections = syncRunner.listInstalledCollections(staging);
+            // Combined installed+workshop (2026-08-27) -- the picker now legitimately offers BOTH,
+            // so resolving a chosen modId back to its real collection.json must check both too, or
+            // picking a Workshop entry would silently find nothing here.
+            const pickable = listPickableCollections(staging);
+            const allCollections = [...pickable.installed, ...pickable.workshop];
             const chosen = allCollections.filter((c) => collectionModIds.includes(c.modId));
             let allPlugins = scanCollectionPlugins(staging, chosen);
             // ESLifier Output is never a declared member mod of any collection.json (confirmed real,
@@ -341,7 +388,16 @@ function createMergeRouter(config) {
         if (!requireStaging(res)) return;
         try {
             const pluginsTxtPath = path.join(pluginsListDir, 'Plugins.txt');
-            const allCollections = syncRunner.listInstalledCollections(staging);
+            // Combined installed+workshop (2026-08-27), same reasoning as /plugins above. Confirmed
+            // this can never produce a FALSE "(master)" label: computeMasterDependents' own WHICH-
+            // masters-need-a-label decision comes entirely from the real active Plugins.txt/Data
+            // folder scan (`active`), never from allCollections -- this list is only used to resolve
+            // a real active master's own bare filename back to a real staged file, for the "Include
+            // in the merge" convenience. Including Workshop entries here can only ever IMPROVE that
+            // resolution (a real active master that happens to also sit in a Workshop draft's own
+            // staged content), never introduce an incorrect label.
+            const pickable = listPickableCollections(staging);
+            const allCollections = [...pickable.installed, ...pickable.workshop];
             const dependentsByMaster = computeMasterDependents(skyrimDataDir, pluginsTxtPath, staging, allCollections);
             res.json({ configured: true, dependents: Object.fromEntries(dependentsByMaster) });
         } catch (e) {
@@ -426,7 +482,12 @@ function createMergeRouter(config) {
         const items = Array.isArray(req.body?.items) ? req.body.items : [];
         if (items.length === 0) return res.status(400).json({ error: 'No plugins were provided.' });
         try {
-            const result = await mergeRunner.analyzePlugins(items, gameDataDir);
+            // v2 engine (2026-08-25, merge-v1-analyze-port) -- replaces mergeRunner.analyzePlugins
+            // (lib/merge-runner.js/lib/merge-worker.js, now deleted). Same result shape
+            // ({ results: [{ fileName, recordCount, newRecordCount, overrideCount, containsOverrides,
+            // hasCellOrWorldspace, masters }] }) -- confirmed a real before/after match against v1's
+            // own output for the same real plugin set, see the handoff for this change.
+            const result = await mergeRunnerV2.analyzePluginsV2(items, gameDataDir);
             res.json(result);
         } catch (e) {
             res.status(500).json({ error: e.message });
@@ -462,7 +523,7 @@ function createMergeRouter(config) {
     // doesn't install anything into the game or Vortex, the user does that themselves afterward.
     //
     // NOT Vortex-gated (2026-08-24) -- same reasoning as /analyze above.
-    router.post('/merge', (req, res) => {
+    router.post('/merge', async (req, res) => {
         if (mergeSession.isActive()) {
             return res.status(409).json({ error: 'A merge is already in progress' });
         }
@@ -472,6 +533,60 @@ function createMergeRouter(config) {
         if (items.length === 0) return res.status(400).json({ error: 'No plugins were provided.' });
         if (!outputName) return res.status(400).json({ error: 'Name the merged plugin first.' });
         if (!outputDir) return res.status(400).json({ error: 'Choose an output folder first.' });
+
+        // Merge Update Report schema (2026-08-25) -- resolves each item's OWNING MOD's live
+        // version/fileId/fileMD5 (Helper-first, state.v2 fallback -- same established pattern as
+        // lib/rebuild-single-mod.js's own liveMods/buildModFromLiveData/buildModFromVortexState
+        // split) so lib/merge-v2-worker.js's writeArtifacts can record them at build time -- there
+        // is nothing for a future Merge Update Report check to compare against otherwise. Keyed by
+        // stagingFolderName (item.modName -- confirmed elsewhere in this file/writeArtifacts that
+        // this field already IS the Vortex staging folder name, not a display name), resolved ONCE
+        // per unique mod even when several selected plugins share one owning mod (a real case --
+        // see lib/merge-plugin-scan.js's own Diziet's-mod precedent). Best-effort only: a lookup
+        // failure for any one mod, or the whole Helper+state.v2 path being unavailable (Vortex open,
+        // no Helper extension reachable), never blocks the merge -- that plugin just isn't checkable
+        // by the report later, matching its own "Can't check -- rebuild to enable" treatment for
+        // exactly this case rather than a hard failure here.
+        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID).catch(() => false);
+        const liveModsData = helperAvailable ? await helperClient.getAllMods().catch(() => null) : null;
+        const modAttrsByName = new Map();
+        const uniqueModNames = [...new Set(items.map((it) => it.modName).filter(Boolean))];
+        const toAttrs = (modInfo) => ({
+            version: modInfo.source.version || null,
+            fileId: modInfo.source.fileId ?? null,
+            fileMD5: modInfo.source.md5 || null,
+        });
+        if (liveModsData) {
+            for (const modName of uniqueModNames) {
+                try {
+                    const modInfo = buildModFromLiveData(liveModsData.mods, modName, syncLib.GAME_ID);
+                    if (modInfo) modAttrsByName.set(modName, toAttrs(modInfo));
+                } catch { /* best-effort -- see comment above */ }
+            }
+        } else if (!syncLib.isVortexRunning() && uniqueModNames.length) {
+            // ONE state.v2 session for every unique mod this merge needs -- syncLib.withStateDb
+            // copies the whole database per call, so looping buildModFromVortexState per mod would
+            // pay that cost once per mod instead of once total. See readModFromOpenDb's own header.
+            try {
+                await syncLib.withStateDb(state, async (db) => {
+                    for (const modName of uniqueModNames) {
+                        try {
+                            const modInfo = await readModFromOpenDb(db, syncLib.GAME_ID, modName);
+                            if (modInfo) modAttrsByName.set(modName, toAttrs(modInfo));
+                        } catch { /* best-effort -- see comment above */ }
+                    }
+                });
+            } catch { /* best-effort -- see comment above */ }
+        }
+        const itemsWithModAttrs = items.map((it) => ({ ...it, ...(it.modName ? modAttrsByName.get(it.modName) : undefined) }));
+
+        // Merge method (2026-08-25, per-build picker, NOT a persisted Settings default -- see the
+        // handoff) -- a real, per-request field now that lib/merge-v2-worker.js implements all 3 real
+        // zMerge methods. Validated here (not just trusted from the client) the same way every other
+        // real-write route on this server validates its own request body -- an unrecognized value
+        // falls back to Clean rather than reaching the worker at all, so a stale/bypassed client can
+        // never silently request something this route doesn't actually support.
+        const method = ['Clean', 'Clobber', 'Master'].includes(req.body?.method) ? req.body.method : 'Clean';
 
         const gameDataDir = requireSkyrimDataDir(res);
         if (!gameDataDir) return;
@@ -523,88 +638,83 @@ function createMergeRouter(config) {
         const mySession = mergeSession.start({ id: `merge-${Date.now()}` });
         res.status(202).json({});
 
-        // Purely for the merge log's own "heads up" section (buildMergeLog in lib/merge-worker.js)
-        // -- Part 1's own pre-flight check (the /master-dependents-backed modal) already blocks the
-        // client from reaching this route with a real unresolved dependency, so this is normally
-        // empty. Computed fresh here rather than trusted from anything the client sent, same
-        // "always re-derive before a real action" principle -- and non-fatal by design: a merge
-        // should never fail just because this heads-up computation couldn't run.
-        let residualDependents = [];
-        try {
-            const { pluginsListDir } = appConfig.loadConfig();
-            if (pluginsListDir) {
-                const pluginsTxtPath = path.join(pluginsListDir, 'Plugins.txt');
-                const allCollections = syncRunner.listInstalledCollections(staging);
-                const dependentsByMaster = computeMasterDependents(gameDataDir, pluginsTxtPath, staging, allCollections);
-                const includedFileNames = new Set(items.map((it) => it.fileName.toLowerCase()));
-                const residual = new Map();
-                for (const item of items) {
-                    const deps = dependentsByMaster.get(item.fileName.toLowerCase());
-                    if (!deps) continue;
-                    for (const dep of deps) {
-                        const key = dep.fileName.toLowerCase();
-                        if (includedFileNames.has(key)) continue;
-                        if (!residual.has(key)) residual.set(key, { fileName: dep.fileName, neededFor: [] });
-                        residual.get(key).neededFor.push(item.fileName);
-                    }
-                }
-                residualDependents = [...residual.values()];
-            }
-        } catch {
-            // non-fatal -- see comment above
-        }
-
-        // Engine selection (2026-08-24, merge-port-implement) -- v2 (lib/merge-v2-worker.js, the
-        // zMerge port) is now the REAL default path every merge runs through (mergeUseV2Engine
-        // defaults true in lib/app-config.js). `false` in config.json is a real, working rollback to
-        // the old engine (lib/merge-worker.js, untouched by the port) with no code change needed.
+        // v2 (lib/merge-v2-worker.js, the zMerge port) is the only merge engine now (2026-08-25,
+        // merge-v1-engine-retired -- the old engine's `lib/merge-worker.js`'s `runMerge` and its own
+        // `mergeUseV2Engine: false` config rollback were removed once confirmed genuinely unreachable
+        // through any normal flow; see TECHNICAL.md's "Merge Plugins: v1 engine retired" section).
+        // The old engine's own "heads up, these OTHER plugins still need one of the merged originals"
+        // note (fed by a `residualDependents` computation that used to run here) went with it -- v2's
+        // own merge log has no equivalent section. Part 1's own pre-flight check (the
+        // /master-dependents-backed modal) still blocks the client from reaching this route with a
+        // real unresolved dependency in the first place, so this was always a secondary, log-only
+        // note, never the actual safety check.
         //
         // v2's own result shape ({ outputPath, mergeFolder, logPath, recordCount, failedToCopy }) is
         // adapted to the shape this same .then() and the client's own result rendering expect below.
         // eslFlagged/qualificationReason stay a fixed "not yet ported" pair -- v2 has no ESL
-        // qualification logic at all yet (a real, separate gap from the log-content bug this fixes),
-        // so every v2 merge is honestly reported as a full, non-ESL-flagged .esp regardless of
-        // whether the old engine would have qualified it -- never a guess presented as a real
-        // determination.
+        // qualification logic at all yet, so every v2 merge is honestly reported as a full,
+        // non-ESL-flagged .esp -- never a guess presented as a real determination.
         //
-        // logContent used to be hardcoded '' here -- found by the design side, not this task: the
-        // log FILE (r.logPath) was already written correctly and richly by
-        // lib/merge-v2-worker.js's own incremental logger, just never read back into the value the
-        // UI actually displays (merge-app.js's mergeDoneLogContent.textContent = result.logContent,
-        // which HIDES the whole log panel outright when this is falsy -- see mergeRenderDoneStep).
-        // Read fresh off disk here instead of threading the in-memory buffer back through the
-        // worker's own stdout JSON, since the log file itself is now the durable source of truth
-        // (lib/merge-v2-worker.js's logger appends synchronously as it goes, specifically so a
-        // genuine worker crash -- an access violation, not a catchable JS throw -- still leaves a
-        // real partial file to read here, rather than nothing).
-        const { mergeUseV2Engine } = appConfig.loadConfig();
+        // logContent is read fresh off disk here (not threaded back through the worker's own stdout
+        // JSON) since the log file itself is the durable source of truth -- lib/merge-v2-worker.js's
+        // logger appends synchronously as it goes, specifically so a genuine worker crash (an access
+        // violation, not a catchable JS throw) still leaves a real partial file to read here.
         const mergeName = mergedBaseName; // identical computation -- computeMergeOutputPaths already derived this
-        const runMerge = mergeUseV2Engine
-            ? (onProgress) => mergeRunnerV2.mergePluginsV2(items, outputPath, gameDataDir, mergeName, onProgress)
-                .then((r) => {
-                    let logContent = '';
-                    try { logContent = fs.readFileSync(r.logPath, 'utf8'); } catch { /* the file itself is the log; if it's unreadable there's nothing to show */ }
-                    return {
-                        recordCount: r.recordCount, overrideRecordCount: 0, eslFlagged: false,
-                        qualificationReason: 'v2 engine -- ESL qualification not yet ported',
-                        logContent, logPath: r.logPath, outputPath: r.outputPath, failedToCopy: r.failedToCopy,
-                        // Kept (2026-08-24, merge-restore-report-data) so the merge.json enrichment
-                        // step below can find the SAME merge.json lib/merge-v2-worker.js's own
-                        // writeArtifacts already wrote there -- absent for the old engine's result
-                        // (mergeDataDir, a different field, different meaning), which is exactly what
-                        // makes that step a no-op for the old engine without a separate check.
-                        mergeFolder: r.mergeFolder,
-                    };
-                })
-            : (onProgress) => mergeRunner.mergePlugins(items, outputPath, LIGHT_PLUGIN_LIMIT, gameDataDir, onProgress, residualDependents);
+        const runMerge = (onProgress) => mergeRunnerV2.mergePluginsV2(itemsWithModAttrs, outputPath, gameDataDir, mergeName, method, onProgress)
+            .then((r) => {
+                let logContent = '';
+                try { logContent = fs.readFileSync(r.logPath, 'utf8'); } catch { /* the file itself is the log; if it's unreadable there's nothing to show */ }
+                return {
+                    method, recordCount: r.recordCount, overrideRecordCount: 0, eslFlagged: false,
+                    qualificationReason: 'v2 engine -- ESL qualification not yet ported',
+                    logContent, logPath: r.logPath, outputPath: r.outputPath, failedToCopy: r.failedToCopy,
+                    // unhandledStringFiles (2026-08-25, merge-results-screen-asset-gap) -- see
+                    // lib/merge-v2-worker.js's own runMergeV2 comment for what this counts and why.
+                    unhandledStringFiles: r.unhandledStringFiles,
+                    // Kept (2026-08-24, merge-restore-report-data) so the merge.json enrichment
+                    // step below can find the SAME merge.json lib/merge-v2-worker.js's own
+                    // writeArtifacts already wrote there.
+                    mergeFolder: r.mergeFolder,
+                };
+            });
 
         runMerge((current, total, label) => {
             if (mergeSession.get() === mySession) mergeSession.emit({ type: 'progress', current, total, label });
         }).then(async (result) => {
             if (mergeSession.get() !== mySession) return;
-            const { mergeOutputDir, mergePostMergeAction, pluginsListDir } = appConfig.loadConfig();
+            const { mergeOutputDir, mergePostMergeAction, pluginsListDir, mergeStagingCopyDir } = appConfig.loadConfig();
             if (outputDir !== mergeOutputDir) appConfig.saveConfig({ mergeOutputDir: outputDir }); // remember as the default for next time
             const pluginsTxtPath = pluginsListDir ? path.join(pluginsListDir, 'Plugins.txt') : null;
+
+            // Staging folder auto-copy (2026-08-25) -- a SEPARATE, optional destination from
+            // mergeOutputDir (see lib/app-config.js's own mergeStagingCopyDir comment for why): a
+            // real copy (never a move -- mergeOutputDir stays the source of truth) of the finished
+            // .esp, so Vortex can adopt it as its own mod without the user moving it by hand. Logged
+            // into the SAME merge log every other phase already writes to, appended the exact way the
+            // cleanup step just below does (result.logContent for the UI + a real synchronous
+            // fs.appendFileSync so the durable log file matches it) -- a genuine failure here
+            // (permissions, disk full, the folder no longer existing) must stay visible on the results
+            // screen, never silently swallowed, same standing rule the cleanup step already follows.
+            if (mergeStagingCopyDir) {
+                const stagingDestPath = path.join(mergeStagingCopyDir, path.basename(result.outputPath));
+                try {
+                    fs.mkdirSync(mergeStagingCopyDir, { recursive: true });
+                    fs.copyFileSync(result.outputPath, stagingDestPath);
+                    result.stagingCopyPath = stagingDestPath;
+                    const appended = `\r\nCopied to staging folder: ${stagingDestPath}\r\n`;
+                    result.logContent = (result.logContent || '') + appended;
+                    if (result.logPath) {
+                        try { fs.appendFileSync(result.logPath, appended, 'utf8'); } catch { /* non-fatal -- logContent above already carries it for the UI */ }
+                    }
+                } catch (e) {
+                    result.stagingCopyError = e.message;
+                    const appended = `\r\nWARNING: could not copy to staging folder "${mergeStagingCopyDir}": ${e.message}\r\n`;
+                    result.logContent = (result.logContent || '') + appended;
+                    if (result.logPath) {
+                        try { fs.appendFileSync(result.logPath, appended, 'utf8'); } catch { /* best-effort */ }
+                    }
+                }
+            }
 
             // Never let a Merge Settings failure hide a merge that already succeeded -- the build is
             // done by this point regardless of what happens below, so 'done' must still fire either
@@ -633,7 +743,7 @@ function createMergeRouter(config) {
             // cleanup step above -- any failure here is reported into the log, not thrown.
             if (result.mergeFolder) {
                 try {
-                    enrichMergeJsonForRestore({ mergeFolder: result.mergeFolder, mergeName, action: resolvedAction, items, backupPaths, staging });
+                    enrichMergeJsonForRestore({ mergeFolder: result.mergeFolder, mergeName, action: resolvedAction, items: itemsWithModAttrs, backupPaths, staging });
                 } catch (e) {
                     const appended = `\r\nCould not write recovery data to merge.json: ${e.message}\r\n`;
                     result.logContent = (result.logContent || '') + appended;

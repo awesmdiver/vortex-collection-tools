@@ -274,6 +274,37 @@ async function chCheckScanFreshnessAsync() {
   }
 }
 
+// Real SSE-streamed progress (2026-08-25) -- POST /scan now only starts the real scan, then returns
+// as soon as it's genuinely running server-side; GET /scan/events streams a live tick every second
+// while it's in flight (cycle-helper-routes.js's own tickingPhase) plus the final 'done' event
+// carrying the exact same result shape this function used to get back directly. No real per-item
+// count exists here (a single opaque helperClient/isolated-worker call), so chLoading's text ticks
+// with real elapsed time instead of a percentage -- same shape as Rules Generator's own Analyze
+// (rules-generator-app.js's rgAnalyze/rgHandleAnalyzeEvent), reused here rather than reinvented.
+let chScanEventSource = null;
+
+function chFinishScanStream() {
+  if (chScanEventSource) { chScanEventSource.close(); chScanEventSource = null; }
+  $ch('chLoading').classList.add('hidden');
+  $ch('chScanBtn').disabled = false;
+}
+
+function chHandleScanEvent(frame) {
+  if (frame.type === 'phase') {
+    $ch('chLoading').lastChild.textContent = ` ${frame.message}${frame.seconds ? ` (${frame.seconds}s)` : ''}`;
+  } else if (frame.type === 'done') {
+    chFinishScanStream();
+    chRenderScanResult(frame);
+  } else if (frame.type === 'error') {
+    chFinishScanStream();
+    if (frame.errorCode === 'vortex-running') {
+      window.showVortexRunningModal(chScan);
+    } else {
+      chHandleError(new Error(frame.message || 'The scan failed.'), chScan);
+    }
+  }
+}
+
 async function chScan() {
   chHideCriticalError();
   chRenderFreshnessWarning(null);
@@ -281,18 +312,22 @@ async function chScan() {
   // whatever session was in progress is done; the next applied fix (if any) starts a new one.
   chHistorySessionId = null;
   chSessionFixes = [];
+  $ch('chLoading').lastChild.textContent = " Reading Vortex's database…";
   $ch('chLoading').classList.remove('hidden');
   $ch('chScanBtn').disabled = true;
   chCheckScanFreshnessAsync(); // parallel with the scan request below, not sequenced after it
   try {
-    const result = await chApi('POST', '/api/cycle-helper/scan');
-    chRenderScanResult(result);
+    await chApi('POST', '/api/cycle-helper/scan');
   } catch (e) {
-    chHandleError(e, chScan);
-  } finally {
     $ch('chLoading').classList.add('hidden');
     $ch('chScanBtn').disabled = false;
+    chHandleError(e, chScan);
+    return;
   }
+  if (chScanEventSource) chScanEventSource.close();
+  const es = new EventSource('/api/cycle-helper/scan/events');
+  chScanEventSource = es;
+  es.onmessage = (msg) => chHandleScanEvent(JSON.parse(msg.data));
 }
 
 // ---- Step 3: fix modal ----
@@ -564,7 +599,7 @@ async function chDoHistoryRevert() {
   try {
     const result = await chRunRevert(fixes);
     const parts = [];
-    if (result.reverted.length) parts.push(`<p>✅ Reverted ${result.reverted.length} rule${result.reverted.length === 1 ? '' : 's'}.</p>`);
+    if (result.reverted.length) parts.push(`<p>🎉 Reverted ${result.reverted.length} rule${result.reverted.length === 1 ? '' : 's'}.</p>`);
     if (result.failed.length) {
       parts.push(
         `<p>⚠️ Couldn't revert ${result.failed.length}:</p><ul style="margin:0;padding-left:20px">` +
@@ -596,6 +631,11 @@ function loadCycleHelperPageOnce() {
   chCheckScanFreshnessAsync();
 }
 window.loadCycleHelperPageOnce = loadCycleHelperPageOnce;
+
+// Exposed for cleanup-app.js's showUtilitiesSubTab when arriving at cyclehelper from a different
+// sub-tab. Resets to the Prep screen and clears in-progress validation/fix state, same "start fresh
+// on entry" behavior mergeResetOnEntry/ucv2ResetOnEntry already provide for their respective areas.
+window.chStartOver = chStartOver;
 
 // ---- Graph View (2026-08-18) -- a spider-web visualization of the scan's own cycle(s), matching
 // real Vortex's own conflict graph (mod-dependency-manager/src/views/{GraphView,ConflictGraph}.tsx,

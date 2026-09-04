@@ -1,0 +1,149 @@
+{
+  "title": "The Eye — A Traveler's Field Guide",
+  "chapters": [
+    {
+      "toolId": "home",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-the-eye.png",
+      "lore": "High above Jemison, the massive orbital sensors of the Eye scan the farthest reaches of the Settled Systems for anomalous readings and uncharted space. It does not chart your flight path or load your cargo, but it tracks every signal across the stars from a single observation deck. Standing before its panoramic array, an explorer can assess the entire frontier at a glance and jump wherever duty calls. This console serves that exact purpose, standing watch over your entire suite of diagnostic instruments. It is your mission hub, connecting you to every specialized station aboard without the clutter.",
+      "whatItDoes": "This is the home launcher for the entire toolkit. Use it to quickly navigate to any utility you need without hunting through menus."
+    },
+    {
+      "toolId": "rebuild",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-grav-drive-jump.png",
+      "lore": "Sub-light cruising through standard orbital corridors can leave a starship crawling for cycles when standard docking protocols stall out. When standard planetary transit fails or locks up the ship's nav-computer, you spool up the grav drive to bypass the lane entirely. Folding space allows your vessel to reach the destination in a single burst, pulling directly from auxiliary fuel reserves. It completely bypasses congested local traffic lanes to drop your cargo precisely where it belongs. When standard deployment routes break down, a hard grav jump is the only reliable way to cross the void intact.",
+      "whatItDoes": "Rapidly extracts and rebuilds an entire collection outside of Vortex, automatically finding and restoring archives to fix broken or sluggish standard installations."
+    },
+    {
+      "toolId": "update-collection-v2",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-memory-fragment.png",
+      "lore": "Touching an Artifact imprints an indelible pattern across the fabric of spacetime, preserving a record of your exact state before reality shifts. Without that anchor, stepping through a cosmic anomaly or overwriting a flight manifest erases every personal calibration you painstakingly dialed in. By etching a permanent memory fragment, you ensure that your unique modifications survive the transition untouched. When the universe resets or updates around you, the recorded signature seamlessly reinstates your preferred choices. You never have to rebuild your tailored setup from scratch after the cosmic tide shifts.",
+      "whatItDoes": "Snapshots your disabled and ignored mod preferences before an update and restores them immediately afterward, preserving your customized loadout."
+    },
+    {
+      "toolId": "rules-generator",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-quantum-entanglement.png",
+      "lore": "In high-energy research labs across the Settled Systems, quantum entanglement proves that two paired particles remain fundamentally linked across shifting states and realities. When an updated structural component replaces an obsolete assembly, re-establishing physical wiring by hand across thousands of relays invites catastrophic human error. Entangling the data stream allows the system to recognize the ancestor module instantly and bind the new unit to the existing grid. The connection synchronizes across the entire vessel without requiring manual recalibration of every individual conduit. It bridges the gap between old protocols and fresh revisions automatically.",
+      "whatItDoes": "Automatically maps your existing conflict-resolution rules onto newly updated mod versions so you don't have to rebuild them manually."
+    },
+    {
+      "toolId": "merge",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-staryard-assembly-line.png",
+      "lore": "The bustling gantry cranes of the orbital staryards know that bolted-together scrap modules quickly exceed maximum ship hull tolerances. Instead of cluttering your vessel's flight computer with dozens of micro-brackets and unlinked power conduits, the assembly line welds them into a single, unified hull plate. This consolidated component is stamped with standard lightweight certification, drawing minimal power from your reactor core. You free up crucial system hardpoints without sacrificing the specialized utility of any integrated part. It keeps your overall vessel streamlined, seaworthy, and well within standard operational limits.",
+      "whatItDoes": "Merges multiple small plugins into a single file flagged as a lightweight master, conserving your load order's plugin slots."
+    },
+    {
+      "toolId": "report-mergehistory",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-flight-data-recorder.png",
+      "lore": "Every jump through the Settled Systems leaves an indelible telemetry trace across your ship's black box avionics log. When a routine dockside overhaul inadvertently re-engages a decommissioned auxiliary conduit or misplaces a consolidated power manifold, silent system drift threatens the entire craft. The flight data recorder cross-references your current engine diagnostics against historical manifold configurations to catch any resurrected ghost circuits before ignition. With a single manual override from the captain's seat, you can reinstate the streamlined manifold or safely uncouple components back to factory spec. Vigilant telemetry ensures that what was fused together stays unified across the stars.",
+      "whatItDoes": "Monitors your active mod list against past plugin merges to detect missing merged files or unintentionally re-enabled original plugins after an update. Provides one-click options to re-apply your merge or restore the original individual plugins."
+    },
+    {
+      "toolId": "missing-masters",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-structural-hull-breach.png",
+      "lore": "Venturing into deep space with an unanchored bulkhead or missing seal will blow a catastrophic hole in your pressurized hull the moment you leave orbit. When a system relies on a structural keystone that was never bolted down, your vessel will violently destabilize on ignition. Diagnostic monitoring must catch these severed dependencies before the reactor spins up, pinpointing the exact missing component in the schematic. Patching the breach immediately restores structural integrity and re-establishes life support before catastrophe strikes. It keeps your flight worthy and prevents an unexpected descent into total system failure.",
+      "whatItDoes": "Detects missing master dependencies instantly and patches or restores them with a single click to prevent game crashes."
+    },
+    {
+      "toolId": "scrub",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-deimos-salvage-yard.png",
+      "lore": "The heavy cutting lasers of the Deimos salvage platforms make quick work of derelict hulls, slagged plating, and spent fuel casings adrift in Martian orbit. Floating debris and abandoned crates choke the loading bays over time, wasting precious cargo space that belongs to operational gear. The yard's automated reclamation scythe sweeps away orphaned scrap while rigorously cross-referencing your manifest to protect critical spare parts. Anything registered on your priority manifest remains untouched in secure storage, safe from the furnace. It leaves your hangar pristine, functional, and stripped of useless dead weight.",
+      "whatItDoes": "Cleans out orphaned staging folders, obsolete downloads, and abandoned files while respecting an exclusion list for files you want to preserve."
+    },
+    {
+      "toolId": "file-retriever",
+      "banner": "theme-assets/starfield/book/book-banner-trade-authority-requisition.png",
+      "lore": "The Trade Authority operates far beyond the slow, heavily regulated administrative red tape of United Colonies kiosks and Freestar registry impounds. With an active requisition clearance, a vessel bypasses congested civilian comms arrays and restrictive orbital traffic to pull specific component shipments&mdash;including buried, discontinued, or legacy manifests&mdash;straight into local cargo bays. No waiting for vendor inventories to cycle, no public terminal delays; simply targeted logistics executed across the Settled Systems with quiet, absolute efficiency.",
+      "whatItDoes": "Enter a mod's Nexus ID, filter by file category (Main, Optional, Miscellaneous, or File Archive), check off exactly the files and versions you need &mdash; including older, archived ones &mdash; and download them straight to a folder of your choosing."
+    },
+    {
+      "toolId": "archive-finder",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-akila-city-archive.png",
+      "lore": "Deep within the dusty stone walls of the Coe legacy buildings, the Akila City archives house centuries of flight logs, mineral surveys, and trade manifests. A proper frontier archivist does not pry open hundreds of sealed titanium cargo crates just to locate a single planetary scan. Instead, a comprehensive registry indexes every sealed canister and manifest line the moment it arrives in port. A quick search through the records uncovers the exact manifest ledger you need without disturbing a single lock. It turns an impenetrable warehouse of compressed crates into an open, searchable book.",
+      "whatItDoes": "Indexes your entire archive collection in advance, allowing you to instantly search inside compressed files without extracting them."
+    },
+    {
+      "toolId": "missing-files",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-cydonia-ore-extraction.png",
+      "lore": "Deep beneath the red dust of Mars, Cydonia's subterranean drill platforms extract specific mineral deposits without destabilizing the surrounding rock face. When a localized section of processing machinery loses a crucial gear or raw ore feed, you do not tear down the entire mining sector to fix it. Precision extraction drills directly into the deep supply reserves to recover only the exact material required to resume operation. The missing piece is re-inserted into the assembly line seamlessly, leaving adjacent machinery undisturbed. It restores factory output rapidly without wasting energy on a full re-excavation.",
+      "whatItDoes": "Identifies specific missing files from a mod's staging folder and restores just those files directly from their original archive."
+    },
+    {
+      "toolId": "cycle-helper",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-serpent-s-embrace.png",
+      "lore": "Devotees of the Great Serpent revere the infinite coil that encircles the cosmic void, but aboard a starship, an endless feedback loop spells total paralysis. When targeting systems and navigation thrusters each wait on the other to fire first, your vessel is trapped in a serpent's ouroboros that locks the entire bridge. The coil cannot be reasoned with; you must pinpoint the exact overlapping impulse and invert its priority to break the loop. Severing that single redundant knot releases the grid and allows power to flow smoothly once more. Order is restored to the stars, guiding you out of the theological maze and back into clear space.",
+      "whatItDoes": "Identifies circular load-order conflicts and resolves them by reversing the single rule causing the loop."
+    },
+    {
+      "toolId": "remove-collection",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-neon-red-tape-audit.png",
+      "lore": "In the neon-soaked corridors of Ebbside and the high-rise boardrooms of Ryujin Industries, cutting a contract without reviewing the fine print is a quick way to tank your entire enterprise. Before offloading a corporate subsidiary, legal analysts must audit every shared supply chain to ensure active projects do not rely on the same vendor. Tearing down an asset without checking cross-departmental dependencies risks shutting down crucial production lines across the entire city. The audit flags every shared component in bright warning lights before you sign the termination order. It guarantees that pruning one branch never compromises the rest of your commercial empire.",
+      "whatItDoes": "Scans a collection prior to uninstallation, highlighting any mods shared with other active collections so you don't inadvertently delete them."
+    },
+    {
+      "toolId": "report-stats",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-starborn-telemetry.png",
+      "lore": "Across dozens of jumps through the Unity, a Starborn monitors the subtle fluctuations in energy signatures and quantum degradation across every cycle. Sifting through miles of raw atmospheric sensor logs and reactor diagnostics by eye is a fool's errand when traversing the Settled Systems. Telemetry instruments process that raw data stream into actionable metrics, highlighting sub-optimal reactor outputs and strained grav drives before they fail. You immediately see where performance holds strong and which systems demand maintenance across your journey. It provides omniscient clarity across your ship's history without drowning you in raw technical logs.",
+      "whatItDoes": "Visualizes performance and operational stats over time, pinpointing problematic mods and system bottlenecks without requiring you to comb through raw logs."
+    },
+    {
+      "toolId": "report-workthrough",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-constellation-mission-board.png",
+      "lore": "Inside the quiet wooden halls of the Lodge on Jemison, the Constellation mission terminal collects every pending expedition, survey request, and anomaly report across known space. Rather than hunting through scattered dataspads left on desks across the galaxy, explorers find every pressing objective organized in one place. Each outstanding hull repair, uncatalogued planetary survey, and supply shortage is tracked until resolved and checked off. Working through the roster systematically ensures that no expedition launches with unchecked vulnerabilities. It keeps your voyage methodical, disciplined, and fully prepared for deep space exploration.",
+      "whatItDoes": "Consolidates all pending errors, missing files, and mod conflicts across your collections into a single, step-by-step checklist."
+    },
+    {
+      "toolId": "report-updatecompare",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-star-system-cartography.png",
+      "lore": "Charting the changing political boundaries and outpost installations of the Settled Systems requires precise, updated orbital maps. When a planetary sector undergoes terraforming or a new colony is established, navigators need a side-by-side overlay comparing the old system chart to the new scan. Every altered gravity anomaly, newly constructed docking port, and decommissioned sensor relay stands out in sharp relief. Understanding precisely what shifted across the star system prevents navigation errors when entering unfamiliar orbits. It keeps your flight plans completely aligned with the newest frontier realities.",
+      "whatItDoes": "Compares previous and updated collection versions side-by-side, detailing exactly which files were added, removed, or modified."
+    },
+    {
+      "toolId": "report-rulesgen",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-quantum-link-status.png",
+      "lore": "Long-range subspace relays connecting distant frontier outposts rely on precision quantum links that must verify their handshakes across parsecs. When a mass alignment routine runs across the communications network, engineers require immediate confirmation of which relays locked on and which dropped signal. This diagnostic readout categorizes every transmission channel, distinguishing seamless handshakes from links that require an engineer's manual override. You can immediately review the network's health and provide executive sign-off on any stubborn connection. It guarantees full transparency across your communications grid with zero guesswork.",
+      "whatItDoes": "Generates a clear summary showing which conflict rules were automatically linked and which ones require manual review."
+    },
+    {
+      "toolId": "report-workshop",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-relic-chronology.png",
+      "lore": "Outpost traders and unscrupulous scows often smudge shipping manifests and public registries to misrepresent the true origin of their salvage. Relying on the stamped date on a public terminal can leave you holding an outdated schematic or an obsolete engine part. Chronological telemetry penetrates surface-level metadata to extract the exact quantum timestamp of when the artifact was truly manufactured or modified. Knowing the authentic timeline protects your ship from deploying counterfeit or unmaintained hardware. It exposes the real history behind every registry, cutting through outdated public listings.",
+      "whatItDoes": "Reveals the genuine last-modified date of a private Workshop collection, bypassing outdated or inaccurate public metadata."
+    },
+    {
+      "toolId": "report-exceptions",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-constellation-quarantine-zone.png",
+      "lore": "When returning from extreme xenobiological surveys beyond the settled frontier, rare botanical and alien specimens must be placed in reinforced containment. When automated decontaminators and broad-spectrum purge protocols sweep through the cargo bay, these quarantined lockers are completely insulated from the blast. Standard maintenance procedures will not touch, overwrite, or sanitize whatever precious cargo you have locked away inside. Your custom-engineered adaptations remain exactly as you left them, preserved through the most aggressive overhaul. It grants absolute security to unique hardware that standard procedures might otherwise destroy.",
+      "whatItDoes": "Protects specific, manually installed mods from being overwritten or modified during automated batch rebuilds."
+    },
+    {
+      "toolId": "clear-update-flags",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-false-beacon-jammer.png",
+      "lore": "Deep space is littered with phantom transponder pings, obsolete navigational advisories, and automated shipyard recall notices that refuse to go dark. When your scanner console blinks endlessly with alerts for decommissioned frequency upgrades, true priority transmissions get lost in the static. A tuned jamming relay isolates these false telemetry pings and scrubs them from your active cockpit display, preserving your custom frequency lock. Should you ever need to reopen listening channels to standard civilian broadcasts, the jamming matrix can be disengaged instantly to restore full signal telemetry. Clean airwaves mean a focused pilot when navigating uncharted sectors.",
+      "whatItDoes": "Clears unwanted or false \"needs update\" notifications on installed mods on a collection-by-collection basis. Allows you to safely pin exact mod versions while retaining the ability to undo or restore flags at any time."
+    },
+    {
+      "toolId": "pgpatcher",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-modular-shipbuilder-matrix.png",
+      "lore": "Fitting a Deimos cockpit onto a Stroud-Eklund structural frame often forces shipyard engineers to decide which plating takes precedence along the seam. When two hull composites demand the exact same hardpoint, overlapping geometry can compromise structural integrity or warp cockpit viewports entirely. The shipyard matrix lets engineers drag, snap, and re-sequence component priority across all manufacturer blueprints before welding commences. Once the structural hierarchy is locked in, automated fabrication gantries restrike the composite seams to guarantee every exterior bulkhead mounts flush. Master your vessel's architectural hierarchy, and no structural seam will ever buckle under hyperdrive stress.",
+      "whatItDoes": "Lets you customize the conflict priority for visual assets like meshes, textures, and shaders using drag-and-drop or sorting tools. It then coordinates with PGPatcher to generate custom patches reflecting your exact asset override order."
+    },
+    {
+      "toolId": "settings",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-ship-customization-terminal.png",
+      "lore": "The diagnostic console beside the New Atlantis landing pad establishes the foundational operational parameters for your entire starship. You do not re-calibrate fuel manifolds, grav drive offsets, and cargo routing at every single staryard across the Settled Systems; you configure your core vessel specifications once. Every diagnostic sub-routine, fabrication bay, and crew console aboard your vessel draws directly from this central master profile. When your ship's foundational coordinates are locked in at the terminal, every tool in your fleet aligns to the same heading without hesitation. It ensures smooth voyages across the stars without ever having to re-declare your home port.",
+      "whatItDoes": "Lets you configure your core Vortex paths, staging directories, and global preferences once so every tool across the suite automatically references them."
+    },
+    {
+      "toolId": "duplicate-version-cleanup",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-staryard-blueprint-arbitration.png",
+      "lore": "Every long-haul vessel inevitably piles up iterative engineering schematics, superseded avionics firmware, and ghost CAD files across its onboard logs. Staryard Blueprint Arbitration runs a comprehensive manifest diagnostic across your ship's systems, isolating obsolete draft clutter from bespoke hull revisions still tethered to active flight modules. Stray debris is cleanly flushed from the drive and reconciled to pristine, shipyard-certified master specs, restoring immaculate telemetry across your entire fleet.",
+      "whatItDoes": "Scans your install (or one chosen collection) for mods showing more than one version in Vortex, tells real orphaned clutter apart from anything still legitimately needed elsewhere, and cleans up what you check off &mdash; remove, redownload, reinstall, replay any FOMOD choices, and reassign it back to every collection it belongs to."
+    },
+    {
+      "toolId": "save-cleaner",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-unity-sieve.png",
+      "lore": "As an explorer journeys across stars and quantum shifts, your personal chronologue gathers gravitational sediment&mdash;phantom telemetry and orphaned script-wakes from modules long since jettisoned into deep space. The Sieve scans the core frequency of your timeline, sifting out the dead weight and corrupted reference fields without altering your true coordinates. You step forward into the void unburdened, your trajectory intact.",
+      "whatItDoes": "Opens a save file, finds orphaned Papyrus scripts left behind by mods you've removed (grouped by the real mod name, not a cryptic ID), and clears exactly the categories you choose &mdash; with an automatic backup created first, every time."
+    }
+  ]
+}

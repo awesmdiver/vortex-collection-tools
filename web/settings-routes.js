@@ -11,9 +11,12 @@ const { spawn } = require('child_process');
 const express = require('express');
 const appConfig = require('../lib/app-config');
 const { pickFolderAsync } = require('../lib/vortex-sync/win-dialog');
+const { findVortexManagedConflict } = require('../lib/vortex-managed-paths');
 const helperClient = require('../lib/vortex-helper-client');
 const { version: TOOL_VERSION } = require('../package.json');
 const syncLib = require('../lib/vortex-sync/lib');
+const saveScan = require('../lib/save-cleaner-scan');
+const { createSseSession } = require('./sse-session');
 
 // Every log file this project writes (currently only Rebuild Collection's) follows this exact
 // name shape -- same pattern used everywhere else a log filename is validated (rebuild-routes.js).
@@ -49,7 +52,7 @@ function listBackupRunDirs(backupRoot) {
     return entries.filter((e) => e.isDirectory() && BACKUP_RUN_DIR_PATTERN.test(e.name)).map((e) => e.name);
 }
 
-const PATH_FIELDS = ['staging', 'downloads', 'backupRoot', 'syncBackupRoot', 'state', 'logsDir', 'cleanupExcludeListDir', 'skyrimDataDir', 'pluginsListDir', 'dummyMastersOutputDir', 'archiveFinderDbDir', 'archiveFinderOutputDir', 'eslifierOutputDir', 'mergeOutputDir', 'modExceptionListDir', 'cycleHelperHistoryDir', 'pgpatcherCfgDir', 'pgpatcherOutputBackupDir'];
+const PATH_FIELDS = ['staging', 'downloads', 'backupRoot', 'syncBackupRoot', 'ucv2TrackingDir', 'state', 'logsDir', 'cleanupExcludeListDir', 'skyrimDataDir', 'pluginsListDir', 'dummyMastersOutputDir', 'archiveFinderDbDir', 'archiveFinderOutputDir', 'eslifierOutputDir', 'mergeOutputDir', 'mergeStagingCopyDir', 'modExceptionListDir', 'cycleHelperHistoryDir', 'pgpatcherCfgDir', 'pgpatcherOutputBackupDir', 'saveCleanerSavesDir', 'saveCleanerBackupRoot', 'saveCleanerSavesDirFO4', 'saveCleanerBackupRootFO4', 'saveCleanerSavesDirStarfield', 'saveCleanerBackupRootStarfield'];
 // No sensible blank/default state for these eight -- Rebuild Collection can't scan a collection
 // without staging/downloads, Update Collection can't save a backup without somewhere real (not
 // "wherever this project happens to think is a good place") to put it, and Clean Up's exclude list,
@@ -63,7 +66,7 @@ const PATH_FIELDS = ['staging', 'downloads', 'backupRoot', 'syncBackupRoot', 'st
 // destination per extraction instead -- and eslifierOutputDir is simply inert (no ESLifier
 // downgrade applied) until the user actually sets it, same "blank is a normal, supported state" as
 // archiveFinderOutputDir.
-const REQUIRED_PATH_FIELDS = ['staging', 'downloads', 'syncBackupRoot', 'cleanupExcludeListDir', 'skyrimDataDir', 'pluginsListDir', 'dummyMastersOutputDir', 'archiveFinderDbDir', 'modExceptionListDir'];
+const REQUIRED_PATH_FIELDS = ['staging', 'downloads', 'syncBackupRoot', 'ucv2TrackingDir', 'cleanupExcludeListDir', 'skyrimDataDir', 'pluginsListDir', 'dummyMastersOutputDir', 'archiveFinderDbDir', 'modExceptionListDir'];
 // pgpatcherCfgDir is deliberately NOT in REQUIRED_PATH_FIELDS above -- unlike skyrimDataDir/
 // modExceptionListDir (needed by tools most installs actually use), this is a single, brand-new,
 // one-workflow integration; requiring it would block saving ANY OTHER setting for every install
@@ -76,7 +79,10 @@ const REQUIRED_PATH_FIELDS = ['staging', 'downloads', 'syncBackupRoot', 'cleanup
 // set up before saving any other setting on the page.
 // Server bind settings -- like the paths above, these are only read once at process startup
 // (web/server.js), so changing any of them needs the same restart-required treatment.
-const SERVER_FIELDS = ['serverPort', 'serverHost', 'autoOpenBrowser'];
+// appLogEnabled (2026-08-26) belongs here too, not with downloadMissingArchives/
+// forceExtractOffSiteMismatches/hideVortexVersionWarning below -- lib/app-logger.js's console.*
+// wrapping only ever happens once, at boot, same as autoOpenBrowser/serverPort/serverHost.
+const SERVER_FIELDS = ['serverPort', 'serverHost', 'autoOpenBrowser', 'appLogEnabled'];
 // Merge Plugins' own post-merge "Merge Settings" -- see lib/app-config.js's mergePostMergeAction
 // comment for what each value does.
 const MERGE_POST_MERGE_ACTIONS = ['disable', 'remove', 'backup-remove'];
@@ -88,11 +94,61 @@ function withoutKey(cfg) {
     return { ...rest, hasNexusApiKey: !!nexusApiKey, toolVersion: TOOL_VERSION };
 }
 
+// Real SSE-streamed progress for a plain "delete every item in this list" action (2026-08-25, closes
+// docs/UI-PATTERN-MAP.md's Settings findings: a static "Deleting…" text swap with no real feedback on
+// genuinely slow filesystem work). Each item is a synchronous fs.rmSync -- fast per-file, but a real,
+// possibly-long loop on a large backup/log folder -- so this reports a REAL current/total count per
+// item, same technique as remove-collection-runner.js's own "deleting-archives" phase (loop one item
+// at a time instead of one batch call, purely to get a per-item count out). Shared by /delete-backups
+// and /delete-logs below rather than duplicated -- both are the identical shape, just a different
+// item list/label.
+function deleteWithProgress(session, res, itemLabel, items, deleteOne) {
+    if (session.isActive()) {
+        return res.status(409).json({ error: `A ${itemLabel} deletion is already in progress.` });
+    }
+    const mySession = session.start({ id: `${itemLabel}-${Date.now()}` });
+    res.status(202).json({});
+    const emitIfCurrent = (event) => {
+        if (session.get() === mySession) session.emit(event);
+    };
+    (async () => {
+        try {
+            for (let i = 0; i < items.length; i++) {
+                emitIfCurrent({ type: 'phase', current: i + 1, total: items.length, message: `Deleting ${itemLabel} ${i + 1} of ${items.length}…` });
+                deleteOne(items[i]);
+            }
+            emitIfCurrent({ type: 'done', done: true, deletedCount: items.length });
+        } catch (e) {
+            emitIfCurrent({ type: 'error', done: true, error: true, message: e.message });
+        }
+    })();
+}
+
 function createSettingsRouter() {
     const router = express.Router();
 
     router.get('/', (req, res) => {
-        res.json(withoutKey(appConfig.loadConfig()));
+        const cfg = withoutKey(appConfig.loadConfig());
+        // Save Cleaner's own saves-folder auto-detect for Skyrim -- checked on every GET (never written to
+        // config.json until the user actually clicks Save), same "auto-detected badge, still a real
+        // editable field" shape the mockup's own Settings screen shows. Uses the real (possibly
+        // OneDrive-redirected) Documents folder -- see lib/save-cleaner-scan.js's own
+        // resolveDefaultSavesDir/resolveDocumentsDir for why a naive os.homedir() guess isn't enough.
+        if (!cfg.saveCleanerSavesDir) {
+            cfg.saveCleanerSavesDir = saveScan.resolveDefaultSavesDir('skyrim');
+            cfg.saveCleanerSavesDirAutoDetected = !!cfg.saveCleanerSavesDir;
+        }
+        // Same auto-detect for Fallout 4.
+        if (!cfg.saveCleanerSavesDirFO4) {
+            cfg.saveCleanerSavesDirFO4 = saveScan.resolveDefaultSavesDir('fallout4');
+            cfg.saveCleanerSavesDirFO4AutoDetected = !!cfg.saveCleanerSavesDirFO4;
+        }
+        // Same auto-detect for Starfield.
+        if (!cfg.saveCleanerSavesDirStarfield) {
+            cfg.saveCleanerSavesDirStarfield = saveScan.resolveDefaultSavesDir('starfield');
+            cfg.saveCleanerSavesDirStarfieldAutoDetected = !!cfg.saveCleanerSavesDirStarfield;
+        }
+        res.json(cfg);
     });
 
     router.post('/', (req, res) => {
@@ -127,6 +183,18 @@ function createSettingsRouter() {
                 patch.maxStateBackupsToKeep = Number.isFinite(n) ? Math.max(1, Math.floor(n)) : null;
             }
         }
+        // Save Cleaner's own backups -- same "null = unlimited, no 0-off state" shape as
+        // maxStateBackupsToKeep above (a save file is too valuable to a real playthrough to treat
+        // "don't back it up at all" as a real option the way maxBackupsToKeep's 0 does).
+        if ('maxSaveCleanerBackupsToKeep' in body) {
+            const raw = body.maxSaveCleanerBackupsToKeep;
+            if (raw === null || raw === '' || raw === undefined) {
+                patch.maxSaveCleanerBackupsToKeep = null;
+            } else {
+                const n = Number(raw);
+                patch.maxSaveCleanerBackupsToKeep = Number.isFinite(n) ? Math.max(1, Math.floor(n)) : null;
+            }
+        }
         // Always a plain 1-8 integer -- unlike maxBackupsToKeep, there's no meaningful "unlimited"
         // here, so an invalid/blank value just falls back to 1 (sequential), never null.
         if ('concurrentExtractions' in body) {
@@ -148,6 +216,9 @@ function createSettingsRouter() {
         }
         if ('autoOpenBrowser' in body) {
             patch.autoOpenBrowser = !!body.autoOpenBrowser;
+        }
+        if ('appLogEnabled' in body) {
+            patch.appLogEnabled = !!body.appLogEnabled;
         }
         // Merge Plugins' "Merge Settings" -- validated against a known set rather than trusted
         // as-is (same defensive habit as maxBackupsToKeep's clamp above), since an unrecognized value
@@ -174,6 +245,22 @@ function createSettingsRouter() {
         const missing = REQUIRED_PATH_FIELDS.filter((k) => !merged[k]);
         if (missing.length > 0) {
             return res.status(400).json({ error: 'missing-required', missing, message: `Required setting(s) missing: ${missing.join(', ')}.` });
+        }
+
+        // Archive Finder database folder vs. Vortex's own managed folders (2026-08-27, GitHub issue
+        // #4) -- checked against `merged`, not just `patch`, so this catches BOTH a fresh
+        // archiveFinderDbDir being pointed at Vortex's territory AND downloads/staging being changed
+        // to somewhere that now happens to contain an already-saved archiveFinderDbDir. Server-side
+        // backstop (same reasoning as the REQUIRED_PATH_FIELDS check above) -- the Settings page
+        // itself should also warn/block client-side, but a corrupt/manually-edited config.json or
+        // any future non-web caller must not be able to slip past this via this same endpoint. See
+        // lib/vortex-managed-paths.js for exactly which folders count and why.
+        const dbConflict = findVortexManagedConflict(merged.archiveFinderDbDir, { downloads: merged.downloads, staging: merged.staging });
+        if (dbConflict) {
+            return res.status(400).json({
+                error: 'archive-finder-db-in-vortex-folder',
+                message: `The Archive Finder database folder can't be the same as, or inside, your ${dbConflict.label} ("${dbConflict.path}"). Vortex actively manages that folder, and a database file left open there can block Vortex itself with a "File busy" error. Choose a different folder.`,
+            });
         }
 
         const restartRequired = [...PATH_FIELDS, ...SERVER_FIELDS].some((k) => k in patch && patch[k] !== before[k]);
@@ -226,6 +313,14 @@ function createSettingsRouter() {
         res.json({ backupRoot, count: listBackupRunDirs(backupRoot).length });
     });
 
+    const deleteBackupsSession = createSseSession();
+
+    router.get('/delete-backups/events', (req, res) => {
+        if (!deleteBackupsSession.get()) return res.status(404).end();
+        const afterSeq = Number(req.headers['last-event-id'] || 0);
+        deleteBackupsSession.subscribe(res, { afterSeq });
+    });
+
     // Deletes every real backup-run folder under the configured backupRoot -- permanent, no undo.
     // Only touches folders matching BACKUP_RUN_DIR_PATTERN (see its own comment above); anything else
     // sitting in backupRoot is left alone.
@@ -233,10 +328,9 @@ function createSettingsRouter() {
         const { backupRoot } = appConfig.loadConfig();
         if (!backupRoot) return res.status(400).json({ error: 'No backup root folder is configured.' });
         const dirs = listBackupRunDirs(backupRoot);
-        for (const name of dirs) {
+        deleteWithProgress(deleteBackupsSession, res, 'backup', dirs, (name) => {
             fs.rmSync(path.join(backupRoot, name), { recursive: true, force: true });
-        }
-        res.json({ deletedCount: dirs.length });
+        });
     });
 
     // Read-only count for the "Delete all logs" confirmation dialog, same reasoning as
@@ -249,15 +343,22 @@ function createSettingsRouter() {
         res.json({ logsRoot, count: listLogFiles(logsDir).length });
     });
 
+    const deleteLogsSession = createSseSession();
+
+    router.get('/delete-logs/events', (req, res) => {
+        if (!deleteLogsSession.get()) return res.status(404).end();
+        const afterSeq = Number(req.headers['last-event-id'] || 0);
+        deleteLogsSession.subscribe(res, { afterSeq });
+    });
+
     // Deletes every real log file under Rebuild Collection's logs subfolder -- permanent, no undo.
     // Only touches files matching LOG_FILE_PATTERN; anything else in the folder is left alone.
     router.post('/delete-logs', (req, res) => {
         const logsDir = appConfig.getLogsDir('rebuild-collection');
         const files = listLogFiles(logsDir);
-        for (const name of files) {
+        deleteWithProgress(deleteLogsSession, res, 'log file', files, (name) => {
             fs.rmSync(path.join(logsDir, name), { force: true });
-        }
-        res.json({ deletedCount: files.length });
+        });
     });
 
     // Opens the logs root folder itself in Explorer (navigates INTO it), unlike the Reveal buttons

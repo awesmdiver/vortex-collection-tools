@@ -1,0 +1,260 @@
+{
+  "id": "starfield",
+  "label": "Starfield",
+  "appName": "The Eye",
+  "accent": "#0099cc",
+  "hasHomeBackgroundWash": true,
+  "bgTint": "#005875",
+  "hasBook": true,
+  "palette": {},
+  "fontStylesheet": null,
+  "defaultFont": "trebuchet",
+  "fonts": {
+    "trebuchet": {
+      "label": "Trebuchet MS (default)",
+      "cssFamily": "'Trebuchet MS', sans-serif"
+    },
+    "arial": {
+      "label": "Arial",
+      "cssFamily": "'Arial', sans-serif"
+    },
+    "courier": {
+      "label": "Courier New",
+      "cssFamily": "'Courier New', monospace"
+    },
+    "verdana": {
+      "label": "Verdana",
+      "cssFamily": "'Verdana', sans-serif"
+    },
+    "helvetica": {
+      "label": "Helvetica",
+      "cssFamily": "'Helvetica', sans-serif"
+    }
+  },
+  "tools": {
+    "home": {
+      "name": "The Eye",
+      "emoji": "👁️",
+      "function": "Home",
+      "heroTitle": "The Eye",
+      "heroBody": "Your central navigation array for charting, organizing, and stabilizing your settled systems.",
+      "cardDesc": "Central hub for all your modding tools and collection management.",
+      "bannerImage": "theme-assets/starfield/home-banner-eye.png"
+    },
+    "rebuild": {
+      "name": "Grav Drive Jump",
+      "emoji": "🌀",
+      "function": "Rebuild Collection",
+      "heroTitle": "Grav Drive Jump",
+      "heroBody": "Bypass local bottlenecks—re-extract heavy collections at lightspeed, completely free of Vortex constraints.",
+      "cardDesc": "Re-extract collections at full speed, free of Vortex constraints."
+    },
+    "update-collection-v2": {
+      "name": "Memory Fragment",
+      "emoji": "🧬",
+      "function": "Update Collection",
+      "heroTitle": "Memory Fragment",
+      "heroBody": "Never lose your custom configurations to an update again—automated snapshots preserve your choices through every iteration.",
+      "cardDesc": "Preserve your custom setup across every update automatically."
+    },
+    "sync": {
+      "name": "Memory Fragment",
+      "emoji": "🧬",
+      "function": "Update Collection (Classic)",
+      "heroTitle": "Memory Fragment",
+      "heroBody": "Never lose your custom configurations to an update again—automated snapshots preserve your choices through every iteration.",
+      "cardDesc": "Preserve your custom setup across every update automatically."
+    },
+    "rules-generator": {
+      "name": "Quantum Entanglement",
+      "emoji": "⚛️",
+      "function": "Rules Generator",
+      "heroTitle": "Quantum Entanglement",
+      "heroBody": "Instantly bridge legacy conflict rules to updated mod versions without spending hours matching them by hand.",
+      "cardDesc": "Auto-map your existing conflict rules onto updated mods instantly."
+    },
+    "merge": {
+      "name": "Staryard Assembly Line",
+      "emoji": "🛰️",
+      "function": "Merge Plugins",
+      "heroTitle": "Staryard Assembly Line",
+      "heroBody": "Consolidate scattered plugins into single bundles and auto-qualify them as ESL equivalents to save precious load order slots.",
+      "cardDesc": "Bundle plugins into one file and auto-ESL to reclaim load order slots."
+    },
+    "missing-masters": {
+      "name": "Structural Hull Breach",
+      "emoji": "🚨",
+      "function": "Missing Masters",
+      "heroTitle": "Structural Hull Breach",
+      "heroBody": "Detect missing master files the instant they occur and patch them with a single click to prevent desktop crashes.",
+      "cardDesc": "Catch missing masters instantly—no more crash to desktop."
+    },
+    "scrub": {
+      "name": "Deimos Salvage Yard",
+      "emoji": "🛠️",
+      "function": "Mod Scrub",
+      "heroTitle": "Deimos Salvage Yard",
+      "heroBody": "Sweep away orphaned staging folders, dead downloads, and leftover debris with customizable permanent exclusion lists.",
+      "cardDesc": "Clean up orphaned folders and dead downloads safely."
+    },
+    "archive-finder": {
+      "name": "Akila City Archive",
+      "emoji": "🗄️",
+      "function": "Archive Finder",
+      "heroTitle": "Akila City Archive",
+      "heroBody": "Index your entire downloads library upfront and search across every compressed archive instantly—zero unpacking required.",
+      "cardDesc": "Search all archives instantly without unpacking a single byte."
+    },
+    "missing-files": {
+      "name": "Cydonia Ore Extraction",
+      "emoji": "⛏️",
+      "function": "Rebuild Missing Files",
+      "heroTitle": "Cydonia Ore Extraction",
+      "heroBody": "Target and restore only the files that quietly went missing from your staging folders, straight from the source archive.",
+      "cardDesc": "Restore only the missing files—no need for a full rebuild."
+    },
+    "file-retriever": {
+      "name": "Trade Authority Requisition",
+      "emoji": "📦",
+      "function": "File Retriever",
+      "heroTitle": "Trade Authority Requisition",
+      "heroBody": "Nexus not letting you download a file? Is that Archive not available? It is now. Enter any mod ID to pull up its complete cargo manifest, check off the specific revisions or legacy packages you need, and beam them straight into your local hold without the web kiosk red tape.",
+      "cardDesc": "Enter a mod's ID to inspect its full cargo manifest and beam specific or archived files straight to your local drive."
+    },
+    "cycle-helper": {
+      "name": "Serpent's Embrace",
+      "emoji": "🐍",
+      "function": "Cycle Helper",
+      "heroTitle": "Serpent's Embrace",
+      "heroBody": "Untangle load-order priority loops instantly by isolating the single bad rule responsible and flipping it on the spot.",
+      "cardDesc": "Find and fix the one bad rule causing your cycle instantly."
+    },
+    "remove-collection": {
+      "name": "Neon Red-Tape Audit",
+      "emoji": "📋",
+      "function": "Safe Collection Removal",
+      "heroTitle": "Neon Red-Tape Audit",
+      "heroBody": "Purge old collections safely with a pre-removal audit that flags and protects shared mods still used by your other setups.",
+      "cardDesc": "Audit shared dependencies before removal—nothing shared goes missing."
+    },
+    "report-stats": {
+      "name": "Starborn Telemetry",
+      "emoji": "📡",
+      "function": "Stats",
+      "heroTitle": "Starborn Telemetry",
+      "heroBody": "Track historical run efficiency and surface mods needing attention without digging through raw log files.",
+      "cardDesc": "Historical rebuild trends and mods needing attention at a glance."
+    },
+    "report-workthrough": {
+      "name": "Constellation Mission Board",
+      "emoji": "📌",
+      "function": "Work Through",
+      "heroTitle": "Constellation Mission Board",
+      "heroBody": "Conquer all your modding issues across every collection from a single, persistent, interactive checklist.",
+      "cardDesc": "Every problem mod across all collections in one persistent checklist."
+    },
+    "report-updatecompare": {
+      "name": "Star System Cartography",
+      "emoji": "🗺️",
+      "function": "Update Compare",
+      "heroTitle": "Star System Cartography",
+      "heroBody": "Inspect a crystal-clear before-and-after manifest of every addition, removal, and change following an update.",
+      "cardDesc": "Inspect before-and-after of what was added, removed, or changed in an update."
+    },
+    "report-rulesgen": {
+      "name": "Quantum Link Status",
+      "emoji": "🔗",
+      "function": "Rules Generator Report",
+      "heroTitle": "Quantum Link Status",
+      "heroBody": "Review at a glance which conflict rules successfully self-mapped and which still require your manual sign-off.",
+      "cardDesc": "See which rules linked cleanly and which need your review."
+    },
+    "report-workshop": {
+      "name": "Relic Chronology",
+      "emoji": "⏳",
+      "function": "Workshop Report",
+      "heroTitle": "Relic Chronology",
+      "heroBody": "Unmask static web dates with true revision history timestamps to see which collections you've actually touched recently.",
+      "cardDesc": "The real last-touched date for each Workshop collection from revision history."
+    },
+    "report-exceptions": {
+      "name": "Constellation Quarantine Zone",
+      "emoji": "🧪",
+      "function": "Mod Exceptions",
+      "heroTitle": "Constellation Quarantine Zone",
+      "heroBody": "Shield hand-picked, custom-installer mods from automated batch rebuilds to protect your precise micro-choices.",
+      "cardDesc": "Protect hand-picked mods from automated rebuilds."
+    },
+    "settings": {
+      "name": "Ship Customization Terminal",
+      "emoji": "🎛️",
+      "function": "Settings",
+      "heroTitle": "Ship Customization Terminal",
+      "heroBody": "Configure your core Vortex paths, staging directories, and global preferences once for the entire application fleet.",
+      "cardDesc": "Set paths and preferences once for all tools."
+    },
+    "clear-update-flags": {
+      "name": "False Beacon Jammer",
+      "emoji": "🔇",
+      "function": "Clear Update Flags",
+      "heroTitle": "False Beacon Jammer",
+      "heroBody": "Scrub false update flags and silence unwanted upgrade pings across curated collections, with full roll-back protection.",
+      "cardDesc": "Silence false update flags with full rollback protection."
+    },
+    "pgpatcher": {
+      "name": "Modular Shipbuilder Matrix",
+      "emoji": "🧩",
+      "function": "PGPatcher Load Order",
+      "heroTitle": "Modular Shipbuilder Matrix",
+      "heroBody": "Set visual priority for conflicting meshes and textures, re-ordering overrides before triggering an automatic PGPatcher rebuild.",
+      "cardDesc": "Dictate visual priority for conflicting meshes and textures.",
+      "landingHint": "Click Start to begin."
+    },
+    "report-mergeupdatereport": {
+      "name": "Drydock Variance Report",
+      "emoji": "📡",
+      "function": "Merge Update Status Report",
+      "heroTitle": "Drydock Variance Report",
+      "heroBody": "Securing upgraded grav-drive manifolds in your cargo bay does nothing for the welded hab module already sealed and pressurized on the pad&mdash;a structural merge remains locked to the exact revision specs clamped into the jig on assembly day. The Drydock Variance Report checks your current mod manifests against every composite plugin built on the line. It flags updated supplier parts and maps them directly to the merged modules carrying stale blueprints, giving you an exact refit punch list before launch.",
+      "cardDesc": "Maps blueprint drift across welded ship modules&mdash;giving you an exact refit punch list for stale staryard merges."
+    },
+    "report-mergehistory": {
+      "name": "Flight Data Recorder",
+      "emoji": "📼",
+      "function": "Merge History",
+      "heroTitle": "Flight Data Recorder",
+      "heroBody": "Audit built merges against your active load order to catch zombie plugins or missing merged archives, restoring balance in one click.",
+      "cardDesc": "Audit merges against active load order to catch drift and missing archives."
+    },
+    "duplicate-version-cleanup": {
+      "name": "Staryard Blueprint Arbitration",
+      "emoji": "🛠️",
+      "function": "Duplicate Version Cleanup",
+      "heroTitle": "Staryard Blueprint Arbitration",
+      "heroBody": "Updating mods across multiple collections often strands legacy version entries inside your ship manifest dropdowns. Staryard Blueprint Arbitration isolates orphaned revisions from intentionally pinned variants, downloading and reinstalling a pristine survivor so your mod loadout matches your actual flight plan.",
+      "cardDesc": "Consolidates duplicate version records into a single clean reinstallation without breaking collection-specific variants."
+    },
+    "save-cleaner": {
+      "name": "Unity Sieve",
+      "emoji": "🌌",
+      "function": "Save Cleaner",
+      "heroTitle": "🌌 Unity Sieve",
+      "heroBody": "Every jump across the settled systems leaves stray quantum echoes in your save file from mods left behind in older universes. The Unity Sieve analyzes your character's record, groups orphaned script instances by their origin mod, and sifts out the dead weight so your journey continues unburdened.",
+      "cardDesc": "Sifts orphaned script fragments and timeline debris directly out of your character's save file."
+    }
+  },
+  "sections": {
+    "mainTools": {
+      "name": "Command Deck",
+      "bannerImage": "theme-assets/starfield/home-banner-command-deck.png"
+    },
+    "reports": {
+      "name": "Flight Logs & Manifests",
+      "bannerImage": "theme-assets/starfield/home-banner-flight-logs.png"
+    },
+    "utilities": {
+      "name": "Engineering Bay",
+      "bannerImage": "theme-assets/starfield/home-banner-engineering-bay.png"
+    }
+  }
+}

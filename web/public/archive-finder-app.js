@@ -90,8 +90,16 @@ async function afLoadConfig() {
     afState.downloadsDir = cfg.downloads || '';
     $g('afNotConfigured').classList.toggle('hidden', cfg.configured);
     if (!cfg.configured) {
-      const afName = window.themedToolName ? window.themedToolName('archive-finder', 'Archive Finder') : 'Archive Finder';
-      $g('afNotConfigured').textContent = `Set up your Vortex downloads folder and ${afName} database folder under Settings first.`;
+      // configError (2026-08-27, GitHub issue #4): both fields ARE set, but the database itself
+      // couldn't actually be opened (e.g. it's pointed at a folder Vortex manages, or an existing
+      // file there isn't recognized as an Archive Finder index) -- show that real reason instead of
+      // the generic "go set these up" text, which would be misleading here (they ARE set up).
+      if (cfg.configError) {
+        $g('afNotConfigured').textContent = cfg.configError;
+      } else {
+        const afName = window.themedToolName ? window.themedToolName('archive-finder', 'Archive Finder') : 'Archive Finder';
+        $g('afNotConfigured').textContent = `Set up your Vortex downloads folder and ${afName} database folder under Settings first.`;
+      }
       $g('afMain').classList.add('hidden');
       return;
     }

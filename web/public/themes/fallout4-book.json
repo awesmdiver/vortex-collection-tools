@@ -38,6 +38,12 @@
       "whatItDoes": "Skyrim's plugin slots fill up fast. Pick plugins from one or more collections and this tool bundles them into a single file&mdash;freeing up slots without touching xEdit. Review exactly what's going in first, and it'll flag the result as ESL automatically when it fits."
     },
     {
+      "toolId": "report-mergehistory",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-assembly-integrity-audit.png",
+      "lore": "Even inside the Institute's sealed cleanrooms, automated maintenance routines and upstream manifest syncs can quietly muddle an otherwise immaculate deployment&mdash;re-activating decommissioned prototype parts on the live floor or misplacing a finalized frame during routine restocking. The Assembly Integrity Audit serves as your quality-control registry, comparing the gear currently on the line against every sub-assembly you have ever registered. When a drift in specification is detected, the audit highlights the discrepancy immediately, giving you the executive clearance to re-enforce the unified assembly or restore the original standalone schematics.",
+      "whatItDoes": "Compares your active Vortex load order against the history of every merge you have created with the app. If a collection update quietly re-enabled individual plugins that were supposed to stay merged, or if a merged file went missing, you can fix the conflict in one click by re-applying the merge or restoring the original plugins."
+    },
+    {
       "toolId": "missing-masters",
       "banner": "theme-assets/fallout4/book/book-banner-fallout4-vault-tec-diagnostic-prompt.png",
       "lore": "Vault-Tec terminals down in the sub-basement don't wait for a life-support system to actually fail before they sound off — the second a required component goes missing, the screen flashes red and says so, loud and immediate, before whatever depends on that component ever gets the chance to lock up. A plugin missing its master file is the exact same failure waiting to happen — quiet, invisible, right up until the game crashes straight to desktop. This tool is the terminal that catches it first.",
@@ -50,6 +56,12 @@
       "whatItDoes": "Easily spot staging folders and archives that Vortex has quietly stopped tracking&mdash;no digging through anything by hand! Designed to take the guesswork out of cleanup, this tool shows you exactly what's safe to remove so you can reclaim disk space with confidence."
     },
     {
+      "toolId": "file-retriever",
+      "banner": "theme-assets/fallout4/book/book-banner-robco-requisition-protocol.png",
+      "lore": "Standard pre-War logistics networks were choked with bureaucratic latency, red tape, and dispatch bottlenecks designed to waste billable hours. The RobCo Requisition Protocol overrides civilian routing queues, opening an uninhibited optical data pipeline directly into deep archival mainframes to retrieve legacy holotapes and classified component files on demand. Rather than wrestling with corrupted public terminal interfaces or waiting on sluggish relay buffers, field technicians requisition the exact binary payloads they require directly to local storage.",
+      "whatItDoes": "Enter a mod's Nexus ID, filter by file category (Main, Optional, Miscellaneous, or File Archive), check off exactly the files and versions you need &mdash; including older, legacy ones &mdash; and download them straight to a folder of your choosing."
+    },
+    {
       "toolId": "archive-finder",
       "banner": "theme-assets/fallout4/book/book-banner-fallout4-boston-library-terminal.png",
       "lore": "The Boston Public Library's own card-catalog terminals never made anyone dig through dusty boxes of loose paper to find one specific document — you queried the system, and it told you exactly where the thing you wanted actually was, without you ever having to open a single crate you didn't need. Your downloads folder is that same room full of crates, except every crate is a packed archive. This tool is the terminal: search once, across everything, and it points straight at the file — no unpacking required.",
@@ -59,7 +71,7 @@
       "toolId": "missing-files",
       "banner": "theme-assets/fallout4/book/book-banner-fallout4-auto-doc-diagnostic-repair.png",
       "lore": "A properly stocked Auto-Doc doesn't rebuild a patient from scratch with new skin and bones — it scans, finds exactly what's actually damaged or missing, and repairs just that, leaving everything already healthy completely alone. A collection that's \"not working\" almost never means the whole thing is broken; it usually means a handful of files quietly went missing somewhere in staging. This tool runs the same diagnostic: find precisely what's gone, mod by mod, and put back only that.",
-      "whatItDoes": "Whether a collection removed straight in Vortex (skipping Safe Collection Removal) wiped out shared files, a few mods quietly went missing from your staging folder, or rebuilding the entire collection feels like overkill&mdash;this tool has you covered. It scans your chosen collections, highlights exactly which files are missing, and restores only what's needed directly from the archive."
+      "whatItDoes": "Whether a Vortex removal wiped out shared files, staging folder mods went missing, or rebuilding an entire collection feels like overkill&mdash;this tool has you covered. It scans your collections, pinpoints missing files or archives, and restores only what you need directly from the local archive or a fresh download."
     },
     {
       "toolId": "cycle-helper",
@@ -120,6 +132,24 @@
       "banner": "theme-assets/fallout4/book/book-banner-fallout4-vault-tec-priority-protocol.jpg",
       "lore": "When two competing subroutines attempt to route auxiliary power to the same life-support manifold, the mainframe cannot afford an administrative dead-heat. Vault-Tec automation resolves contention through a rigid hierarchy of execution protocols, allowing the highest-ranked directive to immediately override and suppress all subordinate signals below it. Without a deliberate sequence governing the sub-level logic gates, conflicting commands inevitably spiral into erratic sensor readouts, subsystem brownouts, and terminal crashes. Calibrating the protocol hierarchy in advance ensures that every conflicting directive is resolved with precision, leaving the primary system operating exactly to overseer specifications.",
       "whatItDoes": "Decide which mod takes priority when two of them rewrite the same mesh or shader. Drag to reorder, grab a whole group and move it at once, or sort the list A&ndash;Z and adjust from there&mdash;then PGPatcher runs to exactly that order, no guesswork."
+    },
+    {
+      "toolId": "settings",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-central-calibration-console.png",
+      "lore": "Vault-Tec protocol dictates that a field technician never wastes billable hours re-entering sector coordinates and frequency bands into every individual terminal on the network. You feed your master directory parameters into the mainframe once, and every automated substation downstream aligns without further intervention. Establishing your baseline telemetry here guarantees that all diagnostic tools know precisely where your manifests and staging bays live before you initiate a single procedure.",
+      "whatItDoes": "Set your Vortex staging path, downloads path, and app preferences here just once. Every other tool in the suite references these settings automatically, so you never have to re-select your folders when switching tasks."
+    },
+    {
+      "toolId": "duplicate-version-cleanup",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-robco-revision-arbitration.png",
+      "lore": "Decades of routine terminal cycles inevitably choke a mainframe with superseded holotape revisions, redundant patch files, and duplicate subroutines drifting through memory banks. RobCo Revision Arbitration inspects the data bus with strict industrial precision, separating rotting digital debris from legacy files still wired into secondary terminals. Redundant clutter is completely purged and re-indexed to factory-fresh master tapes, leaving your system cache lean without severing a single active protocol.",
+      "whatItDoes": "Scans your install (or one chosen collection) for mods showing more than one version in Vortex, tells real orphaned clutter apart from anything still legitimately needed elsewhere, and cleans up what you check off &mdash; remove, redownload, reinstall, replay any FOMOD choices, and reassign it back to every collection it belongs to."
+    },
+    {
+      "toolId": "save-cleaner",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-robco-holotape-defrag.png",
+      "lore": "A survivor's biometric logbook takes a beating out in the wastes, accumulating bad sectors, ghost subroutines, and corrupted memory registers from hardware you scrapped three settlements ago. You don't wipe a lifetime of recorded history just because the playback is starting to drag and stutter. Run a defrag cycle: it isolates and dumps the orphaned background garbage without touching a single active byte of your survival record.",
+      "whatItDoes": "Opens a save file, finds orphaned Papyrus scripts left behind by mods you've removed (grouped by the real mod name, not a cryptic ID), and clears exactly the categories you choose &mdash; with an automatic backup created first, every time."
     }
   ]
 }

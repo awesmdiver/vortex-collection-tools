@@ -14,6 +14,12 @@
       "whatItDoes": "Pick plugins from one or more collections, review exactly what's going into the merge (which records, whether anything needs a master, whether it overrides another mod's own changes), then merge them into a single new .esp. If the result stays under Skyrim's 4,096-record light-plugin limit and doesn't touch any cell/worldspace records, it gets flagged as an ESL automatically &mdash; zero load-order cost. Nothing about your original plugins changes; the merge is a new file, backed by the xelib engine Wrye Bash/xEdit both use under the hood."
     },
     {
+      "toolId": "report-mergehistory",
+      "banner": "theme-assets/skyrim/book/book-banner-the-crucible.png",
+      "lore": "A master blacksmith may inspect a newly forged blade upon the cooling rack and find no fault in the temper, but the forge is ever in motion&mdash;unruly apprentices shuffle inventory, fresh ore wagons arrive from distant holds, and the daily clamor of the workshop has a quiet way of muddling the cast. The Crucible serves as the master's ledger and trueing stone, taking stock of every alloy the Forge has ever struck and measuring it against the actual steel resting in your scabbard today. Should an uninvited shipment slip a discarded ingot back onto your workbench or a completed work vanish from the armory, the stone reveals the fracture at a glance, allowing you to hammer the alloy true once more or unbind the metal back into its raw state.",
+      "whatItDoes": "Scans your active load order against the log of every merge you've built using the Forge. If an update to your collection quietly re-enabled the original separated plugins, or if a merged file went missing, The Crucible identifies the discrepancy and lets you resolve it instantly with one-click Revert or Restore actions."
+    },
+    {
       "toolId": "rebuild",
       "banner": "theme-assets/skyrim/book/book-banner-restoration.png",
       "lore": "Restoration is a perfectly valid school of magic because it wastes no time re-inventing the body it tends to; it simply closes wounds and returns weary flesh to full vigor. When a traveler collapses, a priest of Arkay does not demand they be born anew from infancy. The spell simply reaches down, knits the torn fibers back together in a burst of light, and sets you back on the road in moments.",
@@ -86,6 +92,12 @@
       "whatItDoes": "Spots staging folders and archives that Vortex has quietly stopped tracking &mdash; no digging through anything by hand. Shows you exactly what's safe to remove, so you can reclaim disk space with confidence."
     },
     {
+      "toolId": "file-retriever",
+      "banner": "theme-assets/skyrim/book/book-banner-telekinesis.png",
+      "lore": "Mastering the Alteration school teaches that physical distance and cluttered barriers are merely illusions of an untrained mind. When a rare grimoire or forgotten relic lies buried beneath dusty archive heaps or locked behind uncooperative shopkeepers, the adept does not haggle or wait upon slow couriers&mdash;they reach out with pure intent and pull the prize straight into their grasp. In this manner, specific treasures and long-buried revisions are summoned directly from the ether, bypassing crowded bazaars and locked gates entirely.",
+      "whatItDoes": "Enter a mod's Nexus ID, filter by file category (Main, Optional, Miscellaneous, or File Archive), check off exactly the files and versions you need &mdash; including older, archived ones &mdash; and download them straight to a folder of your choosing."
+    },
+    {
       "toolId": "archive-finder",
       "banner": "theme-assets/skyrim/book/book-banner-clairvoyance.png",
       "lore": "The shimmering blue light of Clairvoyance does not require you to tear down dungeon walls or pick heavy iron locks just to see what lies within. The mystic beacon threads effortlessly through solid stone and sealed chests, guiding your inner eye directly to the hidden artifact you seek. You perceive the exact contents of sealed parcels without ever breaking the wax.",
@@ -126,6 +138,18 @@
       "banner": "theme-assets/skyrim/book/book-banner-the-standing-stones.png",
       "lore": "The monolithic Standing Stones carved across the tundra grant enduring blessings that govern an adventurer's journey across thousands of leagues. You do not stop to re-align your stars before entering every dungeon; the foundation is laid once, and the power flows through every sword swing and spell cast thereafter. Align your course here at the monolith, and every tool under your command follows suit.",
       "whatItDoes": "Set your Vortex paths and preferences here just once, and every other tool in The Arcaneum picks them up automatically &mdash; so you can spend your time on the actual work, not re-entering the same folders over and over."
+    },
+    {
+      "toolId": "duplicate-version-cleanup",
+      "banner": "theme-assets/skyrim/book/book-banner-arcane-concordance.png",
+      "lore": "An archive left untended will spawn its own phantoms&mdash;superseded drafts, orphaned scrolls, and duplicate cantrips quietly gathering dust in the margins of your grimoires. True mastery of the Arcane Concordance lies in reading the lineage of every parchment with an archivist's eye, unmaking redundant transcriptions back into a single pristine folio. Extraneous clutter is swept from the study, while those rare, delicate variants still binding another enchantment remain safe upon the shelf.",
+      "whatItDoes": "Scans your install (or one chosen collection) for mods showing more than one version in Vortex, tells real orphaned clutter apart from anything still legitimately needed elsewhere, and cleans up what you check off &mdash; remove, redownload, reinstall, replay any FOMOD choices, and reassign it back to every collection it belongs to."
+    },
+    {
+      "toolId": "save-cleaner",
+      "banner": "theme-assets/skyrim/book/book-banner-azuras-star.png",
+      "lore": "A mortal soul's chronicle gathers invisible weight across a long journey&mdash;lingering echoes of past enchantments, abandoned bindings, and phantom threads that cling to the record long after their sources have vanished. Azura's Star does not unravel your history to cleanse it; it holds the living vessel in crystalline stillness, purging only the orphaned corruption and tethered ghosts. The memory of your journey remains unbroken, restored to pristine clarity.",
+      "whatItDoes": "Opens a save file, finds orphaned Papyrus scripts left behind by mods you've removed (grouped by the real mod name, not a cryptic ID), and clears exactly the categories you choose &mdash; with an automatic backup created first, every time."
     }
   ]
 }
