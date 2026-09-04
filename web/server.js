@@ -272,7 +272,13 @@ function main() {
     server.on('error', (e) => {
         if (e.code === 'EADDRINUSE') {
             console.error(`Port ${config.port} is already in use -- pick another with --port <N>.`);
-            process.exit(1);
+            // Exit code 3, distinct from both 0 (clean/deliberate stop) and the general nonzero-crash
+            // bucket a plain exit(1) would fall into -- launcher/src-tauri/src/main.rs's
+            // spawn_crash_monitor special-cases this one so "someone else already has this port" is
+            // never misclassified as a genuine crash and respawned into a doomed loop (every respawn
+            // would hit this identical EADDRINUSE again). Keep this in sync with that file's own
+            // PORT_CONFLICT_EXIT_CODE constant if this ever changes.
+            process.exit(3);
         }
         throw e;
     });

@@ -1599,30 +1599,6 @@
         <span class="muted" title="A safety backup taken automatically right before this restore, in case you need to undo it">Safety backup</span>
         <button id="settingsStateRevealPreRestoreBtn" class="btn btn--ghost btn--small">Reveal</button>
       </div>
-
-      <h3 class="settings-section-title badge badge--info">Log Storage Location</h3>
-      <p class="muted">Choose where to save run logs. Each logging tool creates its own subfolder in this location. Leave this blank to keep the default folder. Changing this setting requires a server restart.</p>
-      <div class="field-group">
-        <label class="field-label" for="settingsLogsDirInput">Log file location</label>
-        <div class="path-input-row">
-          <input id="settingsLogsDirInput" class="input input--wide" type="text" placeholder="Default: this app's own logs folder" autocomplete="off">
-          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsLogsDirInput">Browse&hellip;</button>
-        </div>
-      </div>
-
-      <div class="field-group">
-        <label class="checkbox">
-          <input type="checkbox" id="settingsAppLogInput">
-          Write a log file for this session
-        </label>
-      </div>
-      <p class="muted">Captures what the app is doing while it runs -- handy for troubleshooting, or to attach when reporting a bug. Changing this requires a server restart.</p>
-
-      <div class="view-actions">
-        <button id="settingsOpenLogsBtn" class="btn btn--ghost btn--small">Open Logs Folder</button>
-        <button id="settingsDeleteLogsBtn" class="btn btn--ghost btn--small">Delete all logs</button>
-        <span id="settingsDeleteLogsStatus" class="muted"></span>
-      </div>
     </div>
     </section>
 
@@ -1769,6 +1745,30 @@
         official Nexus API policy for free accounts, the same way Vortex's own client works. If your
         account isn't Premium, download the archive yourself from either within Vortex or on
         Nexus's website to reinstall it.
+      </div>
+
+      <h3 class="settings-section-title badge badge--info">Log Storage Location</h3>
+      <p class="muted">Choose where to save run logs. Each logging tool creates its own subfolder in this location. Leave this blank to keep the default folder. Changing this setting requires a server restart.</p>
+      <div class="field-group">
+        <label class="field-label" for="settingsLogsDirInput">Log file location</label>
+        <div class="path-input-row">
+          <input id="settingsLogsDirInput" class="input input--wide" type="text" placeholder="Default: this app's own logs folder" autocomplete="off">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsLogsDirInput">Browse&hellip;</button>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="checkbox">
+          <input type="checkbox" id="settingsAppLogInput">
+          Write a log file for this session
+        </label>
+      </div>
+      <p class="muted">Captures what the app is doing while it runs -- handy for troubleshooting, or to attach when reporting a bug. Changing this requires a server restart.</p>
+
+      <div class="view-actions">
+        <button id="settingsOpenLogsBtn" class="btn btn--ghost btn--small">Open Logs Folder</button>
+        <button id="settingsDeleteLogsBtn" class="btn btn--ghost btn--small">Delete all logs</button>
+        <span id="settingsDeleteLogsStatus" class="muted"></span>
       </div>
 
       <h3 class="settings-section-title badge badge--info">Support this project</h3>
