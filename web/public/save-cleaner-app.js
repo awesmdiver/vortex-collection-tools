@@ -196,13 +196,24 @@ async function scLoadSaves() {
   scHideCriticalError();
   $sc('scNotConfigured').classList.add('hidden');
   try {
-    const { savesDir, saves } = await scApi('GET', `/api/save-cleaner/saves?game=${encodeURIComponent(scCurrentGame)}`);
+    const { savesDir, saves, profileNamesError } = await scApi('GET', `/api/save-cleaner/saves?game=${encodeURIComponent(scCurrentGame)}`);
     scSavesDir = savesDir;
     scSaves = saves;
     scSelectedIdx = null;
     $sc('scSavesDirLabel').textContent = savesDir;
     scRenderSavesList();
     scUpdateStep1Actions();
+    // profileNamesError (2026-09-05, director's own direct ask): the saves list ITSELF already
+    // loaded successfully (a 200, not a thrown error) -- this only means some saves' own profile
+    // NAME didn't resolve because Vortex was genuinely busy a moment ago (see
+    // save-cleaner-routes.js's own attachProfileNames for the real 3-way distinction: this flag
+    // only ever fires for that one transient case, never for a permanently-missing Helper or a
+    // genuinely-unknown profile). Offer the same shared busy modal with a real retry; if the user
+    // cancels instead, the list stays exactly as already rendered above ("Unknown profile" showing
+    // for whatever didn't resolve) -- that's the director's own explicitly stated fallback, not a bug.
+    if (profileNamesError && profileNamesError.code === 'vortex-running' && window.showVortexRunningModal) {
+      window.showVortexRunningModal(scLoadSaves, { title: '⚠️ Vortex is currently busy', body: profileNamesError.message });
+    }
   } catch (e) {
     if (e.status === 400 && e.body?.error === 'not-configured') {
       $sc('scNotConfiguredText').textContent = e.message;
@@ -323,7 +334,7 @@ function scRenderSaveRow(s, idx) {
   const noCosave = !s.cosavePath ? ` <span class="badge badge--warning" style="display:inline-flex">No ${scCosaveName()} co-save</span>` : '';
   // One line: main text on the left, Newest + the date/time right-justified in their own group
   // (director's own call 2026-08-25) -- no file size.
-  return `<div class="merge-chk-row${idx === scSelectedIdx ? ' on' : ''}" data-idx="${idx}" style="cursor:pointer;display:flex;align-items:center;gap:14px;overflow:hidden">
+  return `<div class="name-row${idx === scSelectedIdx ? ' on' : ''}" data-idx="${idx}" style="cursor:pointer;display:flex;align-items:center;gap:14px;overflow:hidden">
     <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${line}${noCosave}</span>
     <span style="flex-shrink:0;display:flex;align-items:center;gap:10px">${newest}<button class="btn btn--ghost btn--small sc-view-btn" data-idx="${idx}" type="button">View</button><span class="muted" style="font-size:12.5px;width:150px;text-align:right;flex-shrink:0">${scFormatDate(s.mtime)}</span></span>
   </div>`;
@@ -402,7 +413,7 @@ function scRenderSavesList() {
       scRenderSavesList();
     });
   });
-  list.querySelectorAll('.merge-chk-row').forEach((row) => {
+  list.querySelectorAll('.name-row').forEach((row) => {
     row.addEventListener('click', () => scSelectSave(Number(row.dataset.idx)));
   });
   list.querySelectorAll('.sc-view-btn').forEach((btn) => {
@@ -415,7 +426,7 @@ function scRenderSavesList() {
 
 function scSelectSave(idx) {
   scSelectedIdx = idx;
-  $sc('scSavesList').querySelectorAll('.merge-chk-row').forEach((row) => {
+  $sc('scSavesList').querySelectorAll('.name-row').forEach((row) => {
     row.classList.toggle('on', Number(row.dataset.idx) === idx);
   });
   scUpdateStep1Actions();

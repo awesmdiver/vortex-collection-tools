@@ -34,7 +34,13 @@ function createCycleHelperRouter(config) {
 
     function vortexRunningGate(res) {
         if (syncLib.isVortexRunning()) {
-            res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
+            // "Currently busy", not "close it" -- this gate only ever trips once the Helper (which
+            // every caller here always tries first) has already been checked and didn't answer while
+            // Vortex is running -- there's no genuine "must be closed" case reachable here (Vortex
+            // actually closed would make isVortexRunning() false and fall through to the real
+            // state.v2 path instead). Same wording/reasoning as rebuild-missing-routes.js's own fix
+            // for the identical condition (2026-09-02) -- this router just hadn't gotten it yet.
+            res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently busy. Please wait for Vortex to finish its current activity, then try again.' });
             return true;
         }
         return false;
@@ -116,9 +122,12 @@ function createCycleHelperRouter(config) {
                 }
                 if (syncLib.isVortexRunning()) {
                     stopTicking();
+                    // Same "busy, not close it" fix as vortexRunningGate above -- this branch only
+                    // ever reaches here after the helper-based scanViaHelper attempt above already
+                    // failed to answer while Vortex is running.
                     emitIfCurrent({
                         type: 'error', done: true, error: true, errorCode: 'vortex-running',
-                        message: 'Vortex is currently running. Close it completely and try again.',
+                        message: 'Vortex is currently busy. Please wait for Vortex to finish its current activity, then try again.',
                     });
                     return;
                 }

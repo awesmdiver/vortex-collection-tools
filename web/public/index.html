@@ -3600,7 +3600,10 @@
   <div id="rgEmpty" class="empty-row hidden"></div>
 
   <div id="rgCriticalError" class="callout callout--critical hidden"></div>
-  <div id="rgLoading" class="loading-row hidden"><span class="spinner"></span> Reading Vortex's database&hellip;</div>
+  <div id="rgLoading" class="loading-row hidden">
+    <span class="spinner"></span><span id="rgLoadingText"> Reading Vortex's database&hellip;</span>
+    <button id="rgCancelAnalyzeBtn" class="btn btn--ghost btn--small">Cancel</button>
+  </div>
 
   <!-- Same real .merge-stepper/.merge-step component Update Collection's own syncStepper uses
        (web/public/sync-app.js) -- reused as-is, not reinvented, for this new 2-step flow. Hidden
@@ -3670,8 +3673,8 @@
     <div class="summary-badges" id="rgSummaryBadges"></div>
 
     <div class="view-actions" style="margin-bottom: 20px;">
-      <button id="rgApplyBtn" class="btn btn--primary">Apply to Vortex</button>
       <span id="rgApplyStatus" class="muted"></span>
+      <button id="rgApplyBtn" class="btn btn--primary">Apply to Vortex</button>
     </div>
 
     <!-- Success, not info -- the write genuinely completed at this point. Kept separate from
@@ -3729,9 +3732,19 @@
        entirely when there's nothing in any of the 4 lists below, same instinct as Step 1's own
        auto-skip. Fully navigable via the stepper pill regardless, same as every other step. -->
   <div id="rgScreenExceptions" class="hidden">
-    <div class="callout callout--warning">
+    <div id="rgExcWarningBanner" class="callout callout--warning">
       <div class="callout__title" id="rgExcCalloutTitle">⚠️ Some rules didn't carry over cleanly</div>
       <p>These new-collection mods already had a rule set for the same relationship, so nothing was overwritten automatically &mdash; pick which one should win, or leave things as they are.</p>
+    </div>
+
+    <!-- Success banner (2026-09-05) -- moved here, same top position rgApplyDoneInfo occupies on the
+         Report step (rgResults, above), mutually exclusive with rgExcWarningBanner just above.
+         Previously sat at the very bottom of this screen (after the Switch-all/Save-my-picks row),
+         which read as if the warning above were still an open problem even once it had already been
+         resolved and saved -- director-confirmed live. -->
+    <div id="rgExcSaveDoneInfo" class="callout callout--success hidden" style="margin-top:20px">
+      <div class="callout__title">&#9989; Saved</div>
+      <p id="rgExcSaveDoneText"></p>
     </div>
 
     <div class="rg-rel-stat-row" id="rgExcStatRow"></div>
@@ -3763,11 +3776,6 @@
         <span id="rgExcSaveStatus" class="muted"></span>
         <button id="rgExcSaveBtn" class="btn btn--primary">Save my picks</button>
       </span>
-    </div>
-
-    <div id="rgExcSaveDoneInfo" class="callout callout--success hidden" style="margin-top:20px">
-      <div class="callout__title">&#9989; Saved</div>
-      <p id="rgExcSaveDoneText"></p>
     </div>
 
     <!-- Back/Next footer (2026-08-25, see rgScreenRelCheck's own comment above) -- Exceptions is the
@@ -4965,6 +4973,11 @@
 
   <!-- Editor screen -->
   <div id="pgpatcherEditor" class="hidden">
+    <!-- Shown once after a ModruleSync import (mockup screen 3) -- filled in by
+         pgpApplyImportedModrules (pgpatcher-app.js). Stays visible until the next full reload/Start
+         over; a subsequent Save doesn't hide it (there's no real need to -- it's informational, not a
+         pending action). -->
+    <div id="pgpatcherImportToast" class="callout callout--success hidden"></div>
     <!-- Each panel gets its OWN toolbar (search/Sort A-Z/Select all/Invert/Clear), scoped to only
          that panel's own list and selection -- previously ONE shared toolbar above both panels drove
          both at once (confirmed live: typing in the single search box highlighted matches in BOTH
@@ -5044,6 +5057,45 @@
       <button class="btn btn--ghost" id="pgpatcherReloadBtn" title="Starts over from scratch -- re-reads everything fresh from PGPatcher (a real reload, not just a display refresh). Use this if you changed mods in Vortex or settings in PGPatcher since opening this list.">&#8635; Reset</button>
       <button class="btn btn--ghost" id="pgpatcherSaveBtn" title="Writes your order to modrules.json -- backs up the original first">&#128190; Save (Apply)</button>
       <button class="btn btn--primary" id="pgpatcherBuildBtn" title="Saves your order, then runs the real PGPatcher build -- generates the actual output">&#128295; Build (Okay)</button>
+    </div>
+  </div>
+
+  <!-- Save button choice (design/mockup-pgpatcher-modrulesync-import.html, screen 1) -- same-area as
+       its own trigger button above, same reasoning mhRenameModal's own comment documents (never hits
+       the hidden-ancestor modal bug, since #area-pgpatcher is already the visible section whenever
+       Save is clickable at all). "Save & Import…" leads into #pgpatcherModruleSyncModal below only on
+       a SUCCESSFUL save -- see pgpatcher-app.js's own click handler. -->
+  <div id="pgpatcherSaveChoiceModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>&#128190; Save your priority order</h2>
+      <p>This will write your current Ranked and New Mods order to <code>modrules.json</code> (and don't worry, we'll back up your existing file first!).</p>
+      <p>Want to blend a collection curator's priorities with your own list? Choose <strong>Save &amp; Import&hellip;</strong> instead &mdash; we'll save your current setup, then walk you through merging the files over on ModruleSync.</p>
+      <div class="modal-actions">
+        <button class="btn btn--ghost" id="pgpatcherSaveChoiceCancelBtn">Cancel</button>
+        <button class="btn btn--ghost" id="pgpatcherSaveChoiceImportBtn">Save &amp; Import&hellip;</button>
+        <button class="btn btn--primary" id="pgpatcherSaveChoiceSaveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ModruleSync hand-off (mockup screen 2) -- opened right after a successful Save & Import save.
+       The external link is a plain target="_blank" <a>, matching this same file's own
+       pgpShowError-built download links (pgpatcher-app.js) -- this app's established way to open a
+       system-browser link rather than an in-app navigation. -->
+  <div id="pgpatcherModruleSyncModal" class="modal-overlay hidden">
+    <div class="modal modal--wide">
+      <h2>&#128279; Merge priorities with ModruleSync</h2>
+      <p id="pgpatcherModruleSyncIntro">All saved! Now let's merge your file with the collection curator's priority file on ModruleSync, then bring the finished result right back here.</p>
+      <ul class="step-list">
+        <li><span class="step-num">1</span><span>Open <a href="https://awesmdiver.github.io/modrule-sync/" target="_blank" rel="noopener noreferrer">ModruleSync</a> in your browser.</span></li>
+        <li><span class="step-num">2</span><span>Upload your freshly saved file as <strong>Your file</strong>, and the collection's priority file as <strong>Author's file</strong>.</span></li>
+        <li><span class="step-num">3</span><span>Review the match report, confirm anything flagged, and download your merged file.</span></li>
+        <li><span class="step-num">4</span><span>Head back here and click <strong>Import merged file&hellip;</strong> below to load it in.</span></li>
+      </ul>
+      <div class="modal-actions">
+        <button class="btn btn--ghost" id="pgpatcherModruleSyncCloseBtn">Close</button>
+        <button class="btn btn--primary" id="pgpatcherModruleSyncImportBtn">Import merged file&hellip;</button>
+      </div>
     </div>
   </div>
 </main>

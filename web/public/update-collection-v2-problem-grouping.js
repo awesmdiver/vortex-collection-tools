@@ -24,19 +24,39 @@ const UCV2_PROBLEM_GROUP_HEADINGS = {
     'Delete archive': "These archives couldn't be deleted. Delete them manually if you no longer need them.",
 };
 
-// Splits a flat `problems` array (each {label, name, message, retry}, same shape
+// Cross-cutting hash-mismatch group (2026-09-04, director's own exact wording) -- pulled out of the
+// normal Update/Add grouping by `p.code === 'HASH_MISMATCH'`, REGARDLESS of which operation (Update
+// or Add) it came from. This is now the ONLY way a real HASH_MISMATCH reaches this screen at all:
+// rebuildSingleMod already deletes the mismatched file and tries a real fresh redownload first (see
+// that function's own header comment) -- a mod only lands here once that redownload has ALSO been
+// attempted and STILL didn't match, a genuinely persistent/confirmed problem, not a stale-local-copy
+// one. Director's own exact text, shown ONCE for the whole group (not repeated per line) -- a real
+// title + explanation, unlike every other group's single heading line, hence `body` and
+// `suppressMessage` as new (optional, additive) fields on a group -- every OTHER existing group
+// leaves both unset and renders exactly as before.
+const HASH_MISMATCH_GROUP_TITLE = '⚠️ File Hash Mismatch';
+const HASH_MISMATCH_GROUP_BODY = "The downloaded archive's hash does not match the checksum "
+    + 'provided by the mod author. The file may be corrupted, modified, or out of date. Please '
+    + 're-download the archive or verify the file source.';
+
+// Splits a flat `problems` array (each {label, name, message, retry, code}, same shape
 // update-collection-v2-app.js's own pushProblem already builds) into:
-//   - groups: one entry per grouped category that actually has at least one problem, in
-//     UCV2_GROUPED_PROBLEM_LABELS' own fixed order (not insertion order -- a stable, predictable
-//     reading order regardless of which categories happen to fail), each { label, heading, items }.
+//   - groups: one entry per grouped category that actually has at least one problem. The
+//     cross-cutting hash-mismatch group (if any) always comes FIRST, then the six per-operation
+//     categories in UCV2_GROUPED_PROBLEM_LABELS' own fixed order (not insertion order -- a stable,
+//     predictable reading order regardless of which categories happen to fail), each
+//     { label, heading, items } (hash-mismatch also carries `body`/`suppressMessage`).
 //   - ungrouped: every remaining problem (Collection rules/record/membership today, and any future
 //     label this project adds without also adding it to UCV2_GROUPED_PROBLEM_LABELS), in original
 //     order, untouched.
 // Pure -- no DOM, no I/O, safe to call from a plain Node test or the browser alike.
 function ucv2GroupProblems(problems) {
+    const hashMismatchItems = problems.filter((p) => p.code === 'HASH_MISMATCH');
+    const rest = problems.filter((p) => p.code !== 'HASH_MISMATCH');
+
     const byLabel = new Map();
     const ungrouped = [];
-    for (const p of problems) {
+    for (const p of rest) {
         if (!UCV2_GROUPED_PROBLEM_LABELS.includes(p.label)) {
             ungrouped.push(p);
             continue;
@@ -47,6 +67,12 @@ function ucv2GroupProblems(problems) {
     const groups = UCV2_GROUPED_PROBLEM_LABELS
         .filter((label) => byLabel.has(label))
         .map((label) => ({ label, heading: UCV2_PROBLEM_GROUP_HEADINGS[label], items: byLabel.get(label) }));
+    if (hashMismatchItems.length > 0) {
+        groups.unshift({
+            label: 'Hash mismatch', heading: HASH_MISMATCH_GROUP_TITLE, body: HASH_MISMATCH_GROUP_BODY,
+            suppressMessage: true, items: hashMismatchItems,
+        });
+    }
     return { groups, ungrouped };
 }
 
@@ -54,5 +80,8 @@ function ucv2GroupProblems(problems) {
 // undefined there) AND a plain require()-able CommonJS module in Node (used by
 // scripts/test-ucv2-group-problems.js) -- same pattern status-labels.js already established.
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { ucv2GroupProblems, UCV2_GROUPED_PROBLEM_LABELS, UCV2_PROBLEM_GROUP_HEADINGS };
+    module.exports = {
+        ucv2GroupProblems, UCV2_GROUPED_PROBLEM_LABELS, UCV2_PROBLEM_GROUP_HEADINGS,
+        HASH_MISMATCH_GROUP_TITLE, HASH_MISMATCH_GROUP_BODY,
+    };
 }

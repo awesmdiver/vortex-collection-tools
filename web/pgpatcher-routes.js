@@ -23,6 +23,7 @@ const express = require('express');
 const { createSseSession } = require('./sse-session');
 const helperClient = require('../lib/vortex-helper-client');
 const syncLib = require('../lib/vortex-sync/lib');
+const { pickOpenFileAsync } = require('../lib/vortex-sync/win-dialog');
 
 // Resolved the same way lib/sevenzip.js resolves 7z.exe -- bundled copy first (build-release.ps1's
 // own "Bundle pgtools.exe" step stages it at tools/pgtools/pgtools.exe alongside its real runtime
@@ -930,6 +931,44 @@ function createPgpatcherRouter(config) {
         }
 
         res.json({ backupPath, modCount: total });
+    });
+
+    // ModruleSync import-back (design/mockup-pgpatcher-modrulesync-import.html, screen 2's "Import
+    // merged file…" button) -- opens a native file picker for the merged modrules.json ModruleSync
+    // produced, reads and validates it, and hands the parsed object straight back to the frontend.
+    // Deliberately does NOT write anything -- this is a pure browse-then-read action, same shape as
+    // rebuild-routes.js's own /import-offsite-archive (its own pickOpenFileAsync precedent). Per this
+    // spec's own explicit rule, import never writes modrules.json itself: the frontend applies the
+    // imported priorities to its own in-memory Ranked/New lists and marks the session dirty, same as
+    // a manual drag-and-drop reorder -- the user still clicks Save (Apply) afterward to persist it.
+    router.post('/import-modrules', async (req, res) => {
+        let picked;
+        try {
+            picked = await pickOpenFileAsync({
+                title: 'Select the merged modrules.json',
+                filter: 'JSON files (*.json)|*.json|All files (*.*)|*.*',
+            });
+        } catch (e) {
+            return res.status(500).json({ error: `File picker failed: ${e.message}` });
+        }
+        if (!picked) return res.json({ ok: false, cancelled: true });
+
+        let parsed;
+        try {
+            parsed = JSON.parse(fs.readFileSync(picked, 'utf8'));
+        } catch (e) {
+            return res.status(400).json({ error: "That file couldn't be read as JSON -- make sure you selected the right file and give it another shot!" });
+        }
+        // Real modrules.json shape: a plain object keyed by mod name, each value itself a plain
+        // object carrying at least a `priority` -- reject an array, a primitive, or an object whose
+        // values aren't shaped like a real mod entry, rather than silently passing through something
+        // that would just fail (or worse, silently do nothing) once the frontend tries to apply it.
+        const looksValid = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+            && Object.values(parsed).every((v) => v && typeof v === 'object' && !Array.isArray(v) && 'priority' in v);
+        if (!looksValid) {
+            return res.status(400).json({ error: "That file has valid JSON, but it doesn't match the format of a modrules.json file. Double-check your export and try again." });
+        }
+        res.json({ ok: true, path: picked, modrules: parsed });
     });
 
     // Step 4 -- build the output. Calls the REAL, unmodified `pgtools patch` -- the exact same

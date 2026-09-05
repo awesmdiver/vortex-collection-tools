@@ -382,6 +382,45 @@ async function pgpHandleReenableOffers(frame, outputModMessage, oneMoreStepEl) {
   if (oneMoreStepEl && stillNeedsAttention) oneMoreStepEl.classList.remove('hidden');
 }
 
+// Shared by the initial /load and a ModruleSync import (pgpApplyImportedModrules below) -- both
+// need to re-derive which mods are Ranked vs. New from the SAME set of per-mod fields, so this is
+// the ONE place that filter logic lives rather than two copies that could silently drift apart.
+// `mods`: an array of the full per-mod objects (same shape /load's own `data.mods` and
+// `pgpModsByName`'s own values already carry).
+function pgpDeriveRankedUnranked(mods) {
+  // Ranked panel: SECOND real correction on this same filter, 2026-08-19 -- the first pass used
+  // `enabled === true` as the "keep it even without a shader match" exception, reasoning that a
+  // real, manually-set checkbox state should never be silently dropped. Confirmed live this was
+  // wrong for a real case: "Tomato's Riften PBR - 2k" showed here (enabled: true, a stale leftover
+  // from before another mod, "...4k", started overriding it in Vortex) even though it no longer
+  // contributes ANY real files and does NOT appear in real PGPatcher's own list at all. Real
+  // PGPatcher's actual inclusion rule (ModSortDialog.cpp: `if (shaders.empty() && !hasMeshes)
+  // continue;`) was never about `enabled` -- it's about `hasMeshes`, confirmed against real
+  // captured data: the false-positive mod has `hasMeshes: false` despite `enabled: true`, while
+  // "Tomato's PBR Solitude" (manually UNCHECKED, correctly still shown) has `hasMeshes: true`.
+  // `hasMeshes` -- not `enabled` -- is what real PGPatcher actually keys this on. priority !== -1
+  // means PGPatcher has explicitly ordered this mod before (pgpatcher-fork, PGModManager.hpp's own
+  // isNew doc comment). Sorted descending by priority -- highest first at the top, matching
+  // PGModManager's own getModsByPriority() and the real GUI's own ranked-list convention.
+  const ranked = mods
+    .filter((m) => m.priority !== -1 && (m.hasMeshes === true || pgpHasPatchableShader(m)))
+    .sort((a, b) => b.priority - a.priority)
+    .map((m) => m.name);
+  // Only show a GENUINELY NEW, patchable mod in "New mods" -- confirmed real bug, 2026-08-19:
+  // `priority === -1` is NOT the same thing as `isNew`. PGModManager::loadJSON (pgpatcher-fork)
+  // sets `isNew = false` for ANY mod already recorded in modrules.json, even one whose stored
+  // priority is -1 (a mod PGPatcher has seen before and left explicitly unranked -- our own
+  // /save route writes exactly this shape for a dragged-out mod, and a real modrules.json can
+  // already carry such entries from past PGPatcher sessions). `priority === -1` alone was
+  // wrongly including every one of those already-known-but-unranked mods -- confirmed live
+  // against the real GUI's own count (36 shown here vs. 2 actually pink/new in PGPatcher itself).
+  // `isNew` is the real, authoritative field for this -- use it directly, not the priority proxy.
+  const unranked = mods
+    .filter((m) => m.isNew === true && pgpHasPatchableShader(m))
+    .map((m) => m.name);
+  return { ranked, unranked };
+}
+
 function pgpHandleLoadEvent(frame) {
   if (frame.type === 'cancellable') {
     $g('pgpatcherCancelLoadBtn').disabled = false;
@@ -397,41 +436,15 @@ function pgpHandleLoadEvent(frame) {
     pgpActiveShaderLabels = new Set(
       (Array.isArray(data.patchers) ? data.patchers : []).map((id) => PGP_PATCHER_ID_TO_SHADER_LABEL[id]).filter(Boolean)
     );
-    // Ranked panel: SECOND real correction on this same filter, 2026-08-19 -- the first pass used
-    // `enabled === true` as the "keep it even without a shader match" exception, reasoning that a
-    // real, manually-set checkbox state should never be silently dropped. Confirmed live this was
-    // wrong for a real case: "Tomato's Riften PBR - 2k" showed here (enabled: true, a stale leftover
-    // from before another mod, "...4k", started overriding it in Vortex) even though it no longer
-    // contributes ANY real files and does NOT appear in real PGPatcher's own list at all. Real
-    // PGPatcher's actual inclusion rule (ModSortDialog.cpp: `if (shaders.empty() && !hasMeshes)
-    // continue;`) was never about `enabled` -- it's about `hasMeshes`, confirmed against real
-    // captured data: the false-positive mod has `hasMeshes: false` despite `enabled: true`, while
-    // "Tomato's PBR Solitude" (manually UNCHECKED, correctly still shown) has `hasMeshes: true`.
-    // `hasMeshes` -- not `enabled` -- is what real PGPatcher actually keys this on. priority !== -1
-    // means PGPatcher has explicitly ordered this mod before (pgpatcher-fork, PGModManager.hpp's own
-    // isNew doc comment). Sorted descending by priority -- highest first at the top, matching
-    // PGModManager's own getModsByPriority() and the real GUI's own ranked-list convention.
-    pgpRanked = data.mods
-      .filter((m) => m.priority !== -1 && (m.hasMeshes === true || pgpHasPatchableShader(m)))
-      .sort((a, b) => b.priority - a.priority)
-      .map((m) => m.name);
+    const derived = pgpDeriveRankedUnranked(data.mods);
+    pgpRanked = derived.ranked;
+    pgpUnranked = derived.unranked;
     pgpOriginalRankedOrder = [...pgpRanked]; // snapshot BEFORE anything (Sort A-Z, drag) can mutate it
-    // Only show a GENUINELY NEW, patchable mod in "New mods" -- confirmed real bug, 2026-08-19:
-    // `priority === -1` is NOT the same thing as `isNew`. PGModManager::loadJSON (pgpatcher-fork)
-    // sets `isNew = false` for ANY mod already recorded in modrules.json, even one whose stored
-    // priority is -1 (a mod PGPatcher has seen before and left explicitly unranked -- our own
-    // /save route writes exactly this shape for a dragged-out mod, and a real modrules.json can
-    // already carry such entries from past PGPatcher sessions). `priority === -1` alone was
-    // wrongly including every one of those already-known-but-unranked mods -- confirmed live
-    // against the real GUI's own count (36 shown here vs. 2 actually pink/new in PGPatcher itself).
-    // `isNew` is the real, authoritative field for this -- use it directly, not the priority proxy.
-    pgpUnranked = data.mods
-      .filter((m) => m.isNew === true && pgpHasPatchableShader(m))
-      .map((m) => m.name);
     pgpEnabled = new Map(data.mods.map((m) => [m.name, pgpInitialEnabled(m)]));
     pgpSelected.clear();
     pgpLastClicked = null;
     pgpDirty = false;
+    $g('pgpatcherImportToast').classList.add('hidden'); // stale from a PRIOR session's import, if any
     pgpFinishLoading();
     $g('pgpatcherEditor').classList.remove('hidden');
     $g('pgpatcherLoadedCount').textContent = String(data.mods.length);
@@ -1026,6 +1039,7 @@ function pgpResetToIdle() {
   pgpEnabled = new Map();
   pgpDirty = false;
   pgpHideError();
+  $g('pgpatcherImportToast').classList.add('hidden');
   $g('pgpatcherEditor').classList.add('hidden');
   $g('pgpatcherBuilding').classList.add('hidden');
   $g('pgpatcherIdle').classList.remove('hidden');
@@ -1060,11 +1074,86 @@ async function pgpatcherSaveOrder() {
   }
 }
 
-$g('pgpatcherSaveBtn').addEventListener('click', async () => {
-  const btn = $g('pgpatcherSaveBtn');
+// ---------- Save & Import via ModruleSync (design/mockup-pgpatcher-modrulesync-import.html) ----------
+// The standalone Save button now offers a 3-way choice instead of saving immediately. This does NOT
+// touch pgpatcherBuildBtn's own save-then-build flow above/below -- that keeps calling
+// pgpatcherSaveOrder() directly, unchanged.
+function pgpShowSaveChoiceModal() { $g('pgpatcherSaveChoiceModal').classList.remove('hidden'); }
+function pgpHideSaveChoiceModal() { $g('pgpatcherSaveChoiceModal').classList.add('hidden'); }
+function pgpShowModruleSyncModal() { $g('pgpatcherModruleSyncModal').classList.remove('hidden'); }
+function pgpHideModruleSyncModal() { $g('pgpatcherModruleSyncModal').classList.add('hidden'); }
+
+$g('pgpatcherSaveBtn').addEventListener('click', pgpShowSaveChoiceModal);
+
+$g('pgpatcherSaveChoiceCancelBtn').addEventListener('click', pgpHideSaveChoiceModal);
+
+$g('pgpatcherSaveChoiceSaveBtn').addEventListener('click', async () => {
+  const btn = $g('pgpatcherSaveChoiceSaveBtn');
   btn.disabled = true;
   await pgpatcherSaveOrder();
   btn.disabled = false;
+  pgpHideSaveChoiceModal();
+});
+
+$g('pgpatcherSaveChoiceImportBtn').addEventListener('click', async () => {
+  const btn = $g('pgpatcherSaveChoiceImportBtn');
+  btn.disabled = true;
+  const saved = await pgpatcherSaveOrder();
+  btn.disabled = false;
+  if (!saved) return; // pgpatcherSaveOrder already called pgpShowError -- stay on the choice modal
+  pgpHideSaveChoiceModal();
+  pgpShowModruleSyncModal();
+});
+
+$g('pgpatcherModruleSyncCloseBtn').addEventListener('click', pgpHideModruleSyncModal);
+
+// Applies an imported modrules.json's own priorities onto the CURRENT session -- only `priority`
+// travels (this spec's own "only priority travels" rule); `enabled` is left exactly as this session
+// already has it, same "sticky" behavior /save itself already applies. A name with no entry in the
+// imported file is left completely untouched. Re-derives Ranked/New with the SAME shared filter
+// pgpHandleLoadEvent's own /load path uses (pgpDeriveRankedUnranked above), so the two can never
+// silently drift apart.
+function pgpApplyImportedModrules(modrules, filename) {
+  let matched = 0;
+  for (const [name, mod] of pgpModsByName) {
+    const imported = modrules[name];
+    if (!imported || typeof imported.priority !== 'number') continue;
+    mod.priority = imported.priority;
+    matched += 1;
+  }
+  const derived = pgpDeriveRankedUnranked([...pgpModsByName.values()]);
+  pgpRanked = derived.ranked;
+  pgpUnranked = derived.unranked;
+  pgpDirty = true;
+  $g('pgpatcherDirtyStatus').textContent = 'unsaved changes (imported, not yet saved)';
+  pgpRenderAll();
+
+  const box = $g('pgpatcherImportToast');
+  box.innerHTML = '';
+  box.appendChild(el('div', { class: 'callout__title' },
+    `✅ Successfully imported ${filename} (${pgpRanked.length} ranked, ${pgpUnranked.length} new/unranked)!`));
+  box.appendChild(el('p', {}, 'Take a quick look below, then click Save (Apply) to lock it into modrules.json.'));
+  box.classList.remove('hidden');
+
+  return matched;
+}
+
+$g('pgpatcherModruleSyncImportBtn').addEventListener('click', async () => {
+  const btn = $g('pgpatcherModruleSyncImportBtn');
+  btn.disabled = true;
+  try {
+    const result = await pgpatcherApi('POST', '/api/pgpatcher/import-modrules', {});
+    if (result.cancelled) return; // user closed the native file picker -- stay on this modal
+    // path is a full OS path (e.g. "D:\Downloads\modrules-merged.json") -- show just the filename,
+    // matching the mockup's own screen-3 toast wording.
+    const filename = result.path.split(/[\\/]/).pop();
+    pgpApplyImportedModrules(result.modrules, filename);
+    pgpHideModruleSyncModal();
+  } catch (e) {
+    pgpShowError(e);
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 $g('pgpatcherBuildBtn').addEventListener('click', async () => {

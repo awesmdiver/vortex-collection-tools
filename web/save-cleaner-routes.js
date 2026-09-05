@@ -19,7 +19,9 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const express = require('express');
+const semver = require('semver');
 const appConfig = require('../lib/app-config');
+const syncLib = require('../lib/vortex-sync/lib');
 const syncRunner = require('../lib/sync-runner');
 const helperClient = require('../lib/vortex-helper-client');
 const resaverRunner = require('../lib/save-cleaner-runner');
@@ -62,6 +64,13 @@ function createSaveCleanerRouter(config) {
         return saveCleanerSavesDir || saveScan.resolveDefaultSavesDir('skyrim');
     }
 
+    // The Helper version /profiles was actually added in (SCOPE ADDENDUM v0.13.0, confirmed via
+    // vortex-collection-helper/index.js's own header) -- a Helper reachable but older than this
+    // genuinely doesn't have the endpoint yet, a PERMANENT gap for this session, never a busy/retry
+    // case. Distinct from MIN_HELPER_VERSION (this project's own overall floor) -- deliberately not
+    // reused here, since a version between the two floors legitimately supports this ONE endpoint.
+    const PROFILES_ENDPOINT_MIN_VERSION = '0.13.0';
+
     // Cross-references each save's raw profileFolderId (a Vortex profile ID, when the install uses
     // per-profile save separation) against Vortex's own real profile list to attach the actual
     // display name. Prefers the live Helper extension (getLiveProfiles) -- no "close Vortex first"
@@ -70,24 +79,70 @@ function createSaveCleanerRouter(config) {
     // the same LevelDB Vortex already has locked) when the Helper isn't installed, isn't running, or
     // is an older version that predates GET /profiles. Best-effort either way: a lookup failure just
     // leaves saves ungrouped by name (raw ID still shown) rather than failing the whole saves list.
+    //
+    // profileNamesError (2026-09-05, director's own direct ask): "Unknown profile" reads as broken
+    // even when it's really just a transient Vortex-busy moment (the exact HELPER_TIMEOUT_MS issue
+    // fixed elsewhere this session, commit bb4df28) -- the director's own words: "if someone sees
+    // Unknown, I think something is broken - add the modal... but if a user cancels the modal because
+    // Vortex is having issues, Unknown is fine." Distinguishes 3 real cases, only one of which is
+    // actually "Vortex busy right now":
+    //   1. Helper unreachable/not installed at all -> falls to state.v2 exactly as before, no flag
+    //      (state.v2 itself might then find Vortex genuinely running -- THAT'S case 3 below).
+    //   2. Helper reachable but genuinely older than PROFILES_ENDPOINT_MIN_VERSION -> falls to
+    //      state.v2 exactly as before, no flag -- this is a PERMANENT gap for this session (updating
+    //      the Helper, not retrying, is what actually fixes it), never worth a busy modal.
+    //   3. Helper's own /health JUST succeeded (so Vortex is confirmed reachable this instant) and
+    //      the version supports this endpoint, yet the /profiles call itself came back empty -- this
+    //      can only be a real, transient failure (timeout, brief main-thread stall), so it's flagged.
+    //      Vortex is confirmed running in this case, so a state.v2 fallback attempt would be
+    //      guaranteed to fail too (it needs Vortex closed) -- skipped rather than tried and failed a
+    //      second time. The state.v2 path's OWN direct "Vortex is running" failure (no Helper at all,
+    //      case 1's fallback) is flagged the same way for the identical real reason.
     async function attachProfileNames(saves) {
         const ids = new Set(saves.map((s) => s.profileFolderId).filter(Boolean));
-        if (ids.size === 0) return saves;
+        if (ids.size === 0) return { saves, profileNamesError: null };
 
-        const live = await helperClient.getLiveProfiles();
-        let profiles = live ? live.profiles : null;
-        if (!profiles) {
+        let profiles = null;
+        let genuinelyBusy = false;
+        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+        if (helperAvailable) {
+            const health = await helperClient.getHelperHealth();
+            const version = health && health.version;
+            const clean = version && semver.valid(semver.coerce(version));
+            const supportsProfiles = !!clean && semver.gte(clean, PROFILES_ENDPOINT_MIN_VERSION);
+            if (supportsProfiles) {
+                const live = await helperClient.getLiveProfiles();
+                if (live) {
+                    profiles = live.profiles;
+                } else {
+                    genuinelyBusy = true; // case 3 above
+                }
+            }
+            // else: Helper reachable but too old for /profiles -- case 2, fall through, no flag.
+        }
+
+        if (!profiles && !genuinelyBusy) {
             try {
                 ({ profiles } = await syncRunner.listProfiles(state));
             } catch {
-                return saves; // Vortex running (and no Helper) / no state.v2 yet -- fall back to raw IDs on the frontend
+                // Vortex running (and no/too-old Helper) is the one real "busy" reason this specific
+                // read can fail this way -- anything else (no state.v2 yet, corrupt file) is a
+                // genuine, non-transient gap, not worth a retry prompt.
+                if (syncLib.isVortexRunning()) genuinelyBusy = true;
             }
         }
-        const nameById = new Map(profiles.map((p) => [p.profileId, p.name]));
-        return saves.map((s) => ({
+
+        const nameById = new Map((profiles || []).map((p) => [p.profileId, p.name]));
+        const namedSaves = saves.map((s) => ({
             ...s,
             profileName: s.profileFolderId ? (nameById.get(s.profileFolderId) || null) : null,
         }));
+        return {
+            saves: namedSaves,
+            profileNamesError: genuinelyBusy
+                ? { code: 'vortex-running', message: 'Vortex is currently busy. Please wait for Vortex to finish its current activity, then try again.' }
+                : null,
+        };
     }
 
     // Whether the "Regional Save Names" mod (github.com/powerof3/RegionalSaveNames) is installed --
@@ -175,7 +230,7 @@ function createSaveCleanerRouter(config) {
             return;
         }
         try {
-            let saves = await attachProfileNames(saveScan.listSaves(dir, game));
+            let { saves, profileNamesError } = await attachProfileNames(saveScan.listSaves(dir, game));
             // Only surface the filename's own region tag (e.g. "Tamriel") when the "Regional Save
             // Names" mod is actually installed -- see parseRegionFromFilename's own header comment
             // for why: without that mod, the same filename segment can just as easily be an internal
@@ -186,7 +241,7 @@ function createSaveCleanerRouter(config) {
             if (game === 'skyrim' && await detectRegionalSaveNames()) {
                 saves = saves.map((s) => ({ ...s, region: saveScan.parseRegionFromFilename(s.filename) }));
             }
-            res.json({ savesDir: dir, saves, game });
+            res.json({ savesDir: dir, saves, game, profileNamesError });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }

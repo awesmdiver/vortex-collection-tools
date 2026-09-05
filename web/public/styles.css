@@ -1367,6 +1367,12 @@ tr.apply-row--leaving { animation: rowLeave .5s ease forwards; }
    margin-bottom is the right amount of breathing room above the loading spinner/results directly
    below this row on that screen; .actions has no bottom margin at all. */
 .view-actions #rmfBackToPickerBtn { margin-left: auto; }
+/* Confirmed real 2026-09-05: Rules Generator's own "Apply to Vortex" (rgApplyBtn) sat left-justified
+   too, same standing rule as the two overrides above. Its own status text (rgApplyStatus) belongs
+   right next to it, not stranded alone on the left once the button moves -- so the margin goes on
+   the STATUS span (now first in markup order, see index.html), which pushes itself AND the button
+   after it to the right edge together, status-then-button, rather than on the button itself. */
+.view-actions #rgApplyStatus { margin-left: auto; }
 
 /* Keeps Pause anchored on the same row as the phase text regardless of whether the backup/download
    notice rows below it are shown -- those rows appearing/disappearing must not shift the button. */
@@ -1461,6 +1467,19 @@ tr.apply-row--leaving { animation: rowLeave .5s ease forwards; }
 .modal--critical { border-color: var(--danger); }
 .modal--critical h2 { color: var(--danger); }
 .error-modal-text { white-space: pre-line; line-height: 1.55; font-size: 14px; max-height: 55vh; overflow-y: auto; }
+
+/* Numbered step list inside a modal (2026-09-05, PGPatcher's ModruleSync hand-off modal -- a real
+   "here's what to do next, in order" walkthrough, the first place this app needed one). Same
+   circled-number-badge pattern the approved mockup used, ported to this app's own real tokens
+   (--accent/--accent-bg/--border already match the mockup's own variable names exactly) rather than
+   copied verbatim -- reuse this for any future step-by-step modal instead of inventing a new shape. */
+.step-list { margin: 14px 0; padding: 0; list-style: none; }
+.step-list li { display: flex; gap: 12px; margin-bottom: 12px; font-size: 14px; color: var(--text); }
+.step-list li:last-child { margin-bottom: 0; }
+.step-num {
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-bg);
+  color: var(--accent); font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
 
 /* Cycle Helper -- Graph View (2026-08-18), a near-fullscreen variant of the same .modal-overlay >
    .modal base every other modal in this app uses. Real Vortex sets NO special size override for
@@ -1779,6 +1798,18 @@ tr.apply-row--leaving { animation: rowLeave .5s ease forwards; }
 .merge-stepper--spaced { margin-top: var(--stack-gap); }
 
 .merge-navrow { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; }
+/* Rules Generator's own Report step (#rgResults) can list dozens of expandable mod rows above this
+   Back/Next row -- confirmed live (2026-09-05, director-reported real 16+11-mod collection): the
+   plain static row scrolls out of view entirely ("totally not seen"). Scoped to THIS ONE screen's
+   own instance, not the shared .merge-navrow class above -- that class is reused by 12+ other,
+   normally-short screens (Merge Plugins, Update Collection, etc.) that must NOT become sticky.
+   Mirrors .settings-save-bar's own real sticky-bottom recipe exactly (see its own comment above),
+   just scoped to a different selector -- display/justify-content/gap already come from the shared
+   rule above, only the sticky-positioning properties are new here. */
+#rgResults .merge-navrow {
+  position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--border);
+  padding: 14px 0 6px; margin-top: 6px;
+}
 
 /* .name-row -- the "Bordered name row" shape DESIGN.md's own "Consolidating the checkbox-selection
    variants" section documents (design/vortex-bordered-row-mockup.html is the canonical reference,

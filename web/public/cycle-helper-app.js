@@ -47,7 +47,14 @@ function chHandleError(e, retryFn) {
     return;
   }
   if (e.status === 409 && e.body?.error === 'vortex-running') {
-    window.showVortexRunningModal(retryFn || (() => {}));
+    // Every Cycle Helper vortex-running gate is the helper-unreachable-while-running case, never a
+    // genuine "must be closed" one -- see cycle-helper-routes.js's own gate comments. Same
+    // busy-detection pattern rmfHandleError/ucv2HandleError already established (2026-09-02).
+    const isBusy = /currently busy/i.test(e.body?.message || '');
+    window.showVortexRunningModal(retryFn || (() => {}), isBusy ? {
+      title: '⚠️ Vortex is currently busy',
+      body: e.body.message,
+    } : undefined);
     return;
   }
   chShowCriticalError(e.message);
@@ -298,7 +305,10 @@ function chHandleScanEvent(frame) {
   } else if (frame.type === 'error') {
     chFinishScanStream();
     if (frame.errorCode === 'vortex-running') {
-      window.showVortexRunningModal(chScan);
+      // Same busy-detection fix as chHandleError above -- this SSE frame carries the identical
+      // "currently busy" wording now, never a genuine "must be closed" case.
+      const isBusy = /currently busy/i.test(frame.message || '');
+      window.showVortexRunningModal(chScan, isBusy ? { title: '⚠️ Vortex is currently busy', body: frame.message } : undefined);
     } else {
       chHandleError(new Error(frame.message || 'The scan failed.'), chScan);
     }

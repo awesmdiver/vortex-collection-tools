@@ -45,7 +45,14 @@ function rgHandleError(e, retryFn) {
     return;
   }
   if (e.status === 409 && e.body?.error === 'vortex-running') {
-    window.showVortexRunningModal(retryFn || (() => {}));
+    // Every Rules Generator vortex-running gate is the helper-unreachable-while-running case, never
+    // a genuine "must be closed" one -- see rules-generator-routes.js's own gate comments. Same
+    // busy-detection pattern already established elsewhere (2026-09-02/04).
+    const isBusy = /currently busy/i.test(e.body?.message || '');
+    window.showVortexRunningModal(retryFn || (() => {}), isBusy ? {
+      title: '⚠️ Vortex is currently busy',
+      body: e.body.message,
+    } : undefined);
     return;
   }
   rgShowCriticalError(e.message);
@@ -140,7 +147,11 @@ async function rgLoadPickers() {
         // looks), with a working retry -- not swallowed into a silent, unlabeled empty list.
         if (e.status === 409 && e.body?.error === 'vortex-running') {
           vortexBlockedNew = true;
-          window.showVortexRunningModal(rgLoadPickers);
+          const isBusy = /currently busy/i.test(e.body?.message || '');
+          window.showVortexRunningModal(rgLoadPickers, isBusy ? {
+            title: '⚠️ Vortex is currently busy',
+            body: e.body.message,
+          } : undefined);
           return { collections: [] };
         }
         throw e;
@@ -181,6 +192,34 @@ async function rgLoadPickers() {
 function rgUpdateAnalyzeButton() {
   const ready = $rg('rgOldCollectionSelect').value && $rg('rgNewCollectionSelect').value;
   $rg('rgAnalyzeBtn').disabled = !ready;
+}
+
+// Prevents picking the SAME collection for both dropdowns at once -- scoped to only whichever ONE
+// collection is actually currently selected, not a blanket cross-list filter (that blanket version
+// was the real bug fixed 2026-09-05: /workshop-collections used to exclude EVERY collection that
+// also appeared in the old list, silently stripping out most of the director's own real Workshop
+// collections since a Workshop collection legitimately has real on-disk content too -- see that
+// route's own updated comment). `c.modId` (old list) and `c.modKey` (workshop list) are the same
+// identity space -- confirmed by rgLoadPickers' own option-building above, which uses them directly
+// as each option's value.
+function rgSyncCollectionExclusion(changedSelectId) {
+  const oldSelect = $rg('rgOldCollectionSelect');
+  const newSelect = $rg('rgNewCollectionSelect');
+  const source = changedSelectId === 'rgOldCollectionSelect' ? oldSelect : newSelect;
+  const target = changedSelectId === 'rgOldCollectionSelect' ? newSelect : oldSelect;
+  const pickedId = source.value;
+
+  let clearedTarget = false;
+  Array.from(target.options).forEach((opt) => {
+    if (!opt.value) return; // never touch the placeholder option
+    const shouldDisable = !!pickedId && opt.value === pickedId;
+    opt.disabled = shouldDisable;
+    if (shouldDisable && target.value === opt.value) {
+      target.value = ''; // don't leave a stale, now-invalid selection sitting there
+      clearedTarget = true;
+    }
+  });
+  if (clearedTarget) rgUpdateAnalyzeButton();
 }
 
 function rgFindByKey(list, key) {
@@ -887,6 +926,12 @@ function rgRenderExceptionsStep(exceptions) {
   const totalCount = needsDecisionCount + oldVersionCount + disabledCount + noConflictCount;
 
   $rg('rgExcCalloutTitle').textContent = `⚠️ ${needsDecisionCount} rule${needsDecisionCount === 1 ? "" : "s"} didn't carry over cleanly`;
+  // Mutually exclusive with rgExcSaveDoneInfo, same "top banner reflects THIS render's own real
+  // data" instinct rgAllClearBanner/rgApplyDoneInfo already follow on the Report step -- a genuinely
+  // resolved (needsDecisionCount === 0) result hides the warning; a fresh render that still has real
+  // decisions pending shows it (correctly, even right after a save -- that's a NEW warning, not the
+  // stale pre-save one rgExcConfirmSwitch already hides explicitly).
+  $rg('rgExcWarningBanner').classList.toggle('hidden', needsDecisionCount === 0);
 
   $rg('rgExcStatRow').innerHTML = `
     <div class="rg-rel-stat rg-rel-stat--warn"><div class="rg-rel-stat__num">${needsDecisionCount}</div><div class="rg-rel-stat__lbl">Need a decision</div></div>
@@ -1037,13 +1082,29 @@ let rgAnalyzeEventSource = null;
 function rgFinishAnalyzeStream() {
   if (rgAnalyzeEventSource) { rgAnalyzeEventSource.close(); rgAnalyzeEventSource = null; }
   $rg('rgLoading').classList.add('hidden');
+  const cancelBtn = $rg('rgCancelAnalyzeBtn');
+  cancelBtn.disabled = false;
+  cancelBtn.textContent = 'Cancel';
   rgUpdateAnalyzeButton();
+}
+
+async function rgCancelAnalyze() {
+  const btn = $rg('rgCancelAnalyzeBtn');
+  btn.disabled = true;
+  btn.textContent = 'Cancelling…';
+  try {
+    await rgApi('POST', '/api/rules-generator/analyze/cancel', {});
+  } catch (e) {
+    // Already finished or already gone -- the 'done'/'error' event (if any) resolves the UI on its
+    // own; nothing more to do here (same shape as PGPatcher's own pgpatcherCancelBuild).
+  }
 }
 
 function rgRenderAnalyzeResult(result, landStep) {
   rgApplyCompleted = false; // a genuine fresh analysis -- clears any stale Complete state from a previous Apply
   $rg('rgApplyDoneInfo').classList.add('hidden');
   $rg('rgExcSaveDoneInfo').classList.add('hidden');
+  $rg('rgExcWarningBanner').classList.add('hidden'); // re-shown by rgRenderExceptionsStep below if this fresh result actually has one
   rgRender(result);
   // Step 3's own content, populated so it's reachable via the stepper pill even on a plain scan
   // (e.g. mismatches that already existed in Vortex from an earlier manual edit, independent of
@@ -1085,14 +1146,20 @@ function rgRenderAnalyzeResult(result, landStep) {
 
 function rgHandleAnalyzeEvent(frame, landStep) {
   if (frame.type === 'phase') {
-    $rg('rgLoading').lastChild.textContent = ` ${frame.message}${frame.seconds ? ` (${frame.seconds}s)` : ''}`;
+    $rg('rgLoadingText').textContent = ` ${frame.message}${frame.seconds ? ` (${frame.seconds}s)` : ''}`;
   } else if (frame.type === 'done') {
     rgFinishAnalyzeStream();
     rgRenderAnalyzeResult(frame, landStep);
   } else if (frame.type === 'error') {
     rgFinishAnalyzeStream();
+    if (frame.cancelled) {
+      // A real, deliberate stop -- not a failure. Loading UI is already reset above; nothing else to
+      // show (no error banner, no retry prompt), same as just never having clicked Analyze.
+      return;
+    }
     if (frame.errorCode === 'vortex-running') {
-      window.showVortexRunningModal(() => rgAnalyze(landStep));
+      const isBusy = /currently busy/i.test(frame.message || '');
+      window.showVortexRunningModal(() => rgAnalyze(landStep), isBusy ? { title: '⚠️ Vortex is currently busy', body: frame.message } : undefined);
     } else {
       rgHandleError(new Error(frame.message || 'The analysis failed.'), () => rgAnalyze(landStep));
     }
@@ -1105,9 +1172,12 @@ async function rgAnalyze(landStep = 0) {
   $rg('rgScreenRelCheck').classList.add('hidden');
   $rg('rgResults').classList.add('hidden');
   $rg('rgScreenExceptions').classList.add('hidden');
-  $rg('rgLoading').lastChild.textContent = " Reading Vortex's database…";
+  $rg('rgLoadingText').textContent = " Reading Vortex's database…";
   $rg('rgLoading').classList.remove('hidden');
   $rg('rgAnalyzeBtn').disabled = true;
+  const cancelBtn = $rg('rgCancelAnalyzeBtn');
+  cancelBtn.disabled = false;
+  cancelBtn.textContent = 'Cancel';
   try {
     await rgApi('POST', '/api/rules-generator/analyze', {
       oldCollectionKey: $rg('rgOldCollectionSelect').value,
@@ -1280,7 +1350,8 @@ function rgHandleApplyEvent(frame) {
     rgFinishApplyStream();
     $rg('rgApplyStatus').textContent = '';
     if (frame.errorCode === 'vortex-running') {
-      window.showVortexRunningModal(rgConfirmApply);
+      const isBusy = /currently busy/i.test(frame.message || '');
+      window.showVortexRunningModal(rgConfirmApply, isBusy ? { title: '⚠️ Vortex is currently busy', body: frame.message } : undefined);
     } else {
       rgHandleError(new Error(frame.message || 'The write failed.'), rgConfirmApply);
     }
@@ -1379,6 +1450,10 @@ async function rgExcConfirmSwitch() {
     $rg('rgExcSaveDoneText').textContent =
       `${result.totalRulesChanged} rule(s) changed across ${result.totalModsChanged} mod(s).`;
     $rg('rgExcSaveDoneInfo').classList.remove('hidden');
+    // Hide the stale PRE-save warning immediately, regardless of whether freshExceptions comes back
+    // below -- rgRenderExceptionsStep's own toggle will correctly re-show it right after this if the
+    // fresh data still has real decisions pending (a genuinely new warning, not this stale one).
+    $rg('rgExcWarningBanner').classList.add('hidden');
     if (result.freshExceptions) rgRenderExceptionsStep(result.freshExceptions);
   } catch (e) {
     rgHandleError(e, rgExcConfirmSwitch);
@@ -1400,28 +1475,69 @@ async function rgExcConfirmSwitch() {
 window.rgLoadPickers = rgLoadPickers;
 
 // Same "fires once each time arriving from a DIFFERENT area" reset pattern (2026-08-27,
-// merge-entry-reset) -- resets rgStep/rgLastResult/rgLastExceptions/rgExceptionPicks/
-// rgApplyCompleted/rgSectionFilter back to their defaults, then re-fetches the collections
-// pickers fresh via rgLoadPickers (same as shell.js's existing navigation call, just with the
-// state reset added in first).
+// merge-entry-reset) -- already wired into shell.js's navigateToArea (the exact line PGPatcher's
+// own pgpResetToIdle is wired the same way). EXTENDED (2026-09-05, real gap the director hit live:
+// leaving and returning still showed stale results) -- the original version only reset
+// rgStep/rgLastResult/rgLastExceptions/rgExceptionPicks/rgApplyCompleted/rgSectionFilter and
+// re-loaded the pickers; it never hid the stepper/results/exceptions containers or the leftover
+// success banners, and never cleared rgRuleOverrides/rgAnomalyOverrides/rgRelationshipOverrides or
+// the expanded-item/conflict-cache Sets -- so a stale per-mod override from a PREVIOUS session
+// could silently apply to a newly re-matched mod sharing the same modKey on the NEXT analysis, on
+// top of just looking like nothing had changed.
+//
+// Does NOT cancel or even check for an in-progress analyze/apply run -- confirmed by reading
+// PGPatcher's own pgpResetToIdle: it doesn't either (its own two "Finish...Stream" calls are
+// explicitly commented "defensive", cleaning up a stray CLIENT-side EventSource/timer if one
+// somehow survived, never a real server-side cancel). Mirrored here rather than inventing new
+// behavior: a genuinely in-progress /apply write can't be safely interrupted anyway (a single
+// opaque write, no per-item checkpoint -- see /apply's own routes.js comment), so pretending
+// "leaving the page" stops it would be actively misleading. It keeps running in the background
+// exactly as it does today; this function only ever resets what's already finished or what the
+// user is currently looking at.
 function rgResetOnEntry() {
+  rgFinishAnalyzeStream(); // defensive -- stray EventSource/timer cleanup, same as PGPatcher's own
+  rgFinishApplyStream(); // same, for a stray apply EventSource
+  rgHideCriticalError();
+  $rg('rgEmpty').classList.add('hidden');
+  $rg('rgLoading').classList.add('hidden');
+  $rg('rgStepper').classList.add('hidden');
+  $rg('rgAllClearBanner').classList.add('hidden');
+  $rg('rgApplyDoneInfo').classList.add('hidden');
+  $rg('rgExcSaveDoneInfo').classList.add('hidden');
+  $rg('rgExcWarningBanner').classList.add('hidden');
+  for (const id of Object.values(RG_SECTION_IDS)) $rg(id).classList.add('hidden');
   rgGoToStep(0);
   rgLastResult = null;
   rgLastExceptions = null;
   Object.keys(rgExceptionPicks).forEach(k => delete rgExceptionPicks[k]);
+  Object.keys(rgRuleOverrides).forEach((k) => delete rgRuleOverrides[k]);
+  Object.keys(rgAnomalyOverrides).forEach((k) => delete rgAnomalyOverrides[k]);
+  Object.keys(rgRelationshipOverrides).forEach((k) => delete rgRelationshipOverrides[k]);
   rgApplyCompleted = false;
   rgSectionFilter.clear();
-  rgLoadPickers();
+  rgExpandedItems.clear();
+  rgExpandedAnomalies.clear();
+  rgExpandedRelationships.clear();
+  rgExpandedExceptions.clear();
+  rgConflictCache.clear();
+  rgLoadPickers(); // re-fetches fresh AND resets both selects to placeholder -- see its own comment
 }
 window.rgResetOnEntry = rgResetOnEntry;
 
 document.addEventListener('DOMContentLoaded', () => {
-  $rg('rgOldCollectionSelect').addEventListener('change', rgUpdateAnalyzeButton);
-  $rg('rgNewCollectionSelect').addEventListener('change', rgUpdateAnalyzeButton);
+  $rg('rgOldCollectionSelect').addEventListener('change', () => {
+    rgSyncCollectionExclusion('rgOldCollectionSelect');
+    rgUpdateAnalyzeButton();
+  });
+  $rg('rgNewCollectionSelect').addEventListener('change', () => {
+    rgSyncCollectionExclusion('rgNewCollectionSelect');
+    rgUpdateAnalyzeButton();
+  });
   // Wrapped, not passed directly -- addEventListener hands the click's Event object as the first
   // arg, which would otherwise land in rgAnalyze's own landStep parameter instead of letting its
   // default (0) apply.
   $rg('rgAnalyzeBtn').addEventListener('click', () => rgAnalyze());
+  $rg('rgCancelAnalyzeBtn').addEventListener('click', rgCancelAnalyze);
   $rg('rgApplyBtn').addEventListener('click', rgOpenApplyConfirm);
 
   $rg('rgStepper').addEventListener('click', (e) => {

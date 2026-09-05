@@ -37,7 +37,14 @@ function createRulesGeneratorRouter(config) {
 
     function vortexRunningGate(res) {
         if (syncLib.isVortexRunning()) {
-            res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
+            // "Currently busy", not "close it" -- every caller here always tries the Helper first,
+            // so this only ever trips once that's already failed to answer while Vortex is running --
+            // a genuine "must be closed" case is unreachable (Vortex actually closed would make
+            // isVortexRunning() false and fall through to the real state.v2 path instead). Same
+            // wording/reasoning as rebuild-missing-routes.js's and cycle-helper-routes.js's own fixes
+            // for the identical condition (2026-09-02/2026-09-04) -- this router just hadn't gotten it
+            // yet.
+            res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently busy. Please wait for Vortex to finish its current activity, then try again.' });
             return true;
         }
         return false;
@@ -56,16 +63,17 @@ function createRulesGeneratorRouter(config) {
     });
 
     // New collections: every Workshop-tracked collection Vortex knows about, straight from its
-    // live state. Deduped against the "old" list above (queue:
-    // rules-generator-workshop-collection-dedup) -- scanStagingCollections (vortex-sync/lib.js) was
-    // relaxed in 3427f35 to include a Workshop-named folder once it has real on-disk content, so a
-    // Workshop collection can now legitimately appear in BOTH lists (it's both "old" and "new" at
-    // once, which makes no sense in a picker whose whole point is comparing two DIFFERENT
-    // collections). A collection that already has real content and shows up as "old" doesn't need
-    // to also show as a raw Workshop option here -- the dedup runs one way only, old wins. Reuses
-    // listInstalledCollections directly (cheap, filesystem-only, no extra Vortex dependency --
-    // independent of whichever source below answered) rather than threading stagingDir through the
-    // isolated worker just to duplicate that same read in-process.
+    // live state. NOT deduped against the "old" list -- REVERTED 2026-09-05 (real live bug,
+    // director-confirmed): the old blanket "exclude anything that already appears in
+    // listInstalledCollections" filter was meant to stop a collection from showing as both "old" AND
+    // "new" in the SAME session, but it filtered the whole "new" list against the ENTIRE old-collection
+    // list unconditionally -- not scoped to whichever one is actually picked as "old" right now. Since
+    // scanStagingCollections (vortex-sync/lib.js, relaxed in 3427f35) includes a Workshop-named folder
+    // once it has real on-disk content, EVERY Workshop collection the director actually uses (all 15+,
+    // all with real content) got silently stripped from "new" -- confirmed live: only 4 of 15+ showed.
+    // The real "same collection picked twice" case is now handled client-side instead, scoped to just
+    // the one currently-selected id (see rules-generator-app.js's own picker-exclusion logic) -- this
+    // route just returns the full, real Workshop list, unfiltered.
     //
     // Opportunistic helper-extension path (2026-08-18, Tier 2 of "remove the Vortex-must-be-closed
     // requirement" -- this is the front door Tier 1's own write routes were stuck behind: this route
@@ -83,16 +91,7 @@ function createRulesGeneratorRouter(config) {
                 if (vortexRunningGate(res)) return;
                 result = { collections: await rgRunner.listWorkshopCollections(state) };
             }
-            let { collections } = result;
-            if (staging) {
-                let alreadyListedIds;
-                try {
-                    alreadyListedIds = new Set(syncRunner.listInstalledCollections(staging).map((c) => c.modId));
-                } catch {
-                    alreadyListedIds = new Set(); // staging unreadable -- fail open, no dedup rather than a 500 here
-                }
-                collections = collections.filter((c) => !alreadyListedIds.has(c.modKey));
-            }
+            const { collections } = result;
             res.json({ collections, source });
         } catch (e) {
             res.status(500).json({ error: e.message });
@@ -127,11 +126,30 @@ function createRulesGeneratorRouter(config) {
     // above: checked before vortexRunningGate, falls through to the exact original gated path when
     // the helper isn't reachable.
     const analyzeSession = createSseSession();
+    // No child process and no per-item loop here (analyzeViaHelper/analyze is a single opaque await,
+    // see this file's own top-of-file comment) -- PGPatcher's own /load/cancel and /build/cancel both
+    // require a live tracked child process to `.kill()`, which doesn't exist for this route at all, so
+    // neither is a real fit to copy verbatim. This mirrors their SHARED underlying idea instead (a
+    // cancelled flag that suppresses the eventual real result) adapted to the one thing actually
+    // interruptible here: the in-flight await can't be stopped early, but its result can be discarded
+    // the moment it resolves, and the user gets told "cancelled" immediately rather than waiting for
+    // it. Safe because analyze is read-only -- letting it finish uselessly in the background costs
+    // nothing and writes nothing.
+    let analyzeCancelled = false;
 
     router.get('/analyze/events', (req, res) => {
         if (!analyzeSession.get()) return res.status(404).end();
         const afterSeq = Number(req.headers['last-event-id'] || 0);
         analyzeSession.subscribe(res, { afterSeq });
+    });
+
+    router.post('/analyze/cancel', (req, res) => {
+        if (!analyzeSession.isActive()) {
+            return res.status(404).json({ error: 'No analysis is currently running.' });
+        }
+        analyzeCancelled = true;
+        analyzeSession.emit({ type: 'error', done: true, error: true, cancelled: true, message: 'Cancelled.' });
+        res.json({ ok: true });
     });
 
     router.post('/analyze', async (req, res) => {
@@ -142,6 +160,9 @@ function createRulesGeneratorRouter(config) {
         if (analyzeSession.isActive()) {
             return res.status(409).json({ error: 'An analysis is already in progress.' });
         }
+        // Reset for this fresh run -- a PRIOR run's own cancel must never suppress the result of a
+        // brand new one.
+        analyzeCancelled = false;
         // vortexRunningGate only applies to the state.v2 fallback path, and that path is only known
         // once the (fast) helper-availability check below resolves -- checked inside the background
         // task, same as every other route here, rather than duplicated up front.
@@ -161,15 +182,17 @@ function createRulesGeneratorRouter(config) {
                     source = 'state.v2';
                     if (syncLib.isVortexRunning()) {
                         stopTicking();
+                        if (analyzeCancelled) return; // already told the user "Cancelled." -- don't overwrite it
                         emitIfCurrent({
                             type: 'error', done: true, error: true, errorCode: 'vortex-running',
-                            message: 'Vortex is currently running. Close it completely and try again.',
+                            message: 'Vortex is currently busy. Please wait for Vortex to finish its current activity, then try again.',
                         });
                         return;
                     }
                     result = await rgRunner.analyze(state, oldCollectionKey, newCollectionKey);
                 }
                 stopTicking();
+                if (analyzeCancelled) return; // real result arrived late -- the user already saw "Cancelled."
                 // computeRelationshipCandidates handles a missing staging root internally (the
                 // noLinkFound/file-conflict half needs it, the incompleteLinks half doesn't) -- always
                 // called, never gated on `staging` here.
@@ -177,6 +200,7 @@ function createRulesGeneratorRouter(config) {
                 emitIfCurrent({ type: 'done', done: true, ...result, relationshipCandidates, source });
             } catch (e) {
                 stopTicking();
+                if (analyzeCancelled) return;
                 emitIfCurrent({ type: 'error', done: true, error: true, message: e.message });
             }
         })();
@@ -275,7 +299,7 @@ function createRulesGeneratorRouter(config) {
                         stopTicking();
                         emitIfCurrent({
                             type: 'error', done: true, error: true, errorCode: 'vortex-running',
-                            message: 'Vortex is currently running. Close it completely and try again.',
+                            message: 'Vortex is currently busy. Please wait for Vortex to finish its current activity, then try again.',
                         });
                         return;
                     }

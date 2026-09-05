@@ -2493,8 +2493,8 @@ function ucv2ProblemLineHtml(p, i) {
 // .ucv2-problem-text span, .ucv2-problem-retry button) -- ucv2AttemptProblemRetry/
 // ucv2MaybeClearApplyProblemsBadge need that shape unchanged; this only changes the label/message
 // content inside it.
-function ucv2GroupedProblemLineHtml(p, i) {
-  const nameHtml = `${escHtmlUcv2(p.name || '')}${p.message ? ` — ${escHtmlUcv2(p.message)}` : ''}`;
+function ucv2GroupedProblemLineHtml(p, i, suppressMessage) {
+  const nameHtml = `${escHtmlUcv2(p.name || '')}${(!suppressMessage && p.message) ? ` — ${escHtmlUcv2(p.message)}` : ''}`;
   if (!p.retry) return `<li class="muted">${nameHtml}</li>`;
   const modIdAttr = p.retry.modId ? ` data-ucv2-retry-modid="${escHtmlUcv2(p.retry.modId)}"` : '';
   return `<li data-ucv2-problem-index="${i}" data-ucv2-problem-label="${escHtmlUcv2(p.label)}" data-ucv2-problem-name="${escHtmlUcv2(p.name || '')}" style="display: flex; align-items: center; gap: 12px; justify-content: space-between;">`
@@ -2515,7 +2515,8 @@ function ucv2ProblemsHtml(problems) {
   const { groups, ungrouped } = ucv2GroupProblems(problems);
   const groupsHtml = groups.map((g) => `<div class="ucv2-problem-group" data-ucv2-problem-group="${escHtmlUcv2(g.label)}">`
     + `<p style="margin:10px 0 4px;font-weight:600">${escHtmlUcv2(g.heading)}</p>`
-    + `<ul style="margin:0 0 4px;padding-left:20px">${g.items.map(ucv2GroupedProblemLineHtml).join('')}</ul>`
+    + (g.body ? `<p style="margin:0 0 6px">${escHtmlUcv2(g.body)}</p>` : '')
+    + `<ul style="margin:0 0 4px;padding-left:20px">${g.items.map((p, i) => ucv2GroupedProblemLineHtml(p, i, g.suppressMessage)).join('')}</ul>`
     + `</div>`).join('');
   const ungroupedHtml = ungrouped.length > 0
     ? `<ul style="margin:0;padding-left:20px">${ungrouped.map(ucv2ProblemLineHtml).join('')}</ul>` : '';
@@ -2695,7 +2696,12 @@ function ucv2RenderApplyResult(result, isOptionalPass) {
   // category (Remove/Keep disabled/Dependency warning/Delete archive) has no real retry mechanism
   // built yet, so those never get a button that would silently do nothing.
   const problems = [];
-  const pushProblem = (label, name, message, retry) => problems.push({ label, name, message, retry: retry || null });
+  // code (2026-09-04): the archive-locator-level error code (HASH_MISMATCH being the one this app
+  // currently acts on) threaded through from rebuildSingleMod -> describeApplyFailure's own caller
+  // in the runner, all the way to this per-mod result -- see ucv2GroupProblems' own cross-cutting
+  // hash-mismatch group, which pulls these out of the normal Update/Add grouping by this field,
+  // regardless of which operation they came from.
+  const pushProblem = (label, name, message, retry, code) => problems.push({ label, name, message, retry: retry || null, code: code || null });
   // A cycle-blocked retry (2026-08-30, real live incident -- runApply's own retryStillFailedRemovals/
   // retryStillFailedDependencyAcknowledgements) is the one server-side message that DOES need a
   // frontend-side swap -- the server has no access to the browser's active theme, so it sends the
@@ -2706,11 +2712,11 @@ function ucv2RenderApplyResult(result, isOptionalPass) {
   // entry IS "Cycle Helper", so this never renders the redundant "Cycle Helper (Cycle Helper)").
   const resolveProblemMessage = (x) => ucv2ThemedCycleMessage(x.error, x.code, 'cycle-detected');
   (result.updatedResults || []).filter((x) => x.ok === false)
-    .forEach((x) => pushProblem('Update', x.name, x.error, x.modId ? { kind: 'mod', modId: x.modId } : null));
+    .forEach((x) => pushProblem('Update', x.name, x.error, x.modId ? { kind: 'mod', modId: x.modId } : null, x.code));
   (result.removedResults || []).filter((x) => x.ok === false)
     .forEach((x) => pushProblem('Remove', x.name, resolveProblemMessage(x)));
   (result.addedResults || []).filter((x) => x.ok === false)
-    .forEach((x) => pushProblem('Add', x.name, x.error, x.modId ? { kind: 'mod', modId: x.modId } : null));
+    .forEach((x) => pushProblem('Add', x.name, x.error, x.modId ? { kind: 'mod', modId: x.modId } : null, x.code));
   (result.disabledResults || []).filter((x) => x.ok === false)
     .forEach((x) => pushProblem('Keep disabled', x.name, x.error));
   (result.dependencyBreakResults || []).filter((x) => x.ok === false)
