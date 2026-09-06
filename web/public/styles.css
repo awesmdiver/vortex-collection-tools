@@ -876,7 +876,7 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    under a titled callout also indents to match". */
 .callout__body { padding-left: 1.65em; }
 .callout ul, .callout ol { margin: 8px 0 0; padding-left: 20px; }
-.callout p { margin: 4px 0; font-size: 13.5px; }
+.callout p { margin: 4px 0; font-size: 13.5px; white-space: pre-line; }
 .callout ol li { font-size: 13.5px; margin: 4px 0; }
 .callout .callout { margin: 12px 0 8px; }
 /* Retry button inside the critical-error callout (2026-08-28) -- a small gap so it doesn't sit flush
@@ -2393,6 +2393,7 @@ tr.apply-row--leaving { animation: rowLeave .5s ease forwards; }
 .pgp-search { flex: 1; min-width: 200px; }
 .pgp-toolbar__sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
 .pgp-selcount { font-size: 12.5px; color: var(--text-muted); margin-right: auto; }
+.pgp-unchecked-warning { font-size: 12.5px; color: var(--warning); font-weight: 600; white-space: nowrap; }
 
 .pgp-panels { display: flex; gap: 16px; align-items: flex-start; }
 .pgp-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; flex: 1; min-width: 0; display: flex; flex-direction: column; max-height: 620px; }
@@ -2465,15 +2466,6 @@ tr.apply-row--leaving { animation: rowLeave .5s ease forwards; }
 .pgp-idle__credits a { color: var(--text-muted); text-decoration: underline; }
 .pgp-idle__credits a:hover { color: var(--text); }
 .pgp-footer__status strong { color: var(--text); }
-
-/* Build completion -- the one genuine payoff moment in this tool (director's own explicit call,
-   2026-08-20: a real build finishing used to end in a tiny, easy-to-miss status line -- this is the
-   deliberately oversized, celebratory opposite of that). Built on top of the existing .callout--
-   success severity color (TECHNICAL.md's own convention), not a new color, just much larger. */
-.pgp-build-success__banner { background: var(--success-bg); border: 1px solid var(--success); border-radius: var(--radius); padding: 32px 24px; margin-bottom: 20px; text-align: center; font-size: 28px; font-weight: 700; }
-.pgp-build-success__path { text-align: center; font-size: 14px; color: var(--text-muted); margin: 0 0 10px; }
-.pgp-build-success .callout { text-align: left; max-width: 640px; margin: 20px auto; }
-.pgp-build-success__actions { text-align: center; margin-top: 20px; }
 
 /* Restore chooser + confirm summary (Missing Masters, 2026-08-23). Deliberately small: the row is a
    plain label so the whole thing is clickable, and the summary is a definition list because that is

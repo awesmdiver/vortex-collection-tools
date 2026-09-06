@@ -44,10 +44,71 @@ let pgpUnranked = [];  // mod names still at priority -1
 let pgpOriginalRankedOrder = []; // snapshot of pgpRanked exactly as loaded, before any Sort A-Z/drag
                                   // -- lets "Priority order" restore the real priority order after
                                   // sorting A-Z to find a mod (director's own real workflow).
+// Revert Changes' own full-state snapshots (queue: pgpatcher-revert-changes) -- pgpOriginalRankedOrder
+// above only ever covered ranked order (Priority order's own narrower need). Revert has to put the
+// WHOLE panel back to exactly how it looked right after this session's own load -- enabled toggles,
+// which mods are New vs. Ranked, and the mod data itself -- so these three snapshot everything else
+// that can mutate, taken at the exact same moment (pgpHandleLoadEvent's 'done' branch), deep-copied so
+// later mutation of the live Maps/arrays can never reach back into the snapshot.
+let pgpOriginalModsByName = new Map();
+let pgpOriginalUnranked = [];
+let pgpOriginalEnabled = new Map();
 let pgpSelected = new Set(); // keys are `${panel}:${name}`
 let pgpLastClicked = null;   // { panel, name } -- shift-click anchor
 let pgpDragging = null;      // { names, fromPanel }
 let pgpDirty = false;
+
+// Search-click scroll fix (queue: pgpatcher-search-click-autoscroll) -- pgpRenderList's own
+// scroll-to-first-match has to fire only when the search text ITSELF just changed, not on every
+// re-render (a plain row click re-renders too, via pgpRenderAll). Tracked per panel, since the two
+// search boxes are already independent (pgpRenderList's own per-panel filter read, above).
+let pgpLastSearchValue = { ranked: null, unranked: null };
+
+// Drag auto-scroll near a panel's own top/bottom edge (queue: pgpatcher-drag-autoscroll) -- a single,
+// always-running rAF loop rather than a setInterval started fresh from inside dragover: pgpRenderList
+// re-adds each container's own dragover/drop listeners on every re-render (an existing, unrelated
+// pattern -- container.innerHTML is cleared but the container element itself, and therefore its
+// listeners, are never replaced), so a per-listener interval would multiply every time the panel
+// re-renders mid-drag. This stays immune to that: dragover just updates the two variables below
+// (idempotent -- harmless if a duplicate listener sets them redundantly), and one loop, started once
+// at load, does the actual scrolling.
+const PGP_AUTOSCROLL_EDGE_PX = 50;   // how close to the edge (in px) before auto-scroll kicks in
+const PGP_AUTOSCROLL_SPEED_PX = 14;  // px scrolled per animation frame while inside that zone
+let pgpAutoScrollContainer = null;
+let pgpAutoScrollDirection = 0; // -1 = scrolling up, 0 = not scrolling, 1 = scrolling down
+function pgpAutoScrollTick() {
+  if (pgpAutoScrollDirection !== 0 && pgpAutoScrollContainer) {
+    pgpAutoScrollContainer.scrollTop += pgpAutoScrollDirection * PGP_AUTOSCROLL_SPEED_PX;
+  }
+  requestAnimationFrame(pgpAutoScrollTick);
+}
+requestAnimationFrame(pgpAutoScrollTick);
+// Called from a panel container's own dragover (bubbled up from whichever row is under the cursor,
+// since row-level dragover only ever calls preventDefault -- it never stops propagation). Decides
+// whether THIS container should be auto-scrolling right now, and in which direction.
+function pgpHandleDragOverAutoScroll(e, container) {
+  const rect = container.getBoundingClientRect();
+  if (e.clientY < rect.top + PGP_AUTOSCROLL_EDGE_PX) {
+    pgpAutoScrollContainer = container;
+    pgpAutoScrollDirection = -1;
+  } else if (e.clientY > rect.bottom - PGP_AUTOSCROLL_EDGE_PX) {
+    pgpAutoScrollContainer = container;
+    pgpAutoScrollDirection = 1;
+  } else if (pgpAutoScrollContainer === container) {
+    pgpAutoScrollDirection = 0;
+  }
+}
+function pgpStopAutoScroll(container) {
+  if (!container || pgpAutoScrollContainer === container) {
+    pgpAutoScrollContainer = null;
+    pgpAutoScrollDirection = 0;
+  }
+}
+// Safety net: `dragend` fires on the drag SOURCE after every drop or cancelled drag, no matter where
+// (or whether) it landed -- catches drops onto a specific row (their own drop handler never touches
+// auto-scroll) and a drag released outside the window entirely, either of which would otherwise leave
+// the panel scrolling forever with no drag actually in progress.
+document.addEventListener('dragend', () => pgpStopAutoScroll(null));
 let pgpEnabled = new Map();  // mod name -> boolean, "will this mod actually get patched" (director's
                               // own real-PGPatcher-checkbox request, color-highlighted instead of a
                               // literal checkbox per his own call). Keyed by name only (not panel) --
@@ -88,7 +149,14 @@ let pgpClipboard = [];
 // replicated, purely to seed this display-only toggle -- priority is never touched by this.
 function pgpInitialEnabled(mod) {
   if (mod.enabled) return true; // already explicitly enabled in modrules.json -- respect it as-is
-  return !!mod.isNew && Array.isArray(mod.shaders) && mod.shaders.some((s) => s !== 'Default');
+  // Real bug found live (2026-09-06), SECOND pass -- the FIRST pass (2026-09-05) gated this on
+  // pgpActiveShaderLabels, reasoning a Parallax-only mod shouldn't auto-check with Parallax turned
+  // off. That reasoning was wrong: confirmed directly against PGModManager::updateStateFromModlist
+  // (pgpatcher-fork) and a real from-scratch PGPatcher save, real auto-enable has NO active-patcher
+  // gate at all -- a mod auto-checks the instant it has ANY detected shader (Parallax, Complex
+  // Material, or PBR), regardless of which patchers settings.json currently has on.
+  // pgpHasAnyRealShader is the ungated version of that same idea -- see its own comment.
+  return !!mod.isNew && pgpHasAnyRealShader(mod);
 }
 
 // Clicking a toggle while it's part of a multi-selection flips every selected mod to the SAME new
@@ -302,6 +370,15 @@ async function pgpTryWithGateConfirms(method, path, baseBody) {
 // genuinely about to start, only THEN transitions to the Loading screen.
 async function pgpatcherLoad() {
   pgpHideError();
+  // Disabled the instant this runs, not just while the network call is in flight -- real bug found
+  // live (2026-09-06): a fast double-click sent a second /load request before the first one's own
+  // 202 even landed, and the backend's own "A load is already in progress" 409 surfaced as a raw
+  // technical error. Re-enabled on every path that stays on THIS screen (every catch branch, and a
+  // declined confirm) -- never re-enabled on the success path below, since that hides Idle entirely
+  // and switches to the Loading screen; pgpResetToIdle re-enables it defensively when Idle comes
+  // back (Start Over, or after a build's own "Start Over").
+  const loadBtn = $g('pgpatcherLoadBtn');
+  loadBtn.disabled = true;
 
   let result;
   try {
@@ -323,9 +400,13 @@ async function pgpatcherLoad() {
     } else {
       pgpShowError(e);
     }
+    loadBtn.disabled = false;
     return;
   }
-  if (result === null) return; // user declined a confirm -- stay put, same outcome as the old hard block
+  if (result === null) {
+    loadBtn.disabled = false;
+    return; // user declined a confirm -- stay put, same outcome as the old hard block
+  }
 
   // A real load is now genuinely running server-side -- only now switch to the Loading screen.
   $g('pgpatcherNotConfigured').classList.add('hidden');
@@ -386,8 +467,55 @@ async function pgpHandleReenableOffers(frame, outputModMessage, oneMoreStepEl) {
 // need to re-derive which mods are Ranked vs. New from the SAME set of per-mod fields, so this is
 // the ONE place that filter logic lives rather than two copies that could silently drift apart.
 // `mods`: an array of the full per-mod objects (same shape /load's own `data.mods` and
-// `pgpModsByName`'s own values already carry).
-function pgpDeriveRankedUnranked(mods) {
+// `pgpModsByName`'s own values already carry). `freshSetup` (default false): true only when /load's
+// own backend check found NO existing modrules.json at all -- see the /load route's own comment.
+function pgpDeriveRankedUnranked(mods, freshSetup) {
+  // Real first-time-collection-install case (director's own spec, 2026-09-05): a brand-new
+  // modrules.json doesn't exist yet, so real PGPatcher's own GUI has no "new mods" concept to fall
+  // back to at all -- every scanned mod just lands in its one list, alphabetically (its own last-
+  // resort tiebreaker, PGModManager::compareMods), all checked. Mirror that here: every includable
+  // mod goes straight into Ranked in alphabetical order, nothing into New Mods -- matches what real
+  // PGPatcher would actually save if you hit Okay without touching anything, and avoids the "No
+  // ranked order was provided" Save error a truly empty Ranked panel used to produce. Once this gets
+  // saved, a REAL modrules.json exists and every future /load falls through to the normal logic below
+  // (which is exactly the ModruleSync re-prioritization use case: the author's own file gets applied
+  // on top of this real, if arbitrary, starting order).
+  if (freshSetup) {
+    // Real bug found live (2026-09-06): plain alphabetical was wrong -- confirmed by reading
+    // PGModManager::updateStateFromModlist directly, the auto-enabled group's own base order is
+    // "best detected shader first (PBR > Complex Material > Parallax), alphabetical on a tie", NOT
+    // plain alphabetical. Sorting the whole fresh list this way reproduces the exact relative order
+    // /save's own enabled-first repartition needs to hand out the SAME priority numbers a real
+    // from-scratch PGPatcher save would -- verified directly against one. A disabled mod's exact
+    // position here doesn't affect its saved priority (always -1), so sorting everything by this one
+    // rule, not just the enabled subset, is safe and simpler.
+    // Real bug found live (2026-09-06), SECOND pass on this same filter -- ModSortDialog's own
+    // inclusion check (`if (shaders.empty() && !hasMeshes) continue;`) skips a mod only when its
+    // shaders SET IS LITERALLY EMPTY, not merely "no real shader detected" -- a mod whose only entry
+    // is "Default" (scanned, found to be a no-op) still has a non-empty set and still counts toward
+    // the total, even though it never auto-enables (that's the separate, STRICTER >NONE check
+    // pgpHasAnyRealShader/pgpInitialEnabled correctly still use). Using the stricter check here undercounted
+    // itemCount by exactly the number of Default-only mods -- confirmed live: every enabled mod's
+    // priority was off from a real PGPatcher save by the exact same constant (243), meaning the
+    // RELATIVE order was already right and only the total was short.
+    const ranked = mods
+      .filter((m) => m.hasMeshes === true || (Array.isArray(m.shaders) && m.shaders.length > 0))
+      .sort((a, b) => {
+        const rankDiff = pgpMaxShaderRank(b) - pgpMaxShaderRank(a);
+        if (rankDiff !== 0) return rankDiff;
+        // Real bug found live (2026-09-06): localeCompare sorts case-insensitively/locale-aware, but
+        // real PGPatcher's own tiebreak (`a->name < b->name`, a plain std::wstring comparison) is
+        // ordinal -- every uppercase letter sorts entirely before every lowercase one. localeCompare
+        // put "aMidianBorn Armors PBR 4k" and "apple-pbr" up near the other A's; real PGPatcher pushes
+        // them down after every Z-starting name. Plain `<`/`>` on strings is ordinal in JS (UTF-16
+        // code unit order), matching C++'s wstring comparison exactly -- confirmed directly against a
+        // real from-scratch PGPatcher save.
+        return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+      })
+      .map((m) => m.name);
+    return { ranked, unranked: [] };
+  }
+
   // Ranked panel: SECOND real correction on this same filter, 2026-08-19 -- the first pass used
   // `enabled === true` as the "keep it even without a shader match" exception, reasoning that a
   // real, manually-set checkbox state should never be silently dropped. Confirmed live this was
@@ -436,11 +564,18 @@ function pgpHandleLoadEvent(frame) {
     pgpActiveShaderLabels = new Set(
       (Array.isArray(data.patchers) ? data.patchers : []).map((id) => PGP_PATCHER_ID_TO_SHADER_LABEL[id]).filter(Boolean)
     );
-    const derived = pgpDeriveRankedUnranked(data.mods);
+    const derived = pgpDeriveRankedUnranked(data.mods, data.modrulesExisted === false);
     pgpRanked = derived.ranked;
     pgpUnranked = derived.unranked;
     pgpOriginalRankedOrder = [...pgpRanked]; // snapshot BEFORE anything (Sort A-Z, drag) can mutate it
     pgpEnabled = new Map(data.mods.map((m) => [m.name, pgpInitialEnabled(m)]));
+    // Revert Changes' own full-state snapshots (queue: pgpatcher-revert-changes), taken at this same
+    // "just loaded, nothing has mutated yet" moment. structuredClone deep-copies a Map (including its
+    // object values) natively -- no hand-rolled recursive copy needed for pgpModsByName/pgpEnabled.
+    // pgpUnranked is a plain array of name strings (immutable primitives), so a shallow copy is enough.
+    pgpOriginalModsByName = structuredClone(pgpModsByName);
+    pgpOriginalUnranked = [...pgpUnranked];
+    pgpOriginalEnabled = structuredClone(pgpEnabled);
     pgpSelected.clear();
     pgpLastClicked = null;
     pgpDirty = false;
@@ -457,6 +592,11 @@ function pgpHandleLoadEvent(frame) {
   } else if (frame.type === 'error') {
     pgpFinishLoading();
     $g('pgpatcherIdle').classList.remove('hidden');
+    // Real bug found live (2026-09-06): Cancel resolves through THIS branch, not pgpatcherLoad's own
+    // catch/decline paths -- Load stayed disabled forever after a cancel, since nothing on this path
+    // ever flipped it back. Idle is back on screen either way (cancelled or a genuine failure), so
+    // Load must be clickable again regardless of which one it was.
+    $g('pgpatcherLoadBtn').disabled = false;
     if (!frame.cancelled) pgpShowError(new Error(frame.message || 'The load failed.'));
     pgpHandleReenableOffers(frame, 'PGPatcher’s previous output is still disabled from this run. Would you like to enable it and deploy the changes now?');
   }
@@ -564,6 +704,7 @@ async function pgpatcherBuild() {
   $g('pgpatcherBuilding').classList.remove('hidden');
   $g('pgpatcherBuildingProgress').classList.remove('hidden');
   $g('pgpatcherBuildingSuccess').classList.add('hidden');
+  $g('pgpatcherBuildingFailure').classList.add('hidden');
   $g('pgpatcherBuildingPhase').textContent = 'Starting…';
   $g('pgpatcherBuildingBar').style.width = '0%';
   // See pgpatcherLoad's own identical disable + comment -- same preflight-deploy bug, same fix.
@@ -588,6 +729,11 @@ function pgpHandleBuildEvent(frame) {
     $g('pgpatcherBuildingProgress').classList.add('hidden');
     $g('pgpatcherBuildingSuccess').classList.remove('hidden');
     $g('pgpatcherOneMoreStep').classList.add('hidden'); // reset -- only a declined enable+deploy offer below shows this again
+    // Reset both "complete" banners for a genuinely fresh build -- a prior deploy earlier THIS
+    // session may have hidden Patch Complete and shown Deployment Complete; a brand-new build means
+    // neither is true yet again.
+    $g('pgpatcherPatchCompleteBanner').classList.remove('hidden');
+    $g('pgpatcherDeployAllDone').classList.add('hidden');
     $g('pgpatcherDirtyStatus').textContent = 'no changes yet';
     // DynDoLOD.esp's own re-enable is automatic and immediate WHEN this session itself disabled it
     // (free, no deploy needed) -- but per the director's own 4-case spec (2026-08-21), if it was
@@ -604,11 +750,39 @@ function pgpHandleBuildEvent(frame) {
     // action -- accepting this prompt IS the re-enable, not a separate step after one already happened.
     // Sequential with any DynDoLOD offer above -- see pgpHandleReenableOffers's own header comment.
     pgpHandleReenableOffers(frame, 'The build is complete. Would you like to enable PGPatcher’s new output and deploy the changes?', $g('pgpatcherOneMoreStep'));
+    // Proactive Deploy prompt (2026-09-06) -- covers the case the confirm above never could: a
+    // genuinely first-ever build, where the output folder was never a registered Vortex mod at all.
+    // Real bug found live: outputModPendingReenable only ever fires for a mod that ALREADY existed
+    // and got disabled this session -- a brand-new build silently had no path to going live short of
+    // the director manually creating the mod in Vortex himself. The backend's own
+    // ensureOutputModRegisteredAndEnabled already registered/enabled it by the time this event
+    // arrives (null only when the confirm above is already handling it instead, so this never shows
+    // both prompts at once for the same mod).
+    if (frame.outputModStatus) {
+      if (frame.outputModStatus.error) {
+        pgpShowError(new Error(`⚠️ ${frame.outputModStatus.error} You can still try Deploy below.`));
+      }
+      $g('pgpatcherDeployPending').classList.remove('hidden');
+    }
   } else if (frame.type === 'error') {
     pgpFinishBuildingStream();
-    $g('pgpatcherBuilding').classList.add('hidden');
-    $g('pgpatcherEditor').classList.remove('hidden');
-    if (!frame.cancelled) pgpShowError(new Error(frame.message || 'The build failed.'));
+    if (frame.cancelled) {
+      // A deliberate Cancel has nothing to show -- straight back to the editor, same as before
+      // (director never asked for this path to change, only the real-failure one below).
+      $g('pgpatcherBuilding').classList.add('hidden');
+      $g('pgpatcherEditor').classList.remove('hidden');
+    } else {
+      // queue: pgpatcher-build-error-placement -- a genuine failure used to silently bounce back to
+      // the editor screen, so the shared #pgpatcherError banner rendered ABOVE the sort page instead
+      // of this "final page" (director's own catch, live: "that critical warning should be on the
+      // final page, not the sort page"). Stay on pgpatcherBuilding; show its own failure state
+      // instead of Progress. The existing Ranked/New Mods state is untouched by a failed build, so
+      // there's no need to force the full pgpResetToIdle() a genuine SUCCESS uses -- see
+      // pgpatcherBuildingFailureBackBtn's own handler below.
+      $g('pgpatcherBuildingProgress').classList.add('hidden');
+      $g('pgpatcherBuildingFailure').classList.remove('hidden');
+      pgpShowError(new Error(frame.message || 'The build failed.'));
+    }
     pgpHandleReenableOffers(frame, 'PGPatcher’s previous output is still disabled from this run. Would you like to enable it and deploy the changes now?');
   }
 }
@@ -634,6 +808,7 @@ function pgpStopDeployAllPolling() {
 }
 
 async function pgpDeployAll() {
+  $g('pgpatcherDeployPending').classList.add('hidden'); // hides the proactive "one step left" prompt while its own action runs
   $g('pgpatcherDeployAllDone').classList.add('hidden');
   $g('pgpatcherDeployAllProgress').classList.remove('hidden');
   $g('pgpatcherDeployAllPhase').textContent = 'Starting…';
@@ -648,6 +823,12 @@ async function pgpDeployAll() {
   } catch (e) {
     $g('pgpatcherDeployAllProgress').classList.add('hidden');
     $g('pgpatcherBuildingBackToEditorBtn').disabled = false;
+    // Real gap found live (2026-09-06): a failed deploy used to leave NO visible way back to Deploy
+    // on this screen at all (the proactive prompt was already hidden at the top of this function,
+    // and nothing ever re-showed it). Bringing it back gives a real retry path regardless of which
+    // caller triggered this deploy -- the copy ("one step left, Deploy to finish") is still accurate
+    // either way, since a build genuinely did complete and deploying genuinely is what's left.
+    $g('pgpatcherDeployPending').classList.remove('hidden');
     // Deploy All is the one PGPatcher action that genuinely cannot work without the Helper -- it
     // runs Vortex's own real deploy through it, with no read-only fallback. That earns the
     // standardized callout and a Retry rather than a bare error dump, since "start Vortex and try
@@ -679,8 +860,13 @@ async function pgpDeployAll() {
       $g('pgpatcherDeployAllProgress').classList.add('hidden');
       $g('pgpatcherBuildingBackToEditorBtn').disabled = false;
       if (progress.error) {
+        $g('pgpatcherDeployPending').classList.remove('hidden'); // real retry path -- see the catch block above's own comment
         pgpShowError(new Error(progress.error));
       } else {
+        // Director's own explicit call: Deployment Complete REPLACES Patch Complete rather than
+        // stacking two different "complete" banners on the same screen -- once deploy has actually
+        // succeeded, "the patch is built" is no longer the headline, "you're live in-game" is.
+        $g('pgpatcherPatchCompleteBanner').classList.add('hidden');
         $g('pgpatcherDeployAllDone').classList.remove('hidden');
       }
     }
@@ -707,6 +893,33 @@ function pgpModNames(list) { return list; } // list is already plain names -- ke
 // this file's own top-of-file comment on PGP_PATCHER_ID_TO_SHADER_LABEL).
 function pgpHasPatchableShader(mod) {
   return Array.isArray(mod.shaders) && mod.shaders.some((s) => s !== 'Default' && pgpActiveShaderLabels.has(s));
+}
+
+// Real bug found live (2026-09-06): confirmed by reading PGModManager::updateStateFromModlist
+// directly (pgpatcher-fork) -- real PGPatcher's own "does this mod get auto-enabled / counted at
+// all" rule (`hasPatchableShader = !shaders.empty() && *shaders.rbegin() > ShapeShader::NONE`) has
+// NO active-patcher gate whatsoever. A mod with a detected Parallax shader auto-enables with a real
+// priority in a fresh PGPatcher save even when only TruePBR is active in settings -- confirmed
+// directly against a real from-scratch save. `pgpHasPatchableShader` above is for a DIFFERENT,
+// legitimately gated purpose (the Shader column / toggle tooltip, which should only ever name a
+// patcher that's actually going to run); this is for "is this mod real enough to include/auto-enable
+// at all", which real PGPatcher decides independent of settings.json entirely.
+function pgpHasAnyRealShader(mod) {
+  return Array.isArray(mod.shaders) && mod.shaders.some((s) => s !== 'Default' && s !== 'Unknown');
+}
+
+// Rank matching PGEnums::ShapeShader's own declared order (pgpatcher-fork) -- higher value sorts
+// first in compareMods (`*maxElemAIt > *maxElemBIt`). Used to reproduce the exact order real
+// PGPatcher assigns auto-enabled mods their priority in: best-shader-first, alphabetical on a tie.
+const PGP_SHADER_RANK = { PBR: 4, 'Complex Material': 3, Parallax: 2, Default: 1, Unknown: 0 };
+function pgpMaxShaderRank(mod) {
+  if (!Array.isArray(mod.shaders) || mod.shaders.length === 0) return 0;
+  let max = 0;
+  for (const s of mod.shaders) {
+    const r = PGP_SHADER_RANK[s] != null ? PGP_SHADER_RANK[s] : 0;
+    if (r > max) max = r;
+  }
+  return max;
 }
 
 // Real PGPatcher's own Shader column (ModSortDialog.cpp's constructShaderString): every non-Default,
@@ -738,6 +951,12 @@ function pgpRenderList(panel, names, containerId) {
   // Reads THIS panel's own search box, not a single shared one -- confirmed live bug: one global
   // search input filtered/highlighted matches in both panels at once from the same keystroke.
   const filter = $g(pgpPanelId(panel, 'SearchInput')).value.trim().toLowerCase();
+  // Search-click scroll fix (queue: pgpatcher-search-click-autoscroll) -- only a REAL search-text
+  // change earns the scroll-to-first-match jump below; a click-driven re-render (e.g. selecting a
+  // highlighted match) leaves this panel's search box untouched, so searchChanged stays false and
+  // the panel is left exactly where the user was looking.
+  const searchChanged = pgpLastSearchValue[panel] !== filter;
+  pgpLastSearchValue[panel] = filter;
   container.innerHTML = '';
   let firstMatchRow = null;
   const displayNames = panel === 'ranked' ? pgpRankedDisplayOrder(names) : names;
@@ -747,7 +966,16 @@ function pgpRenderList(panel, names, containerId) {
     // for where a mod sits relative to its neighbors, which matters when you're about to drag a new
     // mod in next to it. Every row stays visible here; a match just gets highlighted (and the FIRST
     // match auto-scrolls into view), non-matches dim instead of disappearing.
-    const isMatch = filter && name.toLowerCase().includes(filter);
+    // Vortex's own "common name" overlay (prompts/handoff-latest.md's own scoping writeup) -- `name`
+    // itself (pgtools' own raw, modrules.json-matching key) is what selection/drag/drop/search-range
+    // and the /save payload all still key off, completely unchanged; `friendlyName` is purely what
+    // gets DISPLAYED, with the raw name moved to a mouse-over tooltip instead of disappearing (open
+    // question #1 in that doc, now answered) so anyone cross-referencing modrules.json can still find
+    // it. Search matches against either name, since the whole point is being able to find a mod
+    // whichever name you actually remember it by.
+    const mod = pgpModsByName.get(name);
+    const friendlyName = mod && mod.friendlyName;
+    const isMatch = filter && (name.toLowerCase().includes(filter) || (!!friendlyName && friendlyName.toLowerCase().includes(filter)));
     const k = pgpKey(panel, name);
     const row = el('div', {
       class: 'pgp-row' + (pgpSelected.has(k) ? ' selected' : '') + (isMatch ? ' search-match' : ''),
@@ -781,7 +1009,12 @@ function pgpRenderList(panel, names, containerId) {
     }
 
     if (panel === 'ranked') row.appendChild(el('span', { class: 'pgp-row__rank' }, String(idx + 1)));
-    row.appendChild(el('span', { class: 'pgp-row__name' }, name));
+    const nameEl = el('span', { class: 'pgp-row__name' }, friendlyName || name);
+    // `friendlyName` is now always set whenever Vortex has a name for this mod at all (even when it's
+    // identical to the raw name -- see /load's own comment) -- only worth a tooltip here when it
+    // actually tells you something the visible text doesn't already.
+    if (friendlyName && friendlyName !== name) nameEl.title = name;
+    row.appendChild(nameEl);
     const shaderLabel = pgpShaderLabel(name);
     if (shaderLabel) row.appendChild(el('span', { class: 'pgp-row__shader' }, shaderLabel));
 
@@ -826,10 +1059,20 @@ function pgpRenderList(panel, names, containerId) {
 
     container.appendChild(row);
   });
-  if (firstMatchRow) firstMatchRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  container.addEventListener('dragover', (e) => e.preventDefault());
+  if (searchChanged && firstMatchRow) firstMatchRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  container.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    pgpHandleDragOverAutoScroll(e, container);
+  });
+  container.addEventListener('dragleave', (e) => {
+    // Only when the pointer genuinely left the container (not just moved from one child row to
+    // another -- both fire dragleave/dragover on every row boundary crossing), so a drag still
+    // hovering over rows near the edge doesn't get its auto-scroll cancelled mid-scroll.
+    if (!container.contains(e.relatedTarget)) pgpStopAutoScroll(container);
+  });
   container.addEventListener('drop', (e) => {
     e.preventDefault();
+    pgpStopAutoScroll(container);
     if (pgpDragging && e.target === container) pgpHandleDrop(panel, null); // drop at end of list
   });
 }
@@ -900,6 +1143,14 @@ function pgpRenderAll() {
     const n = [...pgpSelected].filter((sk) => sk.startsWith(panel + ':')).length;
     $g(pgpPanelId(panel, 'SelectionCount')).textContent = n > 0 ? `${n} selected` : '';
   }
+  // At-a-glance unchecked count -- real complaint, live (2026-09-06, ported from the same fix on
+  // ModruleSync's own sort screen): no bulk check/clear/invert for the enabled toggle and no way to
+  // filter to just unchecked rows, so one buried mid-list is easy to miss without scrolling the whole
+  // panel. Ranked-only: New Mods has no per-row checkbox at all.
+  const uncheckedCount = pgpRanked.filter((name) => !pgpEnabled.get(name)).length;
+  const uncheckedWarning = $g('pgpatcherRankedUncheckedWarning');
+  uncheckedWarning.textContent = uncheckedCount > 0 ? `⚠ ${uncheckedCount} unchecked` : '';
+  uncheckedWarning.classList.toggle('hidden', uncheckedCount === 0);
   pgpApplyConflictHighlights();
   pgpUpdateCutPasteButtons();
 }
@@ -980,12 +1231,24 @@ $g('pgpatcherRankedPasteBtn').addEventListener('click', () => {
 });
 function pgpUpdateCutPasteButtons() {
   const selectedRankedCount = pgpRanked.filter((name) => pgpSelected.has(pgpKey('ranked', name))).length;
-  $g('pgpatcherRankedCutBtn').disabled = selectedRankedCount === 0;
+  const cutBtn = $g('pgpatcherRankedCutBtn');
   const pasteBtn = $g('pgpatcherRankedPasteBtn');
+  // Only one of the two is ever relevant at a time (queue: pgpatcher-cut-paste-toggle): once
+  // something's cut, Cut has nothing left to do until it's pasted somewhere, and showing it next to
+  // Paste is just noise -- the whole rest of the workflow from here is "pick a destination, Paste."
+  // Toggled by clipboard state alone, not selection -- Cut stays the visible slot the whole time
+  // nothing's cut, Paste stays the visible slot the whole time something is, regardless of what's
+  // currently selected (that only ever affects each button's OWN disabled state below).
+  const hasClipboard = pgpClipboard.length > 0;
+  cutBtn.classList.toggle('hidden', hasClipboard);
+  pasteBtn.classList.toggle('hidden', !hasClipboard);
+  cutBtn.disabled = selectedRankedCount === 0;
   pasteBtn.disabled = pgpClipboard.length === 0 || selectedRankedCount !== 1;
-  pasteBtn.innerHTML = pgpClipboard.length > 0
-    ? `&#128203; Paste ${pgpClipboard.length} mod${pgpClipboard.length === 1 ? '' : 's'} here`
-    : '&#128203; Paste';
+  // U+2398 (Unicode's own "PASTE SYMBOL") rather than the clipboard emoji -- confirmed live
+  // (queue: pgpatcher-cut-paste-toggle) the emoji renders as a bold, full-color glyph next to Cut's
+  // thin monochrome scissors, reading as a mismatched pair; this one matches Cut's weight and style.
+  // Static label, no dynamic mod count (director's own correction, live) -- just "Paste".
+  pasteBtn.innerHTML = '&#9112; Paste';
 }
 
 // CSV export -- director's own ask: people compare load orders with each other, so a plain rank/
@@ -1014,6 +1277,56 @@ $g('pgpatcherRankedExportBtn').addEventListener('click', () => {
   URL.revokeObjectURL(url);
 });
 
+// ModruleSync export (director's own ask, 2026-09-06) -- ModruleSync is a static, zero-backend page
+// with no way to know which of a user's mods actually have real meshes/shaders (that data only ever
+// exists inside a real PGPatcher/pgtools scan, which this editor already just ran). Its own New Mods
+// panel was showing literally every unmatched mod as a drag candidate, the vast majority of which can
+// never take a real priority at all. Rather than a name-based heuristic on ModruleSync's own side
+// (unreliable both ways -- misses real PBR mods with generic names, catches unrelated ones with "PBR"
+// in the name), this hands ModruleSync the REAL, already-known answer: same modrules.json shape, plus
+// one extra `patchable` field per mod, computed with the exact same hasMeshes-or-any-shader rule this
+// editor itself uses to decide what's displayable at all (see pgpDeriveRankedUnranked's own fresh-
+// setup filter). match-engine.js reads this field when present and silently drops a non-patchable,
+// unmatched mod from the New Mods bucket instead of listing it; a plain vanilla modrules.json (no
+// `patchable` field) falls back to today's unfiltered behavior, so this stays fully optional.
+// Priority here is computed the SAME way /save's own real formula does (itemCount - enabled-first
+// index) -- not read back off disk -- so this reflects the CURRENT in-memory session even before a
+// Save.
+//
+// Moved (2026-09-06, director's own call) from its own standalone Ranked-panel toolbar button into
+// the Save & Import... flow below -- that modal already explains ModruleSync and walks the user
+// through the merge, so generating the file there (where the "Import" concept already lives) reads
+// more coherently than a separate, easy-to-miss export button elsewhere on the screen.
+function pgpDownloadForModruleSync() {
+  const isEnabledFor = (name) => !!pgpEnabled.get(name);
+  const itemCount = pgpRanked.length + pgpUnranked.length;
+  const enabledFirstOrder = pgpRanked.filter(isEnabledFor).concat(pgpRanked.filter((n) => !isEnabledFor(n)));
+  const priorityByName = new Map();
+  enabledFirstOrder.forEach((name, i) => {
+    priorityByName.set(name, isEnabledFor(name) ? itemCount - i : -1);
+  });
+
+  const out = {};
+  pgpModsByName.forEach((mod, name) => {
+    const patchable = mod.hasMeshes === true || (Array.isArray(mod.shaders) && mod.shaders.length > 0);
+    out[name] = {
+      priority: priorityByName.has(name) ? priorityByName.get(name) : -1,
+      enabled: isEnabledFor(name),
+      meshesignored: !!mod.areMeshesIgnored,
+      patchable,
+    };
+  });
+  const json = JSON.stringify(out, null, 2);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = el('a', { href: url, download: `modrulesync-input-${stamp}.json` });
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ---------- Footer actions (steps 3 & 4) ----------
 
 // Director's own real complaint: leaving the editor (Home, then back) lands right back on the
@@ -1034,6 +1347,9 @@ function pgpResetToIdle() {
   pgpRanked = [];
   pgpUnranked = [];
   pgpOriginalRankedOrder = [];
+  pgpOriginalModsByName = new Map();
+  pgpOriginalUnranked = [];
+  pgpOriginalEnabled = new Map();
   pgpSelected.clear();
   pgpLastClicked = null;
   pgpEnabled = new Map();
@@ -1043,6 +1359,7 @@ function pgpResetToIdle() {
   $g('pgpatcherEditor').classList.add('hidden');
   $g('pgpatcherBuilding').classList.add('hidden');
   $g('pgpatcherIdle').classList.remove('hidden');
+  $g('pgpatcherLoadBtn').disabled = false; // defensive -- Idle is back, so Load must be clickable again
 }
 
 $g('pgpatcherStartOverBtn').addEventListener('click', async () => {
@@ -1050,9 +1367,28 @@ $g('pgpatcherStartOverBtn').addEventListener('click', async () => {
   pgpResetToIdle();
 });
 
+// Revert Changes (queue: pgpatcher-revert-changes) -- repurposes what used to be a full re-scan
+// ("Reset" -> pgpatcherLoad(), a real multi-minute PGPatcher/Vortex re-scan) into the cheap thing the
+// director actually wants: put the panel back to exactly how it looked right after THIS session's own
+// load, from the snapshots pgpHandleLoadEvent captured at that moment -- no network call at all. A
+// genuine re-scan (mods changed in Vortex since opening) still needs "Start over": clicking Load again
+// is a real fresh scan by definition, so that capability isn't lost, just reached a different way.
+function pgpRevertChanges() {
+  pgpModsByName = structuredClone(pgpOriginalModsByName);
+  pgpRanked = [...pgpOriginalRankedOrder];
+  pgpUnranked = [...pgpOriginalUnranked];
+  pgpEnabled = structuredClone(pgpOriginalEnabled);
+  pgpSelected.clear();
+  pgpLastClicked = null;
+  pgpClipboard = [];
+  pgpDirty = false;
+  $g('pgpatcherDirtyStatus').textContent = 'no changes yet';
+  pgpRenderAll();
+}
+
 $g('pgpatcherReloadBtn').addEventListener('click', async () => {
-  if (pgpDirty && !(await showConfirmModal('You have unsaved changes that will be lost. Reset anyway?'))) return;
-  pgpatcherLoad();
+  if (pgpDirty && !(await showConfirmModal('Revert to how this was when you loaded it? Unsaved changes will be lost.'))) return;
+  pgpRevertChanges();
 });
 
 window.pgpResetToIdle = pgpResetToIdle;
@@ -1064,6 +1400,12 @@ async function pgpatcherSaveOrder() {
       order: pgpRanked,
       unranked: pgpUnranked,
       enabled: Object.fromEntries(pgpEnabled),
+      // Every mod THIS load's own pgtools scan reported, meshless ones included -- pgpModsByName is
+      // never filtered (pgpDeriveRankedUnranked only filters what gets DISPLAYED in Ranked/New Mods).
+      // Lets /save seed a real placeholder entry for every mod real PGPatcher would also know about
+      // but this editor doesn't show, straight from data this session already has -- no separate live
+      // Vortex call needed on the backend.
+      allModNames: [...pgpModsByName.keys()],
     });
     pgpDirty = false;
     $g('pgpatcherDirtyStatus').textContent = `saved — backed up to ${result.backupPath}`;
@@ -1101,6 +1443,11 @@ $g('pgpatcherSaveChoiceImportBtn').addEventListener('click', async () => {
   const saved = await pgpatcherSaveOrder();
   btn.disabled = false;
   if (!saved) return; // pgpatcherSaveOrder already called pgpShowError -- stay on the choice modal
+  // Save & Import... saves the real modrules.json AND downloads the ModruleSync-ready file in one
+  // step (director's own call, 2026-09-06) -- this modal already explains ModruleSync and walks the
+  // user through the merge, so this is where generating that file belongs now, not a separate
+  // standalone button elsewhere on the screen.
+  pgpDownloadForModruleSync();
   pgpHideSaveChoiceModal();
   pgpShowModruleSyncModal();
 });
@@ -1119,6 +1466,14 @@ function pgpApplyImportedModrules(modrules, filename) {
     const imported = modrules[name];
     if (!imported || typeof imported.priority !== 'number') continue;
     mod.priority = imported.priority;
+    // Director's own explicit call (2026-09-06): a mod that receives a REAL priority from the merge
+    // should also come in checked, not just ranked. Reading `imported.enabled` wouldn't actually
+    // achieve that -- ModruleSync's own buildFinalRules never changes `enabled`, only `priority`, so
+    // that field is just a pass-through of whatever the end-user's OWN file already had; it carries
+    // no signal about whether this is a genuine author match. `priority !== -1` IS that real signal --
+    // gated so an unmatched entry (reset to -1 by the merge, same as before this change) is never
+    // force-enabled.
+    if (imported.priority !== -1) pgpEnabled.set(name, true);
     matched += 1;
   }
   const derived = pgpDeriveRankedUnranked([...pgpModsByName.values()]);
@@ -1175,6 +1530,44 @@ $g('pgpatcherCancelBuildBtn').addEventListener('click', pgpatcherCancelBuild);
 // (director's own call, 2026-08-20).
 $g('pgpatcherBuildingBackToEditorBtn').addEventListener('click', () => {
   pgpResetToIdle();
+});
+// The failure state's own "back" button -- deliberately NOT pgpResetToIdle() like the success
+// button above. Nothing in Vortex changed as a result of a build that never finished, so the
+// Ranked/New Mods state the director was just working on is still perfectly valid; this just
+// re-shows it, the same way a failed build always used to (just gated behind an explicit click now
+// instead of happening automatically underneath the error banner -- see pgpHandleBuildEvent's own
+// error branch).
+$g('pgpatcherBuildingFailureBackBtn').addEventListener('click', () => {
+  $g('pgpatcherBuilding').classList.add('hidden');
+  $g('pgpatcherEditor').classList.remove('hidden');
+});
+$g('pgpatcherDeployBtn').addEventListener('click', () => pgpDeployAll());
+
+// Congrats-screen CSV export (director's own ask, 2026-09-06, prompts/handoff-latest.md's own
+// scoping writeup) -- a mod author reviewing the final sort order in a spreadsheet needs BOTH the
+// raw modrules.json key (frequently an unreadable Nexus-derived folder name) and Vortex's own
+// friendly "common name" for it. Reads `friendlyName` straight off pgpModsByName -- already attached
+// by /load itself (server-side, once, at load time), so this needs no extra live Vortex call of its
+// own. Same Blob-download shape pgpatcherRankedExportBtn already uses just above. `pgpRanked` here is
+// the TRUE saved priority order (top = highest/winning), not pgpRankedDisplayOrder's own checked-
+// first visual regrouping -- a spreadsheet reference for "what actually won" should reflect
+// modrules.json itself, not this editor's own display convenience.
+$g('pgpatcherBuildingExportCsvBtn').addEventListener('click', () => {
+  const total = pgpRanked.length;
+  const rows = [['Priority', 'Common Name', 'File Name']];
+  pgpRanked.forEach((name, idx) => {
+    const mod = pgpModsByName.get(name);
+    rows.push([total - idx, (mod && mod.friendlyName) || '', name]);
+  });
+  const csv = rows.map((row) => row.map(pgpCsvField).join(',')).join('\r\n') + '\r\n';
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = el('a', { href: url, download: `pgpatcher-priority-order-${stamp}.csv` });
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 });
 
 // ---------- Idle screen ----------

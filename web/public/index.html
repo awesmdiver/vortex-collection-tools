@@ -308,6 +308,7 @@
         <div class="home-card__open">Open <span>→</span></div>
       </button>
       <button class="home-card__star" data-pin-key="duplicateversions" title="Pin to top">☆</button>
+      <a class="home-card__premium-badge" href="https://www.nexusmods.com/premium" target="_blank" rel="noopener">N</a>
     </div>
     <div class="home-card-wrap" data-section="homeSectionUtilities">
       <button class="home-card" data-area="pgpatcher" data-tool-id="pgpatcher">
@@ -4941,10 +4942,34 @@
     </div>
 
     <div id="pgpatcherBuildingSuccess" class="hidden">
-      <div class="pgp-build-success__banner">&#9989; Yep, it's built &mdash; happy gaming!</div>
+      <!-- Standard callout shape (2026-09-06 fix, director's own catch: this used to be a one-off
+           centered/oversized banner, not this project's own established callout look -- every other
+           success banner in this app, e.g. ucv2ApplyResultSuccessBanner, is a plain left-justified
+           .callout--success with a title + body sentence, not a custom class). Given an id so
+           pgpDeployAll can hide it once deploy actually succeeds -- director's own explicit call:
+           the deploy-complete banner below REPLACES this one rather than stacking two different
+           "complete" messages at once. -->
+      <div class="callout callout--success" id="pgpatcherPatchCompleteBanner">
+        <div class="callout__title">🎉 Patch Complete!</div>
+        <p>Your PGPatcher output is ready to be deployed in Vortex. Deploy your changes and enjoy the game!</p>
+      </div>
       <div class="callout callout--warning hidden" id="pgpatcherOneMoreStep">
         <div class="callout__title">One more step in Vortex</div>
         <p>DynDoLOD.esp and/or PGPatcher's previous output are still disabled. Enable them in Vortex, then <strong>Deploy</strong>, so your new output is actually live in-game.</p>
+      </div>
+
+      <!-- Proactive Deploy step (2026-09-06) -- a fresh build's own new files are never live in-game
+           until a real Vortex deploy links them, so this shows after EVERY successful build, not just
+           the reactive "would you like to enable and deploy" confirm above (that one only ever fires
+           when this session had to disable an ALREADY-registered output mod to build in the first
+           place -- a genuinely first build has nothing to react to, so it needed its own proactive
+           prompt). Same real "current deploy activity UI" this tool already uses just below
+           (#pgpatcherDeployAllProgress/#pgpatcherDeployAllDone, driven by pgpDeployAll()) -- clicking
+           Deploy here calls that exact same function, not a second copy of the same idea. -->
+      <div class="callout callout--info hidden" id="pgpatcherDeployPending">
+        <div class="callout__title">🚀 Build complete — one step left</div>
+        <p>Your new output is built and registered with Vortex, but your game can't see it yet. Deploy your mods to finish.</p>
+        <div class="row-actions"><button class="btn btn--primary btn--small" id="pgpatcherDeployBtn">Deploy →</button></div>
       </div>
 
       <!-- Shown when this session's own pgpHandleReenableOffers left something still disabled --
@@ -4961,12 +4986,35 @@
         <p class="muted" id="pgpatcherDeployAllPhase">Starting&hellip;</p>
       </div>
       <div id="pgpatcherDeployAllDone" class="callout callout--success hidden">
-        <div class="callout__title">Deploy complete</div>
-        <p>PGPatcher's new output is enabled and live in Vortex.</p>
+        <div class="callout__title">🎉 Deployment Complete</div>
+        <p>PGPatcher's new output is enabled and live in Vortex. You're all set to play!</p>
       </div>
 
-      <div class="pgp-build-success__actions">
+      <!-- row-actions -- same right-justified action-row convention used everywhere else in this
+           project (e.g. ucv2DeployPending's own Deploy button), replacing this screen's own
+           one-off centered .pgp-build-success__actions. -->
+      <div class="row-actions">
+        <button class="btn btn--ghost" id="pgpatcherBuildingExportCsvBtn" title="Download the final priority order as a CSV -- priority, Vortex's common name, and the file name">&#11015; Download .csv</button>
         <button class="btn btn--primary" id="pgpatcherBuildingBackToEditorBtn">Restart</button>
+      </div>
+    </div>
+
+    <!-- Third state alongside Progress/Success above (2026-09-06 fix, director's own catch: a failed
+         build used to silently bounce back to the Editor screen underneath the shared #pgpatcherError
+         banner, so the warning READ as belonging to the sort page instead of the "final page" this
+         whole view exists to be the destination for -- see this view's own top comment). Unlike a
+         genuine success, nothing here actually changed in Vortex, so there's no "the mod list could be
+         stale" reason to force a full reset -- the existing Ranked/New Mods state the director was
+         just working on is still perfectly valid, so this offers an explicit way BACK to it instead
+         (pgpatcherBuildingFailureBackBtn), rather than reusing pgpatcherBuildingBackToEditorBtn's own
+         deliberately-a-fresh-session semantics. -->
+    <div id="pgpatcherBuildingFailure" class="hidden">
+      <div class="callout callout--critical">
+        <div class="callout__title">Build failed</div>
+        <p>See the error above for what went wrong. Nothing was lost -- your existing setup here is untouched.</p>
+      </div>
+      <div class="row-actions">
+        <button class="btn btn--primary" id="pgpatcherBuildingFailureBackBtn">Back to Editor</button>
       </div>
     </div>
   </div>
@@ -5000,9 +5048,13 @@
           <button class="pgp-link-btn" id="pgpatcherRankedInvertBtn">Invert selection</button>
           <button class="pgp-link-btn" id="pgpatcherRankedClearSelBtn">Clear selection</button>
           <span class="pgp-selcount" id="pgpatcherRankedSelectionCount"></span>
+          <!-- Real complaint, live (2026-09-06, ported to ModruleSync's own sort screen first): no
+               way to bulk-check/filter to unchecked rows, and one buried mid-list is easy to miss
+               without scrolling the whole panel. A small at-a-glance count is the simplest fix. -->
+          <span class="pgp-unchecked-warning hidden" id="pgpatcherRankedUncheckedWarning"></span>
           <div class="pgp-toolbar__sep"></div>
           <button class="pgp-link-btn" id="pgpatcherRankedCutBtn" title="Cut the selected mod(s) -- search for where you want them, select a mod, then Paste before it">&#9986; Cut</button>
-          <button class="pgp-link-btn" id="pgpatcherRankedPasteBtn" title="Select a mod first, then Paste inserts here, right before it" disabled>&#128203; Paste</button>
+          <button class="pgp-link-btn hidden" id="pgpatcherRankedPasteBtn" title="Select a mod first, then Paste inserts here, right before it" disabled>&#9112; Paste</button>
           <div class="pgp-toolbar__sep"></div>
           <button class="pgp-link-btn" id="pgpatcherRankedExportBtn" title="Download this list as a CSV -- rank, mod name, shader">&#11015; Export CSV</button>
           <label class="pgp-conflict-toggle" for="pgpatcherConflictHighlightToggle" title="Select a mod to inspect its conflicts. Conflicting mods glow green if the selected mod wins the overwrite, or red if it loses. Use this to quickly sanity-check your load order before building.">
@@ -5054,7 +5106,7 @@
         Log weight-variant mesh mismatches as warnings
       </label>
       <button class="btn btn--ghost" id="pgpatcherStartOverBtn">&#10005; Start over</button>
-      <button class="btn btn--ghost" id="pgpatcherReloadBtn" title="Starts over from scratch -- re-reads everything fresh from PGPatcher (a real reload, not just a display refresh). Use this if you changed mods in Vortex or settings in PGPatcher since opening this list.">&#8635; Reset</button>
+      <button class="btn btn--ghost" id="pgpatcherReloadBtn" title="Puts this list back to exactly how it looked when you loaded it, undoing any changes you've made since -- instant, no re-scan. If mods changed in Vortex or PGPatcher's own settings since you opened this, use Start over instead.">&#8634; Revert Changes</button>
       <button class="btn btn--ghost" id="pgpatcherSaveBtn" title="Writes your order to modrules.json -- backs up the original first">&#128190; Save (Apply)</button>
       <button class="btn btn--primary" id="pgpatcherBuildBtn" title="Saves your order, then runs the real PGPatcher build -- generates the actual output">&#128295; Build (Okay)</button>
     </div>
@@ -5085,10 +5137,10 @@
   <div id="pgpatcherModruleSyncModal" class="modal-overlay hidden">
     <div class="modal modal--wide">
       <h2>&#128279; Merge priorities with ModruleSync</h2>
-      <p id="pgpatcherModruleSyncIntro">All saved! Now let's merge your file with the collection curator's priority file on ModruleSync, then bring the finished result right back here.</p>
+      <p id="pgpatcherModruleSyncIntro">All saved! We've also downloaded a ModruleSync-ready copy of your list to your Downloads folder. Now let's merge it with the collection curator's priority file on ModruleSync, then bring the finished result right back here.</p>
       <ul class="step-list">
         <li><span class="step-num">1</span><span>Open <a href="https://awesmdiver.github.io/modrule-sync/" target="_blank" rel="noopener noreferrer">ModruleSync</a> in your browser.</span></li>
-        <li><span class="step-num">2</span><span>Upload your freshly saved file as <strong>Your file</strong>, and the collection's priority file as <strong>Author's file</strong>.</span></li>
+        <li><span class="step-num">2</span><span>Upload the file we just downloaded (<code>modrulesync-input-&hellip;.json</code>) as <strong>Your file</strong>, and the collection's priority file as <strong>Author's file</strong>.</span></li>
         <li><span class="step-num">3</span><span>Review the match report, confirm anything flagged, and download your merged file.</span></li>
         <li><span class="step-num">4</span><span>Head back here and click <strong>Import merged file&hellip;</strong> below to load it in.</span></li>
       </ul>

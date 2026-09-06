@@ -85,6 +85,25 @@ function tail(text, lines) {
     return parts.slice(-lines).join('\n');
 }
 
+// The real "what went wrong" text for a failed pgtools run (queue: pgpatcher-real-error-empty) --
+// confirmed real bug, live: every "Real error:" message came back BLANK on a genuine pgtools
+// failure. Root cause: pgtools never configures its own spdlog sink (PGTools/src/main.cpp only
+// calls set_pattern/set_level), so it falls back to spdlog's own default logger, which writes EVERY
+// level -- including the spdlog::critical/error line that actually explains a failure -- to
+// STDOUT, not stderr (confirmed reading PGLib/src/util/Logger.cpp and PGTools/src/main.cpp
+// directly; this project's own onLine progress-parsing already only ever reads child.stdout, for
+// the same reason). Both call sites here were tailing `stderr`, which pgtools essentially never
+// writes to on its own -- only a hard native crash (an unhandled C++ exception's own terminate()
+// handler) would ever put anything there. So: stdout is the primary source, stderr is appended
+// only if it actually has content, covering that crash case too without ever showing an empty
+// "Real error:" again for an ordinary logged failure.
+function tailProcessOutput(stdout, stderr, lines) {
+    const out = tail(stdout, lines);
+    const err = stderr.trim() ? tail(stderr, lines) : '';
+    if (out && err) return `${out}\n${err}`;
+    return out || err || '(pgtools exited with no output)';
+}
+
 // Turns pgtools' own real spdlog lines into live progress events for /load -- confirmed by reading
 // PGLib's actual source (PGModManager.cpp, PGDirectory.cpp, PGPatcher.cpp, TaskTracker.cpp), not
 // guessed from the GUI. No progress-callback hook is wired up by PGTools itself today (the plumbing
@@ -506,6 +525,30 @@ function isPgpatcherOutputDeployed(skyrimDataDir) {
     return fs.existsSync(path.join(skyrimDataDir, 'ParallaxGen_Diff.json'));
 }
 
+// Builds { canonicalModName: vortexCommonName } for every mod Vortex currently knows about, keyed
+// the same canonical way PGModManager itself derives a mod's name from a Vortex staging folder (see
+// ensureOutputModRegisteredAndEnabled's own header comment for the exact suffix-stripping regex and
+// why it matches). Used by /load to attach `friendlyName` to each pgtools-reported mod, once, at load
+// time -- see prompts/handoff-latest.md's own scoping writeup this implements. The congrats screen's
+// own CSV export reads that same attached field back off pgpModsByName client-side rather than
+// calling this again. Same customFileName/modName/name fallback chain already established across
+// this codebase for "Vortex's own display name for a mod" (e.g. save-cleaner-routes.js).
+async function buildVortexCommonNameMap() {
+    const allMods = await helperClient.getAllMods();
+    if (!allMods || !allMods.mods) return {};
+    const vortexSuffixRe = /-[0-9]+-.*/;
+    const names = {};
+    for (const mod of Object.values(allMods.mods)) {
+        const installPath = (mod && mod.installationPath) || '';
+        if (!installPath) continue;
+        const canonicalName = installPath.replace(vortexSuffixRe, '');
+        const attrs = (mod && mod.attributes) || {};
+        const commonName = attrs.customFileName || attrs.modName || attrs.name || '';
+        if (commonName) names[canonicalName] = commonName;
+    }
+    return names;
+}
+
 async function resolveOutputMod(outputDir) {
     const folderName = path.basename(outputDir);
     const allMods = await helperClient.getAllMods();
@@ -516,6 +559,54 @@ async function resolveOutputMod(outputDir) {
         if (installPath === folderName) return { modId, enabled: enabledSet.has(modId) };
     }
     return null;
+}
+
+// Real gap found live (2026-09-06): a genuinely first-ever build writes real output files to
+// settings.outputDir, but nothing in this file ever checked whether Vortex actually knows about that
+// folder as a mod at all, or whether it's enabled -- the congrats screen's own "would you like to
+// enable and deploy" confirm (outputModPendingReenable, above) only ever fires for a mod that's
+// ALREADY registered and got disabled THIS session; resolveOutputMod returns null for a folder Vortex
+// has simply never heard of, and null silently short-circuits every caller that checks it. So a real
+// first build produced correct output on disk with no path at all to getting it live in-game short of
+// the director manually going into Vortex and creating the mod himself.
+//
+// Same create-then-enable shape missing-masters-routes.js's own restore flow already uses for exactly
+// this situation (registering a locally-generated/rebuilt folder as a real Vortex mod) -- confirmed
+// against that route rather than inventing a new shape: `helperClient.createMod(folderName, {id,
+// state: 'installed', type: '', installationPath: folderName, attributes: {name, installTime}})`,
+// then `setModEnabled(folderName, true)`. Director's own call there applies here too: enabled by
+// default, since real output nobody can see isn't really finished. Called ONLY after a build has
+// genuinely succeeded (never on cancel/error -- there's no real output to register yet on those
+// paths). Best-effort: any failure is reported back, not thrown -- it must never block the congrats
+// screen itself or the Deploy button's own separate ability to try.
+async function ensureOutputModRegisteredAndEnabled(outputDir) {
+    const folderName = path.basename(outputDir);
+    try {
+        const resolved = await resolveOutputMod(outputDir);
+        if (resolved) {
+            if (resolved.enabled) return { modId: resolved.modId, justRegistered: false, enabled: true };
+            const enabledOk = await helperClient.setModEnabled(resolved.modId, true);
+            return {
+                modId: resolved.modId, justRegistered: false, enabled: enabledOk,
+                error: enabledOk ? null : "Vortex didn't confirm the mod is enabled -- check the Mods table.",
+            };
+        }
+        const vortexMod = {
+            id: folderName, state: 'installed', type: '', installationPath: folderName,
+            attributes: { name: folderName, installTime: new Date().toISOString() },
+        };
+        const created = await helperClient.createMod(folderName, vortexMod);
+        if (!created) {
+            return { modId: folderName, justRegistered: false, enabled: false, error: "Vortex couldn't register the output as a new mod -- check Vortex's own log." };
+        }
+        const enabledOk = await helperClient.setModEnabled(folderName, true);
+        return {
+            modId: folderName, justRegistered: true, enabled: enabledOk,
+            error: enabledOk ? null : "The output was registered, but Vortex didn't confirm it's enabled -- check the Mods table.",
+        };
+    } catch (e) {
+        return { modId: folderName, justRegistered: false, enabled: false, error: e.message };
+    }
 }
 
 const OUTPUT_MOD_CONFIRM_MESSAGE = 'PGPatcher’s own previous output is still deployed in your Data folder. Disabling it (and redeploying) makes sure this run doesn’t process its own prior output as input — this can take a few minutes. Would you like to disable it and redeploy?\n\nIf not, click Cancel, disable and redeploy directly in Vortex yourself, then click Start again.';
@@ -684,6 +775,15 @@ function createPgpatcherRouter(config) {
         // before any file reading at all, so this project's own gate check happens just as early.
         const settings = requirePgpatcherSettings(cfg, res);
         if (!settings) return;
+        // Real, expected first-time state: a brand-new collection install has no modrules.json yet
+        // at all. Real PGPatcher's own PGModManager::compareMods (pgpatcher-fork) falls through every
+        // tiebreaker to alphabetical order when every mod starts with the same unset priority, and
+        // populates its ONE list with everything, checked, in that order -- there's no separate "new
+        // mods" bucket in the real GUI at all when nothing has ever been ranked. The frontend uses
+        // this flag to match that behavior instead of dumping everything into "New mods" and leaving
+        // Ranked empty (real bug found live, 2026-09-05: Save then failed with "No ranked order was
+        // provided"). Checked BEFORE the real scan runs, since the scan itself never writes this file.
+        const modrulesExisted = fs.existsSync(path.join(cfg.cfgDir, 'modrules.json'));
         // Gate 1 -- before the DynDoLOD and output-mod gates below, both of which drive real Helper
         // writes and can say nothing useful without one. See requireHelperAvailable's own comment.
         if (!(await requireHelperAvailable(res))) return;
@@ -724,7 +824,10 @@ function createPgpatcherRouter(config) {
             // is about to bail out -- re-enable it rather than leave it silently disabled over a
             // "session already busy" collision.
             if (dyndolodDisabledThisRequest) await reenableDyndolod(cfg, true, () => {});
-            return res.status(409).json({ error: 'A load is already in progress.' });
+            return res.status(409).json({
+                error: 'load-already-running',
+                message: 'Process Already Running\n\nAn operation is already in progress. Please wait for the current task to finish.',
+            });
         }
         if (settings.patchers.length === 0) {
             if (dyndolodDisabledThisRequest) await reenableDyndolod(cfg, true, () => {});
@@ -789,7 +892,7 @@ function createPgpatcherRouter(config) {
                     const parsed = parsePgtoolsLine(line);
                     if (parsed) emitIfCurrent(parsed);
                 },
-            }).then(async ({ code, stderr }) => {
+            }).then(async ({ code, stdout, stderr }) => {
                 currentLoadChild = null;
                 // Real bug found live (2026-08-21, director's own report): this used to call
                 // reenableAllIfNeeded() (both DynDoLOD AND the output mod) unconditionally right here,
@@ -812,7 +915,7 @@ function createPgpatcherRouter(config) {
                 if (code !== 0) {
                     const result = await finalizeDyndolodAndOutputMod(cfg, settings, dyndolodDisabledThisRequest, emitIfCurrent);
                     const note = result.dyndolodReenableFailed ? DYNDOLOD_REENABLE_FAILED_NOTE : '';
-                    emitIfCurrent({ type: 'error', message: `pgtools conflicts failed (exit ${code}): ${tail(stderr, 20)}${note}`, done: true, error: true, outputModPendingReenable: result.outputModPendingReenable, dyndolodOfferEnable: result.dyndolodOfferEnable });
+                    emitIfCurrent({ type: 'error', message: `pgtools conflicts failed (exit ${code}): ${tailProcessOutput(stdout, stderr, 20)}${note}`, done: true, error: true, outputModPendingReenable: result.outputModPendingReenable, dyndolodOfferEnable: result.dyndolodOfferEnable });
                     return;
                 }
                 let mods;
@@ -823,6 +926,30 @@ function createPgpatcherRouter(config) {
                     const note = result.dyndolodReenableFailed ? DYNDOLOD_REENABLE_FAILED_NOTE : '';
                     emitIfCurrent({ type: 'error', message: `Couldn't read pgtools' own output: ${e.message}${note}`, done: true, error: true, outputModPendingReenable: result.outputModPendingReenable, dyndolodOfferEnable: result.dyndolodOfferEnable });
                     return;
+                }
+                // Vortex's own "common name" overlay (prompts/handoff-latest.md's own scoping writeup,
+                // director-approved 2026-09-06: tooltip shows the raw name, both panels, CSV shows
+                // both). Display-only -- `mods[i].name` (pgtools' own raw, modrules.json-matching key)
+                // is never touched; `friendlyName` is only ever an ADDITIONAL field the frontend may
+                // choose to show instead, falling back to `name` itself whenever this lookup has
+                // nothing better or isn't reachable at all. Best-effort: /load already required the
+                // Helper to be available (Gate 1 above), so this should almost always succeed here, but
+                // a failure must never fail the whole load over what's purely a cosmetic overlay.
+                try {
+                    const commonNames = await buildVortexCommonNameMap();
+                    // Real bug found live (2026-09-06): this used to only set `friendlyName` when it
+                    // DIFFERED from the raw name (avoiding a pointless "same name" tooltip in the
+                    // panel) -- but that made the CSV export's own Common Name column look broken for
+                    // every mod that's simply never been custom-renamed in Vortex (a blank cell reads
+                    // as "missing data", not "matches the file name"). Always set it whenever Vortex
+                    // actually has a name for this mod; the frontend decides per-surface whether
+                    // showing it is useful (panel: only tooltip when it differs; CSV: always show it).
+                    mods.forEach((m) => {
+                        const friendly = commonNames[m.name];
+                        if (friendly) m.friendlyName = friendly;
+                    });
+                } catch (e) {
+                    // Panels just show the raw name, same as if Vortex were unreachable.
                 }
                 // SUCCESS -- director's own explicit correction (2026-08-21): DynDoLOD.esp should NOT
                 // reenable right here. Even though the flip itself is free (no deploy), reenabling it
@@ -839,6 +966,7 @@ function createPgpatcherRouter(config) {
                     type: 'done',
                     mods,
                     patchers: settings.patchers,
+                    modrulesExisted,
                     done: true,
                     reenableFailedMessage: null,
                     outputModPendingReenable: !!outputModPendingReenableModId,
@@ -864,28 +992,46 @@ function createPgpatcherRouter(config) {
     // is removed, reverting it to genuinely unranked/new. Every mod name in neither list is left
     // completely untouched -- this never has to be the full authoritative list, only what the
     // session actually touched.
-    router.post('/save', (req, res) => {
+    router.post('/save', async (req, res) => {
         const cfg = requireConfigured(config, res);
         if (!cfg) return;
-        const { order, unranked, enabled } = req.body || {};
+        const { order, unranked, enabled, allModNames } = req.body || {};
         if (!Array.isArray(order) || order.length === 0) {
             return res.status(400).json({ error: 'No ranked order was provided.' });
         }
         const enabledMap = enabled && typeof enabled === 'object' ? enabled : {};
 
+        // A missing modrules.json is a real, expected state -- the same "PGPatcher hasn't written one
+        // yet" case requirePgpatcherSettings already treats as normal for settings.json (real bug
+        // found live, 2026-09-05: deleting modrules.json to force a from-scratch regenerate, then
+        // Save here, hard-failed with a raw ENOENT instead of just creating it fresh). Only a genuine
+        // read failure on an EXISTING file (corrupted JSON, permissions) is a real error worth 500ing.
         const modrulesPath = path.join(cfg.cfgDir, 'modrules.json');
         let modrules;
+        let modrulesExisted = true;
         try {
             modrules = JSON.parse(fs.readFileSync(modrulesPath, 'utf8'));
         } catch (e) {
-            return res.status(500).json({ error: `Couldn't read the existing modrules.json: ${e.message}` });
+            if (e.code === 'ENOENT') {
+                modrules = {};
+                modrulesExisted = false;
+            } else {
+                return res.status(500).json({ error: `Couldn't read the existing modrules.json: ${e.message}` });
+            }
         }
 
-        const backupPath = `${modrulesPath}.backup-${backupStamp()}`;
-        try {
-            fs.copyFileSync(modrulesPath, backupPath);
-        } catch (e) {
-            return res.status(500).json({ error: `Couldn't back up modrules.json before saving: ${e.message}` });
+        // Declared here (not inside the if-block) so the response below can always reference it --
+        // real bug found live (2026-09-05): a from-scratch save (no prior file, nothing to back up)
+        // threw a ReferenceError on the response's own `backupPath` reference, surfacing as a raw
+        // "Request failed (500)" even though the write itself had already succeeded.
+        let backupPath = null;
+        if (modrulesExisted) {
+            backupPath = `${modrulesPath}.backup-${backupStamp()}`;
+            try {
+                fs.copyFileSync(modrulesPath, backupPath);
+            } catch (e) {
+                return res.status(500).json({ error: `Couldn't back up modrules.json before saving: ${e.message}` });
+            }
         }
 
         // `enabled` -- the "will this mod actually be patched" toggle the editor now shows (director's
@@ -895,15 +1041,31 @@ function createPgpatcherRouter(config) {
         // whole point of this being a real, savable toggle. Falls back to the previous existing-file-
         // or-default-true behavior only if a name is somehow missing from the payload (defensive; the
         // frontend always sends one for every mod it knows about).
-        const total = order.length;
-        order.forEach((name, index) => {
+        //
+        // Real bug found live (2026-09-06), SECOND pass -- the exact formula, read straight from
+        // ModSortDialog::updateMods (pgpatcher-fork): `if (mod->isEnabled) mod->priority = itemCount
+        // - i;`, where `itemCount` is the FULL Set-Mods list size (every patchable mod PGPatcher
+        // displays, checked AND unchecked together -- our own Ranked + New Mods combined) and `i` is
+        // the mod's position within an "enabled rows first (their own relative order), disabled rows
+        // after (their own relative order)" sequence (getOrderedCachedRows' own doc comment). A
+        // disabled mod's priority line never runs at all -- it keeps whatever priority it already had
+        // (its existing on-disk value, or -1 if PGPatcher has never ranked it before). The FIRST pass
+        // at this fix wrongly used `total = count of ENABLED mods only` as the base, which is why
+        // enabled mods still saved with priorities far too low (196 instead of a real ~1359) --
+        // confirmed directly against a real from-scratch PGPatcher save.
+        const isEnabledFor = (name) => {
             const existing = modrules[name] || {};
             const hasSentEnabled = Object.prototype.hasOwnProperty.call(enabledMap, name);
+            return hasSentEnabled ? !!enabledMap[name] : (existing.enabled !== undefined ? existing.enabled : true);
+        };
+        const itemCount = order.length + (Array.isArray(unranked) ? unranked.length : 0);
+        const enabledFirstOrder = order.filter(isEnabledFor).concat(order.filter((name) => !isEnabledFor(name)));
+        enabledFirstOrder.forEach((name, i) => {
+            const existing = modrules[name] || {};
+            const isEnabled = isEnabledFor(name);
             modrules[name] = {
-                priority: total - index,
-                enabled: hasSentEnabled
-                    ? !!enabledMap[name]
-                    : (existing.enabled !== undefined ? existing.enabled : true),
+                priority: isEnabled ? itemCount - i : (existing.priority !== undefined ? existing.priority : -1),
+                enabled: isEnabled,
                 meshesignored: existing.meshesignored !== undefined ? existing.meshesignored : false,
             };
         });
@@ -924,13 +1086,39 @@ function createPgpatcherRouter(config) {
             }
         }
 
+        // Placeholder entries for every OTHER mod THIS session's own pgtools scan reported -- real
+        // PGPatcher writes an entry (priority: -1) for literally every deployed mod it knows about,
+        // not just the ones with meshes/shaders. Confirmed live, 2026-09-05: real PGPatcher's own
+        // fresh save had 1934 entries, ours had 1228, and the missing 706 were exactly the meshless
+        // ones (animations, quest mods, FOMODs with no meshes at all) this editor's own Ranked/New
+        // panels deliberately never show (that's the whole point of this tool) but the SAVED FILE
+        // still has to carry, to be a byte-for-byte match to what real PGPatcher would produce.
+        //
+        // THIRD pass, sourced from `allModNames` instead of a live Vortex Helper call -- confirmed by
+        // reading PGTools' own conflicts subcommand (main.cpp): it already serializes pgmm.getModsBy
+        // Priority(), which is EVERY mod populateModFileMapVortex found, meshless ones included --
+        // `hasMeshes`/`shaders` are just extra fields on each entry, not a pre-filter. So the frontend
+        // already had this exact list in `pgpModsByName` from THIS load, no separate live call (and
+        // its own "is Vortex still open" failure mode, and its own scope-matching regex) needed at
+        // all. The one prior attempt that DID call the Helper first pulled from every mod Vortex has
+        // ever tracked regardless of deployment state (4364 entries vs. a real 1934), then a second
+        // pass filtered to `enabledModKeys` -- both problems disappear by construction using pgtools'
+        // own already-correctly-scoped list instead.
+        if (Array.isArray(allModNames)) {
+            for (const name of allModNames) {
+                if (!Object.prototype.hasOwnProperty.call(modrules, name)) {
+                    modrules[name] = { priority: -1, enabled: false, meshesignored: false };
+                }
+            }
+        }
+
         try {
             fs.writeFileSync(modrulesPath, JSON.stringify(modrules, null, 2));
         } catch (e) {
             return res.status(500).json({ error: `Couldn't write modrules.json: ${e.message}` });
         }
 
-        res.json({ backupPath, modCount: total });
+        res.json({ backupPath, modCount: itemCount });
     });
 
     // ModruleSync import-back (design/mockup-pgpatcher-modrulesync-import.html, screen 2's "Import
@@ -1250,7 +1438,7 @@ function createPgpatcherRouter(config) {
                         : '';
                     emitIfCurrent({
                         type: 'error',
-                        message: `⚠️ The build failed (exit ${code}).${backupNote}${note} Real error: ${tail(stderr, 20)}`,
+                        message: `⚠️ The build failed (exit ${code}).${backupNote}${note} Real error: ${tailProcessOutput(stdout, stderr, 20)}`,
                         done: true,
                         error: true,
                         outputModPendingReenable: result.outputModPendingReenable,
@@ -1267,6 +1455,14 @@ function createPgpatcherRouter(config) {
                 // reminder applies, since the risk (new output not actually live) is identical either
                 // way. See finalizeDyndolodAndOutputMod's own header comment for the full writeup.
                 const result = await finalizeDyndolodAndOutputMod(cfg, settings, dyndolodDisabledThisRequest, emitIfCurrent);
+                // Only when the OTHER path above isn't already handling it -- outputModPendingReenable
+                // covers "this mod already existed and is disabled", which still needs the director's
+                // own confirm (a real deploy, not something to do silently); this covers the gap that
+                // confirm never could: a folder Vortex has never heard of at all. See this function's
+                // own header comment.
+                const outputModStatus = result.outputModPendingReenable
+                    ? null
+                    : await ensureOutputModRegisteredAndEnabled(settings.outputDir);
                 emitIfCurrent({
                     type: 'done',
                     outputDir: settings.outputDir,
@@ -1276,6 +1472,7 @@ function createPgpatcherRouter(config) {
                     reenableFailedMessage: result.dyndolodReenableFailed ? DYNDOLOD_REENABLE_FAILED_NOTE.trim() : null,
                     outputModPendingReenable: result.outputModPendingReenable,
                     dyndolodOfferEnable: result.dyndolodOfferEnable,
+                    outputModStatus,
                 });
             }).catch(async (e) => {
                 currentBuildChild = null;

@@ -196,7 +196,7 @@ Once installed, supported tools detect the Helper automatically — no app resta
 ---
 
 * **Q: Does this tool modify my game save files?**
-  > **No.** The app only interacts with your mod staging folder, archive downloads, and Vortex's own settings. It never touches your game saves.
+  > **Only if you're using Save Cleaner — and only when you explicitly tell it to.** Save Cleaner is the single exception: its whole job is opening a specific save file you pick, finding orphaned Papyrus script data left behind by removed mods, and clearing it out. It never runs automatically or in the background, and it always creates a real backup of your save file before touching anything. Every other tool in the app (Rebuild Collection, Update Collection, Rules Generator, Merge Plugins, etc.) strictly touches your mod staging folder, downloaded archives, and Vortex's own settings — they never touch your game saves.
 
 ---
 
@@ -211,7 +211,13 @@ Once installed, supported tools detect the Helper automatically — no app resta
 ---
 
 * **Q: What if I don't have a Nexus Premium account?**
-  > **All tools still work.** Missing archives simply need to be downloaded through the Nexus website and dropped into Vortex manually. Automatic background downloads require Nexus Premium due to Nexus API limits.
+  > **You can still use the app!** Just like Vortex itself, automated background downloads require Nexus Premium due to Nexus API limits.
+  >
+  > Without Premium, five specific tools won't be able to download archives automatically: **Rebuild Collection** (fetching missing archives), **Update Collection** (fetching missing archives during updates), **File Retriever** (fetching specific archives from Nexus), **Missing Masters** (the "Rebuild This Mod" action), and **Merge History** (the Restore/Rebuild action).
+  >
+  > For all five, the app simply skips the automated download and gives you a clear manual fallback instead — just grab the archive from the Nexus website and drop it into Vortex yourself.
+  >
+  > You'll spot these tools on the Home page by the small round orange **N** badge in the bottom-right corner of their card (hovering over it shows *"Works best with Nexus Premium"*, and clicking it takes you directly to [nexusmods.com/premium](https://www.nexusmods.com/premium)). Every other tool that doesn't touch Nexus downloads is completely unaffected.
 
 ---
 
