@@ -35,6 +35,7 @@ A collection of focused utilities rounds out the workspace — clearing leftover
 
 * **Every tool in one place:** The app opens to a clean Home page with a card for each tool. Pin your favorites to the top, see exactly where you are with clear breadcrumbs, and hop back Home in a single click.
 * **Organized settings:** Settings are grouped neatly by category in a sidebar instead of buried in a giant endless page. Pin your most frequent settings just like tool cards.
+* **Logs vs. App Data:** Two clear places instead of one tangled folder — a Logs folder for safe-to-delete troubleshooting files (the app log, crash reports), and an App Data folder for what the tools actually remember (Rebuild Collection reports, Cycle Helper history, your Mod Exceptions list, and more). Settings shows exactly what's in each before you delete anything.
 
 ### 🧰 Main Tools
 
