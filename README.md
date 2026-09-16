@@ -1,3 +1,5 @@
+![License](https://img.shields.io/badge/License-Source--available-lightgrey.svg) ![Skyrim](https://img.shields.io/badge/Skyrim-SE%2FAE-blue.svg) ![Fallout 4](https://img.shields.io/badge/Fallout-4-brightgreen.svg) ![Starfield](https://img.shields.io/badge/Starfield-supported-blueviolet.svg)
+
 # Vortex Collection Tools
 
 ![Vortex Collection Tools](assets/readme-banner.png)
