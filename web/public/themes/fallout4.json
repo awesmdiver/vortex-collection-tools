@@ -49,6 +49,14 @@
       "heroBody": "The Institute doesn't build a synth from one giant piece — dozens of separate, purpose-built components get compressed, synthesized, and integrated into a single unified frame, indistinguishable from something that was always whole. Your plugin count works the same way: a pile of small, individually-necessary mods, each taking up its own load-order slot. This tool does what the Institute does with raw components — folds several into one clean, finished unit, at a fraction of the original footprint.",
       "cardDesc": "Synthesize many plugins into one unified file — reclaim load-order slots without touching xEdit."
     },
+    "add-mods-to-collections": {
+      "name": "RobCo Batch Manifest Protocol",
+      "emoji": "📋",
+      "function": "Bulk Collection Editor",
+      "heroTitle": "RobCo Batch Manifest Protocol",
+      "heroBody": "RobCo's own terminals never processed requisitions one line at a time when a batch job could clear the whole queue in a single pass — that's the entire point of a manifest protocol. This tool runs your own collections the same way: queue mods in or out of as many lists as you need, submit once, and let the batch job clear the whole stack. Nothing gets requisitioned or decommissioned on the install side — only the manifest itself changes.",
+      "cardDesc": "Runs your collection edits as one batch job instead of Vortex's one-line-at-a-time requisition queue."
+    },
     "rebuild": {
       "name": "Project Purity",
       "emoji": "💧",
@@ -229,7 +237,7 @@
     "duplicate-version-cleanup": {
       "name": "RobCo Revision Arbitration",
       "emoji": "💾",
-      "function": "Duplicate Version Cleanup",
+      "function": "Cleanup Duplicates",
       "heroTitle": "RobCo Revision Arbitration",
       "heroBody": "Mod updates frequently leave retired version records cluttering your Pip-Boy dropdowns long after you've moved on to newer files. This utility identifies orphaned builds versus versions actively required by other collections, then executes a fresh download and reinstall to leave you with one working copy.",
       "cardDesc": "Arbitrates duplicate mod version entries down to a single clean reinstallation while keeping active variants intact."

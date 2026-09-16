@@ -13,7 +13,23 @@ const rmfState = {
   selected: new Set(), // row index
   eventSource: null,
   extractEventSource: null,
+  // "Rebuild Missing Files: download missing archives automatically during the scan" (2026-09-14):
+  // { enabled, premium } from the scan's own archiveAutoDownload result -- premium is null until the
+  // scan actually needed to check (nothing eligible this scan, or the setting's off). Read by
+  // rmfShowDownloadArchiveButton() below; premium===false is the ONLY case that hides the button (see
+  // its own comment).
+  archiveAutoDownload: { enabled: false, premium: null },
 };
+
+// The Download Archive button is hidden only when auto-download is ON and this account was just
+// confirmed NOT Premium -- Nexus's API can't do the download either way, so the manual button would
+// just fail identically to the automatic attempt that already ran. Every other case keeps it: the
+// setting's off (never attempted), or Premium but this specific row still failed (a real network/
+// Nexus error) or was never eligible (AMBIGUOUS -- needs a human pick) -- all real fallback cases the
+// director's own enumeration keeps the button for.
+function rmfShowDownloadArchiveButton() {
+  return !(rmfState.archiveAutoDownload.enabled && rmfState.archiveAutoDownload.premium === false);
+}
 
 // Real 3rd stage (2026-08-25) -- .stepnote's 2-step badge no longer fit once "Done" became a real,
 // distinct state (see DESIGN.md's own "reach for the full stepper once a tool has 3+ stages" rule).
@@ -346,11 +362,22 @@ $g('rmfScanBtn').addEventListener('click', rmfStartScan);
 // so there's nothing to undo server-side -- closing the client's own EventSource is enough to make
 // "Cancel" genuinely mean cancel.
 $g('rmfBackToPickerBtn').addEventListener('click', () => {
+  // "Back to Collections also starts clean" (2026-09-17, director's own reversal of 8c5d3e6): once
+  // the run is actually Done (rmfDoneActions is only ever shown in that state -- see
+  // rmfSetBackBtnState's own 'done' branch), this same shared button now does a full reset -- no
+  // collections picked, cart bar empty, filters back to default, fresh collection list -- instead of
+  // quietly keeping the previous picks checked. Cancel (mid-scan) and Back (reviewing results) below
+  // are UNCHANGED: those still preserve the picks so the user can adjust and re-scan, which is a
+  // genuinely different action from "I'm done, start over."
+  if (!$g('rmfDoneActions').classList.contains('hidden')) { rmfResetOnEntry(); return; }
   if (rmfState.eventSource) { rmfState.eventSource.close(); rmfState.eventSource = null; }
   $g('rmfScanLoading').classList.add('hidden');
   $g('rmfReportView').classList.add('hidden');
   $g('rmfPickerView').classList.remove('hidden');
   rmfSetBackBtnState('results');
+  // Step 1 (the picker) has no Cancel/Back of its own -- see rmfSetBackBtnState's own comment on why
+  // this is a separate toggle from the label/class/placement it already handles.
+  $g('rmfBackToPickerBtn').classList.add('hidden');
   rmfRenderStepper(0);
 });
 
@@ -360,19 +387,51 @@ $g('rmfBackToPickerBtn').addEventListener('click', () => {
 // "pretty sure we removed that and use back buttons now") with this app's standard nav-button
 // convention -- plain ghost "Back" matching frBackBtn/chHistoryCancelBtn/ucv2CancelReviewBtn, and
 // "Back to Collections" (btn--primary) matching ucv2ApplyResultBackBtn exactly for the completed-
-// result state. Label/class only; the click handler above already does the real work (close the
-// EventSource) regardless of which state is currently showing.
+// result state. The click handler above already does the real work (close the EventSource)
+// regardless of which state is currently showing.
+//
+// "tighter stepper row, standard Done banner" (2026-09-14): this ONE real button element now also
+// PHYSICALLY MOVES between two homes, not just relabels -- #rmfStepperRow's own row (scanning/
+// results, right-aligned via the scoped `.sync-stepper-row #rmfBackToPickerBtn` CSS override) or
+// #rmfDoneActions (done, underneath whichever success banner/Deploy prompt is showing, DESIGN.md's
+// own bottom `.actions` row). appendChild on an element already in the DOM relocates it without
+// losing its listener -- the single addEventListener above keeps working regardless of which
+// container currently holds it. Visibility on step 1 (the picker, no Cancel/Back at all) is a
+// SEPARATE concern handled at each of the 3 view-transition points instead of here, since this
+// function only ever runs while already on screen 2 -- see rmfResetOnEntry/the click handler above/
+// rmfStartScan below.
 function rmfSetBackBtnState(state) {
   const btn = $g('rmfBackToPickerBtn');
+  const doneActions = $g('rmfDoneActions');
   if (state === 'scanning') {
     btn.textContent = 'Cancel';
     btn.className = 'btn btn--ghost btn--small';
+    $g('rmfStepperRow').appendChild(btn);
+    doneActions.classList.add('hidden');
   } else if (state === 'done') {
     btn.textContent = 'Back to Collections';
     btn.className = 'btn btn--primary';
+    doneActions.appendChild(btn);
+    doneActions.classList.remove('hidden');
   } else {
+    // 'results' -- "Back sits next to Continue" (2026-09-16, director: "it's lost up there, didn't
+    // even see it"). DESIGN.md's own button-row rule 4: with a selection bar, Back goes immediately
+    // left of the bar's own primary action on its right side, never alone in the stepper row.
     btn.textContent = 'Back';
     btn.className = 'btn btn--ghost btn--small';
+    const selectionBar = $g('rmfSelectionBar');
+    if (selectionBar.classList.contains('hidden')) {
+      // Defensive fallback, per DESIGN.md's own rule: Scan Results reached with no selection bar
+      // showing puts Back in the bottom .actions row instead of stranding it in the stepper row.
+      // Shouldn't occur today -- 'results' state and the selection bar's own visibility are both
+      // gated on the SAME rmfHasSelectableRows() check -- but never silently regress to the old
+      // lost-up-top placement if that invariant ever changes.
+      doneActions.appendChild(btn);
+      doneActions.classList.remove('hidden');
+    } else {
+      $g('rmfSelectionBarRight').insertBefore(btn, $g('rmfExtractSelectedBtn'));
+      doneActions.classList.add('hidden');
+    }
   }
 }
 
@@ -388,15 +447,32 @@ let rmfAnyRestoreThisRun = false;
 // Groups the Done-state-only UI changes that always move together once hasActionable flips to false
 // (director's own catches, 2026-09-01): the live remaining-count stat grid and the Missing/Ignored/
 // Show-all filter pills both go stale/misleading once nothing is left to act on, so both hide; the
-// nav button switches to "Back to Collections"; and the new real Deploy prompt shows, but ONLY when
-// this run actually restored something (see rmfAnyRestoreThisRun above) -- never for a plain "nothing
-// was missing" landing. Reverts every one of these the moment `done` is false again (still reviewing).
-function rmfSetDoneUI(done, offerDeploy) {
+// nav button switches to "Back to Collections"; and the real Deploy prompt shows. Reverts every one
+// of these the moment `done` is false again (still reviewing).
+//
+// Deploy now shows on EVERY Done landing (2026-09-14, "the same Deploy step on every Done screen"),
+// not just after a real restore -- the director may not have deployed since an earlier rebuild or
+// update. `restoredThisRun` (renamed from the old offerDeploy, which used to gate VISIBILITY -- see
+// rmfAnyRestoreThisRun's own header comment) now only picks which of the two title/body variants
+// shows: a real restore gets "one step left" with the explanatory body; an all-clear scan (nothing
+// to restore) gets the plain title-only prompt, since nothing here changed staging this run.
+function rmfSetDoneUI(done, restoredThisRun) {
   $g('rmfStatGrid').classList.toggle('hidden', done);
   $g('rmfSummaryBadges').classList.toggle('hidden', done);
   rmfSetBackBtnState(done ? 'done' : 'results');
-  $g('rmfDeployPending').classList.toggle('hidden', !(done && offerDeploy));
-  if (!done) {
+  $g('rmfDeployPending').classList.toggle('hidden', !done);
+  if (done) {
+    const title = $g('rmfDeployPendingTitle');
+    const body = $g('rmfDeployPendingBody');
+    if (restoredThisRun) {
+      title.textContent = '🚀 One step left';
+      body.textContent = "Your files are restored in staging, but your game can't see them yet. Deploy your mods to finish.";
+      body.classList.remove('hidden');
+    } else {
+      title.textContent = '🚀 Deploy your mods';
+      body.classList.add('hidden');
+    }
+  } else {
     $g('rmfDeployProgress').classList.add('hidden');
     $g('rmfDeployResult').classList.add('hidden');
   }
@@ -405,6 +481,10 @@ function rmfSetDoneUI(done, offerDeploy) {
 // ---------- Scan (Screen 2) ----------
 
 async function rmfStartScan() {
+  // Safety net only -- rmfScanBtn is disabled whenever rmfState.picked is empty (rmfUpdatePickCount),
+  // but stay on step 1 rather than switching to a "Scanning..." screen with nothing to scan if this
+  // is ever reached with zero picks anyway (e.g. the disabled-state getting out of sync again).
+  if (rmfState.picked.size === 0) return;
   $g('rmfPickerView').classList.add('hidden');
   $g('rmfReportView').classList.remove('hidden');
   $g('rmfResults').classList.add('hidden');
@@ -414,9 +494,11 @@ async function rmfStartScan() {
   $g('rmfActionsHelp').classList.add('hidden');
   $g('rmfScanError').classList.add('hidden');
   $g('rmfRefreshFailuresCallout').classList.add('hidden');
+  $g('rmfNotPremiumCallout').classList.add('hidden');
   $g('rmfScanLoading').classList.remove('hidden');
   $g('rmfScanLoadingText').textContent = 'Starting scan…';
   rmfSetBackBtnState('scanning');
+  $g('rmfBackToPickerBtn').classList.remove('hidden'); // hidden on step 1 (the picker) -- see rmfResetOnEntry
   rmfAnyRestoreThisRun = false; // a fresh scan starts a new run -- see its own header comment
   rmfRenderStepper(1, true);
 
@@ -452,12 +534,21 @@ function rmfHandleScanEvent(frame) {
     $g('rmfScanLoadingText').textContent = `${frame.name}: refreshing from Nexus…`;
   } else if (frame.type === 'mod-scanned') {
     $g('rmfScanLoadingText').textContent = `${frame.collectionName}: ${frame.index} / ${frame.total} — ${frame.modName}`;
+  } else if (frame.type === 'checking-premium') {
+    // "Rebuild Missing Files: download missing archives automatically during the scan" (2026-09-14)
+    // -- same wording app.js's own PHASE_TEXT uses for Rebuild Collection's identical check.
+    $g('rmfScanLoadingText').textContent = 'Checking Nexus Premium status…';
+  } else if (frame.type === 'downloading-missing-archive') {
+    // Same wording/truncation as app.js's own 'download-progress' phase text for Rebuild Collection
+    // (truncatePhaseName is a plain global function declared in app.js, loaded before this file).
+    $g('rmfScanLoadingText').textContent = `Downloading missing archive (${frame.index}/${frame.total}): ${truncatePhaseName(frame.name)}…`;
   } else if (frame.type === 'scan-complete') {
     $g('rmfScanLoading').classList.add('hidden');
     // No rmfSetBackBtnState call here -- rmfRenderReport below always calls rmfSetDoneUI itself,
     // which sets the real final back-button state (done vs. still reviewing) based on the actual
     // results, superseding any intermediate value this line could set.
     if (rmfState.eventSource) { rmfState.eventSource.close(); rmfState.eventSource = null; }
+    rmfState.archiveAutoDownload = frame.archiveAutoDownload || { enabled: false, premium: null };
     rmfRenderReport(frame.collectionResults, frame.stats, frame.refreshFailures);
   } else if (frame.type === 'scan-error') {
     $g('rmfScanLoading').classList.add('hidden');
@@ -487,13 +578,27 @@ function rmfRenderReport(collectionResults, stats, refreshFailures) {
       refreshFailures.map((f) => `${f.name} (${f.error})`).join('; ');
     $g('rmfRefreshFailuresCallout').classList.remove('hidden');
   }
+  // "Rebuild Missing Files: download missing archives automatically during the scan" (2026-09-14) --
+  // the persistent not-Premium notice, same "shows once, stays up" treatment as the refresh-failures
+  // callout just above and Rebuild Collection's own downloadNotice. Only ever true when the setting is
+  // ON and this scan actually had something eligible to auto-download AND confirmed the account isn't
+  // Premium -- see rmfShowDownloadArchiveButton's own header for why this is the one case (not "setting
+  // off", not "Premium but this row still failed") that changes each row's own action button too.
+  if (rmfState.archiveAutoDownload.premium === false) {
+    $g('rmfNotPremiumCallout').textContent = "Nexus API only allows automated downloads for Premium accounts -- this respects Nexus's ad-supported download model for free users. Download the archive(s) below manually from Nexus, or upgrade to Premium.";
+  }
+  $g('rmfNotPremiumCallout').classList.toggle('hidden', rmfState.archiveAutoDownload.premium !== false);
   for (const c of collectionResults) {
     if (c.error) continue;
     for (const mod of c.modsWithMissing || []) {
       rmfState.rows.push({ kind: 'missing', collectionModId: c.collectionModId, collectionName: c.name, ...mod });
     }
     for (const mod of c.modsArchiveMissing || []) {
-      rmfState.rows.push({ kind: 'archive-missing', collectionModId: c.collectionModId, collectionName: c.name, ...mod });
+      // collectionDomainName: the collection-wide default game domain (missing-files-scan.js's own
+      // scanCollections), used to build a real Nexus "view files" link when this account isn't
+      // Premium -- a mod's OWN domainName (set only when cross-listed under a different game) takes
+      // priority when present, same fallback order resolveAndDownloadArchive's own gameDomain uses.
+      rmfState.rows.push({ kind: 'archive-missing', collectionModId: c.collectionModId, collectionName: c.name, collectionDomainName: c.domainName, ...mod });
     }
     // A mod Ignored in Vortex is never added as a row at all (2026-09-02, director's own direct ask
     // -- "we don't need to show mods that are ignored"). Server already reclassified it out of
@@ -504,6 +609,14 @@ function rmfRenderReport(collectionResults, stats, refreshFailures) {
     // acknowledged tier as modsIgnored above, distinct reason text.
     for (const mod of c.modsExcepted || []) {
       rmfState.rows.push({ kind: 'excepted', collectionModId: c.collectionModId, collectionName: c.name, ...mod });
+    }
+    // "mods it couldn't check show up instead of hiding" (2026-09-14) -- server-side
+    // scanCollections' own new modsUnchecked bucket, surfaced here instead of silently dropped the
+    // way every 'skipped' scanOneMod result used to be. Genuinely needs attention (this tool never
+    // confirmed the mod is actually complete), so it's counted the same way missing/archive-missing
+    // rows are everywhere below -- see rmfHasRowsNeedingAttention().
+    for (const mod of c.modsUnchecked || []) {
+      rmfState.rows.push({ kind: 'unchecked', collectionModId: c.collectionModId, collectionName: c.name, ...mod });
     }
   }
 
@@ -516,47 +629,57 @@ function rmfRenderReport(collectionResults, stats, refreshFailures) {
   // rmfState.rows was LITERALLY empty -- but rows also includes the 'excepted' kind, which is
   // informational-only (its own checkbox is disabled, nothing to select or extract). A
   // collection with nothing actionable left except those still showed the whole active-work UI
-  // (Select All, Extract Selected, the table) for nothing to act on. hasActionable is the real
+  // (Select All, Extract Selected, the table) for nothing to act on. hasSelectable is the real
   // condition for "is there still work to do here" -- trulyEmpty is reserved for the plain
   // "literally nothing at all" case (rmfAllClearCallout).
-  const hasActionable = rmfState.rows.some((r) => r.kind === 'missing' || r.kind === 'archive-missing');
-  const trulyEmpty = rmfState.rows.length === 0;
-  rmfRenderStepper(hasActionable ? 1 : 2);
-  // A fresh scan reaching Done here never has anything of ITS OWN to deploy (offerDeploy false) --
-  // rmfAnyRestoreThisRun was already reset to false at the start of this scan (rmfStartScan), so this
-  // is really just documenting the intent, not relying on incidental ordering.
-  rmfSetDoneUI(!hasActionable, rmfAnyRestoreThisRun);
+  //
+  // REVISED 2026-09-16 ("a Couldn't Check row doesn't strand the finished screen"): the 2026-09-14
+  // fix broadened this SAME check to rmfHasRowsNeedingAttention() so an 'unchecked' row would keep
+  // suppressing the all-clear banner -- but that also meant a scan left with ONLY an 'unchecked' row
+  // (nothing selectable at all) never reached Done: no Deploy panel, a stranded "0 of 0 selected"
+  // selection bar with nothing to select, and the stale pre-shared-Deploy-step wording below. Split
+  // back into two separate concepts (rmfHasSelectableRows/rmfHasRowsNeedingAttention, see their own
+  // header comments) -- this done-transition/visibility check uses ONLY the narrower "selectable"
+  // one; the all-clear-suppression check below still uses the broader one.
+  const { hasSelectable, hasAttention, trulyEmpty } = rmfRefreshResultsVisibility();
   // filesMissing/modsWithMissing only ever count 'missing' rows -- an 'archive-missing' row (its
-  // files can't even be checked yet without the archive) never adds to either. So hasActionable-but-
+  // files can't even be checked yet without the archive) never adds to either. So hasSelectable-but-
   // filesMissing-0 is a real case (archive issues only) and the "0 files are missing across 0 mods"
   // wording was flatly wrong there -- confirmed live 2026-08-25. The per-row "⚠️ {reason}" note and
   // the "N Archive Issue(s)" filter badge above already cover that case, so just skip the summary
   // callout entirely rather than inventing a second banner that duplicates them.
   const showSummary = stats.filesMissing > 0;
-  $g('rmfAllClearCallout').classList.toggle('hidden', !trulyEmpty);
-  $g('rmfSummaryCallout').classList.toggle('hidden', trulyEmpty || (hasActionable && !showSummary));
-  $g('rmfSelectionBar').classList.toggle('hidden', !hasActionable);
-  $g('rmfTableWrap').classList.toggle('hidden', !hasActionable);
-  $g('rmfActionsHelp').classList.toggle('hidden', !hasActionable);
   $g('rmfExtractResultsCallout').classList.add('hidden');
-  if (!trulyEmpty && (!hasActionable || showSummary)) {
-    const summary = $g('rmfSummaryCallout');
-    if (!hasActionable) {
-      // "External Changes" static note removed from here (2026-09-01) -- this branch fires on a
-      // FRESH scan that found nothing missing, so this tool never wrote anything this run; there was
-      // never a real trigger for Vortex's own dialog to begin with (pre-existing bug: the note used
-      // to show here unconditionally even though nothing was restored -- director's own catch).
-      summary.className = 'callout callout--success';
-      summary.innerHTML = '<div class="callout__title">🎉 No Missing Files Detected</div>'
-        + '<p>All mods are complete. No repairs are needed in your staging folder. Open Vortex and click <strong>Deploy Mods</strong> to apply the changes.</p>';
-    } else {
-      summary.className = 'callout callout--warning';
-      summary.innerHTML =
-        `<b>${stats.filesMissing} file${stats.filesMissing === 1 ? '' : 's'}</b> ${stats.filesMissing === 1 ? 'is' : 'are'} missing across ` +
-        `<b>${stats.modsWithMissing} mod${stats.modsWithMissing === 1 ? '' : 's'}</b>. Fixing these only updates your staging folder — ` +
-        `open Vortex and click <strong>Deploy Mods</strong> afterward.`;
-    }
+  const summary = $g('rmfSummaryCallout');
+  if (trulyEmpty || (hasSelectable && !showSummary) || (!hasSelectable && hasAttention)) {
+    // The last branch is the real fix here: nothing selectable, but a Couldn't Check row remains --
+    // never claim "No Missing Files Detected" (or anything else implying total completeness). The
+    // new rmfCouldntCheckCallout (rendered inside rmfRefreshResultsVisibility above) carries that
+    // message instead; this banner just stays out of its way.
+    summary.classList.add('hidden');
+  } else if (!hasSelectable) {
+    // "External Changes" static note removed from here (2026-09-01) -- this branch fires on a
+    // FRESH scan that found nothing missing (and nothing left unchecked either), so this tool never
+    // wrote anything this run; there was never a real trigger for Vortex's own dialog to begin with
+    // (pre-existing bug: the note used to show here unconditionally even though nothing was restored
+    // -- director's own catch).
+    summary.classList.remove('hidden');
+    summary.className = 'callout callout--success';
+    // Points at this tool's own Deploy button below (#rmfDeployPending, now shown on every Done
+    // landing -- 2026-09-14, "the same Deploy step on every Done screen") instead of sending the
+    // director to Vortex directly, consistent with the after-restore "Restoration Complete!"
+    // wording just below in rmfApplyExtractResults.
+    summary.innerHTML = '<div class="callout__title">🎉 No Missing Files Detected</div>'
+      + '<p>All mods are complete. No repairs are needed in your staging folder. Click <strong>Deploy</strong> below if you haven\'t deployed since your last change.</p>';
+  } else {
+    summary.classList.remove('hidden');
+    summary.className = 'callout callout--warning';
+    summary.innerHTML =
+      `<b>${stats.filesMissing} file${stats.filesMissing === 1 ? '' : 's'}</b> ${stats.filesMissing === 1 ? 'is' : 'are'} missing across ` +
+      `<b>${stats.modsWithMissing} mod${stats.modsWithMissing === 1 ? '' : 's'}</b>. Fixing these only updates your staging folder — ` +
+      `open Vortex and click <strong>Deploy Mods</strong> afterward.`;
   }
+  $g('rmfAllClearCallout').classList.toggle('hidden', !trulyEmpty);
   rmfRenderRows();
 }
 
@@ -575,7 +698,130 @@ const RMF_KIND_INFO = {
   // non-severity "acknowledged" tier (grey, informational, not a problem) -- a deliberate, standing
   // opt-out this director set, not something Vortex itself reports.
   excepted: { label: 'Excepted', badgeClass: 'badge--neutral' },
+  // "mods it couldn't check show up instead of hiding" (2026-09-14) -- server-side scanOneMod's own
+  // 'skipped' bucket (an unresolvable install: an ambiguous archive that even the fixed findModRoot
+  // couldn't settle, an Open FOMOD with no recorded choices, or an unhandled FOMOD feature). Warning
+  // color, not critical -- this isn't confirmed-broken the way a 'missing' row is, but it genuinely
+  // needs attention (rmfHasRowsNeedingAttention treats it the same as missing/archive-missing) since
+  // the tool never actually confirmed the mod is complete.
+  unchecked: { label: "Couldn't Check", badgeClass: 'badge--warning' },
 };
+
+// "mods it couldn't check show up instead of hiding" (2026-09-14) -- the single shared definition of
+// "is there still something here the user needs to deal with." Previously this exact condition
+// (missing || archive-missing) was independently duplicated in FOUR places across this file
+// (rmfRenderReport, twice in rmfApplyExtractResults, and rmfDownloadArchive) -- a real risk that a
+// future change (like this one, adding 'unchecked') updates some call sites and misses others, which
+// would let the "No Missing Files Detected" all-clear fire while an unchecked mod still sits there.
+// One function, called everywhere the old inline expression was.
+function rmfHasRowsNeedingAttention() {
+  return rmfState.rows.some((r) => r.kind === 'missing' || r.kind === 'archive-missing' || r.kind === 'unchecked');
+}
+
+// "a Couldn't Check row doesn't strand the finished screen" (2026-09-16) -- a SEPARATE, narrower
+// concept from rmfHasRowsNeedingAttention() above: "is there still something this screen can
+// actually DO" (missing/archive-issue rows -- rmfIsSelectable's own pair, same rows Extract/Download
+// Archive can act on) vs. "is there still something worth telling the user about at all" (that PLUS
+// 'unchecked'). Conflating the two was a real bug the design side's own sandbox review caught: a
+// scan left with only a Couldn't Check row (nothing left to select) never reached the Done screen at
+// all, because the done-transition check was ALSO using the broader needs-attention definition.
+// rmfHasSelectableRows() governs the done transition/selection bar/table/actions-help visibility;
+// rmfHasRowsNeedingAttention() is reserved for ONLY suppressing the all-clear/"No Missing Files
+// Detected" wording, which must stay suppressed even once nothing is selectable.
+function rmfHasSelectableRows() {
+  return rmfState.rows.some(rmfIsSelectable);
+}
+
+// One shared place deciding "reviewing vs. Done" visibility from the CURRENT rmfState.rows --
+// called after every action that can change which rows are left (a fresh scan, an extraction
+// finishing OR erroring out, Add to Exception List). Replaces what used to be four independently
+// duplicated toggle blocks (rmfRenderReport, twice in rmfApplyExtractResults, rmfDownloadArchive) --
+// exactly the kind of drift risk that produced the done-transition bug this task fixes, so this
+// consolidates it into one function instead of trusting every call site to stay in sync by hand.
+// Returns the three flags callers need for their OWN remaining bespoke content (summary banner
+// wording, extract-results wording) so they don't have to recompute them.
+function rmfRefreshResultsVisibility() {
+  const hasSelectable = rmfHasSelectableRows();
+  const hasAttention = rmfHasRowsNeedingAttention();
+  const trulyEmpty = rmfState.rows.length === 0;
+  rmfRenderStepper(hasSelectable ? 1 : 2);
+  // Selection bar's own visibility MUST be settled before rmfSetDoneUI (which relocates
+  // rmfBackToPickerBtn into it via rmfSetBackBtnState('results')) -- that function checks whether
+  // the selection bar is CURRENTLY hidden to decide where Back belongs, so it needs this render's
+  // real answer, not whatever was left over from the previous one.
+  $g('rmfSelectionBar').classList.toggle('hidden', !hasSelectable);
+  $g('rmfTableWrap').classList.toggle('hidden', !hasSelectable);
+  $g('rmfActionsHelp').classList.toggle('hidden', !hasSelectable);
+  rmfSetDoneUI(!hasSelectable, rmfAnyRestoreThisRun);
+  rmfRenderCouldntCheckAttention(!hasSelectable);
+  return { hasSelectable, hasAttention, trulyEmpty };
+}
+
+// "Add to Exception List" (queue: rebuild-missing-hand-pick-exceptions) -- offered on every
+// 'missing'/'archive-missing'/'unchecked' row (real case this exists for: a hand-pick-only FOMOD,
+// e.g. "1DustAdeptArmorSE", where auto-extracting/auto-rebuilding the full archive would install
+// content the user never chose; for an 'unchecked' row specifically, see its own build-actions-cell
+// comment on why this genuinely stops the mod from hitting the resolver again). A ghost btn, not
+// primary -- this is an opt-out action, not the row's main "fix it" action (Extract from Archive/
+// Download Archive keep that spot on a selectable row; an 'unchecked' row has no fix action at all).
+function rmfBuildExceptionBtn(row) {
+  const btn = el('button', { class: 'btn btn--ghost btn--small' }, 'Add to Exception List');
+  btn.addEventListener('click', () => rmfAddException(row, btn));
+  return btn;
+}
+
+// Needs-attention callout for 'unchecked' rows, shown ONLY on the Done screen (nothing left
+// selectable) -- DESIGN.md's own ".rbc-attn-*" pattern (see its "Needs-attention callout" section),
+// same shape Rebuild Collection's own Done-screen attention rows already use. While STILL reviewing
+// (something selectable remains), an 'unchecked' row keeps showing in the normal filterable table
+// instead -- this callout is reserved for the moment that table itself hides, so a Couldn't Check
+// row is never simply invisible.
+function rmfBuildCouldntCheckAttnRow(row, idx) {
+  const actions = [];
+  // Same skipKind gate the main table's own rmfBuildActionsCell uses -- an unhandled-feature/
+  // resolve-error row has no real picker to offer, only a real Open FOMOD does.
+  if (row.skipKind === 'open-fomod') {
+    const installBtn = el('button', { class: 'btn btn--small btn--primary' }, 'Install');
+    installBtn.addEventListener('click', () => rmfInstallFomod(row, idx, installBtn));
+    actions.push(installBtn);
+  }
+  actions.push(rmfBuildExceptionBtn(row));
+  const row2 = el('div', { class: 'rbc-attn-row' }, [
+    el('div', { class: 'rbc-attn-row__main' }, [
+      el('div', { class: 'rbc-attn-row__name' }, row.name),
+      el('div', { class: 'rbc-attn-row__why' }, row.reason || 'This mod could not be checked for missing files.'),
+    ]),
+    el('div', { class: 'rbc-attn-row__actions' }, actions),
+  ]);
+  return row2;
+}
+function rmfRenderCouldntCheckAttention(show) {
+  const callout = $g('rmfCouldntCheckCallout');
+  const uncheckedRows = rmfState.rows
+    .map((row, idx) => ({ row, idx }))
+    .filter(({ row }) => row.kind === 'unchecked');
+  if (!show || uncheckedRows.length === 0) {
+    callout.classList.add('hidden');
+    return;
+  }
+  callout.classList.remove('hidden');
+  const n = uncheckedRows.length;
+  const anyInstallable = uncheckedRows.some(({ row }) => row.skipKind === 'open-fomod');
+  $g('rmfCouldntCheckTitle').textContent = n === 1 ? "⚠️ One mod couldn't be checked" : `⚠️ ${n} mods couldn't be checked`;
+  // Body now matches the real count (singular vs. plural) instead of a static "these mods" line
+  // that misread as several even for one, and points at Install (once it exists for at least one
+  // row here) rather than only ever naming the exceptions list as the sole option.
+  $g('rmfCouldntCheckBody').textContent = n === 1
+    ? (anyInstallable
+      ? `This mod has a FOMOD wizard or another issue the tool couldn't resolve automatically. No files were extracted — click Install to pick your options, or add it to the exceptions list if that's expected.`
+      : `This mod has a FOMOD wizard or another issue the tool couldn't resolve automatically. No files were extracted — check the mod, or add it to the exceptions list if that's expected.`)
+    : (anyInstallable
+      ? `These mods have a FOMOD wizard or another issue the tool couldn't resolve automatically. No files were extracted — click Install where available, or add them to the exceptions list if that's expected.`
+      : `These mods have a FOMOD wizard or another issue the tool couldn't resolve automatically. No files were extracted — check the mods, or add them to the exceptions list if that's expected.`);
+  const list = $g('rmfCouldntCheckList');
+  list.innerHTML = '';
+  for (const { row, idx } of uncheckedRows) list.appendChild(rmfBuildCouldntCheckAttnRow(row, idx));
+}
 
 // A Set of active kinds -- empty shows everything. Multi-select: each badge toggles independently
 // and the shown rows are the UNION of every active kind, not "isolate to just one" (workspace
@@ -600,7 +846,7 @@ function rmfRenderSummaryBadges() {
   for (const row of rmfState.rows) counts[row.kind] = (counts[row.kind] || 0) + 1;
   // Fixed order (missing first -- the category fixable right here) rather than object insertion
   // order, so pills don't reshuffle position as counts change between renders.
-  for (const key of ['missing', 'archive-missing', 'excepted']) {
+  for (const key of ['missing', 'archive-missing', 'unchecked', 'excepted']) {
     if (!counts[key]) continue;
     const info = RMF_KIND_INFO[key];
     const active = rmfKindFilter.has(key);
@@ -716,6 +962,12 @@ function rmfBuildMissingCell(row, idx) {
   if (row.kind === 'excepted') {
     return el('span', { class: 'muted' }, `Not checked — on the ${rmfExceptionsName()} list.`);
   }
+  if (row.kind === 'unchecked') {
+    return el('div', { class: 'detail-cell' }, [
+      el('span', { class: 'status-pill status-pill--warning' }, "Couldn't check"),
+      el('div', { class: 'muted', style: 'margin-top:4px' }, row.reason || 'This mod could not be checked for missing files.'),
+    ]);
+  }
   const wrap = el('div', { class: 'detail-cell' }, [
     el('span', { class: 'status-pill status-pill--critical' }, row.notInstalled ? 'Not installed' : `${row.missing.length} missing`),
   ]);
@@ -749,6 +1001,35 @@ function rmfBuildActionsCell(row, idx) {
     // showing a "here's how to fix it" button next to a row that says "nothing to fix" reads as a
     // contradiction). Left empty rather than a placeholder note -- the mod-name cell's own
     // "⚪ {reason}" note already says why.
+  } else if (row.kind === 'unchecked') {
+    // "Open FOMOD mods get an Install button" (2026-09-17) -- a real Open FOMOD (skipKind ===
+    // 'open-fomod') gets the SAME shared picker Update Collection already uses, primary action,
+    // since this tool can genuinely fix it now rather than only naming the limitation. The OTHER two
+    // 'skipped' reasons (an unhandled FOMOD feature, a genuine resolve error) have no real picker to
+    // offer -- no Extract/Download/Install button for those, same as before this task.
+    if (row.skipKind === 'open-fomod') {
+      const installBtn = el('button', { class: 'btn btn--small btn--primary' }, 'Install');
+      installBtn.addEventListener('click', () => rmfInstallFomod(row, idx, installBtn));
+      actions.appendChild(installBtn);
+    }
+    // "Add to Exception List" is still offered regardless: scanOneMod's own Mod Exceptions check
+    // runs BEFORE install resolution (it's what produces the 'excepted' bucket), so adding an
+    // unresolvable mod here genuinely stops it from hitting the resolver -- and the "Couldn't Check"
+    // row -- again.
+    actions.appendChild(rmfBuildExceptionBtn(row));
+  } else if (row.modId != null && !rmfShowDownloadArchiveButton()) {
+    // Not Premium, and the setting is on -- the automated attempt already ran and failed the same
+    // way a manual click would, so the button here would just be a guaranteed-to-fail dead end
+    // (2026-09-14, director's own case: "the only time Download Archive should show up is if there's
+    // a network issue"). A real link to the mod's own Nexus files page instead.
+    const domain = row.domainName || row.collectionDomainName;
+    if (domain) {
+      const link = el('a', { class: 'btn btn--ghost btn--small', href: `https://www.nexusmods.com/${domain}/mods/${row.modId}?tab=files`, target: '_blank', rel: 'noopener' }, 'View files on Nexus');
+      actions.appendChild(link);
+    } else {
+      actions.appendChild(el('span', { class: 'muted', style: 'font-size:12px' }, 'Download this archive manually from Nexus.'));
+    }
+    actions.appendChild(rmfBuildExceptionBtn(row));
   } else if (row.modId != null) {
     const dlBtn = el('button', { class: 'btn btn--small' }, 'Download Archive');
     dlBtn.addEventListener('click', () => rmfDownloadArchive(row, idx, dlBtn));
@@ -759,17 +1040,6 @@ function rmfBuildActionsCell(row, idx) {
     actions.appendChild(rmfBuildExceptionBtn(row));
   }
   return actions;
-}
-
-// "Add to Exception List" (queue: rebuild-missing-hand-pick-exceptions) -- offered on every
-// 'missing'/'archive-missing' row (real case this exists for: a hand-pick-only FOMOD, e.g.
-// "1DustAdeptArmorSE", where auto-extracting/auto-rebuilding the full archive would install
-// content the user never chose). A ghost btn, not primary -- this is an opt-out action, not the
-// row's main "fix it" action (Extract from Archive/Download Archive keep that spot).
-function rmfBuildExceptionBtn(row) {
-  const btn = el('button', { class: 'btn btn--ghost btn--small' }, 'Add to Exception List');
-  btn.addEventListener('click', () => rmfAddException(row, btn));
-  return btn;
 }
 
 async function rmfAddException(row, btn) {
@@ -793,6 +1063,11 @@ async function rmfAddException(row, btn) {
       rmfState.selected.delete(idx);
       rmfRenderRows();
       $g('rmfStatMods').textContent = rmfState.rows.filter((r) => r.kind === 'missing').length;
+      // An 'unchecked' row exempted from the Done screen's own attention callout (see
+      // rmfBuildCouldntCheckAttnRow) needs that callout rebuilt too -- it's a SEPARATE render from
+      // rmfRenderRows() above (the normal table), and the row just disappears from the list once it's
+      // no longer 'unchecked', rather than a static "✓ Added" placeholder.
+      rmfRefreshResultsVisibility();
     }
   } catch (e) {
     btn.disabled = false;
@@ -868,13 +1143,96 @@ $g('rmfExtractConfirmCancelBtn').addEventListener('click', () => {
 // A big batch (a whole collection's worth of mods) can take a while -- streams per-mod progress the
 // same POST-starts-202/GET-.../events-subscribes way the scan itself already does (rmfStartScan /
 // rmfHandleScanEvent above), so a long-running extract never reads as "nothing is happening."
+// "the old results table is still on screen" (2026-09-16, director's real screenshot: Extract
+// running, the progress list showing correctly, but the ORIGINAL results table still sitting right
+// underneath it -- every row still checked, its own Extract from Archive button just greyed out).
+// UX principle 14 ("once something is no longer valid, don't show it"): once Extract starts, the
+// progress list REPLACES the results table, it doesn't sit on top of it -- same real screen-handoff
+// Update Collection's own Apply step already does (ucv2ConfirmApply navigates to a whole separate
+// ucv2ScreenApplyProgress, no review table visible underneath at all, and -- confirmed by reading
+// that screen's own markup -- no Back/Cancel control shown there either while a write is running).
 function rmfSetExtractingUI(active) {
   $g('rmfExtractLoading').classList.toggle('hidden', !active);
   document.querySelectorAll('.rmf-extract-trigger').forEach((btn) => { btn.disabled = active; });
-  // rmfExtractSelectedBtn's real disabled state depends on selection count, not just "not
-  // extracting" -- rmfRefreshSelectionUI is the single source of truth for that, so let it settle
-  // the bulk button back to correct rather than force it enabled here.
-  if (!active) rmfRefreshSelectionUI();
+  if (active) {
+    $g('rmfStatGrid').classList.add('hidden');
+    $g('rmfSummaryBadges').classList.add('hidden');
+    $g('rmfSummaryCallout').classList.add('hidden');
+    $g('rmfAllClearCallout').classList.add('hidden');
+    $g('rmfCouldntCheckCallout').classList.add('hidden');
+    $g('rmfSelectionBar').classList.add('hidden');
+    $g('rmfTableWrap').classList.add('hidden');
+    $g('rmfActionsHelp').classList.add('hidden');
+  } else {
+    // rmfExtractSelectedBtn's real disabled state depends on selection count, not just "not
+    // extracting" -- rmfRefreshSelectionUI is the single source of truth for that, so let it settle
+    // the bulk button back to correct rather than force it enabled here.
+    rmfRefreshSelectionUI();
+    // Restores whatever was showing before extraction started. On a successful extraction this runs
+    // a moment before rmfApplyExtractResults' OWN call to the same function (using rows it hasn't
+    // updated yet) -- both calls are synchronous, so nothing paints in between; the visible result is
+    // always the final, post-mutation one. On an ERROR path (rmfDoExtract's catch, or
+    // rmfHandleExtractEvent's 'extract-error' branch) this is the ONLY restore that runs at all, since
+    // neither of those falls through to rmfApplyExtractResults -- without it, an extraction that fails
+    // outright would leave the whole reviewing UI hidden with no way back except a fresh scan.
+    rmfRefreshResultsVisibility();
+  }
+}
+
+// "Rebuild Missing Files: real per-mod status pills during Extract" (2026-09-14) -- one <tr> per
+// item in THIS batch, same order as the `indices` array passed to rmfDoExtract, so a server frame's
+// 1-based `index` maps straight to `rmfExtractRowEls[index - 1]` with no separate name/id lookup
+// (a mod name isn't guaranteed unique across collections, unlike Rebuild Collection's own
+// state.progressRows, which keys by name because a single run is always one collection).
+let rmfExtractRowEls = [];
+let rmfExtractProgressTotal = 0;
+let rmfExtractProgressDone = 0;
+
+function rmfBuildExtractProgressTable(indices) {
+  const tbody = $g('rmfExtractTableBody');
+  tbody.innerHTML = '';
+  rmfExtractRowEls = indices.map((i) => {
+    const row = rmfState.rows[i];
+    const tr = el('tr', {});
+    tr.appendChild(el('td', {}, row.name));
+    const statusCell = el('td', {});
+    // ucv2ApplyPillHtml (update-collection-v2-apply-pills.js) is the ONE shared status-pill
+    // vocabulary this whole app renders through for a live apply/extract progress row -- reused
+    // here rather than app.js's own statusPill (a DIFFERENT lookup, keyed by real run-status
+    // strings like REBUILT/FAILED_MISMATCH_NOT_TOUCHED, not by a stage-of-progress key) precisely
+    // so this table looks like every other tool's, per the director's own catch: "use the same pill
+    // format the other tools use, so they all look the same." Every label passed through here is a
+    // fixed literal from this file's own lookup, never row/user data, so no escaping is needed.
+    statusCell.innerHTML = ucv2ApplyPillHtml('pending', 'Waiting');
+    tr.appendChild(statusCell);
+    tr.appendChild(el('td', { class: 'detail-cell' }, ''));
+    tbody.appendChild(tr);
+    return tr;
+  });
+  rmfExtractProgressTotal = indices.length;
+  rmfExtractProgressDone = 0;
+  $g('rmfExtractProgressBar').style.width = '0%';
+  $g('rmfExtractProgressBarWrap').classList.remove('hidden');
+  $g('rmfExtractTableWrap').classList.remove('hidden');
+}
+
+// Same bounded-wrap scroll math as app.js's own updateProgressRow / update-collection-v2-app.js's
+// own ucv2UpdateApplyProgressRow -- row.scrollIntoView() walks every scrollable ancestor including
+// the window itself, which is what caused the whole page to bounce in both of those precedents;
+// this only ever scrolls this table's own bounded wrap.
+function rmfUpdateExtractRow(index1Based, key, label, detail) {
+  const tr = rmfExtractRowEls[index1Based - 1];
+  if (!tr) return;
+  tr.children[1].innerHTML = ucv2ApplyPillHtml(key, label);
+  tr.children[2].textContent = detail || '';
+  const wrap = $g('rmfExtractTableWrap');
+  if (wrap) {
+    const rowRect = tr.getBoundingClientRect();
+    const wrapRect = wrap.getBoundingClientRect();
+    const offsetWithinWrap = (rowRect.top - wrapRect.top) + wrap.scrollTop;
+    const target = offsetWithinWrap - (wrap.clientHeight / 2) + (tr.clientHeight / 2);
+    wrap.scrollTo({ top: target, behavior: 'smooth' });
+  }
 }
 
 // Named (not just an inline listener body) so a Vortex-running retry -- from either the initial
@@ -896,7 +1254,8 @@ async function rmfDoExtract(indices) {
   });
   $g('rmfExtractResultsCallout').classList.add('hidden');
   rmfSetExtractingUI(true);
-  $g('rmfExtractLoadingText').textContent = 'Restoring files…';
+  rmfBuildExtractProgressTable(indices);
+  $g('rmfExtractLoadingText').textContent = `0 of ${indices.length} mods done`;
   try {
     await rmfApi('POST', '/api/rebuild-missing/extract', { items });
   } catch (e) {
@@ -916,8 +1275,25 @@ $g('rmfExtractConfirmOkBtn').addEventListener('click', () => {
 });
 
 function rmfHandleExtractEvent(frame, indices) {
-  if (frame.type === 'mod-extracted') {
-    $g('rmfExtractLoadingText').textContent = `${frame.index} / ${frame.total} mods restored — ${frame.name}`;
+  if (frame.type === 'mod-started') {
+    rmfUpdateExtractRow(frame.index, frame.phase === 'downloading' ? 'downloading' : 'extracting',
+      frame.phase === 'downloading' ? 'Downloading…' : 'Extracting…');
+  } else if (frame.type === 'mod-phase') {
+    // Only ever fires for an archive-missing row moving from its own download to its own extraction
+    // (see downloadThenExtract's onPhase in rebuild-missing-routes.js) -- 'extracting' is the only
+    // phase it's ever called with today.
+    rmfUpdateExtractRow(frame.index, 'extracting', 'Extracting…');
+  } else if (frame.type === 'mod-extracted') {
+    rmfExtractProgressDone += 1;
+    const pct = frame.total > 0 ? Math.round((rmfExtractProgressDone / frame.total) * 100) : 0;
+    $g('rmfExtractProgressBar').style.width = `${pct}%`;
+    $g('rmfExtractLoadingText').textContent = `${rmfExtractProgressDone} of ${frame.total} mods done`;
+    let detail;
+    if (!frame.ok) detail = frame.error || 'Something went wrong.';
+    else if (frame.note) detail = frame.note;
+    else if (frame.extracted > 0) detail = `${frame.extracted} file(s) restored`;
+    else detail = 'Archive downloaded';
+    rmfUpdateExtractRow(frame.index, frame.ok ? 'enabled' : 'failed', frame.ok ? 'Restored' : 'Failed', detail);
   } else if (frame.type === 'extract-complete') {
     rmfSetExtractingUI(false);
     if (rmfState.extractEventSource) { rmfState.extractEventSource.close(); rmfState.extractEventSource = null; }
@@ -930,6 +1306,11 @@ function rmfHandleExtractEvent(frame, indices) {
 }
 
 function rmfApplyExtractResults(indices, results) {
+  // The per-mod progress table stays visible with its final Restored/Failed pills through the whole
+  // run (per this feature's own spec: "keep the row visible... until the existing results flow takes
+  // over") -- hidden right here, at the exact point that flow takes over, not any earlier.
+  $g('rmfExtractTableWrap').classList.add('hidden');
+  $g('rmfExtractProgressBarWrap').classList.add('hidden');
   let restoredFiles = 0;
   let restoredMods = 0;
   const failures = [];
@@ -963,18 +1344,25 @@ function rmfApplyExtractResults(indices, results) {
   // everything -- the separate "Nothing missing" callout below used to show redundantly right next
   // to this one saying almost the same thing. rmfAllClearCallout stays reserved for the OTHER case
   // (a fresh scan that never had anything missing at all -- rmfRenderReport above, untouched).
-  // Gated on hasActionable (2026-09-02 fix), not the stricter "rows.length === 0" -- a run that still
-  // has 'excepted' rows left (rows.length > 0) but nothing ACTIONABLE remaining already reaches the
-  // real Done UI (rmfSetDoneUI below, stat grid/badges hidden, Deploy prompt shown) --
-  // the old rows-length check kept showing the plain pre-Deploy-button wording in exactly that case,
-  // caught live by the director on a real 13,016-file/5-mod restore that still had excepted rows.
-  const hasActionableAfterExtract = rmfState.rows.some((r) => r.kind === 'missing' || r.kind === 'archive-missing');
+  // Gated on hasSelectable (2026-09-02 fix; REVISED 2026-09-16, "a Couldn't Check row doesn't strand
+  // the finished screen" -- reverted from a 2026-09-14 broadening to rmfHasRowsNeedingAttention() that
+  // was wrong for this specific decision, see that function's own header comment), not the stricter
+  // "rows.length === 0" -- a run that still has 'excepted'/'unchecked' rows left (rows.length > 0)
+  // but nothing SELECTABLE remaining already reaches the real Done UI (rmfSetDoneUI below, stat
+  // grid/badges hidden, Deploy prompt shown) -- the old rows-length check kept showing the plain
+  // pre-Deploy-button wording in exactly that case, caught live by the director on a real
+  // 13,016-file/5-mod restore that still had excepted rows. The 2026-09-14 broadening then caused the
+  // SAME wrong wording to come back for the Couldn't-Check case specifically (a real mod that flow
+  // hit: Better Skyrim Parties fixed, Nirnroot's own Open FOMOD left as the only row) -- fixed by
+  // narrowing this specific check back to "selectable," while the all-clear-suppression check in
+  // rmfRenderReport stays on the broader definition.
+  const hasSelectable = rmfHasSelectableRows();
   if (failures.length === 0) {
     callout.className = 'callout callout--success';
     // Exact copy per director's own spec, 2026-09-02 (revised from the 2026-09-01 wording) -- this
     // tool has its own real Deploy button right below (#rmfDeployPending), so the copy points at that
     // instead of Vortex's own Deploy Mods.
-    callout.innerHTML = !hasActionableAfterExtract
+    callout.innerHTML = !hasSelectable
       ? `<div class="callout__title">🎉 Restoration Complete!</div><p>Successfully restored ${restoredFiles.toLocaleString()} file${restoredFiles === 1 ? '' : 's'} across ${restoredMods} mod${restoredMods === 1 ? '' : 's'}. Click <strong>Deploy</strong> to finish, or select another collection to restore more mods.</p>`
       : `Restored ${restoredFiles.toLocaleString()} file${restoredFiles === 1 ? '' : 's'} across ${restoredMods} mod${restoredMods === 1 ? '' : 's'}. Open Vortex and click Deploy Mods to finish.`;
   } else {
@@ -989,20 +1377,15 @@ function rmfApplyExtractResults(indices, results) {
   const statMods = rmfState.rows.filter((r) => r.kind === 'missing').length;
   $g('rmfStatFiles').textContent = statFiles;
   $g('rmfStatMods').textContent = statMods;
-  // Same hasActionable fix as rmfRenderReport above -- ignored/excepted rows shouldn't keep the
-  // active-work UI (Select All, Extract Selected, the table) showing once nothing is actually
-  // selectable anymore.
-  const hasActionable = rmfState.rows.some((r) => r.kind === 'missing' || r.kind === 'archive-missing');
-  rmfRenderStepper(hasActionable ? 1 : 2);
-  rmfSetDoneUI(!hasActionable, rmfAnyRestoreThisRun);
   // Both always hidden here -- "nothing missing"/"still missing" is folded into this function's own
   // extract-results callout above (allDone vs. partial), not rmfAllClearCallout/rmfSummaryCallout --
   // those belong to the fresh-scan path in rmfRenderReport and are never given fresh content here.
   $g('rmfAllClearCallout').classList.add('hidden');
   $g('rmfSummaryCallout').classList.add('hidden');
-  $g('rmfSelectionBar').classList.toggle('hidden', !hasActionable);
-  $g('rmfTableWrap').classList.toggle('hidden', !hasActionable);
-  $g('rmfActionsHelp').classList.toggle('hidden', !hasActionable);
+  // Single shared toggle (stepper/Done UI/selection bar/table/actions-help/Couldn't-Check attention)
+  // -- called AFTER rmfAnyRestoreThisRun is finalized above so rmfSetDoneUI's own Deploy-panel
+  // wording picks up the right restoredThisRun value; see this function's own header comment.
+  rmfRefreshResultsVisibility();
 }
 
 // ---------- Download Archive (archive-missing rows) ----------
@@ -1016,36 +1399,31 @@ async function rmfDownloadArchive(row, idx, btn) {
       collectionModId: row.collectionModId, modId: row.modId, fileId: row.fileId,
     });
     if (result.bucket === 'missing') {
-      rmfState.rows[idx] = { kind: 'missing', collectionModId: row.collectionModId, collectionName: row.collectionName, ...result };
+      rmfState.rows[idx] = { kind: 'missing', collectionModId: row.collectionModId, collectionName: row.collectionName, collectionDomainName: row.collectionDomainName, ...result };
     } else if (result.bucket === 'ok') {
       rmfState.rows = rmfState.rows.filter((_, i) => i !== idx);
     } else {
-      rmfState.rows[idx] = { kind: 'archive-missing', collectionModId: row.collectionModId, collectionName: row.collectionName, ...result };
+      rmfState.rows[idx] = { kind: 'archive-missing', collectionModId: row.collectionModId, collectionName: row.collectionName, collectionDomainName: row.collectionDomainName, ...result };
     }
     rmfState.selected = new Set([...rmfState.selected].map((i) => (i === idx ? null : i)).filter((i) => i !== null));
     rmfRenderRows();
 
-    // Real gap fixed 2026-08-25: a Download Archive that resolves the LAST actionable row (this
+    // Real gap fixed 2026-08-25: a Download Archive that resolves the LAST selectable row (this
     // mod's archive turns out to have nothing missing -- result.bucket === 'ok', the row is just
     // dropped above) used to leave the active-work UI (Select All bar, empty table) sitting there
     // with nothing left to act on, instead of switching to the same "all clear" success screen a
-    // fresh scan or a completed Extract already shows. Same hasActionable recompute as
-    // rmfRenderReport/the extract handler above.
-    const hasActionable = rmfState.rows.some((r) => r.kind === 'missing' || r.kind === 'archive-missing');
-    rmfRenderStepper(hasActionable ? 1 : 2);
-    // offerDeploy reflects rmfAnyRestoreThisRun, not "this download alone" -- Download Archive only
-    // ever writes to the downloads folder, never staging (see its own route comment), so on its own
-    // it has nothing new for Vortex to deploy. Still respects an earlier Extract elsewhere in the
-    // SAME run (a mixed session), rather than hardcoding false here.
-    rmfSetDoneUI(!hasActionable, rmfAnyRestoreThisRun);
-    $g('rmfSelectionBar').classList.toggle('hidden', !hasActionable);
-    $g('rmfTableWrap').classList.toggle('hidden', !hasActionable);
-    $g('rmfActionsHelp').classList.toggle('hidden', !hasActionable);
-    if (!hasActionable) {
+    // fresh scan or a completed Extract already shows. Same rmfHasSelectableRows() this file's other
+    // two "reached the end of the review" spots use -- REVISED 2026-09-16, see
+    // rmfHasSelectableRows()'s own header comment for why this reverted from the 2026-09-14
+    // broadening to rmfHasRowsNeedingAttention().
+    const { hasSelectable, hasAttention } = rmfRefreshResultsVisibility();
+    if (!hasSelectable && !hasAttention) {
+      // Never claim "No Missing Files Detected" while a Couldn't Check row remains (hasAttention) --
+      // same rule rmfRenderReport's own summary-callout logic follows.
       const summary = $g('rmfSummaryCallout');
       summary.className = 'callout callout--success';
       summary.innerHTML = '<div class="callout__title">🎉 No Missing Files Detected</div>'
-        + '<p>All mods are complete. No repairs are needed in your staging folder. Open Vortex and click <strong>Deploy Mods</strong> to apply the changes.</p>';
+        + '<p>All mods are complete. No repairs are needed in your staging folder. Click <strong>Deploy</strong> below if you haven\'t deployed since your last change.</p>';
       summary.classList.remove('hidden');
     }
   } catch (e) {
@@ -1053,6 +1431,95 @@ async function rmfDownloadArchive(row, idx, btn) {
     btn.textContent = original;
     rmfHandleError(e, $g('rmfScanError'), () => rmfDownloadArchive(row, idx, btn));
   }
+}
+
+// ---------- Install (Open FOMOD rows, 2026-09-17; rewritten to a clean reinstall same day) ----------
+// A real Open FOMOD Couldn't Check row's own Install action -- peeks the mod's real FOMOD via
+// /fomod-picker-data, drives the SAME shared picker Update Collection already uses
+// (web/public/fomod-picker.js, opened with reinstallWarning:true since this action replaces the
+// mod's current files rather than Update Collection's own additive Apply flow), then submits the
+// finished picks to /install-fomod -- now a full clean reinstall (runner.installOpenFomodMod(), the
+// exact mechanism Rebuild Collection's own Install button already uses), not the old
+// additive-only extract. Cancel in the picker changes nothing here -- the button just re-enables, no
+// request is ever sent.
+//
+// Any failure -- the picker-data fetch, or the install-fomod call itself -- updates this row's own
+// `reason` field and re-renders, instead of the shared #rmfScanError banner (which sits at the top
+// of the report, disconnected from the row that actually failed, and isn't even present on the Done
+// screen this button lives on).
+async function rmfInstallFomod(row, idx, btn) {
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Loading…';
+  let needs;
+  try {
+    ({ needs } = await rmfApi('POST', '/api/rebuild-missing/fomod-picker-data', {
+      collectionModId: row.collectionModId, modId: row.modId, fileId: row.fileId,
+    }));
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = original;
+    rmfState.rows[idx] = { ...row, reason: e.message || "Couldn't load this mod's install options." };
+    rmfRenderRows();
+    return;
+  }
+  btn.disabled = false;
+  btn.textContent = original;
+  // Set true only if this session's own "Install Anyway" override (a real schema-validation
+  // failure, 2026-09-15) was actually used -- forwarded on Finish so the resulting recorded choices
+  // carry it too (buildFomodChoicesFromPicks), and a later background rebuild of this same mod
+  // doesn't re-block on the same already-confirmed archive.
+  let ignoreFomodValidationUsed = false;
+  showFomodPicker(needs, {
+    reinstallWarning: true,
+    onIgnoreValidation: async () => {
+      ignoreFomodValidationUsed = true;
+      const { needs: retried } = await rmfApi('POST', '/api/rebuild-missing/fomod-picker-data', {
+        collectionModId: row.collectionModId, modId: row.modId, fileId: row.fileId, ignoreFomodValidation: true,
+      });
+      return retried[0];
+    },
+    onDone: async (picksByModId) => {
+      btn.disabled = true;
+      btn.textContent = 'Installing…';
+      try {
+        const { result } = await rmfApi('POST', '/api/rebuild-missing/install-fomod', {
+          collectionModId: row.collectionModId, modId: row.modId, fileId: row.fileId,
+          picks: picksByModId[String(row.modId)] || {}, ignoreFomodValidation: ignoreFomodValidationUsed,
+        });
+        if (result.ok) {
+          // Fully resolved -- drops out of the report entirely, same as a fully-fixed 'missing' row
+          // (rmfApplyExtractResults' own convention).
+          rmfState.rows = rmfState.rows.filter((_, i) => i !== idx);
+          rmfAnyRestoreThisRun = true; // gates the Deploy prompt -- see its own header comment
+        } else {
+          // A real rebuild failure (locked folder, extraction failure, ...) or a non-REBUILD
+          // classification outcome (e.g. the archive went missing between the scan and this click).
+          // The two known statuses below get their own complete, this-tool-specific line (Copy by
+          // Gemini, 2026-09) instead of the shared lib/rebuild-mod.js detail text, which references
+          // Rebuild Collection's own "Restore & Retry" button that this tool doesn't have.
+          const label = statusLabel(result.status);
+          let reason;
+          if (result.status === 'CRITICAL_MANUAL_RESTORE_NEEDED') {
+            reason = 'Needs restore — Both your original and new files are safe on disk. Try Install again; if it keeps failing, check if another program has a file open in your staging folder.';
+          } else if (result.status === 'FAILED_FOLDER_LOCKED_NOT_TOUCHED') {
+            reason = "Folder locked — Couldn't swap in the new files because a folder was locked. Your original files are untouched — close any open folders or apps and try Install again.";
+          } else {
+            reason = `${label} — ${result.detail || 'Install did not fully resolve this mod.'}`;
+          }
+          rmfState.rows[idx] = { ...row, reason };
+        }
+        rmfState.selected = new Set([...rmfState.selected].map((i) => (i === idx ? null : i)).filter((i) => i !== null));
+        rmfRenderRows();
+        rmfRefreshResultsVisibility();
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = original;
+        rmfState.rows[idx] = { ...row, reason: e.message || 'Install failed.' };
+        rmfRenderRows();
+      }
+    },
+  });
 }
 
 // ---------- Open Staging Folder ----------
@@ -1065,71 +1532,93 @@ async function rmfOpenStagingFolder(row) {
   }
 }
 
-// ---------- Deploy (Done state, 2026-09-01) ----------
+// ---------- Deploy (Done state, 2026-09-01, unified 2026-09-14) ----------
 // Real fire-and-poll deploy, replacing the old static "External Changes" warning -- director's own
 // ask: "add Deploy button... replace with our standard deploy modal used elsewhere (Update
-// collection)." Modeled on Missing Masters' own mmDeployAll (missing-masters-app.js) -- a real
-// progress bar + phase text polled from Vortex's own deploy status, not a fake animation, with a
-// genuine Retry Deploy affordance on failure -- rather than Update Collection v2's richer
-// stall-hint version; this tool's own scale doesn't need that extra complexity, and mmDeployAll's
-// simpler setInterval loop is a cleaner fit. Backed by the exact same generic
-// helperClient.deployAllMods()/getDeployAllProgress() pair every one of these deploy buttons in this
-// app already shares (see web/rebuild-missing-routes.js's own /deploy-all + /deploy-all/progress,
-// mirroring missing-masters-routes.js's).
-let rmfDeployPollInterval = null;
-function rmfStopDeployPolling() {
-  if (rmfDeployPollInterval) { clearInterval(rmfDeployPollInterval); rmfDeployPollInterval = null; }
-}
+// collection)." The actual poll loop (percent/text, stall-hint, rule-cycle detection) now lives in
+// deploy-panel.js's shared startDeploy (2026-09-14, "the same Deploy step on every Done screen") --
+// Rebuild Collection's and Update Collection v2's own Deploy panels use the identical engine, backed
+// by the one shared web/deploy-routes.js (/api/deploy/all + /api/deploy/all/progress).
 
-function rmfShowDeployResult(kind) {
+// noRetry (matching Update Collection v2's own ucv2ShowDeployResult): a real rule cycle comes right
+// back on a Retry Deploy click even though that path never re-touches rules at all -- this isn't
+// something a same-tool retry can ever fix, so the button is omitted entirely for that one specific
+// failure. The real fix has to happen in Vortex/Cycle Helper.
+function rmfShowDeployResult(kind, message, noRetry) {
   const box = $g('rmfDeployResult');
   box.classList.remove('hidden');
   box.className = `callout callout--${kind === 'success' ? 'success' : 'warning'}`;
   box.innerHTML = '';
   if (kind === 'success') {
-    box.appendChild(el('div', { class: 'callout__title' }, '✅ Deploy complete — your game is ready to launch.'));
+    // "After a successful deploy, the Done screen shows one All Set banner" (2026-09-15) -- a
+    // successful deploy used to leave whichever result banner got this screen to Done in the first
+    // place (rmfSummaryCallout's "No Missing Files Detected", rmfAllClearCallout's "All Files
+    // Present", or rmfExtractResultsCallout's "Restoration Complete!") sitting right above this
+    // box's own "Deploy complete" -- two banners saying overlapping things at once (director's own
+    // report, three counting the Deploy panel itself, though that part was already supposed to be
+    // hidden by rmfStartDeploy's own onStart/onDone -- these two extra hides are belt-and-suspenders
+    // so this function is correct even if ever called on its own). rmfCouldntCheckCallout is
+    // deliberately left alone -- a Couldn't Check row is unfinished work, not a result banner, same
+    // reasoning as Rebuild Collection's own locked/critical attention rows (see TECHNICAL.md).
+    // Everything hidden here comes back the instant a fresh scan runs (rmfRenderReport) or
+    // rmfResetOnEntry fires (Back to Collections) -- neither of those two banners nor this one is
+    // ever re-shown by anything else in between.
+    $g('rmfSummaryCallout').classList.add('hidden');
+    $g('rmfAllClearCallout').classList.add('hidden');
+    $g('rmfExtractResultsCallout').classList.add('hidden');
+    $g('rmfDeployPending').classList.add('hidden');
+    $g('rmfDeployProgress').classList.add('hidden');
+    box.appendChild(el('div', { class: 'callout__title' }, "🎉 All Set — It's Game Time!"));
+    box.appendChild(el('p', {}, rmfAnyRestoreThisRun
+      ? 'All missing files have been restored and deployed. Your game is ready to launch!'
+      : 'All your files are present and deployed. Your game is ready to launch!'));
     return;
   }
   box.appendChild(el('div', { class: 'callout__title' }, '⚠️ Deploy failed'));
-  box.appendChild(el('p', {}, 'Vortex could not complete the deployment. You can try again from here, or open Vortex and click Deploy Mods directly.'));
-  const retry = el('button', { class: 'btn btn--primary btn--small' }, 'Retry Deploy');
-  retry.addEventListener('click', () => rmfStartDeploy());
-  box.appendChild(el('div', { class: 'row-actions' }, retry));
+  box.appendChild(el('p', {}, message || 'Vortex could not complete the deployment. You can try again from here, or open Vortex and click Deploy Mods directly.'));
+  if (!noRetry) {
+    const retry = el('button', { class: 'btn btn--primary btn--small' }, 'Retry Deploy');
+    retry.addEventListener('click', () => rmfStartDeploy());
+    box.appendChild(el('div', { class: 'row-actions' }, retry));
+  }
 }
 
-async function rmfStartDeploy() {
-  $g('rmfDeployResult').classList.add('hidden');
-  $g('rmfDeployPending').classList.add('hidden');
-  $g('rmfDeployProgress').classList.remove('hidden');
-  $g('rmfDeployPhase').textContent = 'Starting…';
-  $g('rmfDeployBar').style.width = '0%';
-
-  try {
-    await rmfApi('POST', '/api/rebuild-missing/deploy-all', {});
-  } catch (e) {
-    $g('rmfDeployProgress').classList.add('hidden');
-    rmfShowDeployResult('error');
-    return;
-  }
-
-  rmfStopDeployPolling();
-  rmfDeployPollInterval = setInterval(async () => {
-    let progress;
-    try {
-      progress = await rmfApi('GET', '/api/rebuild-missing/deploy-all/progress');
-    } catch {
-      return; // one failed poll is not evidence the deploy failed -- try again next tick
-    }
-    if (progress && typeof progress.percent === 'number') {
-      $g('rmfDeployBar').style.width = `${Math.round(progress.percent)}%`;
-    }
-    if (progress && progress.text) $g('rmfDeployPhase').textContent = progress.text;
-    if (!progress || !progress.done) return;
-
-    rmfStopDeployPolling();
-    $g('rmfDeployProgress').classList.add('hidden');
-    rmfShowDeployResult(progress.error ? 'error' : 'success');
-  }, 1000);
+function rmfStartDeploy() {
+  startDeploy('/api/deploy', rmfApi, {
+    onStart: () => {
+      $g('rmfDeployResult').classList.add('hidden');
+      $g('rmfDeployPending').classList.add('hidden');
+      $g('rmfDeployProgress').classList.remove('hidden');
+      $g('rmfDeployPhase').textContent = 'Starting…';
+      $g('rmfDeployBar').style.width = '0%';
+      // Same precaution Update Collection v2's own Deploy already established (2026-08-28,
+      // director's own catch): leaving this screen mid-deploy doesn't stop the real Vortex deploy
+      // already running server-side, but it does orphan this screen's own live progress/result
+      // reporting for it, and Deploy is real file I/O that shouldn't be walked away from blind.
+      $g('rmfBackToPickerBtn').disabled = true;
+    },
+    onError: (e) => {
+      $g('rmfDeployProgress').classList.add('hidden');
+      rmfShowDeployResult('error', e.message);
+      $g('rmfBackToPickerBtn').disabled = false;
+    },
+    onTick: (progress) => {
+      if (progress && typeof progress.percent === 'number') {
+        $g('rmfDeployBar').style.width = `${Math.round(progress.percent)}%`;
+      }
+      if (progress && progress.text) $g('rmfDeployPhase').textContent = progress.text;
+    },
+    onStall: (show, message) => {
+      const hint = $g('rmfDeployStallHint');
+      hint.innerHTML = message || '⚠️ Vortex is taking longer than usual to finish. Please be patient while it finishes.';
+      hint.classList.toggle('hidden', !show);
+    },
+    onDone: (progress) => {
+      $g('rmfDeployProgress').classList.add('hidden');
+      rmfShowDeployResult(progress.error ? 'error' : 'success', themedCycleMessage(progress.error, progress.code, 'deploy-blocked-by-cycles'), progress.code === 'deploy-blocked-by-cycles');
+      $g('rmfBackToPickerBtn').disabled = false;
+    },
+  });
 }
 $g('rmfDeployBtn').addEventListener('click', () => rmfStartDeploy());
 
@@ -1175,14 +1664,31 @@ async function rmfStartFirstFetch(item, btn) {
 // resets which just call existing per-step reset functions, this one handles the
 // SSE-connection cleanup that's unique to Rebuild Missing Files.
 function rmfResetOnEntry() {
-  if (rmfState.eventSource) { rmfState.eventSource.close(); rmfState.eventSource = null; }
-  if (rmfState.extractEventSource) { rmfState.extractEventSource.close(); rmfState.extractEventSource = null; }
-  rmfStopDeployPolling();
+  // Mid-operation guard ("coming back from another tool starts clean", 2026-09-17): this whole app
+  // is ONE page -- leaving to another tool never destroys a running scan/extraction/deploy, it just
+  // hides this screen behind CSS, and the operation keeps going for real underneath. If one is still
+  // genuinely in flight when the user comes back, leave the screen exactly as it is (still showing
+  // live progress) instead of yanking it out from under them: closing rmfState.eventSource/
+  // extractEventSource here would silently stop this screen from ever hearing the rest of that
+  // scan/extraction's own events, and resetting mid-deploy would abandon a real, still-running
+  // Vortex deploy's own progress/result reporting (deploy itself can't be stopped from here either
+  // way -- see rmfStartDeploy's own onStart comment). Never blocks a genuinely-finished run, though --
+  // 'scan-complete'/'scan-error'/the extract-complete equivalent all already null their own
+  // eventSource/extractEventSource the moment they finish, and a finished/failed deploy already
+  // hides its own progress box -- so by the time any of those three are still true, something is
+  // really still running.
+  if (rmfState.eventSource || rmfState.extractEventSource || !$g('rmfDeployProgress').classList.contains('hidden')) return;
+  // Real, pre-existing bug found live 2026-09-16: this called a never-defined rmfStopDeployPolling(),
+  // throwing a ReferenceError on every re-entry into this page. Vestigial from before Deploy moved to
+  // the shared deploy-panel.js's own event-driven startDeploy (2026-09-14, see this file's own "Deploy
+  // (Done state)" header comment) -- there's no client-side poll interval or connection object left
+  // to stop; rmfDeployPending/Progress/Result are already explicitly hidden two lines below.
   rmfAnyRestoreThisRun = false;
   $g('rmfDeployPending').classList.add('hidden');
   $g('rmfDeployProgress').classList.add('hidden');
   $g('rmfDeployResult').classList.add('hidden');
   rmfState.picked.clear();
+  rmfUpdatePickCount();
   rmfState.collectionsById.clear();
   rmfState.rows = [];
   rmfState.selected.clear();
@@ -1190,6 +1696,7 @@ function rmfResetOnEntry() {
   rmfRenderStepper(0);
   $g('rmfPickerView').classList.remove('hidden');
   $g('rmfReportView').classList.add('hidden');
+  $g('rmfBackToPickerBtn').classList.add('hidden'); // step 1 (the picker) has no Cancel/Back of its own
   rmfLoadCollections();
 }
 window.rmfResetOnEntry = rmfResetOnEntry;

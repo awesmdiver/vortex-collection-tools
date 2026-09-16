@@ -214,6 +214,13 @@ $m('mergeCollRefreshBtn').addEventListener('click', () => mergeLoadCollections()
 // handler's own comment: it's a sticky preference (pre-filled from Settings' own mergeOutputDir on
 // boot), not wizard progress, so there's nothing stale about carrying it across a Home-and-back visit.
 function mergeResetOnEntry() {
+  // Mid-operation guard ("coming back from another tool starts clean", 2026-09-17): a merge build
+  // still genuinely running (mergeEventSource open, the Merging… step's own progress stream) must
+  // keep running in view when the user comes back -- resetting to Step 0 here would strand it, since
+  // nothing else in this function closes mergeEventSource on its behalf. A finished/failed merge
+  // already closes its own mergeEventSource (its success/error branches), so this never blocks a
+  // genuinely-finished run.
+  if (mergeEventSource) return;
   mergeState.searchResults = [];
   $m('mergeSearchInput').value = '';
   mergeState.collSelected.clear();

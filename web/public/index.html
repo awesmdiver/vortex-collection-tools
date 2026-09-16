@@ -303,12 +303,27 @@
     <div class="home-card-wrap" data-section="homeSectionUtilities">
       <button class="home-card" data-area="utilities" data-sub="duplicateversions" data-tool-id="duplicate-version-cleanup">
         <div class="home-card__icon" data-brand-slot="emoji">♻️</div>
-        <div class="home-card__name" data-brand-slot="name">Duplicate Version Cleanup</div>
-        <div class="home-card__desc" data-brand-slot="cardDesc">Find every mod with more than one version showing in Vortex, tell the real duplicates apart from ones kept on purpose, and clean them up for good.</div>
+        <div class="home-card__name-row">
+          <div class="home-card__name" data-brand-slot="name">Cleanup Duplicates</div>
+          <span class="badge badge--neutral">Beta</span>
+        </div>
+        <div class="home-card__desc" data-brand-slot="cardDesc">Clear duplicate mod versions from Vortex and cleanly reinstall the keepers back into your collections.</div>
         <div class="home-card__open">Open <span>→</span></div>
       </button>
       <button class="home-card__star" data-pin-key="duplicateversions" title="Pin to top">☆</button>
       <a class="home-card__premium-badge" href="https://www.nexusmods.com/premium" target="_blank" rel="noopener">N</a>
+    </div>
+    <!-- Named "Bulk Collection Editor" (director's pick, 2026-09-15) -- data-tool-id stays the
+         original internal id (add-mods-to-collections) throughout this app (routes, pin keys,
+         settings-rail) since it's never user-visible; only the brand slots below changed. -->
+    <div class="home-card-wrap" data-section="homeSectionUtilities">
+      <button class="home-card" data-area="utilities" data-sub="addmodstocollections" data-tool-id="add-mods-to-collections">
+        <div class="home-card__icon" data-brand-slot="emoji">🗂️</div>
+        <div class="home-card__name" data-brand-slot="name">Bulk Collection Editor</div>
+        <div class="home-card__desc" data-brand-slot="cardDesc">Add or remove mods across multiple collections at once without touching your installed files.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="addmodstocollections" title="Pin to top">☆</button>
     </div>
     <div class="home-card-wrap" data-section="homeSectionUtilities">
       <button class="home-card" data-area="pgpatcher" data-tool-id="pgpatcher">
@@ -533,8 +548,8 @@
       </div>
 
       <div id="openFomodSection" class="callout callout--warning hidden">
-        <div class="callout__title">⚠️ Needs manual reinstall (Open FOMOD)</div>
-        <p>These mods have a real FOMOD installer wizard but no choices recorded in <code>collection.json</code> &mdash; the collection deliberately leaves them to whoever installs it, and Vortex's wizard even pre-selects based on what else is currently installed. There's no default to replay automatically.</p>
+        <div class="callout__title" id="openFomodTitle"></div>
+        <p id="openFomodBody"></p>
         <ul id="openFomodList"></ul>
       </div>
 
@@ -610,6 +625,12 @@
         <div id="phaseIndicator" class="phase-indicator"></div>
         <button id="pauseRebuildBtn" class="btn btn--primary">Pause</button>
       </div>
+      <!-- Only shown while a classify pass is actually running (a reused plan skips it entirely) --
+           same bar markup/classes as the Plan page's own #planProgressBarWrap, no new component. See
+           "Rebuild Collection: Start reuses the check View Collection just did" (2026-09-14). -->
+      <div id="progressPhaseBarWrap" class="progress-bar-wrap hidden">
+        <div id="progressPhaseBar" class="progress-bar"></div>
+      </div>
       <div id="backupNotice" class="path-row hidden">
         <span class="path-row__label">Backup</span>
         <code id="backupNoticeText" class="path-row__value"></code>
@@ -636,15 +657,64 @@
     </div>
     <div id="summaryBadges" class="summary-badges"></div>
 
-    <div id="criticalBanner" class="callout callout--critical hidden">
-      <div class="callout__title">🛑 Critical: manual restore needed</div>
-      <div id="criticalDetail"></div>
+    <!-- FAILED_FOLDER_LOCKED_NOT_TOUCHED mods -- a swap that couldn't get past a transient Windows
+         lock after 3 tries. Original files were never touched; Retry just re-attempts the same mod.
+         See "Rebuild Collection: a locked mod folder no longer stops the whole run" (2026-09-13). -->
+    <div id="rebuildLockedCallout" class="callout callout--warning hidden">
+      <div class="rbc-attn-head">
+        <div class="callout__title" id="rebuildLockedTitle"></div>
+        <button id="rebuildRetryAllBtn" class="btn btn--primary btn--small">Retry all</button>
+      </div>
+      <div class="callout__body">
+        <p id="rebuildLockedBody"></p>
+        <div id="rebuildLockedList" class="rbc-attn-list"></div>
+      </div>
     </div>
 
-    <div id="summaryOpenFomodSection" class="callout callout--warning hidden">
-      <div class="callout__title">⚠️ Needs manual reinstall (Open FOMOD)</div>
-      <ul id="summaryOpenFomodList"></ul>
+    <!-- CRITICAL_MANUAL_RESTORE_NEEDED mods -- the rare case where the swap AND the rollback both
+         hit a lock, so the real slot is empty right now (both copies are still safe on disk). No
+         bulk action here -- each one needs Restore & Retry individually. -->
+    <div id="rebuildCriticalCallout" class="callout callout--critical hidden">
+      <div class="callout__title" id="rebuildCriticalTitle"></div>
+      <div class="callout__body">
+        <p id="rebuildCriticalBody"></p>
+        <div id="rebuildCriticalList" class="rbc-attn-list"></div>
+      </div>
     </div>
+
+    <!-- SKIP_OPEN_FOMOD mods -- a real FOMOD installer wizard with no recorded choices anywhere
+         (not in this collection.json, not live in Vortex). Each gets an Install button running the
+         same shared picker (fomod-picker.js) Rebuild Missing Files' own Install button and Update
+         Collection use. See "Open FOMOD mods get an Install button" (2026-09-17). -->
+    <div id="summaryOpenFomodSection" class="callout callout--warning hidden">
+      <div class="callout__title" id="summaryOpenFomodTitle"></div>
+      <div class="callout__body">
+        <div id="summaryOpenFomodList" class="rbc-attn-list"></div>
+      </div>
+    </div>
+
+    <!-- Real Deploy step (2026-09-14, "the same Deploy step on every Done screen") -- this tool only
+         ever re-extracts mods directly into staging; the game can't see any of it until a real
+         Vortex deploy runs. Shown on EVERY Done landing, not just after a real rebuild, since the
+         director may not have deployed since an earlier run -- title/body text set by
+         renderDeployPanel depending on whether this run actually rebuilt anything (frame.summary's
+         own REBUILT count). Same real fire-and-poll shape Rebuild Missing Files' own
+         #rmfDeployPending and Update Collection v2's own #ucv2DeployPending establish -- not a new
+         pattern, see deploy-panel.js's shared startDeploy. -->
+    <div id="rebuildDeployPending" class="callout callout--info hidden">
+      <div class="callout__title" id="rebuildDeployPendingTitle">🚀 One step left</div>
+      <p id="rebuildDeployPendingBody">Your mods are rebuilt in staging, but your game can't see them yet. Deploy your mods to finish.</p>
+      <div class="row-actions"><button class="btn btn--primary btn--small" id="rebuildDeployBtn">Deploy →</button></div>
+    </div>
+    <div id="rebuildDeployProgress" class="callout callout--info hidden">
+      <div class="callout__title">Deploying mods in Vortex&hellip;</div>
+      <div class="progress-bar-wrap"><div id="rebuildDeployBar" class="progress-bar"></div></div>
+      <p class="muted" id="rebuildDeployPhase">Starting&hellip;</p>
+      <!-- Stall reminder -- same real, helper-reported signal as Update Collection v2's own
+           #ucv2DeployStallHint (deploy-panel.js's shared deployStallMessage/startDeploy). -->
+      <p class="muted hidden" id="rebuildDeployStallHint" style="color:var(--warning)">⚠️ Vortex is taking longer than usual to finish. Please be patient while it finishes.</p>
+    </div>
+    <div id="rebuildDeployResult" class="callout hidden"></div>
 
     <!-- Backup-folder access lives only in Settings (Reveal/Restore), never on this completion
          screen -- confirmed 2026-07-27: "no one would ever need to access the backup folder from
@@ -655,6 +725,16 @@
         <a id="viewLogLink" class="btn btn--ghost btn--small">View Log</a>
         <button id="revealLogBtn" class="btn btn--ghost btn--small">Reveal</button>
       </div>
+    </div>
+
+    <!-- "Back to Collections", right-aligned bottom action row -- always present so the director can
+         pick another collection to rebuild (2026-09-14, "same Deploy step on every Done screen": "make
+         sure to keep the Back to Collection button, should someone want to rebuild another
+         collection"). data-action="back-to-picker" reuses the exact same delegated handler the
+         tool-eyebrow's own breadcrumb link already wires up (app.js) -- no new JS needed. Same
+         .actions/justify-content:flex-end convention Rebuild Missing Files' own #rmfDoneActions uses. -->
+    <div class="actions">
+      <button class="btn btn--primary" id="rebuildBackToCollectionsBtn" data-action="back-to-picker">Back to Collections</button>
     </div>
   </section>
 
@@ -1153,13 +1233,7 @@
 
       <h3 class="settings-section-title badge badge--info" data-tool-id="report-exceptions"><span data-brand-slot="name">Mod Exceptions</span></h3>
       <p class="muted">Stores the "never auto-fix this mod" list, shared with <span data-tool-id="missing-files"><span data-brand-slot="name">Rebuild Missing Files</span></span>. Manage individual entries from its own report.</p>
-      <div class="field-group">
-        <label class="field-label" for="settingsModExceptionListDirInput">Exception list folder <span class="field-required">(required)</span></label>
-        <div class="path-input-row">
-          <input id="settingsModExceptionListDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\mod-exceptions" autocomplete="off">
-          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsModExceptionListDirInput">Browse&hellip;</button>
-        </div>
-      </div>
+      <p class="muted">Saved under your <a href="#" class="settings-jump-link" data-cat="general">App Data folder</a>, alongside every other tool's own saved data.</p>
     </div>
     </section>
 
@@ -1171,15 +1245,7 @@
         <p class="muted">Update Collection just needs a place to keep track of what it's already applied.</p>
       </div>
 
-      <h3 class="settings-section-title badge badge--info">Paths</h3>
-      <div class="field-group">
-        <label class="field-label" for="settingsUcv2TrackingDirInput">Update tracking folder <span class="field-required">(required)</span></label>
-        <p class="muted">Small metadata files saved per collection&mdash;including a pre-update snapshot and completion status. Stored outside your Vortex staging folders so native Vortex updates will never overwrite or delete them.</p>
-        <div class="path-input-row">
-          <input id="settingsUcv2TrackingDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\update-collection-tracking" autocomplete="off">
-          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsUcv2TrackingDirInput">Browse&hellip;</button>
-        </div>
-      </div>
+      <p class="muted">Small metadata files saved per collection&mdash;including a pre-update snapshot and completion status. Stored outside your Vortex staging folders so native Vortex updates will never overwrite or delete them. Saved under your <a href="#" class="settings-jump-link" data-cat="general">App Data folder</a>, alongside every other tool's own saved data.</p>
     </div>
 
     <div class="settings-group">
@@ -1259,15 +1325,7 @@
         <p class="muted">Mark folders and archives as safe to keep, and they'll stop showing up as "Action Needed" in <span data-brand-slot="name">Mod Scrub</span>.</p>
       </div>
 
-      <h3 class="settings-section-title badge badge--info">Exclude list location</h3>
-      <div class="field-group">
-        <label class="field-label" for="settingsCleanupExcludeListDirInput">Exclude list folder <span class="field-required">(required)</span></label>
-        <div class="path-input-row">
-          <input id="settingsCleanupExcludeListDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\clean-up-exclude-list" autocomplete="off">
-          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsCleanupExcludeListDirInput">Browse&hellip;</button>
-        </div>
-      </div>
-      <p class="muted">Changes to excluded items below take effect right away. Changing this path itself needs <strong>Save Settings</strong> and a server restart.</p>
+      <p class="muted">Saved under your <a href="#" class="settings-jump-link" data-cat="general">App Data folder</a>, alongside every other tool's own saved data. Changes to excluded items below take effect right away.</p>
 
       <h3 class="settings-section-title badge badge--info">Excluded staging folders</h3>
       <details id="settingsCleanupIgnoredStagingDetails">
@@ -1318,15 +1376,7 @@
         <p class="muted">Searches inside the mod archives in your Vortex downloads folder (set under Paths &amp; Backups) -- nothing extra to point it at here.</p>
       </div>
 
-      <h3 class="settings-section-title badge badge--info">Index folder</h3>
-      <div class="field-group">
-        <label class="field-label" for="settingsArchiveFinderDbDirInput">Folder for the archive search index <span class="field-required">(required)</span></label>
-        <div class="path-input-row">
-          <input id="settingsArchiveFinderDbDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Downloads\archive-finder-index" autocomplete="off">
-          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsArchiveFinderDbDirInput">Browse&hellip;</button>
-        </div>
-        <p class="muted">A small search index, kept separate from your downloads -- safe to put anywhere, and safe to delete anytime to force a fresh scan.</p>
-      </div>
+      <p class="muted">Its search index is saved under your <a href="#" class="settings-jump-link" data-cat="general">App Data folder</a> -- safe to delete anytime (from there) to force a fresh scan.</p>
 
       <h3 class="settings-section-title badge badge--info">Default extraction folder</h3>
       <div class="field-group">
@@ -1408,14 +1458,7 @@
         <p class="muted">Stores Cycle Helper's Change History -- a record of every fix it's applied, so you can browse past sessions and undo any of them later.</p>
       </div>
 
-      <h3 class="settings-section-title badge badge--info">Change history folder</h3>
-      <div class="field-group">
-        <label class="field-label" for="settingsCycleHelperHistoryDirInput">Folder for fix history <span class="muted">(optional -- leave blank to use the built-in default)</span></label>
-        <div class="path-input-row">
-          <input id="settingsCycleHelperHistoryDirInput" class="input input--wide" type="text" placeholder="Default: this app's own config/cycle-helper-history folder" autocomplete="off">
-          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsCycleHelperHistoryDirInput">Browse&hellip;</button>
-        </div>
-      </div>
+      <p class="muted">Saved under your <a href="#" class="settings-jump-link" data-cat="general">App Data folder</a>, alongside every other tool's own saved data.</p>
     </div>
     </section>
 
@@ -1748,14 +1791,15 @@
         Nexus's website to reinstall it.
       </div>
 
-      <h3 class="settings-section-title badge badge--info">Log Storage Location</h3>
-      <p class="muted">Choose where to save run logs. Each logging tool creates its own subfolder in this location. Leave this blank to keep the default folder. Changing this setting requires a server restart.</p>
+      <h3 class="settings-section-title badge badge--info">🪵 Logs</h3>
+      <p class="muted">Troubleshooting notes the app writes as it works, like the app log and Merge Plugins crash reports. Handy if something goes wrong. Deleting them won't affect anything else.</p>
       <div class="field-group">
-        <label class="field-label" for="settingsLogsDirInput">Log file location</label>
+        <label class="field-label" for="settingsLogsDirInput">Logs folder</label>
         <div class="path-input-row">
           <input id="settingsLogsDirInput" class="input input--wide" type="text" placeholder="Default: this app's own logs folder" autocomplete="off">
           <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsLogsDirInput">Browse&hellip;</button>
         </div>
+        <p class="muted">Changing this needs <strong>Save Settings</strong> and a server restart.</p>
       </div>
 
       <div class="field-group">
@@ -1763,13 +1807,61 @@
           <input type="checkbox" id="settingsAppLogInput">
           Write a log file for this session
         </label>
+        <p class="muted">Captures what the app is doing while it runs -- handy for troubleshooting, or to attach when reporting a bug. Changing this requires a server restart.</p>
       </div>
-      <p class="muted">Captures what the app is doing while it runs -- handy for troubleshooting, or to attach when reporting a bug. Changing this requires a server restart.</p>
 
       <div class="view-actions">
         <button id="settingsOpenLogsBtn" class="btn btn--ghost btn--small">Open Logs Folder</button>
-        <button id="settingsDeleteLogsBtn" class="btn btn--ghost btn--small">Delete all logs</button>
-        <span id="settingsDeleteLogsStatus" class="muted"></span>
+        <button id="settingsDeleteLogsBtn" class="btn btn--ghost btn--small">Delete Logs</button>
+        <span id="settingsLogsInfoText" class="muted"></span>
+      </div>
+      <p id="settingsDeleteLogsStatus" class="muted"></p>
+
+      <h3 class="settings-section-title badge badge--info">🗂️ App Data</h3>
+      <p class="muted">Everything the tools save so they can pick up where you left off: Rebuild Collection reports (used by Resume, Retry, and Stats), Cycle Helper history, Update Collection tracking, your Mod Exceptions list, and more. Pick exactly what to delete.</p>
+      <div class="field-group">
+        <label class="field-label" for="settingsAppDataDirInput">App Data folder <span class="field-required">(required)</span></label>
+        <div class="path-input-row">
+          <input id="settingsAppDataDirInput" class="input input--wide" type="text" placeholder="e.g. F:\Vortex Backups\app-data" autocomplete="off">
+          <button class="btn btn--ghost btn--small settings-browse-btn" data-target="settingsAppDataDirInput">Browse&hellip;</button>
+        </div>
+        <p class="muted">Changing this needs <strong>Save Settings</strong> and a server restart.</p>
+      </div>
+
+      <div id="settingsAppDataNotConfigured" class="callout callout--info hidden">
+        Set the App Data folder above (and Save Settings) to see and manage what your tools have saved.
+      </div>
+
+      <div id="settingsAppDataManager" class="hidden">
+        <div class="view-actions">
+          <button id="settingsOpenAppDataBtn" class="btn btn--ghost btn--small">Open App Data Folder</button>
+          <span id="settingsAppDataInfoText" class="muted"></span>
+        </div>
+
+        <div id="settingsAppDataChips" class="summary-badges"></div>
+
+        <div id="settingsAppDataEmpty" class="muted hidden">Nothing saved here yet.</div>
+
+        <div id="settingsAppDataTableWrap" class="hidden">
+          <div class="af-selection-bar">
+            <div class="af-selection-bar__left">
+              <button id="settingsAppDataSelectAllBtn" class="btn btn--ghost btn--small">Select All</button>
+              <button id="settingsAppDataInvertBtn" class="btn btn--ghost btn--small">Invert Selection</button>
+              <button id="settingsAppDataClearBtn" class="btn btn--ghost btn--small">Clear Selection</button>
+              <span id="settingsAppDataSelCount" class="muted">0 of 0 selected</span>
+            </div>
+            <button id="settingsAppDataDeleteBtn" class="btn btn--primary btn--small" disabled>Delete Selected</button>
+          </div>
+
+          <div class="plan-table-wrap">
+            <table class="plan-table">
+              <thead><tr><th class="col-check"></th><th>Item</th><th>Type</th><th>Created</th><th>Last changed</th><th style="text-align:right">Size</th></tr></thead>
+              <tbody id="settingsAppDataTableBody"></tbody>
+            </table>
+          </div>
+          <p class="muted">"Last changed" only shows when a file gets updated after it's created (like a Retry updating an old report, or your exceptions list growing).</p>
+        </div>
+        <p id="settingsDeleteAppDataStatus" class="muted"></p>
       </div>
 
       <h3 class="settings-section-title badge badge--info">Support this project</h3>
@@ -1833,6 +1925,19 @@
     <div class="modal-actions">
       <button id="settingsDeleteLogsCancelBtn" class="btn btn--ghost">Cancel</button>
       <button id="settingsDeleteLogsConfirmBtn" class="btn btn--primary">Delete All</button>
+    </div>
+  </div>
+</div>
+
+<div id="settingsDeleteAppDataModal" class="modal-overlay hidden">
+  <div class="modal modal--warning">
+    <h2>🗑️ Delete <span id="settingsDeleteAppDataModalCount"></span>?</h2>
+    <p>This permanently removes them from your App Data folder. Here's what that means:</p>
+    <ul id="settingsDeleteAppDataModalList"></ul>
+    <div id="settingsDeleteAppDataModalWarn" class="callout callout--warning hidden"></div>
+    <div class="modal-actions">
+      <button id="settingsDeleteAppDataCancelBtn" class="btn btn--ghost">Cancel</button>
+      <button id="settingsDeleteAppDataConfirmBtn" class="btn btn--primary">Delete</button>
     </div>
   </div>
 </div>
@@ -2319,7 +2424,8 @@
     <button id="utilities-sub-missingfiles" class="btn btn--ghost btn--small" data-tool-id="missing-files"><span data-brand-slot="name">Missing Files</span></button>
     <button id="utilities-sub-cyclehelper" class="btn btn--ghost btn--small" data-tool-id="cycle-helper"><span data-brand-slot="name">Cycle Helper</span></button>
     <button id="utilities-sub-clearflags" class="btn btn--ghost btn--small" data-tool-id="clear-update-flags"><span data-brand-slot="name">Clear Update Flags</span></button>
-    <button id="utilities-sub-duplicateversions" class="btn btn--ghost btn--small" data-tool-id="duplicate-version-cleanup"><span data-brand-slot="name">Duplicate Version Cleanup</span></button>
+    <button id="utilities-sub-duplicateversions" class="btn btn--ghost btn--small" data-tool-id="duplicate-version-cleanup"><span data-brand-slot="name">Cleanup Duplicates</span></button>
+    <button id="utilities-sub-addmodstocollections" class="btn btn--ghost btn--small" data-tool-id="add-mods-to-collections"><span data-brand-slot="name">Bulk Collection Editor</span></button>
   </div>
 
   <div id="utilities-sub-area-scrub">
@@ -2651,22 +2757,45 @@
   <div id="afExtractModal" class="modal-overlay hidden">
     <div class="modal modal--wide">
       <h2>Extract Selected Files</h2>
-      <p><span id="afExtractCount">0</span> file(s) selected.</p>
-      <div class="field-group">
-        <label class="field-label" for="afExtractDestInput">Destination folder</label>
-        <div class="path-input-row">
-          <input id="afExtractDestInput" class="input input--wide" type="text">
-          <button id="afExtractBrowseBtn" class="btn btn--ghost btn--small">Browse&hellip;</button>
+
+      <div id="afExtractFormSection">
+        <p><span id="afExtractCount">0</span> file(s) selected.</p>
+        <div class="field-group">
+          <label class="field-label" for="afExtractDestInput">Destination folder</label>
+          <div class="path-input-row">
+            <input id="afExtractDestInput" class="input input--wide" type="text">
+            <button id="afExtractBrowseBtn" class="btn btn--ghost btn--small">Browse&hellip;</button>
+          </div>
+        </div>
+        <label class="checkbox">
+          <input type="checkbox" id="afExtractFlatInput" checked>
+          Extract directly into this folder (no per-archive subfolders) &mdash; needed to build a single Vortex-installable patch mod
+        </label>
+      </div>
+
+      <div id="afExtractOverwriteWarning" class="callout callout--warning hidden">
+        <div class="callout__title">&#9888;&#65039; Confirm file overwrite</div>
+        <div class="callout__body">Some of these files already exist in your destination folder. Continuing will replace the existing files with the new versions. This cannot be undone.</div>
+      </div>
+
+      <div id="afExtractProgress" class="hidden">
+        <div class="phase-indicator"><span class="spinner"></span><span>Extracting&hellip;</span></div>
+      </div>
+
+      <div id="afExtractResult" class="hidden">
+        <div class="callout" id="afExtractResultCallout">
+          <div class="callout__title" id="afExtractResultTitle"></div>
+          <div class="callout__body" id="afExtractResultBody"></div>
         </div>
       </div>
-      <label class="checkbox">
-        <input type="checkbox" id="afExtractFlatInput" checked>
-        Extract directly into this folder (no per-archive subfolders) &mdash; needed to build a single Vortex-installable patch mod
-      </label>
-      <div id="afExtractResults"></div>
+
+      <ul class="sync-result-list hidden" id="afExtractResults"></ul>
+
       <div class="modal-actions">
         <button id="afExtractCancelBtn" class="btn btn--ghost">Cancel</button>
         <button id="afExtractConfirmBtn" class="btn btn--primary">Extract</button>
+        <button id="afExtractOverwriteConfirmBtn" class="btn btn--danger hidden">Overwrite and Extract</button>
+        <button id="afExtractReturnBtn" class="btn btn--primary hidden">Return</button>
       </div>
     </div>
   </div>
@@ -2910,8 +3039,19 @@
        (2026-08-25). One shared instance, kept visible across both screens below (same convention
        Rules Generator's own rgStepper already establishes), not two separate copies. Read-only
        status indicator here (no per-tool re-entry the way Rules Generator's own pills support) --
-       see rmfRenderStepper in rebuild-missing-app.js. -->
-  <div class="merge-stepper merge-stepper--spaced" id="rmfStepper"></div>
+       see rmfRenderStepper in rebuild-missing-app.js.
+
+       "tighter stepper row" (2026-09-14): Cancel/Back now share this row (.sync-stepper-row, same
+       pattern Update Collection's own stepper+Refresh row already established) instead of sitting on
+       their own line further down inside #rmfReportView, which used to leave a lot of dead space
+       above the scan's own activity line. Starts hidden -- step 1 (the picker) has no Cancel/Back of
+       its own; rebuild-missing-app.js shows it the moment a scan starts, and rmfSetBackBtnState moves
+       it to #rmfDoneActions instead (see there) once Done -- it is deliberately NOT on this row in
+       that state. -->
+  <div class="sync-stepper-row" id="rmfStepperRow">
+    <div class="merge-stepper" id="rmfStepper"></div>
+    <button id="rmfBackToPickerBtn" class="btn btn--ghost btn--small hidden">Back</button>
+  </div>
 
   <!-- ==================== Screen 1: collection picker ==================== -->
   <div id="rmfPickerView">
@@ -2996,16 +3136,6 @@
 
   <!-- ==================== Screen 2: scan report ==================== -->
   <div id="rmfReportView" class="hidden">
-    <div class="view-actions">
-      <!-- Label/class swapped live by rmfSetBackBtnState (rebuild-missing-app.js): "Cancel" while
-           scanning, plain "Back" (btn--ghost, matching frBackBtn/chHistoryCancelBtn) while reviewing
-           results, "Back to Collections" (btn--primary, matching ucv2ApplyResultBackBtn exactly) once
-           Done. Replaces the old one-off "← Check Different Collections" label entirely -- see
-           prompts/handoff-latest.md for the placement judgment call (kept at the top of this shared
-           screen rather than moved to the bottom for the Done state, matching this screen's own
-           existing top-anchored nav-control convention). -->
-      <button id="rmfBackToPickerBtn" class="btn btn--ghost btn--small">Back</button>
-    </div>
 
     <div id="rmfScanLoading" class="loading-row"><span class="spinner"></span> <span id="rmfScanLoadingText">Scanning&hellip;</span></div>
     <div id="rmfScanError" class="callout callout--critical hidden"></div>
@@ -3014,6 +3144,11 @@
          collection already had on disk, so results below may be based on a stale file for these. A
          specific per-collection note, not a silent skip. -->
     <div id="rmfRefreshFailuresCallout" class="callout callout--warning hidden"></div>
+    <!-- "Rebuild Missing Files: download missing archives automatically during the scan" (2026-09-14)
+         -- shown once, stays up through the report the same way rmfRefreshFailuresCallout above does,
+         whenever this account was just confirmed not Premium (Download Missing Archives is on and
+         this scan actually had something eligible to auto-download). Text set in rmfRenderReport. -->
+    <div id="rmfNotPremiumCallout" class="callout callout--warning hidden"></div>
 
     <div id="rmfResults" class="hidden">
       <!-- Live REMAINING counts (decremented toward 0 as fixes land -- see rmfApplyExtractResults/
@@ -3036,8 +3171,18 @@
       <div class="summary-badges" id="rmfSummaryBadges"></div>
 
       <div id="rmfSummaryCallout" class="callout callout--warning hidden"></div>
-      <div id="rmfAllClearCallout" class="callout callout--success hidden">✅ Nothing missing — every mod in the collections you checked has all its files.</div>
+      <!-- "standard Done banner" (2026-09-14) -- real title+body, matching every other success banner
+           on this screen (e.g. the "No Missing Files Detected" one just below), not a one-liner. -->
+      <div id="rmfAllClearCallout" class="callout callout--success hidden">
+        <div class="callout__title">🎉 All Files Present</div>
+        <p>Nothing is missing! Every mod in the checked collections has all of its files in your staging folder.</p>
+      </div>
 
+      <!-- "Back sits next to Continue" (2026-09-16) -- rmfBackToPickerBtn (Back, ghost) is relocated
+           HERE by rmfSetBackBtnState('results') while reviewing scan results, immediately left of
+           the bar's own primary action, instead of sitting alone in the stepper row above where it's
+           easy to miss (director, 2026-09-14: "it's lost up there, didn't even see it"). See
+           DESIGN.md's own button-row rule 4. -->
       <div id="rmfSelectionBar" class="af-selection-bar hidden">
         <div class="af-selection-bar__left">
           <button id="rmfSelectAllBtn" class="btn btn--ghost btn--small">Select All</button>
@@ -3045,33 +3190,85 @@
           <button id="rmfClearBtn" class="btn btn--ghost btn--small">Clear Selection</button>
           <span id="rmfSelCount" class="muted"></span>
         </div>
-        <button id="rmfExtractSelectedBtn" class="btn btn--primary btn--small rmf-extract-trigger" disabled>Continue →</button>
+        <div class="af-selection-bar__right" id="rmfSelectionBarRight">
+          <button id="rmfExtractSelectedBtn" class="btn btn--primary btn--small rmf-extract-trigger" disabled>Continue →</button>
+        </div>
       </div>
 
-      <!-- A big batch (a whole collection's worth of mods) can take a while to extract -- streams
-           the same per-item progress the scan itself already streams (rmfScanLoading above), so a
-           long-running batch never reads as "nothing is happening." -->
-      <div id="rmfExtractLoading" class="loading-row hidden"><span class="spinner"></span> <span id="rmfExtractLoadingText">Restoring files&hellip;</span></div>
+      <!-- "Rebuild Missing Files: real per-mod status pills during Extract, not one vague spinner
+           line" (2026-09-14). A big batch (a whole collection's worth of mods) can take a while --
+           a real per-mod table (same .plan-table-wrap--scrollable/.plan-table shape and pill
+           vocabulary Rebuild Collection's run screen and Update Collection v2's Apply Progress
+           already use, per that spec's own "reuse, don't reinvent") replaces the old single vague
+           "Restoring files…" line, which left the screen showing the PREVIOUS mod's name for the
+           entire duration of a long download or a large extraction -- see rmfBuildExtractProgressTable/
+           rmfUpdateExtractRow in rebuild-missing-app.js. -->
+      <div id="rmfExtractLoading" class="loading-row hidden"><span class="spinner"></span> <span id="rmfExtractLoadingText">0 of 0 mods done</span></div>
+      <div class="progress-bar-wrap hidden" id="rmfExtractProgressBarWrap"><div id="rmfExtractProgressBar" class="progress-bar"></div></div>
+      <div class="plan-table-wrap plan-table-wrap--scrollable hidden" id="rmfExtractTableWrap">
+        <table class="plan-table">
+          <thead><tr><th>Mod</th><th>Status</th><th>Detail</th></tr></thead>
+          <tbody id="rmfExtractTableBody"></tbody>
+        </table>
+      </div>
       <div id="rmfExtractResultsCallout" class="callout callout--success hidden"></div>
 
       <!-- Real Deploy step (2026-09-01, replacing the old "External Changes" static warning --
            director's own ask: "add Deploy button... replace with our standard deploy modal used
-           elsewhere (Update collection)"). Same real fire-and-poll shape Missing Masters' own
-           #mmPendingDeploy/#mmDeployProgress/#mmDeployResult and Update Collection v2's own
-           #ucv2DeployPending/#ucv2DeployProgress/#ucv2DeployResult already establish -- not a new
-           pattern, see rmfStartDeploy in rebuild-missing-app.js. Shown only once Done
-           (hasActionable === false after a real restore, same condition as #rmfStatGrid above). -->
+           elsewhere (Update collection)"; unified 2026-09-14, "the same Deploy step on every Done
+           screen" -- now shown on EVERY Done landing, not just after a real restore, since the
+           director may not have deployed since an earlier rebuild or update. Title/body text set by
+           rmfSetDoneUI depending on whether this run actually restored anything (see
+           rmfAnyRestoreThisRun's own header comment) -- an all-clear scan gets the title-only variant,
+           no body, since nothing here changed staging this run. Same real fire-and-poll shape Rebuild
+           Collection's own #rebuildDeployPending and Update Collection v2's own #ucv2DeployPending
+           establish -- not a new pattern, see deploy-panel.js's shared startDeploy. -->
       <div id="rmfDeployPending" class="callout callout--info hidden">
-        <div class="callout__title">🚀 One step left</div>
-        <p>Your files are restored in staging, but your game can't see them yet. Deploy your mods to finish.</p>
+        <div class="callout__title" id="rmfDeployPendingTitle">🚀 One step left</div>
+        <p id="rmfDeployPendingBody">Your files are restored in staging, but your game can't see them yet. Deploy your mods to finish.</p>
         <div class="row-actions"><button class="btn btn--primary btn--small" id="rmfDeployBtn">Deploy →</button></div>
       </div>
       <div id="rmfDeployProgress" class="callout callout--info hidden">
         <div class="callout__title">Deploying mods in Vortex&hellip;</div>
         <div class="progress-bar-wrap"><div id="rmfDeployBar" class="progress-bar"></div></div>
         <p class="muted" id="rmfDeployPhase">Starting&hellip;</p>
+        <!-- Stall reminder -- same real, helper-reported signal as Update Collection v2's own
+             #ucv2DeployStallHint (deploy-panel.js's shared deployStallMessage/startDeploy). -->
+        <p class="muted hidden" id="rmfDeployStallHint" style="color:var(--warning)">⚠️ Vortex is taking longer than usual to finish. Please be patient while it finishes.</p>
       </div>
       <div id="rmfDeployResult" class="callout hidden"></div>
+
+      <!-- "a Couldn't Check row doesn't strand the finished screen" (2026-09-16) -- once nothing is
+           SELECTABLE (no missing/archive-issue rows left), this tool has nothing further it can do
+           automatically, but a Couldn't Check row still genuinely needs a look (an unresolved
+           install, an Open FOMOD with no recorded choices) -- shown here as its own needs-attention
+           callout (DESIGN.md's own ".rbc-attn-*" pattern, same shape as Rebuild Collection's own
+           Done-screen attention rows), one row per mod with its real reason and an Add to Exception
+           List action, rather than either hiding them or pretending the run is a plain, uncomplicated
+           success. Placed after the Deploy panel and before Back to Collections, matching DESIGN.md's
+           own Done-screen row order (tool's result -> Deploy -> tool-specific rows -> Back). Toggled
+           by rmfRenderCouldntCheckAttention (rebuild-missing-app.js), called from the one shared
+           rmfRefreshResultsVisibility() -- never shown while still reviewing (those rows stay in the
+           normal filterable table there instead, unchanged). -->
+      <div id="rmfCouldntCheckCallout" class="callout callout--warning hidden">
+        <div class="callout__title" id="rmfCouldntCheckTitle"></div>
+        <div class="callout__body">
+          <!-- Static fallback only -- rmfRenderCouldntCheckAttention (rebuild-missing-app.js) always
+               sets this fresh, matching the real count (one vs. several) and whether Install is
+               offered on at least one row here, before this callout is ever un-hidden. -->
+          <p id="rmfCouldntCheckBody">These mods have a FOMOD wizard or another issue the tool couldn't resolve automatically. No files were extracted — check the mods, or add them to the exceptions list if that's expected.</p>
+          <div id="rmfCouldntCheckList" class="rbc-attn-list"></div>
+        </div>
+      </div>
+
+      <!-- "standard Done banner, Back to Collections underneath" (2026-09-14) -- DESIGN.md's own
+           bottom action row (.actions, justify-content: flex-end). rmfSetBackBtnState moves the one
+           real #rmfBackToPickerBtn element in here (relabeled "Back to Collections", btn--primary)
+           once Done, and back out to the stepper row otherwise -- see that function's own comment.
+           Sits after every Done banner/Deploy-prompt element above so it always lands visually
+           underneath whichever of them is actually showing, for both Done variants (a fresh "all
+           clear" scan and an after-restore "No Missing Files Detected" landing). -->
+      <div class="actions hidden" id="rmfDoneActions"></div>
 
       <div class="plan-table-wrap hidden" id="rmfTableWrap">
         <table class="plan-table">
@@ -3207,7 +3404,7 @@
   <!-- Screen: Scan results (clean) -->
   <div id="chScreenClean" class="hidden">
     <div class="ch-result-hero">
-      <div class="ch-icon">✅</div>
+      <div class="ch-icon">🎉</div>
       <h2>No cycles found</h2>
       <p>Your rules can be sorted into a valid load order. Nothing to fix here.</p>
     </div>
@@ -3355,16 +3552,18 @@
   </div>
   <!-- /utilities-sub-area-clearflags -->
 
-  <!-- Duplicate Version Cleanup (2026-09-01) -- built against the approved
-       design/mockup-duplicate-version-cleanup.html. Placeholder copy throughout (name/hero/callouts)
-       per that mockup's own explicit note -- a real Gemini pass is a separate follow-up, not part of
-       this build. See lib/duplicate-version-cleanup.js and
+  <!-- Cleanup Duplicates (2026-09-01, name/copy finalized 2026-09-15 -- Gemini pass, see
+       prompts/handoff-latest.md) -- built against the approved
+       design/mockup-duplicate-version-cleanup.html. See lib/duplicate-version-cleanup.js and
        web/duplicate-version-cleanup-routes.js for the real logic this markup is wired to. -->
   <div id="utilities-sub-area-duplicateversions" class="hidden">
   <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span>Utilities</div>
   <div class="tool-hero" data-tool-id="duplicate-version-cleanup">
-    <h2 class="tool-hero__title" data-brand-slot="heroTitle">♻️ Working title: "Duplicate Version Cleanup"</h2>
-    <p class="tool-hero__body" data-brand-slot="heroBody">Placeholder hero copy — the whole thing (name, tagline, hero text) still needs a Gemini pass before this is final. What it actually does: Vortex's own Version dropdown can show the same mod more than once — sometimes a genuinely older archived version kept on purpose, sometimes a leftover orphaned download that's really just clutter. This tool finds every group, lets you tell them apart, and cleans up the real duplicates for good: remove, redownload, reinstall, replay any FOMOD choices, and reassign it back to every collection it belonged to.</p>
+    <div class="tool-hero__title-row">
+      <h2 class="tool-hero__title" data-brand-slot="heroTitle">♻️ Cleanup Duplicates</h2>
+      <span class="badge badge--neutral">Beta</span>
+    </div>
+    <p class="tool-hero__body" data-brand-slot="heroBody">Vortex often leaves behind duplicate mod versions in your dropdowns — some you meant to keep, others just leftover clutter. This tool sorts the keepers from the duplicates, removes the clutter, and cleanly reinstalls your chosen versions back into their collections with your saved installer choices.</p>
   </div>
 
   <div class="merge-stepper" id="dvcStepper"></div>
@@ -3382,6 +3581,11 @@
        design/SPEC-duplicate-version-cleanup-tool.md's resolved open question #1), not a state to
        block. One or more checked scopes to the union of their real members. -->
   <div id="dvcScreen1">
+    <div class="callout callout--warning">
+      <div class="callout__title">⚠️ Beta Feature</div>
+      <div class="callout__body">While this tool has been tested, edge cases may still pop up. Proceed with care—if anything looks off, you can always clean it up manually by removing duplicates directly in Vortex.</div>
+    </div>
+
     <div id="dvcPickerLoading" class="loading-row"><span class="spinner"></span> Loading collections&hellip;</div>
 
     <div id="dvcInstalledSection" class="hidden">
@@ -3394,14 +3598,14 @@
       <div class="picker-grid" id="dvcWorkshopGrid"></div>
     </div>
 
-    <p class="tool-hero__body" style="max-width:640px">Scanning your whole install finds everything at once. Check one or more collections below instead to scope the scan to just those.</p>
+    <p class="tool-hero__body" style="max-width:640px">Leave unselected to scan your entire install, or check specific collections to focus the scan.</p>
 
     <div class="rmf-cartbar" id="dvcCartBar">
       <span>♻️</span>
       <span><b id="dvcPickCountNum">0</b> collection<span id="dvcPickCountPlural">s</span> selected <span class="muted">(none checked = whole install)</span></span>
       <button class="rmf-cartbar__toggle" id="dvcCartToggleBtn" hidden>which ones?</button>
       <div class="rmf-cartbar__spacer"></div>
-      <button class="btn btn--primary btn--small" id="dvcScanBtn">Scan for duplicates →</button>
+      <button class="btn btn--primary btn--small" id="dvcScanBtn">Scan for Duplicates →</button>
       <div class="rmf-cartbar__taglist" id="dvcCartTagList"></div>
     </div>
 
@@ -3495,6 +3699,167 @@
   </div>
   </div>
   <!-- /utilities-sub-area-duplicateversions -->
+
+  <!-- Bulk Collection Editor (built 2026-09-10, add-only; rebuilt 2026-09-15 collections-first with
+       a Remove job added) -- built against the approved
+       design/mockup-remove-mods-from-collections.html (Add's own original mockup,
+       design/mockup-add-mods-to-collections.html, is superseded by it for step order/layout, still
+       accurate for the search-mod mechanics themselves). Real name/copy from the director's own
+       2026-09-15 picks + Gemini pass -- see lib/add-mods-to-collections.js and
+       web/add-mods-to-collections-routes.js for the real logic this markup is wired to. -->
+  <div id="utilities-sub-area-addmodstocollections" class="hidden">
+  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span>Utilities</div>
+  <div class="tool-hero" data-tool-id="add-mods-to-collections">
+    <h2 class="tool-hero__title" data-brand-slot="heroTitle">🗂️ Bulk Collection Editor</h2>
+    <p class="tool-hero__body" data-brand-slot="heroBody">Vortex makes you update your collections one mod and one pop-up at a time. This tool lets you batch-edit multiple collections at once — quickly add new mods to your lists or strip out old ones without touching your actual installations.</p>
+  </div>
+
+  <div class="merge-stepper" id="amcStepper"></div>
+  <div id="amcCriticalError" class="callout callout--critical hidden"></div>
+
+  <!-- Mode switch -- lives above every step (not repeated per-step like the mockup's own static
+       screens) since it's the SAME control regardless of which step is showing. Switching modes
+       always restarts the whole flow at Step 1 -- Step 2 shows a completely different list per mode,
+       so there is no sane partial state to carry across. -->
+  <div class="amc-mode-row">
+    <button id="amcModeAddBtn" class="btn btn--ghost amc-mode-btn">Add mods</button>
+    <button id="amcModeRemoveBtn" class="btn btn--ghost amc-mode-btn">Remove mods</button>
+    <span class="muted" id="amcModeHint">Choose whether you are adding new mods to these collections or pruning existing ones from their lists.</span>
+  </div>
+
+  <!-- Step 1: Collections (both modes) -->
+  <div id="amcStep0">
+    <div class="section-title">Your editable collections</div>
+    <div id="amcCollLoading" class="loading-row"><span class="spinner"></span> Loading your collections&hellip;</div>
+    <div id="amcCollEmpty" class="empty-row hidden"></div>
+    <div id="amcCollWrap" class="hidden">
+      <div class="af-selection-bar">
+        <div class="af-selection-bar__left">
+          <button id="amcCollSelectAllBtn" class="btn btn--ghost btn--small">Select all</button>
+          <button id="amcCollInvertBtn" class="btn btn--ghost btn--small">Invert selection</button>
+          <button id="amcCollClearBtn" class="btn btn--ghost btn--small">Clear selection</button>
+          <span class="muted" id="amcCollSelCount"></span>
+        </div>
+      </div>
+      <div class="picker-grid" id="amcCollGrid"></div>
+    </div>
+
+    <div class="merge-navrow">
+      <span></span>
+      <button id="amcCollNextBtn" class="btn btn--primary" disabled>Next: Choose mods →</button>
+    </div>
+    <p class="note">Each collection shows the working version it's on now (what a change here updates) and, smaller, the revision you last published. A collection you've never published says so.</p>
+  </div>
+
+  <!-- Step 2: Mods -- one shared shell, two sub-views swapped by mode -->
+  <div id="amcStep1" class="hidden">
+    <div id="amcStep1Body">
+      <div class="section-title" id="amcModsTitle">Select mods</div>
+
+      <!-- Add sub-view: today's cross-search pick list, unchanged mechanics -->
+      <div id="amcAddView">
+        <div class="af-selection-bar">
+          <div class="af-selection-bar__left">
+            <input id="amcSearchInput" class="input input--wide" placeholder="Search your installed mods by name…" autocomplete="off">
+            <button id="amcSearchBtn" class="btn btn--small btn--primary">Search</button>
+          </div>
+          <div class="af-selection-bar__right">
+            <button id="amcStep1BackBtn" class="btn btn--ghost">Back</button>
+            <button id="amcAddBtn" class="btn btn--primary" disabled>Add to 0 collections</button>
+          </div>
+        </div>
+        <div id="amcSearchLoading" class="loading-row hidden"><span class="spinner"></span> Searching your mods&hellip;</div>
+        <div id="amcSearchEmpty" class="empty-row hidden"></div>
+        <div id="amcSearchResultsWrap" class="hidden">
+          <div class="af-selection-bar" style="margin-top:0">
+            <div class="af-selection-bar__left">
+              <button id="amcSelectAllBtn" class="btn btn--ghost btn--small">Select all</button>
+              <button id="amcInvertBtn" class="btn btn--ghost btn--small">Invert selection</button>
+              <button id="amcClearBtn" class="btn btn--ghost btn--small">Clear selection</button>
+              <span class="muted" id="amcSearchSelCount"></span>
+            </div>
+          </div>
+          <div class="plan-table-wrap">
+            <table class="plan-table">
+              <thead><tr><th class="col-check"></th><th>Mod</th><th style="text-align:right">Version</th><th>Already in</th></tr></thead>
+              <tbody id="amcSearchResultsBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="section-title" style="margin-top:20px">Picked mods (<span id="amcPickedCount">0</span>)</div>
+        <ul class="mod-summary-list" id="amcPickedList"></ul>
+      </div>
+
+      <!-- Remove sub-view: the merged cross-collection list -->
+      <div id="amcRemoveView" class="hidden">
+        <div class="af-selection-bar">
+          <div class="af-selection-bar__left">
+            <input id="amcRemoveFilterInput" class="input input--wide" placeholder="Filter these mods by name…" autocomplete="off">
+          </div>
+          <div class="af-selection-bar__right">
+            <button id="amcRemoveBackBtn" class="btn btn--ghost">Back</button>
+            <button id="amcRemoveBtn" class="btn btn--danger" disabled>Remove from 0 collections</button>
+          </div>
+        </div>
+        <div id="amcRemoveLoading" class="loading-row"><span class="spinner"></span> Loading the mods in those collections&hellip;</div>
+        <div id="amcRemoveEmpty" class="empty-row hidden"></div>
+        <div id="amcRemoveWrap" class="hidden">
+          <div class="af-selection-bar" style="margin-top:0">
+            <div class="af-selection-bar__left">
+              <button id="amcRemoveSelectAllBtn" class="btn btn--ghost btn--small">Select all</button>
+              <button id="amcRemoveInvertBtn" class="btn btn--ghost btn--small">Invert selection</button>
+              <button id="amcRemoveClearBtn" class="btn btn--ghost btn--small">Clear selection</button>
+              <span class="muted" id="amcRemoveSelCount"></span>
+            </div>
+          </div>
+          <div class="plan-table-wrap">
+            <table class="plan-table">
+              <thead><tr><th class="col-check"></th><th>Mod</th><th style="text-align:right">Version</th><th>In which collections</th></tr></thead>
+              <tbody id="amcRemoveResultsBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <p class="note">Every mod in the collections you picked, merged into one list. Selecting a mod removes it from every picked collection it's in.</p>
+      </div>
+    </div>
+
+    <!-- Deliberate plain spinner, no live count (2026-09-10, same justification as the sibling
+         Archive Finder extract modal's own progress state): both the add and the remove are ONE
+         batch HTTP call end-to-end server-side, a pure Redux batch dispatch with no disk I/O -- no
+         real per-item event to hook without building actual SSE streaming for what's normally a
+         sub-second write. -->
+    <div id="amcAddProgress" class="hidden">
+      <div class="phase-indicator"><span class="spinner"></span><span id="amcProgressText">Updating your collections&hellip;</span></div>
+    </div>
+  </div>
+
+  <!-- Step 3: Done -->
+  <div id="amcStep2" class="hidden">
+    <div class="callout" id="amcDoneCallout">
+      <div class="callout__title" id="amcDoneTitle"></div>
+      <p class="callout__body" id="amcDoneBody"></p>
+    </div>
+    <div id="amcDoneGroups"></div>
+    <div class="merge-navrow">
+      <span></span>
+      <button id="amcStartOverBtn" class="btn btn--primary">Edit more collections</button>
+    </div>
+  </div>
+  </div>
+  <!-- /utilities-sub-area-addmodstocollections -->
+
+  <!-- Remove confirm -- Remove only; Add keeps its no-confirm behavior (director's own explicit
+       call). Counts only, no per-collection list -- see design/mockup-remove-mods-from-collections.html. -->
+  <div id="amcRemoveConfirmModal" class="modal-overlay hidden">
+    <div class="modal modal--warning">
+      <h2 id="amcRemoveConfirmTitle"></h2>
+      <p id="amcRemoveConfirmText"></p>
+      <div class="modal-actions">
+        <button id="amcRemoveConfirmCancelBtn" class="btn btn--ghost">Cancel</button>
+        <button id="amcRemoveConfirmOkBtn" class="btn btn--danger">Remove them</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Confirm step for Clear Update Flags' own Restore button -- same shape/copy conventions as
        Update Collection's own syncRestoreBackupModal (a real write to live Vortex state needs a real
@@ -4258,41 +4623,9 @@
     </div>
   </div>
 
-  <!-- FOMOD picker (2026-08-18, rebuilt same day to match Vortex's real wizard -- see
-       design/vortex-update-collection-v2-fomod-picker-mockup.html, the approved reference this was
-       built against) -- pages through one real install step at a time (left: that step's own
-       groups; right: a fixed-size, independently-scrolling image+description panel), with real
-       Back/Next buttons labeled with the adjacent VISIBLE step's own name (not a generic label or a
-       synthesized page number) and a real progress bar -- confirmed against Vortex's own real
-       source (installer_fomod_shared/views/InstallerDialog.tsx + dialog-fomod.scss: a TRUE FIXED
-       60vw x 60vh dialog, not a max/min-height pair that flexes with content). Deliberately
-       reusable (Phase 3's own Added-mod FOMOD needs can drive the same component) -- kept as its
-       own self-contained modal, not entangled with the Apply flow's own state beyond the callback
-       it's given. -->
-  <div class="ucv2-modal-backdrop" id="ucv2FomodPickerModal">
-    <div class="ucv2-modal ucv2-modal--fomod">
-      <div class="ucv2-fomod-modal__head">
-        <button class="ucv2-modal__close ucv2-fomod-modal__close" id="ucv2FomodPickerClose">&times;</button>
-        <div class="ucv2-fomod-modal__title" id="ucv2FomodPickerTitle">FOMOD install options</div>
-        <p class="ucv2-fomod-modal__step" id="ucv2FomodPickerStepName"></p>
-        <p class="ucv2-fomod-modal__intro" id="ucv2FomodPickerIntro"></p>
-        <p class="muted" id="ucv2FomodPickerCounter" style="margin:6px 0 0;font-size:12px"></p>
-      </div>
-      <div class="ucv2-fomod-modal__body">
-        <div class="ucv2-fomod-options" id="ucv2FomodPickerOptions"></div>
-        <div class="ucv2-fomod-preview" id="ucv2FomodPickerPreview">
-          <div class="ucv2-fomod-preview__empty">Hover over an option to see its image and description.</div>
-        </div>
-      </div>
-      <p id="ucv2FomodPickerError" class="callout callout--warning hidden" style="margin:0 24px 12px"></p>
-      <div class="ucv2-fomod-modal__foot">
-        <button class="btn btn--ghost" id="ucv2FomodPickerCancel">Cancel</button>
-        <button class="btn btn--ghost" id="ucv2FomodPickerBack">Back</button>
-        <div class="ucv2-fomod-progress"><div class="ucv2-fomod-progress__fill" id="ucv2FomodPickerProgressFill"></div></div>
-        <button class="btn btn--primary" id="ucv2FomodPickerNext">Next</button>
-      </div>
-    </div>
-  </div>
+  <!-- FOMOD picker moved to page level, outside every .tool-area -- see the shared-modals zone near
+       the end of this file (search "the FOMOD picker itself, moved here") for the markup and the
+       real story of why. -->
 </main>
 </section>
 
@@ -4664,7 +4997,7 @@
   <!-- Step 4: Done -->
   <div id="mergeStep4" class="hidden">
     <div class="settings-group">
-      <h2 id="mergeDoneTitle">✅ Merge complete</h2>
+      <h2 id="mergeDoneTitle">🎉 Merge complete</h2>
       <p class="muted">Your plugins were bundled into one file.</p>
       <div class="merge-stat-grid" id="mergeDoneStats"></div>
       <!-- Failed-to-copy records (2026-08-25, merge-v2-failedtocopy-case) -- lib/merge-v2-worker.js's
@@ -5440,6 +5773,71 @@
   </div>
 </div>
 
+<!-- The FOMOD picker itself, moved here (2026-09-17, "Install opens an invisible picker") --
+     genuinely outside every .tool-area now, same reason as every other modal in this zone.
+     Previously sat inside <section id="area-update-collection-v2">, right before that section's own
+     closing tags -- a 2026-09-17 comment on this same markup claimed it was "already page-level (not
+     nested inside Update Collection's own screen containers)," which was true of Update Collection's
+     own SCREEN containers but not of the whole AREA section itself, one level up. That's the
+     hidden-ancestor bug documented at #wtConfirmModal above: `display:none` on ANY ancestor wins over
+     the modal's own `.open`/position:fixed, so showFomodPicker() opening this from Rebuild Missing
+     Files or Rebuild Collection (Update Collection not the active tool, so its whole area is hidden)
+     added the `open` class to a modal nobody could see or click -- confirmed live, a real Playwright
+     click at the modal's own reported bounding box hit nothing, because that box was `0,0,0,0`.
+     Rebuilt same day to match Vortex's real wizard -- see
+     design/vortex-update-collection-v2-fomod-picker-mockup.html, the approved reference this was
+     built against -- pages through one real install step at a time (left: that step's own groups;
+     right: a fixed-size, independently-scrolling image+description panel), with real Back/Next
+     buttons labeled with the adjacent VISIBLE step's own name (not a generic label or a synthesized
+     page number) and a real progress bar -- confirmed against Vortex's own real source
+     (installer_fomod_shared/views/InstallerDialog.tsx + dialog-fomod.scss: a TRUE FIXED 60vw x 60vh
+     dialog, not a max/min-height pair that flexes with content). Driven by any of Rebuild Collection,
+     Rebuild Missing Files, or Update Collection via showFomodPicker(needs, {onDone, onCancel})
+     (web/public/fomod-picker.js), not entangled with any one tool's own state beyond the callbacks
+     it's given. Ids/classes below keep their historical "ucv2Fomod*"/".ucv2-fomod-*" naming -- a
+     plain getElementById lookup doesn't care, and renaming a dozen ids for a cosmetic-only reason
+     wasn't worth the risk in the same change; disclosed naming debt, not missed. -->
+<div class="ucv2-modal-backdrop" id="ucv2FomodPickerModal">
+  <div class="ucv2-modal ucv2-modal--fomod">
+    <div class="ucv2-fomod-modal__head">
+      <button class="ucv2-modal__close ucv2-fomod-modal__close" id="ucv2FomodPickerClose">&times;</button>
+      <div class="ucv2-fomod-modal__title" id="ucv2FomodPickerTitle">FOMOD install options</div>
+      <p class="ucv2-fomod-modal__step" id="ucv2FomodPickerStepName"></p>
+      <p class="ucv2-fomod-modal__intro" id="ucv2FomodPickerIntro"></p>
+      <p class="ucv2-fomod-modal__reinstall-note hidden" id="ucv2FomodPickerReinstallNote"></p>
+      <p class="ucv2-fomod-modal__intro hidden" id="ucv2FomodPickerNoDataNote"></p>
+      <!-- Shown once, step 1 only, whenever this session already confirmed "Install Anyway" past a
+           schema-validation failure for this mod (2026-09-15, "validate the installer against the
+           real schema") -- a standing reminder it's still worth reporting to the mod's own author,
+           not a one-time toast that disappears before it's read. -->
+      <p class="ucv2-fomod-modal__intro hidden" id="ucv2FomodPickerValidationBypassNote"></p>
+      <p class="muted" id="ucv2FomodPickerCounter" style="margin:6px 0 0;font-size:12px"></p>
+    </div>
+    <div class="ucv2-fomod-modal__body">
+      <div class="ucv2-fomod-options" id="ucv2FomodPickerOptions"></div>
+      <div class="ucv2-fomod-preview" id="ucv2FomodPickerPreview">
+        <div class="ucv2-fomod-preview__empty">Hover over an option to see its image and description.</div>
+      </div>
+    </div>
+    <p id="ucv2FomodPickerError" class="callout callout--warning hidden" style="margin:0 24px 12px"></p>
+    <div class="ucv2-fomod-modal__foot">
+      <button class="btn btn--ghost" id="ucv2FomodPickerCancel">Cancel</button>
+      <button class="btn btn--ghost" id="ucv2FomodPickerBack">Back</button>
+      <div class="ucv2-fomod-progress"><div class="ucv2-fomod-progress__fill" id="ucv2FomodPickerProgressFill"></div></div>
+      <button class="btn btn--primary" id="ucv2FomodPickerNext">Next</button>
+    </div>
+  </div>
+</div>
+
+<!-- Click-to-zoom for a FOMOD preview image (item 10d, 2026-09-15) -- sits ABOVE the FOMOD picker
+     modal itself (a real overlay on top of an already-open one, z-index 70 vs. the picker's own 50 --
+     see styles.css's own z-index ladder comment), reusing the SAME backdrop+escape/outside-click-close
+     structural shape as ucv2FomodPickerModal above, just with its own minimal lightbox styling since
+     an image lightbox isn't a bordered card modal. -->
+<div class="ucv2-fomod-zoom-overlay" id="ucv2FomodZoomOverlay">
+  <img id="ucv2FomodZoomImage" src="" alt="">
+</div>
+
 <!-- Outside every .tool-area on purpose -- triggered by shell.js's nav-click guard when leaving
      Settings with unsaved changes, so it must stay visible no matter which area is toggled. -->
 <div id="unsavedChangesModal" class="modal-overlay hidden">
@@ -5456,6 +5854,14 @@
 <script src="status-labels.js"></script>
 <script src="shell.js"></script>
 <script src="theme.js"></script>
+<!-- Shared Deploy poll engine (2026-09-14) -- loaded before every tool's own *-app.js that calls
+     into it (this one, rebuild-missing-app.js, update-collection-v2-app.js). -->
+<script src="deploy-panel.js"></script>
+<!-- Shared FOMOD choice picker (2026-09-17, "Open FOMOD mods get an Install button") -- loaded
+     before every tool's own *-app.js that calls showFomodPicker() (app.js, rebuild-missing-app.js,
+     update-collection-v2-app.js). Defines its own local $g -- see its own header comment for why it
+     doesn't depend on cleanup-app.js/settings-app.js's own copies, which load later. -->
+<script src="fomod-picker.js"></script>
 <script src="app.js"></script>
 <script src="sync-app.js"></script>
 <script src="settings-app.js"></script>
@@ -5495,5 +5901,6 @@
 <script src="book-app.js"></script>
 <script src="pgpatcher-app.js"></script>
 <script src="save-cleaner-app.js"></script>
+<script src="add-mods-to-collections-app.js"></script>
 </body>
 </html>

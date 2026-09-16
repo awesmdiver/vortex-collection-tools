@@ -400,7 +400,12 @@ async function dvcStartDeploy() {
 // ---------- Reset-on-entry (same seam every other Utilities sub-tab uses, see cleanup-app.js) ----------
 
 function dvcResetOnEntry() {
-  if (dvcState.eventSource) { dvcState.eventSource.close(); dvcState.eventSource = null; }
+  // Mid-operation guard ("coming back from another tool starts clean", 2026-09-17): a clean still
+  // genuinely running (dvcState.eventSource open) must keep running in view when the user comes back
+  // -- resetting to Screen 1 here (this used to close it unconditionally) would strand it, and this
+  // is a real, destructive delete operation, not just a read. A finished/failed clean already closes
+  // +nulls its own eventSource, so this never blocks a genuinely-finished one.
+  if (dvcState.eventSource) return;
   dvcState.groups = [];
   dvcState.selected.clear();
   dvcState.picked.clear();

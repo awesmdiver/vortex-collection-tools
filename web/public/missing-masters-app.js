@@ -165,8 +165,19 @@ function mmIsEslifierSwap(master) {
   return mmRecognizeEslifierEnabled && !!(master.activeAlternate && master.activeAlternate.eslifierSwap);
 }
 
+// dummyCreated (2026-09-14, "a created dummy master shows as Pending"): a real fix already happened
+// here (a dummy stub was created), same "not a real problem for THIS row any more, but not the same
+// green rocket wording readyToDeploy uses either" shape -- reuses the SAME 'ready-to-deploy' display
+// status (🟢 Pending, success styling) rather than inventing a new color, matching the director's own
+// explicit ask ("change the color to a 'Pending' color, not Red"). mmIsDummyPending is checked by the
+// callout/action code below to tell the two apart, since the fix and the remaining step differ.
+function mmIsDummyPending(master) {
+  return !!master.dummyCreated;
+}
+
 function mmDisplayStatus(master) {
   if (master.readyToDeploy) return 'ready-to-deploy';
+  if (mmIsDummyPending(master)) return 'ready-to-deploy';
   if (mmIsEslifierSwap(master)) return 'eslifier-swap';
   return master.status;
 }
@@ -174,8 +185,11 @@ function mmDisplayStatus(master) {
 // Whenever the ESLifier soft tier applies, there's genuinely nothing left to fix (same reasoning as
 // readyToDeploy suppressing these same actions below) -- offering "Create Dummy Master" or "Open
 // Staging Folder" right next to a callout that says "nothing to fix" would read as a contradiction.
+// dummyCreated gets the same suppression EXCEPT it grows its own "Remove Dummy Master" action, added
+// separately below (bypassing this check) since the normal "Create Dummy Master" branch doesn't apply
+// to it (the dummy already exists).
 function mmActionsSuppressed(master) {
-  return master.readyToDeploy || mmIsEslifierSwap(master);
+  return master.readyToDeploy || mmIsDummyPending(master) || mmIsEslifierSwap(master);
 }
 
 // Turns the plugin back on in Vortex, then moves the row into the state that already means exactly
@@ -233,8 +247,13 @@ function mmShowRowEnableError(btn) {
 // "fixed, but Vortex hasn't deployed it yet", whether it got there from this session's own Enable or
 // from the scan finding a rebuilt-but-undeployed mod. Reuses mmDisplayStatus so it can never disagree
 // with what the badge on the row says.
+// dummyCreated rows are deliberately EXCLUDED here (2026-09-14) even though they display under the
+// same "Pending" badge as a real readyToDeploy row (mmDisplayStatus above) -- a plain Vortex deploy
+// genuinely does nothing for a dummy stub that isn't installed as a mod in Vortex yet (see
+// missing-masters-scan.js's own dummyCreated comment), so counting it here would make the "Fixes
+// applied -- one step left, Deploy Mods" banner promise something a deploy can't actually deliver.
 function mmPendingDeployCount() {
-  return mmLastProblemMasters.filter((m) => mmDisplayStatus(m) === 'ready-to-deploy').length;
+  return mmLastProblemMasters.filter((m) => mmDisplayStatus(m) === 'ready-to-deploy' && !mmIsDummyPending(m)).length;
 }
 
 // The three result-level banners are decided together, in one place, because they're mutually
@@ -255,7 +274,7 @@ function mmRenderDeployBanners() {
   allClear.classList.toggle('hidden', !showAllClear);
   if (showAllClear) {
     allClear.innerHTML = '';
-    allClear.appendChild(el('div', { class: 'callout__title' }, '\u2705 No more missing masters \u2014 happy gaming!'));
+    allClear.appendChild(el('div', { class: 'callout__title' }, '\ud83c\udf89 No more missing masters \u2014 happy gaming!'));
     allClear.appendChild(el('p', {}, [
       'Checked ',
       el('strong', {}, mmLastTotal === 1 ? '1 active plugin' : `${mmLastTotal} active plugins`),
@@ -293,7 +312,7 @@ function mmShowDeployResult(kind) {
   box.className = `callout callout--${kind === 'success' ? 'success' : 'warning'}`;
   box.innerHTML = '';
   if (kind === 'success') {
-    box.appendChild(el('div', { class: 'callout__title' }, '\u2705 Deploy complete \u2014 your game is ready to launch.'));
+    box.appendChild(el('div', { class: 'callout__title' }, '\ud83c\udf89 Deploy complete \u2014 your game is ready to launch.'));
     return;
   }
   box.appendChild(el('div', { class: 'callout__title' }, '\u26a0\ufe0f Deploy failed'));
@@ -364,6 +383,7 @@ async function mmDeployAll() {
 function mmCanRestore(master) {
   return master.status === 'missing'
     && !master.readyToDeploy
+    && !mmIsDummyPending(master)
     && !master.activeAlternate
     && !master.deployedMisplaced
     && !master.possibleHollowInstall;
@@ -707,7 +727,17 @@ function mmRenderMasterRow(master) {
       ? 'btn btn--secondary btn--small'
       : 'btn btn--primary btn--small';
     const btn = el('button', { class: dummyClass }, 'Create Dummy Master');
-    btn.addEventListener('click', () => mmShowCreateDummyConfirm(master.name));
+    btn.addEventListener('click', () => mmShowCreateDummyConfirm(master.name, btn));
+    actions.push(btn);
+  }
+  // Remove Dummy Master (2026-09-14) -- the mirror-image action, in the SAME position the normal
+  // Create Dummy Master button would occupy (bypasses mmActionsSuppressed, which suppresses that
+  // button for exactly this row -- the dummy already exists, so the normal branch above doesn't
+  // apply). No confirmation modal: deleting the stub is trivially reversible (Create Dummy Master
+  // any time), matching the route's own "no confirmation needed" design.
+  if (master.status === 'missing' && mmIsDummyPending(master)) {
+    const btn = el('button', { class: 'btn btn--primary btn--small' }, 'Remove Dummy Master');
+    btn.addEventListener('click', () => mmDoRemoveDummyMaster(master, btn));
     actions.push(btn);
   }
   // Enable (2026-08-23) -- the master's file is right there, Vortex just has it switched off. One
@@ -749,7 +779,10 @@ function mmRenderMasterRow(master) {
   // Deployed-but-misplaced is the most concrete, most certain diagnosis whenever it applies (the
   // file is already sitting on disk -- just one folder too deep) -- shown first, above the
   // activeAlternate/hollow-install callouts, since those are comparatively less direct fixes.
-  if (master.deployedMisplaced) {
+  // Suppressed once a dummy's been created (2026-09-14) -- see the dummyCreated callout below,
+  // which takes over as the row's ONE callout rather than showing alongside a second, contradictory
+  // diagnosis of the same still-missing master.
+  if (master.deployedMisplaced && !mmIsDummyPending(master)) {
     // Prefix with "Data\" -- relPath alone (e.g. "data\1DustAdeptArmor.esl") doesn't make the
     // double-nesting obvious at a glance; showing the full "Data\data\..." makes the redundant
     // subfolder immediately visible.
@@ -767,7 +800,7 @@ function mmRenderMasterRow(master) {
     ]);
     children.push(callout);
   }
-  if (master.activeAlternate && master.activeAlternate.sameModAsMaster) {
+  if (master.activeAlternate && master.activeAlternate.sameModAsMaster && !mmIsDummyPending(master)) {
     const callout = el('div', { class: 'callout callout--critical' }, [
       el('div', { class: 'callout__title' }, '🛑 Wrong File Format Installed'),
       el('p', {}, [
@@ -784,7 +817,7 @@ function mmRenderMasterRow(master) {
       ]),
     ]);
     children.push(callout);
-  } else if (master.activeAlternate && !master.activeAlternate.sameModAsMaster) {
+  } else if (master.activeAlternate && !master.activeAlternate.sameModAsMaster && !mmIsDummyPending(master)) {
     // ESLifier awareness -- confirmed real 2026-08-14 (live vortex.deployment.json case): what LOOKS
     // like a name collision with an unrelated mod is actually the user's own deliberate ESLifier
     // swap whenever the active file's true source resolves back to their configured ESLifier output
@@ -849,7 +882,7 @@ function mmRenderMasterRow(master) {
   // row like this showed nothing but a bare "Create Dummy Master" button -- that resolves the crash,
   // but says nothing about how to get the mod's real content back. Critical/🛑, same as every other
   // 'missing' callout: unresolved, this crashes the game.
-  if (master.status === 'missing' && !master.readyToDeploy && !master.activeAlternate
+  if (master.status === 'missing' && !master.readyToDeploy && !mmIsDummyPending(master) && !master.activeAlternate
     && !master.deployedMisplaced && !master.possibleHollowInstall) {
     const callout = el('div', { class: 'callout callout--critical' }, [
       el('div', { class: 'callout__title' }, '🛑 Mod Files Missing'),
@@ -857,6 +890,22 @@ function mmRenderMasterRow(master) {
         'We can’t find ',
         el('strong', {}, master.name),
         ' anywhere in Data, staging, or downloads. This usually means the mod was removed from Vortex entirely. If it belongs to a collection, updating that collection should detect it and offer to reinstall it. Otherwise, download it again from Nexus Mods and install it through Vortex.',
+      ]),
+    ]);
+    children.push(callout);
+  }
+  // Replaces the callout above once a dummy stub has been created for this master (2026-09-14, "a
+  // created dummy master shows as Pending") -- the row is no longer an unresolved crash risk (Skyrim
+  // won't refuse to start over this master any more), just an unfinished setup step. Same wording
+  // this row's own Create Dummy Master confirmation already used ("To finish setting it up:" + the
+  // two numbered steps), so the callout and the confirmation the user just clicked through agree.
+  if (mmIsDummyPending(master)) {
+    const callout = el('div', { class: 'callout callout--success' }, [
+      el('div', { class: 'callout__title' }, '🧩 Dummy master created'),
+      el('p', {}, 'To finish setting it up:'),
+      el('ol', {}, [
+        el('li', {}, 'Install it as a mod in Vortex.'),
+        el('li', {}, 'Make sure it’s enabled.'),
       ]),
     ]);
     children.push(callout);
@@ -1112,6 +1161,16 @@ function mmRenderUnreadable(list) {
 let mmLastResponseJSON = null;
 
 async function runMissingMastersScan() {
+  // Mid-operation guard ("coming back from another tool starts clean", 2026-09-17): a real Deploy
+  // or Restore still genuinely running (mmDeployInFlight, or mmRestoreProgress visible) must keep its
+  // own progress/result reporting undisturbed -- this function re-renders the whole master list
+  // (including per-row buttons) fresh every single visit by design (this tool's own "state changes
+  // constantly" convention, unlike a real reset-to-step-0 tool), which would otherwise silently swap
+  // out a live "Restoring…"-labeled button out from under an in-progress restore. mmRestorePending
+  // is deliberately NOT the check here -- unlike mmRestoreProgress's own visibility, it's never reset
+  // back to null once a restore has ever started, so it can't tell "still running" apart from
+  // "finished a while ago."
+  if (mmDeployInFlight || !$g('mmRestoreProgress').classList.contains('hidden')) return;
   $g('mmCriticalError').classList.add('hidden');
   $g('mmNotConfigured').classList.add('hidden');
   $g('mmResults').classList.add('hidden');
@@ -1179,10 +1238,17 @@ async function pollMissingMastersScanSilently() {
   mmRender(data);
 }
 
-// ---------- Create Dummy Master ----------
+// ---------- Create / Remove Dummy Master ----------
 
-function mmShowCreateDummyConfirm(name) {
+// The row's own "Create Dummy Master" button that opened this modal -- kept disabled with "Creating…"
+// for the whole request, same reasoning/shape as mmPendingRebuildBtn below. Not cleared after use
+// (matches mmPendingDummyName's own existing convention) -- a stale reference here is harmless since
+// it's only ever read again from a fresh click.
+let mmPendingDummyBtn = null;
+
+function mmShowCreateDummyConfirm(name, triggerBtn) {
   mmPendingDummyName = name;
+  mmPendingDummyBtn = triggerBtn || null;
   const container = $g('mmCreateDummyConfirmModalText');
   container.innerHTML = '';
   // Appended straight into the container (no <p> wrapper) -- same DOM shape this line has always
@@ -1202,14 +1268,45 @@ $g('mmCreateDummyConfirmCancelBtn').addEventListener('click', () => {
 // Named (not just an inline listener body) so a Vortex-running retry can re-run the exact same
 // action -- reads mmPendingDummyName itself (set by mmShowCreateDummyConfirm and never cleared
 // after use), same reasoning as mmDoRebuild below reading mmPendingRebuild.
+//
+// REVISED 2026-09-14 ("a created dummy master shows as Pending, and the page keeps its scroll"):
+// used to re-run the full, visible runMissingMastersScan() on success -- that's exactly what jumped
+// the page back to the top (runMissingMastersScan hides #mmResults and shows the loader for the
+// whole round trip, which collapses the page's height mid-scroll). Now updates just this one master
+// in place -- same "only touch what changed" shape mmEnablePlugin already uses -- and the scan
+// itself independently confirms dummyCreated from disk on the next refresh/background poll anyway,
+// so nothing is lost by not re-scanning here.
 async function mmDoCreateDummyMaster() {
   $g('mmCreateDummyConfirmModal').classList.add('hidden');
   const name = mmPendingDummyName;
+  const btn = mmPendingDummyBtn;
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
   try {
     await mmApi('POST', '/api/missing-masters/create-dummy-master', { name });
-    await runMissingMastersScan();
+    const master = mmLastProblemMasters.find((m) => m.name === name);
+    if (master) master.dummyCreated = true;
+    mmRenderSummaryBadges(); // its counts are per display-status, which just changed for this row
+    mmRenderMasterList();
+    mmRenderDeployBanners(); // dummyCreated is deliberately excluded from the pending-deploy count
   } catch (e) {
     mmHandleError(e, mmDoCreateDummyMaster);
+  }
+}
+
+// Mirror-image action -- same "update just this row, no full re-scan" shape as create above. No
+// confirmation modal (matches the route's own "no confirmation needed" design): removing the stub is
+// trivially reversible.
+async function mmDoRemoveDummyMaster(master, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Removing…';
+  try {
+    await mmApi('POST', '/api/missing-masters/remove-dummy-master', { name: master.name });
+    master.dummyCreated = false;
+    mmRenderSummaryBadges();
+    mmRenderMasterList();
+    mmRenderDeployBanners();
+  } catch (e) {
+    mmHandleError(e, () => mmDoRemoveDummyMaster(master, btn));
   }
 }
 $g('mmCreateDummyConfirmOkBtn').addEventListener('click', mmDoCreateDummyMaster);

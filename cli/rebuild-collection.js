@@ -115,7 +115,8 @@ const STATUS_LABEL = {
     FAILED_MISMATCH_NOT_TOUCHED: '[FAIL-NOT-TOUCHED]',
     FAILED_EXTRACTION_NOT_TOUCHED: '[FAIL-NOT-TOUCHED]',
     FAILED_EXTRACTION_NO_PRIOR_DATA: '[FAIL-STILL-MISSING]',
-    CRITICAL_MANUAL_RESTORE_NEEDED: '[CRITICAL]',
+    FAILED_FOLDER_LOCKED_NOT_TOUCHED: '[FOLDER-LOCKED]',
+    CRITICAL_MANUAL_RESTORE_NEEDED: '[NEEDS-RESTORE]',
 };
 
 async function main() {
@@ -216,7 +217,10 @@ async function main() {
         } else {
             downloadResults = await nexusModDownload.downloadMissingArchivesForPlan({
                 mods: missingNexusMods, downloadsDir: args.downloads, gameDomain: collectionInfo.collection.info?.domainName, apiKey,
-                onProgress: ({ index, total, modName }) => console.log(`  [${index}/${total}] ${modName}...`),
+                // Only the 'start' half of onProgress's now-twice-per-mod firing (2026-09-14, "the run
+                // table's status pill shows every stage") -- the 'done' half exists for the web run
+                // screen's live per-row pill, meaningless for this one-line-per-mod CLI log.
+                onProgress: ({ index, total, modName, phase }) => { if (phase === 'start') console.log(`  [${index}/${total}] ${modName}...`); },
             });
             for (const r of downloadResults.results) {
                 console.log(r.status === 'DOWNLOADED' ? `  [OK] ${r.name} -> ${r.fileName}` : `  [FAILED] ${r.name} -- ${r.error}`);
@@ -274,6 +278,13 @@ async function main() {
         rebuildQueue, collectionJsonPath: collectionInfo.collectionJsonPath,
         downloadsDir: args.downloads, stagingDir: args.staging, modEntries,
         concurrency: args.concurrency,
+        // For the per-mod staleness guard (see runRebuild()'s own header comment) -- essentially
+        // never exercised for this CLI (a single process, no concurrent web-server actions can touch
+        // the same staging dir mid-run), but cheap to wire through defensively. collectionModId/
+        // exceptionMatcher/forceExtractOffSiteMismatchesEnabled are left at their defaults here,
+        // matching this CLI's own buildPlan() call above (it doesn't support Import overrides,
+        // exceptions, or force-extract either -- a pre-existing gap, not something this task adds).
+        knownVortexModIds, sevenZipExe,
         onModComplete: (entry) => {
             const mod = { name: entry.name };
             console.log(`${STATUS_LABEL[entry.status] || `[${entry.status}]`} ${mod.name}${entry.detail ? ` -- ${entry.detail}` : ''}`);
@@ -292,15 +303,13 @@ async function main() {
             }
             runner.writeLog(logPath, currentLog('in-progress'));
 
+            // No longer halts the batch (2026-09-13) -- every other mod lives in its own folder, so
+            // one locked/critical mod doesn't stop the rest of the collection from rebuilding. The
+            // row above already carries the label and detail; this CLI has no per-mod retry command
+            // of its own, so point at the log's own recorded paths and the web UI's Retry/Restore &
+            // Retry buttons (same log file, same lib/collection-runner.js retry path) instead.
             if (entry.status === 'CRITICAL_MANUAL_RESTORE_NEEDED') {
-                console.log('\n' + '='.repeat(70));
-                console.log('CRITICAL: swapping the verified-good rebuild into place failed. Halting the whole batch.');
-                console.log(`  Mod:                ${entry.name}`);
-                console.log(`  Old content at:     ${entry.oldContentDir}`);
-                console.log(`  New content at:     ${entry.rebuildingDir}`);
-                console.log(`  Real staging slot:  ${entry.stagingModDir}`);
-                console.log('  Restore this one by hand, then re-run with --resume ' + `"${logPath}"`);
-                console.log('='.repeat(70));
+                console.log(`    Original is saved as "${path.basename(entry.oldContentDir)}", fresh copy as "${path.basename(entry.rebuildingDir)}". Restore it by hand, or open this run's log in the web UI and use Restore & Retry.`);
             }
         },
     });

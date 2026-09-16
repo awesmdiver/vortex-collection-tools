@@ -40,5 +40,6 @@
   "maxSaveCleanerBackupsToKeep": null,
   "mergePostMergeAction": "disable",
   "modExceptionListDir": null,
-  "fileRetrieverLastDestFolder": null
+  "fileRetrieverLastDestFolder": null,
+  "appDataDir": null
 }

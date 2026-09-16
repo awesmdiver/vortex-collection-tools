@@ -18,6 +18,32 @@
   --danger-bg: rgba(240, 84, 107, 0.12);
   --neutral: #7c8494;
   --neutral-bg: rgba(124, 132, 148, 0.12);
+  /* "Extracting…" gets its own color, so amber means only "warning" (2026-09-14, director's own
+     call): a live in-progress pill (Extracting…/Installing…) used to share --warning with FINISHED
+     amber statuses (Folder locked, No archive, Open FOMOD) -- only the spinner told them apart.
+     Violet reads clearly distinct from --accent (Downloading's own blue), --success, --danger,
+     --warning, and --neutral in both themes -- confirmed via a WCAG contrast check against the
+     tinted pill background (see this task's own handoff for the numbers): 5.18:1 dark / 4.13:1
+     light, both at or above the weakest EXISTING pill's own contrast in that theme (--neutral
+     4.03:1 dark, --success 3.03:1 light). Used ONLY for a live "this mod's own work is happening
+     right now" pill (.status-pill--working) -- never a finished/final status, which all keep their
+     existing colors. "In both themes" here means the base dark/light pair only -- the Skyrim brand
+     theme overrides --accent to a violet too (see the [data-brand="skyrim"] override further down,
+     right after .status-pill--working) and needs its own --working to stay distinct from THAT. */
+  --working: #a78bfa;
+  --working-bg: rgba(167, 139, 250, 0.14);
+  /* "Downloading…" gets its own token too, decoupled from --accent (2026-09-14 follow-up, design-side
+     catch): the live Downloading pill used to render via .status-pill--info -> var(--accent), which
+     is exactly the variable theme.js overwrites per brand (see applyAccentStylesheet) -- fine under
+     Plain's blue, but Fallout 4's own --accent is #00D400 (themes/fallout4.json), a green close enough
+     to --success that a downloading row read as already finished. Giving Downloading its own fixed
+     token means no brand's accent choice can ever land on a status color by coincidence again, the
+     same reasoning --working above already established for Extracting/Installing. Value is today's
+     existing blue (the same hex --accent already used before this split), so Plain/Fallout 4/Starfield
+     render byte-identical to before -- only Skyrim changes (see its own override below, needed because
+     its --working override is ALSO blue; see that override's own comment for the numbers). */
+  --downloading: #5b8def;
+  --downloading-bg: rgba(91, 141, 239, 0.12);
   /* Vortex's own real brand color (confirmed against its actual source, $brand-primary in
      src/stylesheets/variables.scss -- the fill color its own real progress bars use) -- used ONLY
      for a live "downloading"/"installing" pill, so that specific state visually reads as "this is
@@ -63,6 +89,10 @@
     --danger-bg: rgba(194, 54, 82, 0.12);
     --neutral: #6b7280;
     --neutral-bg: rgba(107, 114, 128, 0.12);
+    --working: #7c5cd6;
+    --working-bg: rgba(124, 92, 214, 0.12);
+    --downloading: #3568c9;
+    --downloading-bg: rgba(53, 104, 201, 0.12);
     --vortex-orange: #a3651f;
     --vortex-orange-bg: rgba(163, 101, 31, 0.14);
     --shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
@@ -88,6 +118,10 @@
   --danger-bg: rgba(194, 54, 82, 0.12);
   --neutral: #6b7280;
   --neutral-bg: rgba(107, 114, 128, 0.12);
+  --working: #7c5cd6;
+  --working-bg: rgba(124, 92, 214, 0.12);
+  --downloading: #3568c9;
+  --downloading-bg: rgba(53, 104, 201, 0.12);
   --vortex-orange: #a3651f;
   --vortex-orange-bg: rgba(163, 101, 31, 0.14);
   --shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
@@ -326,6 +360,9 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
    Missing Masters 2026-07-27, meant to be reused by every tool page's own intro over time. */
 .tool-hero { margin-bottom: var(--stack-gap); }
 .tool-hero__title { font-size: 22px; margin: 0 0 8px; }
+/* Same reasoning as .home-card__name-row above -- data-brand-slot="heroTitle" is overwritten via
+   textContent, so a Beta badge has to live in a sibling row, not inside the h2 itself. */
+.tool-hero__title-row { display: flex; align-items: center; gap: 10px; }
 .tool-hero__body { margin: 0; color: var(--text); font-size: 14px; line-height: 1.6; }
 /* Merge Plugins' own hero body is the first to need two paragraphs (2026-08-24) -- the wrapper
    became a <div> so theme.js's innerHTML swap can hold real <p> children (nesting <p> inside <p>
@@ -483,6 +520,11 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
   display: grid; place-items: center; font-size: 24px;
 }
 .home-card__name { font-size: 17px; font-weight: 600; margin: 0; }
+/* Beta badge sits next to a card's name, not inside it (2026-09-15, Cleanup Duplicates) -- the name
+   itself is a data-brand-slot="name" element theme.js overwrites via textContent on every theme
+   load/switch (see theme.js), which would silently wipe an inline badge. Wrapping row keeps the
+   badge a sibling instead. */
+.home-card__name-row { display: flex; align-items: center; gap: 8px; }
 .home-card__desc { font-size: 14px; color: var(--text-muted); line-height: 1.5; margin: 0; flex: 1; }
 .home-card__open {
   font-size: 13px; font-weight: 600; color: var(--accent);
@@ -716,6 +758,10 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .badge--skip_no_archive, .badge--skip_open_fomod { background: var(--warning-bg); color: var(--warning); }
 .badge--failed_mismatch_not_touched, .badge--failed_extraction_not_touched,
 .badge--failed_extraction_no_prior_data { background: var(--danger-bg); color: var(--danger); }
+/* Amber, not danger-red -- a locked folder resolves itself with a Retry click (the original was
+   never touched), unlike the FAILED_* statuses above, which need a re-download/re-extract. See
+   "Rebuild Collection: a locked mod folder no longer stops the whole run" (2026-09-13). */
+.badge--failed_folder_locked_not_touched { background: var(--warning-bg); color: var(--warning); }
 .badge--critical_manual_restore_needed { background: var(--danger); color: #fff; }
 /* Update Collection's Ignored/Disabled report -- same color convention as the status-pill variants
    of the same name above. */
@@ -793,10 +839,68 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
    badge above the table) -- one color language for "this row is an info/neutral/warning/critical
    item" used in both places at once. */
 .status-pill--info { background: var(--accent-bg); color: var(--accent); }
+/* Live "downloading" pill only -- see --downloading's own definition at the top of this file for why
+   this doesn't just reuse .status-pill--info/--accent anymore. */
+.status-pill--downloading { background: var(--downloading-bg); color: var(--downloading); }
 .status-pill--success { background: var(--success-bg); color: var(--success); }
 .status-pill--warning { background: var(--warning-bg); color: var(--warning); }
 .status-pill--critical { background: var(--danger-bg); color: var(--danger); }
 .status-pill--neutral { background: var(--neutral-bg); color: var(--neutral); }
+/* Live "this mod's own work is happening right now" pills only (Extracting…/Installing…) -- see
+   --working's own definition at the top of this file for why amber (--warning) no longer covers
+   this. Never used for a finished/final status. */
+.status-pill--working { background: var(--working-bg); color: var(--working); }
+/* Skyrim brand override (2026-09-14, caught live during this task's own screenshot verification --
+   NOT part of the director's original spec, found by actually rendering the pill under every brand
+   theme rather than just the two base light/dark ones). theme.js sets the Skyrim brand's own --accent
+   to #9b72d1 (themes/skyrim.json) -- a violet, which reads as barely distinguishable from the base
+   --working violet above once both are rendered as pills: confirmed live, Downloading and Extracting
+   were nearly the same shade under "The Arcaneum" skin, recreating the exact "only the spinner tells
+   them apart" problem this whole task exists to fix, just against --accent instead of --warning this
+   time. A genuine blue reads clearly apart from Skyrim's own purple accent (and still doesn't collide
+   with --success/--warning/--danger/--neutral), so --working shifts to blue for this one brand only --
+   every other theme's own accent (Fallout 4 green, Starfield cyan, Plain blue) is already far enough
+   from violet that this collision is Skyrim-specific. Contrast re-verified the same way as the base
+   values (text against its own tinted background, blended over --surface): 5.31:1 dark / 4.11:1 light,
+   both clearing the same bar as the base tokens' own weakest pill in that theme. Equal specificity to
+   the base :root rules above, so placement AFTER them in this file is what makes the override actually
+   win -- do not move this block earlier. [data-brand] is the same attribute theme.js already sets on
+   <html> for every brand theme (see the other [data-brand="skyrim"] rules elsewhere in this file). */
+[data-brand="skyrim"] { --working: #7aa2f7; --working-bg: rgba(122, 162, 247, 0.16); }
+@media (prefers-color-scheme: light) {
+  [data-brand="skyrim"]:not([data-theme="dark"]) { --working: #2f6fd6; --working-bg: rgba(47, 111, 214, 0.12); }
+}
+[data-brand="skyrim"][data-theme="light"] { --working: #2f6fd6; --working-bg: rgba(47, 111, 214, 0.12); }
+/* Skyrim ALSO needs its own --downloading (2026-09-14, follow-up to the Fallout-4-green catch above):
+   decoupling Downloading from --accent gave it the same fixed blue everywhere -- fine for Plain/
+   Fallout 4/Starfield, but under Skyrim that fixed blue (#5b8def dark / #3568c9 light) sits too close
+   to the [data-brand="skyrim"] --working override directly above (#7aa2f7 dark / #2f6fd6 light) --
+   both are blues introduced for the SAME reason (getting away from Skyrim's own violet --accent),
+   which just relocates the "only the spinner tells them apart" problem this whole vocabulary exists to
+   fix. Checked with a plain RGB-distance script (this task's own handoff has the numbers): fixed blue
+   vs Skyrim's --working blue measured 38.3 (dark) / 15.9 (light) apart -- both far under every existing
+   distinct-pair's own distance in this file (weakest is neutral-vs-working at ~91-111). Fix: reuse
+   Skyrim's original accent violet (#9b72d1, themes/skyrim.json -- exactly what Downloading already
+   rendered as under this skin before the --accent decoupling above, so this is a revert-to-known-good
+   for Skyrim specifically, not a new color). Skyrim ships one accent hex for both dark/light (no
+   accentLight override in its theme JSON), so this override is also identical in both -- no separate
+   light-mode block needed, unlike --working's own override above. --downloading-bg alpha (0.12) matches
+   theme.js's own deriveAccentShades formula, so this is byte-identical to what Skyrim's --accent-bg
+   already computed to before the split. Distance from Skyrim's own --working blue: 69.5 (dark) / 108.2
+   (light) -- clearly apart, same "different color family" gap violet-vs-blue reads as everywhere else
+   in this file. Contrast (text against its own tinted bg, blended over --surface): 4.01:1 dark / 3.15:1
+   light -- clears the same bar this theme's own weakest existing pill already does (--success light is
+   3.03:1). */
+[data-brand="skyrim"] { --downloading: #9b72d1; --downloading-bg: rgba(155, 114, 209, 0.12); }
+@media (prefers-color-scheme: light) {
+  /* Same value in light mode too (skyrim.json ships one accent hex for both) -- still needs its own
+     rule, not just the bare [data-brand="skyrim"] one above: the light-theme :root block earlier in
+     this file wins on specificity otherwise (confirmed live -- an earlier version of this override
+     without this block rendered Downloading as base blue, not violet, under light-mode Skyrim). Same
+     specificity fix --working's own light-mode blocks already needed. */
+  [data-brand="skyrim"]:not([data-theme="dark"]) { --downloading: #9b72d1; --downloading-bg: rgba(155, 114, 209, 0.12); }
+}
+[data-brand="skyrim"][data-theme="light"] { --downloading: #9b72d1; --downloading-bg: rgba(155, 114, 209, 0.12); }
 .table-empty-note { color: var(--text-muted); font-style: italic; padding: 20px; text-align: center; }
 
 /* File Retriever (2026-09-01) -- from the approved design/mockup-file-retriever.html, lifted here
@@ -882,6 +986,22 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 /* Retry button inside the critical-error callout (2026-08-28) -- a small gap so it doesn't sit flush
    against the message paragraph above it. */
 #ucv2CriticalErrorRetry { margin-top: 6px; }
+/* Rebuild Collection's Locked/Needs-restore Done-screen callouts (2026-09-13) -- new pattern, built
+   from existing tokens (see "Rebuild Collection: a locked mod folder no longer stops the whole run").
+   .rbc-attn-head puts a bulk action (Retry all) inline with the title, on ONE row -- unlike the
+   plain "Retry button in its own right-justified row" precedent (helper-unavailable callouts), this
+   callout can have several rows below it each with their OWN retry action, so the title row's button
+   is deliberately the BULK one, not a duplicate of what every row already offers. */
+.rbc-attn-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.rbc-attn-head .callout__title { margin-bottom: 0; }
+.rbc-attn-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.rbc-attn-row { display: flex; align-items: center; gap: 14px; padding: 12px 14px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+.rbc-attn-row--critical { border-color: var(--danger); }
+.rbc-attn-row__main { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.rbc-attn-row__name { font-weight: 600; }
+.rbc-attn-row__why { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+.rbc-attn-row__actions { display: flex; gap: 8px; flex: none; align-items: center; }
+.rbc-attn-row__status { font-size: 12px; font-weight: 600; color: var(--success); }
 /* Instructions callout (2026-08-28) -- .screen-head has no margin-bottom of its own (nothing needed
    one before this), so the callout sat flush against the title/revision-picker row above it. Same
    14px gap .mm-row__header + .callout already uses for the same "callout right after a header row"
@@ -1258,6 +1378,7 @@ h2.settings-section-title.badge { display: inline-flex; font-size: 16px; }
 .status-pill--skip_no_archive, .status-pill--skip_open_fomod { background: var(--warning-bg); color: var(--warning); }
 .status-pill--failed_mismatch_not_touched, .status-pill--failed_extraction_not_touched,
 .status-pill--failed_extraction_no_prior_data { background: var(--danger-bg); color: var(--danger); }
+.status-pill--failed_folder_locked_not_touched { background: var(--warning-bg); color: var(--warning); }
 .status-pill--critical_manual_restore_needed { background: var(--danger); color: #fff; }
 .status-pill--pending { background: var(--surface-2); color: var(--text-muted); }
 /* Update Collection Apply Progress's own real status vocabulary (2026-08-28, director's own explicit
@@ -1359,14 +1480,6 @@ tr.apply-row--leaving { animation: rowLeave .5s ease forwards; }
    below. .view-actions is reused by 28 other rows in this app; changing the shared class would shift
    all of them. */
 .view-actions #mergeStep0NextBtnTop { margin-left: auto; }
-/* Confirmed real 2026-09-02: Rebuild Missing Files' own Back/Cancel/Back-to-Collections control
-   (rmfBackToPickerBtn) sat left-justified inside its own .view-actions row on the Scan Results/Done
-   screen -- this app's real, established convention is that a screen's own primary nav control is
-   always right-justified (see DESIGN.md's "Button-row alignment" section). Same scoped-override
-   pattern as #mergeStep0NextBtnTop just above, not a swap to .actions -- .view-actions's own 20px
-   margin-bottom is the right amount of breathing room above the loading spinner/results directly
-   below this row on that screen; .actions has no bottom margin at all. */
-.view-actions #rmfBackToPickerBtn { margin-left: auto; }
 /* Confirmed real 2026-09-05: Rules Generator's own "Apply to Vortex" (rgApplyBtn) sat left-justified
    too, same standing rule as the two overrides above. Its own status text (rgApplyStatus) belongs
    right next to it, not stranded alone on the left once the button moves -- so the margin goes on
@@ -1629,6 +1742,11 @@ tr.apply-row--leaving { animation: rowLeave .5s ease forwards; }
    selection-bar/row-state pattern. */
 .af-selection-bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin: 8px 0 14px; }
 .af-selection-bar__left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+/* "Back sits next to Continue" (2026-09-16, DESIGN.md button-row rule 4) -- a selection bar's own
+   Back control lands immediately left of the bar's primary action, both right-justified together as
+   one group, rather than Back sitting alone up in the stepper row where it's easy to miss. Reusable
+   any time a selection bar needs a Back control alongside its own primary action. */
+.af-selection-bar__right { display: flex; align-items: center; gap: 10px; }
 /* The "Select all M results?" offer -- Gmail/GitHub pattern: the header checkbox only ever selects
    the current PAGE; when the full result set is bigger than one page, this banner offers to extend
    that to everything. A plain inline button styled as a link (not a full .btn) since it's phrased
@@ -1672,6 +1790,17 @@ tr.apply-row--leaving { animation: rowLeave .5s ease forwards; }
   display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-weight: 500; cursor: pointer;
 }
 .af-expander:hover { color: var(--accent-hover); }
+
+/* Settings -> App Data checklist (2026-09-14, "split Logs from App Data") -- reuses .af-expander for
+   the group toggle row and .plan-table/.col-check for the table shell (DESIGN.md's own "Grouped
+   table rows with a tri-state group checkbox"), scoped here only for the child row's own indent --
+   deliberately its OWN class rather than adding indentation to the shared .group-row/.group-child
+   Archive Finder already uses, which would be an uninvited visual change to that already-shipped
+   page (DESIGN.md's spacing rule calls for indenting a nested item under its parent, but only where
+   that indentation was actually asked for). */
+.ad-item-name { padding-left: 34px; }
+.ad-group-row td { background: rgba(255, 255, 255, 0.02); }
+
 .mm-row {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -1787,6 +1916,13 @@ tr.apply-row--leaving { animation: rowLeave .5s ease forwards; }
 .sync-stepper-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin: var(--stack-gap) 0; }
 .sync-stepper-row .merge-stepper { margin: 0; }
 .sync-stepper-row #syncListModsBtn { margin-left: auto; }
+/* Rebuild Missing Files: Cancel/Back now share this row too (2026-09-14, "tighter stepper row") --
+   same scoped-to-its-own-id pattern as #syncListModsBtn just above, not a generic child selector
+   (this row's shape is reused by other tools too; a bare `.sync-stepper-row > .btn` would push ANY
+   future button sharing this row to the right whether that's wanted or not). Only ever present here
+   during the scanning/reviewing states -- rmfSetBackBtnState (rebuild-missing-app.js) relocates the
+   same element into #rmfDoneActions once Done, where it is NOT on this row at all. */
+.sync-stepper-row #rmfBackToPickerBtn { margin-left: auto; }
 
 /* A bare stepper with no sibling row/button sharing its line (unlike sync-stepper-row's stepper +
    button layout above) still needs its own top margin from whatever sits directly above it --
@@ -2040,6 +2176,24 @@ tr.apply-row--leaving { animation: rowLeave .5s ease forwards; }
 .coll-card .meta { min-width: 0; }
 .coll-card .name { color: var(--text); font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .coll-card .sub { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+/* Bulk Collection Editor (2026-09-15) -- a collection's own working version leads, its last
+   published revision follows in smaller muted text, per DESIGN.md's "Writing a collection's version
+   and revision" wording rules. Also reused wherever the SAME "vN · published Rev N" pairing shows up
+   again (a status-pill--version pill's own collection tag, a Done-screen group heading) -- one shared
+   class rather than a per-context copy. */
+.rev { font-size: 10.5px; color: var(--text-muted); margin-left: 4px; }
+/* Same rules' section: a plain muted helper paragraph under a step's own controls -- explains what
+   the step is about to do without needing its own callout. Reusable by any tool, not Bulk Collection
+   Editor-specific. */
+.note { color: var(--text-muted); font-size: 12.5px; line-height: 1.55; margin: 10px 0 0; }
+/* Bulk Collection Editor's own Add/Remove mode switch -- a plain two-button segmented control, one
+   held "on" at a time. Markup carries .btn--ghost as its off-state base (same as every other
+   secondary button in this app -- a bare .btn has no background/border of its own and renders as an
+   unstyled browser button, confirmed live 2026-09-15), with only the "on" state's own
+   background/border added here, rather than a bespoke button style from scratch. */
+.amc-mode-row { display: flex; gap: 10px; align-items: center; margin: 0 0 18px; flex-wrap: wrap; }
+.amc-mode-btn.is-on { background: var(--accent-bg); border-color: var(--accent); color: var(--text); }
+.amc-mode-btn.is-on-danger { background: var(--danger-bg); border-color: var(--danger); color: var(--text); }
 /* Sits inside the card's own <label> -- its click handler calls preventDefault/stopPropagation so
    clicking it doesn't also toggle the card's checkbox (see rebuild-missing-app.js). */
 .rmf-refresh-btn { margin-top: 8px; }
@@ -2048,6 +2202,21 @@ tr.apply-row--leaving { animation: rowLeave .5s ease forwards; }
    rebuild-missing-app.js's own rmfRenderUnfetchedGroup). cursor:default overrides the base
    .coll-card's own cursor:pointer -- only the Fetch button inside is actually clickable. */
 .coll-card--unfetched { cursor: default; border-style: dashed; }
+
+/* Plain read-only summary list (Add Mods to Collections, 2026-09-10) -- a name+version (or a
+   name+checkmark) row with nothing to click, so it's deliberately lighter than .sync-result-list's
+   own select-and-act shape: no left padding-for-indent-under-controls (there are no controls to
+   indent under), a flex row per <li> instead of block text. See DESIGN.md's "Plain read-only list"
+   note for the two real call sites (the running cross-search pick list, and Step 3's per-collection
+   result). */
+.mod-summary-list { margin: 0 0 18px; padding: 0; list-style: none; }
+.mod-summary-list li { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.mod-summary-list li:last-child { border-bottom: none; }
+.mod-summary-list .v { color: var(--text-muted); }
+
+.success-list { margin: 0; padding: 0; list-style: none; }
+.success-list li { padding: 6px 0; font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
+.success-list li .check { color: var(--success); }
 
 /* Safe Collection Removal's Screen 2 mod list -- a multi-select, act-on-the-rest list (DESIGN.md's
    "Selectable lists" pattern). The rows themselves are .name-row (see that class's own definition,
@@ -2329,7 +2498,11 @@ tr.apply-row--leaving { animation: rowLeave .5s ease forwards; }
 
 /* FOMOD picker (rebuilt 2026-08-18 to match Vortex's real wizard -- see
    design/vortex-update-collection-v2-fomod-picker-mockup.html, the approved reference this was
-   built against). A TRUE FIXED size, not a max/min-height pair that flexes with content --
+   built against). SHARED (2026-09-17) by Rebuild Collection, Rebuild Missing Files, and Update
+   Collection now (web/public/fomod-picker.js) -- kept its historical "ucv2-fomod-*"/".ucv2-modal*"
+   naming (a global stylesheet loaded for every tool regardless, so this never needed a rename to
+   actually work cross-tool) rather than a cosmetic-only class rename. A TRUE FIXED size, not a
+   max/min-height pair that flexes with content --
    confirmed against real Vortex source (src/stylesheets/vortex/dialog-fomod.scss:
    `.modal-dialog{width:60%;height:60%}`, relative to the viewport). This is why the dialog never
    resizes hover-to-hover or page-to-page in real Vortex: content that doesn't fit scrolls inside
@@ -2342,6 +2515,7 @@ tr.apply-row--leaving { animation: rowLeave .5s ease forwards; }
 .ucv2-fomod-modal__title { font-size: 17px; font-weight: 700; margin: 0 0 4px; }
 .ucv2-fomod-modal__step { font-size: 13px; color: var(--text-muted); margin: 0; }
 .ucv2-fomod-modal__intro { font-size: 12.5px; color: var(--text-muted); margin: 8px 0 0; line-height: 1.6; }
+.ucv2-fomod-modal__reinstall-note { font-size: 12.5px; color: var(--warning); font-weight: 600; margin: 8px 0 0; line-height: 1.6; }
 
 /* Two columns, confirmed against real Vortex source (installer_fomod_shared/views/
    InstallerDialog.tsx): left = the current step's groups, a flex column that FILLS remaining
@@ -2352,7 +2526,6 @@ tr.apply-row--leaving { animation: rowLeave .5s ease forwards; }
 .ucv2-fomod-group { margin-bottom: 20px; }
 .ucv2-fomod-group:last-child { margin-bottom: 0; }
 .ucv2-fomod-group__name { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--accent-bg); }
-.ucv2-fomod-group__all { font-size: 13px; color: var(--text-muted); font-style: italic; margin: 0; }
 .ucv2-fomod-option { display: flex; align-items: center; gap: 9px; padding: 3px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; line-height: 1.3; }
 .ucv2-fomod-option:hover { background: rgba(255, 255, 255, .03); }
 .ucv2-fomod-option.is-active { background: var(--accent-bg); outline: 1px solid var(--accent); }
@@ -2363,10 +2536,39 @@ tr.apply-row--leaving { animation: rowLeave .5s ease forwards; }
 .ucv2-fomod-preview { background: var(--bg); border-left: 1px solid var(--border); padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; flex: none; min-width: 40%; max-width: 60%; overflow-y: auto; }
 .ucv2-fomod-preview__image { width: 100%; aspect-ratio: 16 / 10; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 11.5px; padding: 8px; text-align: center; overflow-wrap: break-word; overflow: hidden; }
 /* Real image (2026-08-28) -- object-fit:contain so a real archive screenshot (often a different
-   real aspect ratio than this box's own fixed 16:10) never gets stretched/distorted to fill it. */
-.ucv2-fomod-preview__image img { width: 100%; height: 100%; object-fit: contain; border-radius: 6px; }
-.ucv2-fomod-preview__desc { font-size: 12.5px; color: var(--text); line-height: 1.6; white-space: normal; }
+   real aspect ratio than this box's own fixed 16:10) never gets stretched/distorted to fill it.
+   REVISED 2026-09-15 (item 10c) -- the box itself keeps its own fixed 16:10 ratio (a deliberate,
+   disclosed design choice: the preview pane doesn't resize/jump around as you hover between
+   differently-shaped images, unlike real Vortex's own unconstrained panel), but the old
+   `width:100%;height:100%` forced even a genuinely SMALL image up to fill that box -- real
+   Vortex's own dialog-fomod.scss never upscales (`max-width/max-height:100%; width/height:auto`).
+   Switched to that exact rule so a small image only ever shrinks to fit, never grows past its own
+   real pixel size, while object-fit:contain still prevents distortion for anything that DOES need
+   to shrink. */
+.ucv2-fomod-preview__image img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; border-radius: 6px; cursor: zoom-in; }
+/* pre-wrap (2026-09-15, item 11b) -- matches real Vortex's own dialog-fomod.scss exactly: ALL
+   whitespace an author wrote (indentation, runs of spaces, blank lines), not just newlines,
+   survives. The description text itself is HTML-escaped in JS before this ever renders (real
+   author text is untrusted input) -- pre-wrap only changes how that already-safe text collapses
+   whitespace, it doesn't add any risk. Real newlines (including the &#13;&#10; entity-decoded kind
+   -- Atlas Map Markers Overhaul's own "The Great City of Winterhold") render as real line breaks
+   straight from the raw text now, no <br> substitution needed in JS at all. */
+.ucv2-fomod-preview__desc { font-size: 12.5px; color: var(--text); line-height: 1.6; white-space: pre-wrap; }
 .ucv2-fomod-preview__empty { color: var(--text-muted); font-size: 12.5px; font-style: italic; }
+
+/* Click-to-zoom overlay (item 10d, 2026-09-15) -- reuses the same backdrop+centered-content
+   STRUCTURAL shape as .ucv2-modal-backdrop/.modal-overlay elsewhere in this app (fixed, full-bleed,
+   dark backdrop, flex-centered content), not their own bordered-card styling -- an image lightbox
+   isn't a card. z-index 70: this app's own existing ladder tops out at 50 (every modal, including
+   ucv2FomodPickerModal itself) and 60 (popovers/tooltips) -- this needs to sit ABOVE an
+   ALREADY-OPEN modal (the FOMOD picker), so it takes the next rung up, not a value borrowed from
+   Vortex's own unrelated `z-index:1080`. */
+.ucv2-fomod-zoom-overlay { position: fixed; inset: 0; z-index: 70; background: rgba(0, 0, 0, .85); display: none; align-items: center; justify-content: center; padding: 24px; cursor: zoom-out; }
+.ucv2-fomod-zoom-overlay.open { display: flex; }
+/* max-width/max-height + width/height:auto (never upscale, same real rule as
+   .ucv2-fomod-preview__image img above) -- capped to the viewport, not the FOMOD picker's own
+   preview pane, since this overlay sits above the whole page. */
+.ucv2-fomod-zoom-overlay img { max-width: 90vw; max-height: 90vh; width: auto; height: auto; object-fit: contain; border-radius: 8px; box-shadow: var(--shadow); cursor: default; }
 
 /* Back/Next show the adjacent VISIBLE step's own real name, so length varies a lot -- wrap rather
    than overflow, matching real Vortex's own .fomod-nav-buttons .btn rule. */

@@ -22,7 +22,8 @@ const STATUS_TEXT = {
   FAILED_MISMATCH_NOT_TOUCHED: 'Mismatch (not touched)',
   FAILED_EXTRACTION_NOT_TOUCHED: 'Extraction failed (not touched)',
   FAILED_EXTRACTION_NO_PRIOR_DATA: 'Extraction failed (still missing)',
-  CRITICAL_MANUAL_RESTORE_NEEDED: 'CRITICAL',
+  FAILED_FOLDER_LOCKED_NOT_TOUCHED: 'Folder locked',
+  CRITICAL_MANUAL_RESTORE_NEEDED: 'Needs restore',
   pending: 'In progress…',
 };
 

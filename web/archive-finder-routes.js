@@ -255,10 +255,30 @@ function createArchiveFinderRouter(config) {
         if (!requireConfigured(res)) return;
         const items = Array.isArray(req.body?.items) ? req.body.items : [];
         const flat = !!req.body?.flat;
+        const checkOnly = !!req.body?.checkOnly;
+        const overwrite = !!req.body?.overwrite;
         const { archiveFinderOutputDir } = appConfig.loadConfig();
         const outputFolder = (req.body?.outputFolder && String(req.body.outputFolder).trim()) || archiveFinderOutputDir;
         if (!outputFolder) {
             return res.status(400).json({ error: 'No destination folder set. Choose one in the extract dialog.' });
+        }
+        // Same destDir/fileName resolution the real extract below uses, so a collision check here
+        // means what it says -- checkOnly never writes anything (no config save, no filesystem writes),
+        // it just reports which of these items would land on top of an existing file.
+        if (checkOnly) {
+            const results = items.map((item) => {
+                const archivePath = item.archivePath;
+                const internalPath = item.internalPath;
+                const key = `${archivePath}|${internalPath}`;
+                if (!archivePath || !internalPath) return { key, collides: false };
+                const archiveName = path.basename(archivePath);
+                const archiveBase = path.basename(archiveName, path.extname(archiveName));
+                const destDir = flat ? outputFolder : path.join(outputFolder, archiveBase);
+                const fileName = path.basename(internalPath);
+                const collides = fs.existsSync(path.join(destDir, fileName));
+                return { key, collides };
+            });
+            return res.json({ results });
         }
         if (outputFolder !== archiveFinderOutputDir) {
             appConfig.saveConfig({ archiveFinderOutputDir: outputFolder }); // remember as the default for next time
@@ -268,7 +288,9 @@ function createArchiveFinderRouter(config) {
 
         // Tracks names already placed in each destination folder so two files sharing a basename
         // (common in flat mode, or same-name files across subfolders of one archive) don't
-        // silently overwrite one another.
+        // silently overwrite one another. Bypassed entirely when `overwrite` is set (the caller has
+        // already been warned and confirmed) -- the natural extracted name IS the desired name, so
+        // the item lands directly on top of whatever's already there instead of being renamed aside.
         const usedNamesByDir = new Map();
         function reserveName(destDir, fileName) {
             if (!usedNamesByDir.has(destDir)) {
@@ -305,7 +327,7 @@ function createArchiveFinderRouter(config) {
             const archiveBase = path.basename(archiveName, path.extname(archiveName));
             const destDir = flat ? outputFolder : path.join(outputFolder, archiveBase);
             const fileName = path.basename(internalPath);
-            const desiredName = reserveName(destDir, fileName);
+            const desiredName = overwrite ? fileName : reserveName(destDir, fileName);
             try {
                 let extractedPath = await sevenzip.extractFile(exePath, archivePath, internalPath, destDir);
                 if (path.basename(extractedPath) !== desiredName) {

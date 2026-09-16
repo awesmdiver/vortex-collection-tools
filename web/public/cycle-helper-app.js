@@ -464,6 +464,12 @@ async function chConfirmApply() {
 }
 
 function chStartOver() {
+  // Mid-operation guard ("coming back from another tool starts clean", 2026-09-17): a scan still
+  // genuinely running (chScanEventSource open) must keep running in view when the user comes back --
+  // resetting to the Prep screen here would strand it, since nothing else in this file closes
+  // chScanEventSource on its behalf. A finished/failed scan already closes its own chScanEventSource
+  // (chFinishScanStream), so this never blocks a genuinely-finished run.
+  if (chScanEventSource) return;
   chIsValidating = false;
   chSelectedFix = null;
   chLoadSnapshotStatus();

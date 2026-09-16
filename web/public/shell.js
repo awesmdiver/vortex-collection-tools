@@ -309,7 +309,22 @@ async function navigateToArea(id, subTab) {
   // top-level area (previousArea check, same convention as every other area's reset hook below), so
   // re-entering the SAME Utilities sub-tab after a Home round-trip still re-fires its reset-on-entry
   // hook instead of looking like "no change" (2026-09-01, utilities-reentry-reset-bugfix).
-  if (id === 'utilities' && previousArea !== 'utilities' && window.utilitiesClearSubTabTracking) window.utilitiesClearSubTabTracking();
+  //
+  // "coming back from another tool starts clean" (2026-09-17): the line below this comment used to
+  // read `if (id === 'utilities' && subTab && ...)` -- ONLY calling showUtilitiesSubTab (and thus
+  // firing a sub-tab's own reset-on-entry hook) when a caller happened to pass an explicit subTab.
+  // Every CURRENT live caller does (every Home card into Utilities carries its own data-sub), which
+  // is exactly why this went unnoticed -- but any path that arrives at Utilities from elsewhere
+  // WITHOUT naming a specific tool (a bare `?area=utilities` link/reload, or any future nav element
+  // that doesn't specify one) left whichever sub-area was already showing on screen untouched and
+  // never re-ran its reset hook -- a finished Rebuild Missing Files Done screen (or any other stale
+  // state) just sat there. Falls back to whichever sub-tab was ALREADY visible (captured via
+  // getCurrentUtilitiesSubTab BEFORE the clear below wipes it) so that hook still fires even with no
+  // explicit subTab -- an explicit one (still the common case) always wins outright.
+  if (id === 'utilities' && previousArea !== 'utilities') {
+    if (!subTab && window.getCurrentUtilitiesSubTab) subTab = window.getCurrentUtilitiesSubTab();
+    if (window.utilitiesClearSubTabTracking) window.utilitiesClearSubTabTracking();
+  }
   if (id === 'utilities' && subTab && window.showUtilitiesSubTab) window.showUtilitiesSubTab(subTab);
   // Same "don't fetch what nobody's looking at yet" convention -- update-collection-v2-app.js's own
   // ucv2LoadCollections() only ever fires once this area is actually visited. Arriving fresh from a
@@ -453,7 +468,7 @@ function setStarVisual(star, on) {
 // already just a sub-sequence of this same list.
 const HOME_CANONICAL_ORDER = [
   'merge', 'rebuild', 'sync', 'rules-generator', 'removecollection',
-  'missingmasters', 'scrub', 'archivefinder', 'fileretriever', 'missingfiles', 'cyclehelper', 'clearflags', 'duplicateversions', 'pgpatcher',
+  'missingmasters', 'scrub', 'archivefinder', 'fileretriever', 'missingfiles', 'cyclehelper', 'clearflags', 'duplicateversions', 'addmodstocollections', 'pgpatcher',
   'stats', 'workthrough', 'updatecompare', 'rulesgen', 'workshopreport', 'mergehistory', 'modexceptions',
 ];
 function pinKeyOf(wrap) {

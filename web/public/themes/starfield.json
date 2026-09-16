@@ -41,6 +41,14 @@
       "cardDesc": "Central hub for all your modding tools and collection management.",
       "bannerImage": "theme-assets/starfield/home-banner-eye.png"
     },
+    "add-mods-to-collections": {
+      "name": "Staryard Manifest Assembler",
+      "emoji": "🛠️",
+      "function": "Bulk Collection Editor",
+      "heroTitle": "Staryard Manifest Assembler",
+      "heroBody": "Update every ship's manifest in the yard at once—load new cargo aboard several vessels or strike it from the hold, in one pass. Nothing in the hold itself changes, only what's logged.",
+      "cardDesc": "Update several collection manifests in one pass, without touching what's actually installed."
+    },
     "rebuild": {
       "name": "Grav Drive Jump",
       "emoji": "🌀",
@@ -229,7 +237,7 @@
     "duplicate-version-cleanup": {
       "name": "Staryard Blueprint Arbitration",
       "emoji": "🛠️",
-      "function": "Duplicate Version Cleanup",
+      "function": "Cleanup Duplicates",
       "heroTitle": "Staryard Blueprint Arbitration",
       "heroBody": "Updating mods across multiple collections often strands legacy version entries inside your ship manifest dropdowns. Staryard Blueprint Arbitration isolates orphaned revisions from intentionally pinned variants, downloading and reinstalling a pristine survivor so your mod loadout matches your actual flight plan.",
       "cardDesc": "Consolidates duplicate version records into a single clean reinstallation without breaking collection-specific variants."

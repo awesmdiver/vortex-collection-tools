@@ -53,6 +53,14 @@
       "heroBody": "Every forge fuses raw ore into a single, stronger blade. Pick plugins from one or more collections and The Forge bundles them into one file&mdash;freeing up load-order slots without ever touching xEdit yourself. Review exactly what's going in before you strike, and it'll flag the result as ESL automatically when it fits.",
       "cardDesc": "Forge many plugins into one&mdash;reclaim load-order slots and stay clear of the 254-plugin limit."
     },
+    "add-mods-to-collections": {
+      "name": "The High Scribe",
+      "emoji": "📜",
+      "function": "Bulk Collection Editor",
+      "heroTitle": "The High Scribe",
+      "heroBody": "A High Scribe keeps a dozen halls' ledgers in order at once, updating every record with a single stroke of the quill rather than walking each shelf in turn. This tool works your own collections the same way: add new mods to several lists at once, or strike old ones from the record&mdash;nothing installed is ever touched, only what's written down.",
+      "cardDesc": "Add or remove mods across several collections at once, without touching a single installed file."
+    },
     "rebuild": {
       "name": "Restoration",
       "emoji": "✨",
@@ -233,7 +241,7 @@
     "duplicate-version-cleanup": {
       "name": "Arcane Concordance",
       "emoji": "📜",
-      "function": "Duplicate Version Cleanup",
+      "function": "Cleanup Duplicates",
       "heroTitle": "Arcane Concordance",
       "heroBody": "Routine mod updates often leave older version records lingering in your dropdowns alongside the files you actually use. Arcane Concordance cross-references your active collections, separates true clutter from intentionally preserved variants, and cleanly reinstalls the surviving files so your loadout stays neat and dependable.",
       "cardDesc": "Resolves cluttered mod version dropdowns into a single clean, reinstalled copy while protecting needed variants."

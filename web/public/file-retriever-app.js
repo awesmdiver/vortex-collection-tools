@@ -466,7 +466,12 @@ function frShowResult({ ok, message, results, destDir, openedInBrowser }) {
 }
 
 function frResetOnEntry() {
-  if (frDownloadEventSource) { frDownloadEventSource.close(); frDownloadEventSource = null; }
+  // Mid-operation guard ("coming back from another tool starts clean", 2026-09-17): a download
+  // still genuinely running (frDownloadEventSource open) must keep running in view when the user
+  // comes back -- resetting to Screen 1 here (this used to close it unconditionally) would strand
+  // it. A finished/failed download already closes+nulls its own frDownloadEventSource, so this never
+  // blocks a genuinely-finished one.
+  if (frDownloadEventSource) return;
   frState.mod = null;
   frState.files = [];
   frState.activeCategories = frDefaultCategories();

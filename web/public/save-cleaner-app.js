@@ -231,6 +231,13 @@ window.scLoadSaves = scLoadSaves;
 // merge-entry-reset) -- resets scSelectedIdx/scReportResult/scSelectedCategories/scCleanResult back
 // to their defaults, goes back to Step 1 via scGoScreen, then reloads the saves list fresh.
 function scResetOnEntry() {
+  // Mid-operation guard ("coming back from another tool starts clean", 2026-09-17): a scan/clean/
+  // save still genuinely running (scActiveEventSource open) must keep running in view when the user
+  // comes back -- resetting to Step 1 here would strand it, and until this same fix nothing in this
+  // file could even close it (see scActiveEventSource's own header comment on why it used to be an
+  // unreachable local `const es`). A finished/failed run always closes+nulls its own
+  // scActiveEventSource, so this never blocks a genuinely-finished run.
+  if (scActiveEventSource) return;
   scSelectedIdx = null;
   scReportResult = null;
   scSelectedCategories.clear();
@@ -532,6 +539,14 @@ $sc('scBrowseSavesDirBtn').addEventListener('click', async () => {
 // Step 1b -- scanning (SSE)
 // ---------------------------------------------------------------------------------------------
 let scElapsedTimer = null;
+// Mid-operation guard support ("coming back from another tool starts clean", 2026-09-17): the scan/
+// clean/save EventSource used to be a plain `const es` local to each of the three start functions
+// below -- unreachable from scResetOnEntry, which is exactly why it never closed any of them (a real,
+// structural gap, worse than every other Utilities/reset-on-entry tool's own version of this same
+// class of bug -- see TECHNICAL.md's own "reset-on-entry" section). Promoted to this one shared
+// module-level variable since only one of scan/clean/save is ever active at a time (a strictly linear
+// wizard, never concurrent) -- one name, one guard, instead of three.
+let scActiveEventSource = null;
 function scStartElapsedTimer(labelId) {
   const start = Date.now();
   clearInterval(scElapsedTimer);
@@ -585,8 +600,8 @@ $sc('scScanBtn').addEventListener('click', async () => {
     scHandleError(e);
     return;
   }
-  const es = new EventSource('/api/save-cleaner/scan/events');
-  es.onmessage = (msg) => {
+  scActiveEventSource = new EventSource('/api/save-cleaner/scan/events');
+  scActiveEventSource.onmessage = (msg) => {
     const frame = JSON.parse(msg.data);
     if (frame.type === 'phase') {
       // No separate phase line anymore -- the callout's own static title already says "Reading
@@ -594,13 +609,13 @@ $sc('scScanBtn').addEventListener('click', async () => {
       // progress -- see save-cleaner-routes.js's own header comment), so a second element showing
       // the identical text was pure duplication, not real progress detail.
     } else if (frame.type === 'result') {
-      es.close();
+      scActiveEventSource.close(); scActiveEventSource = null;
       scStopElapsedTimer();
       scReportResult = frame.result;
       scRenderStep2();
       scGoScreen('scStep2');
     } else if (frame.type === 'error') {
-      es.close();
+      scActiveEventSource.close(); scActiveEventSource = null;
       scStopElapsedTimer();
       scGoScreen('scStep1');
       scShowCriticalError(frame.message);
@@ -791,21 +806,21 @@ $sc('scCleanBtn').addEventListener('click', async () => {
     scHandleError(e);
     return;
   }
-  const es = new EventSource('/api/save-cleaner/clean/events');
-  es.onmessage = (msg) => {
+  scActiveEventSource = new EventSource('/api/save-cleaner/clean/events');
+  scActiveEventSource.onmessage = (msg) => {
     const frame = JSON.parse(msg.data);
     if (frame.type === 'phase') {
       // No separate phase line -- same dedup fix as the Step 1b scScanning screen: the callout's
       // own static title already says "Cleaning save file…", and there's only ever one phase
       // message anyway.
     } else if (frame.type === 'result') {
-      es.close();
+      scActiveEventSource.close(); scActiveEventSource = null;
       scStopElapsedTimer();
       scCleanResult = frame.result;
       scRenderStep4();
       scGoScreen('scStep4');
     } else if (frame.type === 'error') {
-      es.close();
+      scActiveEventSource.close(); scActiveEventSource = null;
       scStopElapsedTimer();
       scGoScreen('scStep3');
       scShowCriticalError(frame.message);
@@ -936,19 +951,19 @@ function scRunSave(outPath) {
       scHandleError(e);
       return;
     }
-    const es = new EventSource('/api/save-cleaner/save/events');
-    es.onmessage = (msg) => {
+    scActiveEventSource = new EventSource('/api/save-cleaner/save/events');
+    scActiveEventSource.onmessage = (msg) => {
       const frame = JSON.parse(msg.data);
       if (frame.type === 'phase') {
         // No separate phase line -- same dedup fix as scScanning/scCleaning above.
       } else if (frame.type === 'result') {
-        es.close();
+        scActiveEventSource.close(); scActiveEventSource = null;
         scStopElapsedTimer();
         scLastSaveResult = frame.result;
         scRenderStep6();
         scGoScreen('scStep6');
       } else if (frame.type === 'error') {
-        es.close();
+        scActiveEventSource.close(); scActiveEventSource = null;
         scStopElapsedTimer();
         scGoScreen('scStep4');
         scShowCriticalError(frame.message);

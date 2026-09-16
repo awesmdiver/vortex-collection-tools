@@ -10,11 +10,20 @@ const express = require('express');
 const modExceptionStore = require('../lib/mod-exception-store');
 const appConfig = require('../lib/app-config');
 
+// App Data (2026-09-14, "split Logs from App Data") -- modExceptionListDir (the old Settings field,
+// now retired from the Settings UI, see app-config.js's own LEGACY comment on it) is kept as the
+// fallback legacy value for anyone who had customized it, same as every other retired field's own
+// resolveDataDir call.
+function resolveModExceptionListDir() {
+    const { modExceptionListDir } = appConfig.loadConfig();
+    return appConfig.resolveDataDir('mod-exceptions', modExceptionListDir);
+}
+
 function createModExceptionsRouter() {
     const router = express.Router();
 
     router.get('/', (req, res) => {
-        const { modExceptionListDir } = appConfig.loadConfig();
+        const modExceptionListDir = resolveModExceptionListDir();
         const { mods } = modExceptionStore.load(modExceptionListDir);
         res.json({ mods, configured: !!modExceptionListDir });
     });
@@ -27,7 +36,7 @@ function createModExceptionsRouter() {
         if (!name || !name.trim()) {
             return res.status(400).json({ error: 'A mod name is required.' });
         }
-        const { modExceptionListDir } = appConfig.loadConfig();
+        const modExceptionListDir = resolveModExceptionListDir();
         try {
             const data = modExceptionStore.load(modExceptionListDir);
             const normalized = modExceptionStore.normalizeName(name);
@@ -50,7 +59,7 @@ function createModExceptionsRouter() {
         if (!name) {
             return res.status(400).json({ error: 'A mod name is required.' });
         }
-        const { modExceptionListDir } = appConfig.loadConfig();
+        const modExceptionListDir = resolveModExceptionListDir();
         try {
             const data = modExceptionStore.load(modExceptionListDir);
             const normalized = modExceptionStore.normalizeName(name);

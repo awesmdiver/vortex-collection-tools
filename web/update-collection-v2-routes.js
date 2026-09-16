@@ -6,8 +6,6 @@
 
 const express = require('express');
 const runner = require('../lib/update-collection-v2-runner');
-const helperClient = require('../lib/vortex-helper-client');
-const syncLib = require('../lib/vortex-sync/lib');
 const { createSseSession } = require('./sse-session');
 
 function createUpdateCollectionV2Router(config) {
@@ -147,19 +145,10 @@ function createUpdateCollectionV2Router(config) {
         });
     });
 
-    // Real FOMOD preview images (2026-08-28) -- serves a file the SAME detectFomodChoiceNeed call
-    // that produced this modId's own fomodChoiceNeeds entry already extracted to a private scratch
-    // folder (see runner.serveFomodImage's own header comment for why: matches Vortex's own real
-    // FOMOD wizard, which reads an already-fully-extracted file off disk, not a per-hover
-    // extraction). A plain GET (not POST) -- this is exactly what an <img src> tag needs to be able
-    // to request directly, and it's a read-only, side-effect-free lookup either way.
-    router.get('/fomod-image', (req, res) => {
-        const { modId, imagePath } = req.query || {};
-        if (!modId || !imagePath) return res.status(400).end();
-        const resolved = runner.serveFomodImage(String(modId), String(imagePath));
-        if (!resolved) return res.status(404).end();
-        res.sendFile(resolved);
-    });
+    // Real FOMOD preview images: this router's own private /fomod-image route moved to a whole-app
+    // GET /api/fomod-image in web/server.js 2026-09-17 ("Open FOMOD mods get an Install button") --
+    // Rebuild Missing Files and Rebuild Collection's own new Install action populate the SAME
+    // server-side image cache now, so one shared route replaces three would-be duplicates.
 
     // Phase 2/3's real Apply -- Updated mods get re-extracted+metadata-refreshed+redeployed, Removed
     // mods get either fully uninstalled or kept per-mod (keepRemovedModIds -- checked-by-default on
@@ -193,7 +182,7 @@ function createUpdateCollectionV2Router(config) {
 
     router.post('/apply', async (req, res) => {
         if (!staging || !downloads) return res.status(400).json({ error: 'Set up the staging and downloads folders under Settings first.' });
-        const { collectionModId, keepRemovedModIds, ignoreDependencyBreaks, keepInstalledModIds, deleteArchives, fomodPicks, targetRevisionNumber, prerequisiteChoices } = req.body || {};
+        const { collectionModId, keepRemovedModIds, ignoreDependencyBreaks, keepInstalledModIds, deleteArchives, fomodPicks, ignoreFomodValidationModIds, targetRevisionNumber, prerequisiteChoices } = req.body || {};
         if (!collectionModId || typeof collectionModId !== 'string') {
             return res.status(400).json({ error: 'No collection given to apply.' });
         }
@@ -237,7 +226,7 @@ function createUpdateCollectionV2Router(config) {
         try {
             prepared = await runner.prepareApply({
                 collectionModId, staging, downloads, state, ignoreDependencyBreaks, keepInstalledModIds, fomodPicks,
-                targetRevisionNumber: parsedTargetForApply, prerequisiteChoices, onProgress: emitIfCurrent,
+                ignoreFomodValidationModIds, targetRevisionNumber: parsedTargetForApply, prerequisiteChoices, onProgress: emitIfCurrent,
             });
         } catch (e) {
             if (e.code === 'HELPER_UNAVAILABLE') {
@@ -310,7 +299,7 @@ function createUpdateCollectionV2Router(config) {
     // whichever of the two is actually running. Same 202-then-stream shape, same gate-error mapping.
     router.post('/apply-optional', async (req, res) => {
         if (!staging || !downloads) return res.status(400).json({ error: 'Set up the staging and downloads folders under Settings first.' });
-        const { collectionModId, optionalModKeys, fomodPicks, targetRevisionNumber } = req.body || {};
+        const { collectionModId, optionalModKeys, fomodPicks, ignoreFomodValidationModIds, targetRevisionNumber } = req.body || {};
         if (!collectionModId || typeof collectionModId !== 'string') {
             return res.status(400).json({ error: 'No collection given to apply.' });
         }
@@ -345,7 +334,7 @@ function createUpdateCollectionV2Router(config) {
         let prepared;
         try {
             prepared = await runner.prepareApplyOptional({
-                collectionModId, staging, downloads, state, optionalModKeys, fomodPicks,
+                collectionModId, staging, downloads, state, optionalModKeys, fomodPicks, ignoreFomodValidationModIds,
                 targetRevisionNumber: parsedTargetForApply, onProgress: emitIfCurrent,
             });
         } catch (e) {
@@ -491,50 +480,19 @@ function createUpdateCollectionV2Router(config) {
         }
     });
 
-    // Real, full Vortex deploy (2026-08-27, director's own architecture call) -- this project's whole
-    // Apply is now extract/register/rule-only; it NEVER touches Data/ or creates hardlinks/symlinks
-    // itself. That's exclusively Vortex's own job, done here via the SAME real deployAllMods() event
-    // the native "Deploy Mods" button dispatches, offered as its own explicit step on the Apply Result
-    // screen once every mod is done -- not an automatic tail end of Apply, and not conditional on
-    // whether a plugin file happened to change (a real, confirmed gap the OLD per-mod-deploy design
-    // had: deploy-single-mod never fires Vortex's own did-deploy reaction chain at all, so plugins.txt/
-    // loadorder.txt only ever got reconciled when this tool detected a plugin change and triggered a
-    // conditional deploy-all itself -- now every apply gets a real, unconditional full deploy).
-    //
-    // Same exact fire-and-poll shape web/missing-masters-routes.js's own /deploy-all already uses
-    // (itself mirroring web/pgpatcher-routes.js's): POST kicks it off and returns 202 immediately, the
-    // client polls /deploy-all/progress. deployAllMods()/getDeployAllProgress() are themselves a
-    // poll-shaped pair in lib/vortex-helper-client.js, so an SSE wrapper would be inventing push
-    // semantics the underlying primitive doesn't have. Module-scoped single-flight, same reasoning as
-    // that route's own -- this is a real, out-of-band, whole-install Vortex operation.
-    let deployAllInProgress = false;
-    router.post('/deploy-all', async (req, res) => {
-        if (deployAllInProgress) {
-            return res.status(409).json({ error: 'A deploy is already in progress.' });
-        }
-        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-        if (!helperAvailable) {
-            return res.status(409).json({
-                error: 'helper-unavailable',
-                message: 'The Vortex Collection Helper extension must be reachable (Vortex genuinely open) to deploy from here.',
-            });
-        }
-        deployAllInProgress = true;
-        res.status(202).json({});
-        (async () => {
-            try {
-                await helperClient.deployAllMods();
-            } catch {
-                // deployAllMods never throws by contract; the progress endpoint below is what
-                // actually reports a real failure, so there is nothing useful to do here.
-            }
-        })().finally(() => { deployAllInProgress = false; });
-    });
+    // Real, full Vortex deploy -- MOVED to the shared web/deploy-routes.js (2026-09-14, "the same
+    // Deploy step on every Done screen"), mounted at /api/deploy. This project's whole Apply is now
+    // extract/register/rule-only; it never touches Data/ or creates hardlinks/symlinks itself --
+    // that's exclusively Vortex's own job, done via the SAME real deployAllMods() event the native
+    // "Deploy Mods" button dispatches, offered as its own explicit step on the Apply Result screen
+    // once every mod is done. The client (update-collection-v2-app.js's ucv2DeployAll) now calls
+    // /api/deploy/all + /api/deploy/all/progress instead of this router's own copies.
 
     // Post-deploy quick reconciliation (2026-09-01, director's own explicit design) -- see
     // runner.quickVerifyAndFinalize's own header comment for the full "why". Called by the frontend
-    // automatically the moment /deploy-all/progress reports done:true for an apply that didn't
-    // finish clean; never redoes real work itself, only confirms and finalizes or reports honestly.
+    // automatically the moment the shared deploy progress poll reports done:true for an apply that
+    // didn't finish clean; never redoes real work itself, only confirms and finalizes or reports
+    // honestly.
     router.post('/verify-and-finalize', async (req, res) => {
         if (!staging) return res.status(400).json({ error: 'Set up the staging folder under Settings first.' });
         const { collectionModId } = req.body || {};
@@ -544,28 +502,6 @@ function createUpdateCollectionV2Router(config) {
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
-    });
-
-    router.get('/deploy-all/progress', async (req, res) => {
-        const progress = await helperClient.getDeployAllProgress();
-        // A null here means "no fresh update right now", NOT that the deploy failed -- the same
-        // event-loop congestion that makes a deploy slow can also time out this poll. Falls back to
-        // this route's own in-flight flag rather than reporting a false "not active", exactly as
-        // missing-masters-routes.js's own equivalent does.
-        const result = progress || { active: deployAllInProgress, done: !deployAllInProgress };
-        // Real false-positive fix (2026-08-31, diagnostics/2026-08-30-real-apply-marathon-findings.md
-        // finding #1) -- the Helper's own deployAllMods() call can return/resolve normally even when
-        // Vortex actually aborted the deploy because of a rule cycle, so `result.error` staying empty
-        // here is NOT proof the deploy succeeded. `deployBlockedByCycles` (Helper v0.18.0+, a real
-        // boolean fact read off Vortex's own live notification state, not guessed) is the corrective
-        // signal -- only overrides a genuinely empty error, never a real one this route already
-        // reported another way. `code` lets the frontend theme-substitute "Cycle Helper" the same way
-        // it already does for the retry-pass guard's own CYCLE_RETRY_BLOCKED_MESSAGE.
-        if (result.done && result.deployBlockedByCycles && !result.error) {
-            result.error = runner.DEPLOY_BLOCKED_BY_CYCLES_MESSAGE;
-            result.code = runner.DEPLOY_BLOCKED_BY_CYCLES_CODE;
-        }
-        res.json(result);
     });
 
     return router;

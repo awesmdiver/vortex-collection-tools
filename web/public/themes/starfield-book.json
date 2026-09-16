@@ -8,10 +8,22 @@
       "whatItDoes": "This is the home launcher for the entire toolkit. Use it to quickly navigate to any utility you need without hunting through menus."
     },
     {
+      "toolId": "add-mods-to-collections",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-staryard-manifest-assembler.png",
+      "lore": "Refitting an entire defense flotilla does not require hailing every individual frigate's dockmaster to adjust their parts requisition by hand. A proper staryard dispatcher transmits the updated spec sheets across every hull roster in the slipway simultaneously, aligning cargo manifests before the first rivet is ever driven.",
+      "whatItDoes": "Adds or removes mods across multiple collections at once. Select your target collections, choose the mods to adjust, and the tool updates each manifest list together without touching the mods already installed on your machine."
+    },
+    {
       "toolId": "rebuild",
       "banner": "theme-assets/starfield/book/book-banner-starfield-grav-drive-jump.png",
       "lore": "Sub-light cruising through standard orbital corridors can leave a starship crawling for cycles when standard docking protocols stall out. When standard planetary transit fails or locks up the ship's nav-computer, you spool up the grav drive to bypass the lane entirely. Folding space allows your vessel to reach the destination in a single burst, pulling directly from auxiliary fuel reserves. It completely bypasses congested local traffic lanes to drop your cargo precisely where it belongs. When standard deployment routes break down, a hard grav jump is the only reliable way to cross the void intact.",
       "whatItDoes": "Rapidly extracts and rebuilds an entire collection outside of Vortex, automatically finding and restoring archives to fix broken or sluggish standard installations."
+    },
+    {
+      "toolId": "sync",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-memory-fragment.png",
+      "lore": "A full core purge and system cycle may reset the vessel's primary arrays to factory zero, wiping away your hard-won manual calibrations. But a persistent telemetry buffer locks your bypassed relays and custom thruster trims in deep storage, ensuring the flight deck remembers exactly how you fly the moment the drives spin back up.",
+      "whatItDoes": "Updating a collection in Vortex normally resets your disabled and ignored mods back to the curator's defaults. This tool records your personal overrides beforehand and restores them the moment the update finishes, keeping your customized loadout exactly the way you left it."
     },
     {
       "toolId": "update-collection-v2",

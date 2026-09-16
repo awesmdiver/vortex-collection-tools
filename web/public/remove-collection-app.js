@@ -419,6 +419,18 @@ async function rcRemoveCollection() {
 $rc('rcRemoveBtn').addEventListener('click', rcRemoveCollection);
 
 function rcCancelReview() {
+  // Mid-operation guard ("coming back from another tool starts clean", 2026-09-17): a real removal
+  // still genuinely streaming (rcApplyEventSource open) must keep running in view when the user comes
+  // back or clicks Back/Cancel/Back-to-collections (this one shared button, same triple-duty
+  // convention as Rebuild Missing Files' own rmfBackToPickerBtn) -- resetting to Screen 1 here would
+  // strand its own progress reporting, and unlike Rebuild Collection/Update Collection v2's own
+  // deploy buttons, nothing here disables this button for the duration to prevent it directly.
+  // rcRemovalPhaseActive is deliberately NOT the check here -- it stays true from the moment removal
+  // STARTS through a completed result screen (only rcOpenReview/this function itself ever clear it),
+  // so it can't tell "still running" apart from "done, just showing results" the way
+  // rcApplyEventSource can (rcFinishApplyStream nulls it the moment a real 'done'/'error' frame
+  // arrives) -- checking it instead would block a genuinely-finished removal from ever resetting.
+  if (rcApplyEventSource) return;
   rcCurrentReview = null;
   rcRemovalPhaseActive = false;
   rcGoScreen('rcScreen1');

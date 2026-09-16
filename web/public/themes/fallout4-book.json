@@ -14,6 +14,12 @@
       "whatItDoes": "Skip Vortex's slow archive-install process entirely! This tool re-extracts an already-installed collection's mods directly into your staging folder&mdash;same result, dramatically faster. Review exactly what would change before anything happens, then let it run while you do something else."
     },
     {
+      "toolId": "add-mods-to-collections",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-robco-batch-manifest-protocol.png",
+      "lore": "Why waste valuable employee-hours dispatching requisition runners down to each individual warehouse sublevel? RobCo's patented batch-routing architecture punches operational directives into every regional terminal simultaneously, ensuring uniform corporate conformity without disturbing a single crate on the factory floor.",
+      "whatItDoes": "Applies mod additions or removals to several collections at the same time. Select the collections you want to alter, choose the mods to add or strike, and let the tool adjust every manifest in one go without altering your installed mods."
+    },
+    {
       "toolId": "sync",
       "banner": "theme-assets/fallout4/book/book-banner-fallout4-memory-den.png",
       "lore": "Dr. Amari's whole practice runs on one rule: you can plug someone into a recliner, pull a memory out, look at it closely, even work on it — but the person sitting in the chair walks out exactly who they walked in as, nothing about their real identity lost in the process. An update to your collection works the same risky-sounding way. Things get touched, rearranged, refreshed — but the choices that make your setup *yours*, which mods you'd quietly Ignored or Disabled, come back out intact, exactly as you left them.",

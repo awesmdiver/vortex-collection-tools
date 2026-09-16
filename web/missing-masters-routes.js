@@ -110,6 +110,40 @@ function createMissingMastersRouter(config) {
         }
     });
 
+    // Removes a dummy stub this app created -- the ONLY thing this ever touches is that one file,
+    // directly inside the Dummy Masters output folder (never a subfolder, matching
+    // espWriter.createDummyMaster's own flat `path.join(outputDir, fileName)` write). Validated the
+    // same "cheap defense-in-depth" way as /open-staging-folder/-deployed-folder above: the resolved
+    // path must actually land inside dummyMastersOutputDir AND its own basename must equal `name`
+    // exactly (rejects a crafted name like "../elsewhere.esp" that would otherwise resolve outside
+    // the folder, or a name smuggling a path separator).
+    //
+    // No confirmation needed client-side (mirrors this route's own idempotent shape): deleting the
+    // stub is trivially reversible (Create Dummy Master any time), and if the dummy was already
+    // installed as a mod in Vortex, removing this output-folder copy does NOT uninstall it -- that's
+    // deliberately out of scope, this only ever removes the file this app itself wrote here.
+    // Missing entirely (already removed, or never created) is treated as success -- the end state the
+    // caller wants is "no file here," which is already true.
+    router.post('/remove-dummy-master', (req, res) => {
+        if (!dummyMastersOutputDir) {
+            return res.status(400).json({ error: 'Set up the Dummy Masters output folder under Settings first.' });
+        }
+        const { name } = req.body || {};
+        if (!name || typeof name !== 'string') {
+            return res.status(400).json({ error: 'No master name given.' });
+        }
+        const targetPath = path.resolve(dummyMastersOutputDir, name);
+        if (path.basename(targetPath) !== name || !isInside(dummyMastersOutputDir, targetPath)) {
+            return res.status(400).json({ error: 'That file is not inside your Dummy Masters output folder.' });
+        }
+        try {
+            fs.rmSync(targetPath, { force: true });
+            res.json({ ok: true });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // Rebuilds ONE mod (not a whole collection) from Vortex's own mod record + its intact archive --
     // offered when a "missing" master's own staging folder was found completely empty (see
     // missing-masters-scan.js's hollowInstalls/possibleHollowInstall). Reuses Rebuild Collection's

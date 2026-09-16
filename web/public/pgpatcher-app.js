@@ -1284,11 +1284,21 @@ $g('pgpatcherRankedExportBtn').addEventListener('click', () => {
 // never take a real priority at all. Rather than a name-based heuristic on ModruleSync's own side
 // (unreliable both ways -- misses real PBR mods with generic names, catches unrelated ones with "PBR"
 // in the name), this hands ModruleSync the REAL, already-known answer: same modrules.json shape, plus
-// one extra `patchable` field per mod, computed with the exact same hasMeshes-or-any-shader rule this
-// editor itself uses to decide what's displayable at all (see pgpDeriveRankedUnranked's own fresh-
-// setup filter). match-engine.js reads this field when present and silently drops a non-patchable,
-// unmatched mod from the New Mods bucket instead of listing it; a plain vanilla modrules.json (no
-// `patchable` field) falls back to today's unfiltered behavior, so this stays fully optional.
+// one extra `patchable` field per mod. match-engine.js reads this field when present and silently
+// drops a non-patchable, unmatched mod from the New Mods bucket instead of listing it; a plain
+// vanilla modrules.json (no `patchable` field) falls back to today's unfiltered behavior, so this
+// stays fully optional.
+//
+// `patchable` here deliberately uses pgpHasAnyRealShader, NOT the hasMeshes-or-any-shader rule
+// pgpDeriveRankedUnranked's own fresh-setup filter uses (tightened 2026-09-06, director's own live
+// finding). That broader rule is correct for the Editor's own Ranked/Unranked split -- it mirrors
+// real PGPatcher's ModSortDialog inclusion rule exactly. But ModruleSync only reads this field to
+// decide "is this worth surfacing as a New Mods candidate at all", and hasMeshes alone is too broad
+// for that: any mod with custom NPCs/followers has facegen .nif files, which sets hasMeshes true even
+// with zero PBR/Complex Material/Parallax work. Confirmed live: a 946-facegen-.nif mod with no real
+// shader work was cluttering ModruleSync's New Mods panel purely off hasMeshes. Requiring a real
+// shader classification here is a different, narrower question than the Editor's own display rule --
+// do not unify these two.
 // Priority here is computed the SAME way /save's own real formula does (itemCount - enabled-first
 // index) -- not read back off disk -- so this reflects the CURRENT in-memory session even before a
 // Save.
@@ -1308,7 +1318,7 @@ function pgpDownloadForModruleSync() {
 
   const out = {};
   pgpModsByName.forEach((mod, name) => {
-    const patchable = mod.hasMeshes === true || (Array.isArray(mod.shaders) && mod.shaders.length > 0);
+    const patchable = pgpHasAnyRealShader(mod);
     out[name] = {
       priority: priorityByName.has(name) ? priorityByName.get(name) : -1,
       enabled: isEnabledFor(name),
@@ -1340,9 +1350,16 @@ function pgpDownloadForModruleSync() {
 // reuses the same shared, already-themed confirm modal every other tool in this project already
 // uses for exactly this "are you sure" pattern, rather than inventing a PGPatcher-only one.
 function pgpResetToIdle() {
-  pgpFinishLoading(); // defensive -- stops a stray load timer/EventSource if one somehow survived
-  pgpFinishBuildingStream(); // same, for a stray build timer/EventSource
-  pgpStopDeployAllPolling(); // same, for a stray deploy-all poll if one somehow survived
+  // Mid-operation guard ("coming back from another tool starts clean", 2026-09-17): a load/build/
+  // deploy-all still genuinely running (pgpLoadEventSource/pgpBuildEventSource/
+  // pgpDeployAllPollInterval) must keep running in view when the user comes back -- this used to
+  // defensively close all three unconditionally on the assumption none would ever really still be
+  // open here ("if one somehow survived"), but this function is called from the exact same
+  // "arriving from a different top-level area" entry point every other tool's own reset-on-entry is
+  // (shell.js's navigateToArea), which every one of THOSE turned out to be reachable mid-operation
+  // through -- there's no reason this tool is architecturally different. A finished/failed run
+  // always closes its own stream/poll, so this never blocks a genuinely-finished one.
+  if (pgpLoadEventSource || pgpBuildEventSource || pgpDeployAllPollInterval) return;
   pgpModsByName = new Map();
   pgpRanked = [];
   pgpUnranked = [];
@@ -1486,7 +1503,7 @@ function pgpApplyImportedModrules(modrules, filename) {
   const box = $g('pgpatcherImportToast');
   box.innerHTML = '';
   box.appendChild(el('div', { class: 'callout__title' },
-    `✅ Successfully imported ${filename} (${pgpRanked.length} ranked, ${pgpUnranked.length} new/unranked)!`));
+    `🎉 Successfully imported ${filename} (${pgpRanked.length} ranked, ${pgpUnranked.length} new/unranked)!`));
   box.appendChild(el('p', {}, 'Take a quick look below, then click Save (Apply) to lock it into modrules.json.'));
   box.classList.remove('hidden');
 

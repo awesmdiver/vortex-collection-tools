@@ -17,17 +17,17 @@ let settingsDirty = false;
 // label is a FUNCTION, not a static string -- the parenthetical tool name needs to reflect
 // whichever brand theme is active when the "missing required field" message actually renders
 // (window.themedToolName, theme.js), not whatever was true when this file loaded.
+// App Data (2026-09-14, "split Logs from App Data"): ucv2TrackingDir/cleanupExcludeListDir/
+// archiveFinderDbDir/modExceptionListDir are RETIRED from this list (and their own Settings fields
+// removed entirely) -- appDataDir replaces all four, one required field instead of four.
 const REQUIRED_FIELDS = [
   { key: 'staging', inputId: 'settingsStagingInput', label: () => 'Vortex staging folder' },
   { key: 'downloads', inputId: 'settingsDownloadsInput', label: () => 'Vortex downloads folder' },
   { key: 'syncBackupRoot', inputId: 'settingsSyncBackupRootInput', label: () => `Backups folder (${themedName('sync', 'Update Collection')})` },
-  { key: 'ucv2TrackingDir', inputId: 'settingsUcv2TrackingDirInput', label: () => `Update tracking folder (${themedName('sync', 'Update Collection')})` },
-  { key: 'cleanupExcludeListDir', inputId: 'settingsCleanupExcludeListDirInput', label: () => `Exclude list location (${themedName('scrub', 'Mod Scrub')})` },
   { key: 'skyrimDataDir', inputId: 'settingsSkyrimDataDirInput', label: () => `Skyrim Data folder (${themedName('missing-masters', 'Missing Masters')})` },
   { key: 'pluginsListDir', inputId: 'settingsPluginsListDirInput', label: () => `Plugins.txt location (${themedName('missing-masters', 'Missing Masters')})` },
   { key: 'dummyMastersOutputDir', inputId: 'settingsDummyMastersOutputDirInput', label: () => `Dummy Masters output folder (${themedName('missing-masters', 'Missing Masters')})` },
-  { key: 'archiveFinderDbDir', inputId: 'settingsArchiveFinderDbDirInput', label: () => `${themedName('archive-finder', 'Archive Finder')} index folder` },
-  { key: 'modExceptionListDir', inputId: 'settingsModExceptionListDirInput', label: () => `${themedName('report-exceptions', 'Mod Exceptions')} list location` },
+  { key: 'appDataDir', inputId: 'settingsAppDataDirInput', label: () => 'App Data folder' },
 ];
 function themedName(id, fallback) { return window.themedToolName ? window.themedToolName(id, fallback) : fallback; }
 
@@ -430,16 +430,14 @@ async function loadSettings() {
   $g('settingsSyncBackupRootInput').value = cfg.syncBackupRoot || '';
   $g('settingsStateInput').value = cfg.state || '';
   $g('settingsLogsDirInput').value = cfg.logsDir || '';
-  $g('settingsCleanupExcludeListDirInput').value = cfg.cleanupExcludeListDir || '';
+  $g('settingsAppDataDirInput').value = cfg.appDataDir || '';
   $g('settingsSkyrimDataDirInput').value = cfg.skyrimDataDir || '';
   $g('settingsPluginsListDirInput').value = cfg.pluginsListDir || '';
   $g('settingsDummyMastersOutputDirInput').value = cfg.dummyMastersOutputDir || '';
-  $g('settingsArchiveFinderDbDirInput').value = cfg.archiveFinderDbDir || '';
   $g('settingsArchiveFinderOutputDirInput').value = cfg.archiveFinderOutputDir || '';
   $g('settingsEslifierOutputDirInput').value = cfg.eslifierOutputDir || '';
   $g('settingsMergeOutputDirInput').value = cfg.mergeOutputDir || '';
   $g('settingsMergeStagingCopyDirInput').value = cfg.mergeStagingCopyDir || '';
-  $g('settingsCycleHelperHistoryDirInput').value = cfg.cycleHelperHistoryDir || '';
   $g('settingsPgpatcherCfgDirInput').value = cfg.pgpatcherCfgDir || '';
   $g('settingsPgpatcherOutputBackupDirInput').value = cfg.pgpatcherOutputBackupDir || '';
   $g('settingsSaveCleanerSavesDirInput').value = cfg.saveCleanerSavesDir || '';
@@ -465,8 +463,6 @@ async function loadSettings() {
   document.querySelectorAll('input[name="settingsMergePostMergeAction"]').forEach((el) => {
     el.checked = el.value === mergeAction;
   });
-  $g('settingsModExceptionListDirInput').value = cfg.modExceptionListDir || '';
-  $g('settingsUcv2TrackingDirInput').value = cfg.ucv2TrackingDir || '';
   $g('settingsMaxBackupsInput').value = cfg.maxBackupsToKeep != null ? cfg.maxBackupsToKeep : '';
   $g('settingsMaxStateBackupsInput').value = cfg.maxStateBackupsToKeep != null ? cfg.maxStateBackupsToKeep : '';
   $g('settingsConcurrencyInput').value = cfg.concurrentExtractions || 1;
@@ -481,7 +477,7 @@ async function loadSettings() {
     ? 'A key is already stored -- leave blank to keep it, or type a new one to replace it.'
     : 'No key stored yet.';
   // Exclude-list CONTENTS live in their own data file now (lib/cleanup-exclude-store.js), not in
-  // config.json -- fetched separately. Gracefully empty if cleanupExcludeListDir isn't set yet.
+  // config.json -- fetched separately. Gracefully empty if App Data isn't set yet.
   try {
     const ignored = await settingsApi('GET', '/api/cleanup/ignored');
     renderCleanupIgnoredList('staging', ignored.staging || []);
@@ -491,6 +487,8 @@ async function loadSettings() {
     renderCleanupIgnoredList('archives', []);
   }
   await loadBackupRatioDismissInfo();
+  await loadLogsInfo();
+  await loadAppDataInfo();
   settingsDirty = false;
 }
 
@@ -656,17 +654,15 @@ async function saveSettings() {
       syncBackupRoot: $g('settingsSyncBackupRootInput').value,
       state: $g('settingsStateInput').value,
       logsDir: $g('settingsLogsDirInput').value,
-      cleanupExcludeListDir: $g('settingsCleanupExcludeListDirInput').value,
+      appDataDir: $g('settingsAppDataDirInput').value,
       skyrimDataDir: $g('settingsSkyrimDataDirInput').value,
       pluginsListDir: $g('settingsPluginsListDirInput').value,
       dummyMastersOutputDir: $g('settingsDummyMastersOutputDirInput').value,
-      archiveFinderDbDir: $g('settingsArchiveFinderDbDirInput').value,
       archiveFinderOutputDir: $g('settingsArchiveFinderOutputDirInput').value,
       eslifierOutputDir: $g('settingsEslifierOutputDirInput').value,
       mergeOutputDir: $g('settingsMergeOutputDirInput').value,
       mergeStagingCopyDir: $g('settingsMergeStagingCopyDirInput').value,
       mergePostMergeAction: document.querySelector('input[name="settingsMergePostMergeAction"]:checked')?.value || 'disable',
-      cycleHelperHistoryDir: $g('settingsCycleHelperHistoryDirInput').value,
       pgpatcherCfgDir: $g('settingsPgpatcherCfgDirInput').value,
       pgpatcherOutputBackupDir: $g('settingsPgpatcherOutputBackupDirInput').value,
       saveCleanerSavesDir: $g('settingsSaveCleanerSavesDirInput').value,
@@ -676,8 +672,6 @@ async function saveSettings() {
       saveCleanerSavesDirStarfield: $g('settingsSaveCleanerSavesDirStarfieldInput').value,
       saveCleanerBackupRootStarfield: $g('settingsSaveCleanerBackupRootStarfieldInput').value,
       maxSaveCleanerBackupsToKeep: $g('settingsMaxSaveCleanerBackupsInput').value === '' ? null : Number($g('settingsMaxSaveCleanerBackupsInput').value),
-      modExceptionListDir: $g('settingsModExceptionListDirInput').value,
-      ucv2TrackingDir: $g('settingsUcv2TrackingDirInput').value,
       maxBackupsToKeep: $g('settingsMaxBackupsInput').value === '' ? null : Number($g('settingsMaxBackupsInput').value),
       maxStateBackupsToKeep: $g('settingsMaxStateBackupsInput').value === '' ? null : Number($g('settingsMaxStateBackupsInput').value),
       concurrentExtractions: Number($g('settingsConcurrencyInput').value) || 1,
@@ -844,7 +838,26 @@ $g('settingsDeleteBackupsConfirmBtn').addEventListener('click', async () => {
   });
 });
 
-// ---------- Logs (Open Logs Folder / Delete all logs) ----------
+// ---------- Logs (Open Logs Folder / Delete Logs) ----------
+function fmtBytes(bytes) {
+  if (!bytes && bytes !== 0) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let n = bytes;
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return `${n.toFixed(n >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+async function loadLogsInfo() {
+  const el = $g('settingsLogsInfoText');
+  try {
+    const { count, totalBytes } = await settingsApi('GET', '/api/settings/logs-info');
+    el.textContent = count > 0 ? `${count} file${count === 1 ? '' : 's'} · ${fmtBytes(totalBytes)}` : 'No logs saved yet.';
+  } catch {
+    el.textContent = '';
+  }
+}
+
 $g('settingsOpenLogsBtn').addEventListener('click', async () => {
   const statusEl = $g('settingsDeleteLogsStatus');
   try {
@@ -879,8 +892,258 @@ $g('settingsDeleteLogsConfirmBtn').addEventListener('click', async () => {
     onPhase: (frame) => { statusEl.textContent = frame.message; },
     onDone: (frame) => {
       statusEl.textContent = frame.deletedCount > 0 ? `Deleted ${frame.deletedCount} log file${frame.deletedCount === 1 ? '' : 's'}.` : 'Nothing to delete.';
+      loadLogsInfo();
     },
   });
+});
+
+// ---------- App Data (2026-09-14, "split Logs from App Data") ----------
+// A plain, generic delegated link -- any element with .settings-jump-link + data-cat jumps to that
+// Settings category, same mechanism #settingsRail's own click handler already uses
+// (showSettingsCategory). Used by the small cross-reference notes left behind on each retired
+// per-tool folder field ("Saved under your App Data folder").
+document.addEventListener('click', (e) => {
+  const link = e.target.closest('.settings-jump-link');
+  if (!link) return;
+  e.preventDefault();
+  showSettingsCategory(link.dataset.cat);
+});
+
+let appDataGroups = []; // [{tool, type, lose, listWarn, items: [{id, name, createdAt, changedAt, sizeBytes, deletePath, isDir}]}]
+const appDataSelected = new Set(); // item ids
+const appDataFilter = new Set(); // tool names; empty = show all
+const appDataOpenGroups = new Set(); // "tool::type" keys currently expanded
+
+function appDataGroupKey(g) { return `${g.tool}::${g.type}`; }
+function appDataAllItems() { return appDataGroups.flatMap((g) => g.items); }
+function appDataVisibleGroups() { return appDataGroups.filter((g) => appDataFilter.size === 0 || appDataFilter.has(g.tool)); }
+function appDataVisibleItems() { return appDataVisibleGroups().flatMap((g) => g.items); }
+
+async function loadAppDataInfo() {
+  let info;
+  try {
+    info = await settingsApi('GET', '/api/settings/app-data-info');
+  } catch {
+    info = { configured: false, count: 0, sizeBytes: 0 };
+  }
+  $g('settingsAppDataNotConfigured').classList.toggle('hidden', info.configured);
+  $g('settingsAppDataManager').classList.toggle('hidden', !info.configured);
+  if (!info.configured) return;
+  $g('settingsAppDataInfoText').textContent = info.count > 0 ? `${info.count} item${info.count === 1 ? '' : 's'} · ${fmtBytes(info.sizeBytes)}` : '';
+  await loadAppDataItems();
+}
+
+async function loadAppDataItems() {
+  let data;
+  try {
+    data = await settingsApi('GET', '/api/settings/app-data-items');
+  } catch {
+    data = { groups: [] };
+  }
+  appDataGroups = data.groups || [];
+  const allIds = new Set(appDataAllItems().map((it) => it.id));
+  for (const id of Array.from(appDataSelected)) if (!allIds.has(id)) appDataSelected.delete(id);
+  renderAppDataChips();
+  renderAppDataTable();
+}
+
+// Same Set-based multi-select filter-badge convention as every other filter row in this app
+// (DESIGN.md's "Filter badges are multi-select toggles" -- e.g. file-retriever-app.js's own
+// frRenderCategoryFilters): a "Show all" badge plus one per-tool badge, each independently
+// toggleable, empty Set = show everything.
+function renderAppDataChips() {
+  const container = $g('settingsAppDataChips');
+  container.className = 'summary-badges';
+  const tools = Array.from(new Set(appDataGroups.map((g) => g.tool)));
+  const countFor = (tool) => appDataGroups.filter((g) => g.tool === tool).reduce((n, g) => n + g.items.length, 0);
+  container.innerHTML = [
+    `<span class="badge badge--clickable badge--show-all${appDataFilter.size === 0 ? ' badge--filter-active' : ''}" data-tool="__all">Show all</span>`,
+    ...tools.map((tool) => `<span class="badge badge--clickable badge--info${appDataFilter.has(tool) ? ' badge--filter-active' : ''}" data-tool="${escHtml(tool)}">${escHtml(tool)} (${countFor(tool)})</span>`),
+  ].join('');
+  container.querySelectorAll('.badge').forEach((elm) => {
+    elm.addEventListener('click', () => {
+      const tool = elm.dataset.tool;
+      if (tool === '__all') appDataFilter.clear();
+      else if (appDataFilter.has(tool)) appDataFilter.delete(tool);
+      else appDataFilter.add(tool);
+      renderAppDataChips();
+      renderAppDataTable();
+    });
+  });
+}
+
+function renderAppDataTable() {
+  const visibleGroups = appDataVisibleGroups();
+  $g('settingsAppDataEmpty').classList.toggle('hidden', appDataGroups.length > 0);
+  $g('settingsAppDataTableWrap').classList.toggle('hidden', appDataGroups.length === 0);
+  const tbody = $g('settingsAppDataTableBody');
+  tbody.innerHTML = '';
+  for (const g of visibleGroups) {
+    const key = appDataGroupKey(g);
+    const isOpen = appDataOpenGroups.has(key);
+    const selectedCount = g.items.filter((it) => appDataSelected.has(it.id)).length;
+    // Same grouped-table-rows-with-a-tri-state-checkbox pattern as Archive Finder's own file search
+    // results (DESIGN.md's "Grouped table rows with a tri-state group checkbox") -- a toggle row
+    // (.af-expander) whose own checkbox reflects the children's combined state, expanding to show
+    // each real item underneath.
+    const groupRow = document.createElement('tr');
+    groupRow.className = 'ad-group-row';
+    const groupCb = document.createElement('input');
+    groupCb.type = 'checkbox';
+    groupCb.checked = g.items.length > 0 && selectedCount === g.items.length;
+    groupCb.indeterminate = selectedCount > 0 && selectedCount < g.items.length;
+    const cbTd = document.createElement('td');
+    cbTd.className = 'col-check';
+    cbTd.appendChild(groupCb);
+    const labelTd = document.createElement('td');
+    labelTd.colSpan = 5;
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'af-expander';
+    toggleBtn.textContent = `${isOpen ? '▾' : '▸'} ${g.tool} — ${g.type} (${g.items.length} item${g.items.length === 1 ? '' : 's'}${selectedCount ? `, ${selectedCount} selected` : ''})`;
+    toggleBtn.addEventListener('click', () => {
+      if (isOpen) appDataOpenGroups.delete(key); else appDataOpenGroups.add(key);
+      renderAppDataTable();
+    });
+    labelTd.appendChild(toggleBtn);
+    groupRow.append(cbTd, labelTd);
+    groupCb.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const shouldSelect = selectedCount !== g.items.length;
+      for (const it of g.items) { if (shouldSelect) appDataSelected.add(it.id); else appDataSelected.delete(it.id); }
+      renderAppDataTable();
+      updateAppDataSelectionBar();
+    });
+    tbody.appendChild(groupRow);
+    if (!isOpen) continue;
+    for (const it of g.items) {
+      const tr = document.createElement('tr');
+      tr.className = 'ad-child-row';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = appDataSelected.has(it.id);
+      const cbTd2 = document.createElement('td');
+      cbTd2.className = 'col-check';
+      cbTd2.appendChild(cb);
+      cb.addEventListener('click', () => {
+        if (cb.checked) appDataSelected.add(it.id); else appDataSelected.delete(it.id);
+        renderAppDataTable();
+        updateAppDataSelectionBar();
+      });
+      const nameTd = document.createElement('td');
+      nameTd.className = 'ad-item-name';
+      nameTd.textContent = it.name;
+      const typeTd = document.createElement('td');
+      typeTd.innerHTML = `<span class="badge ${it.listWarn ? 'badge--warning' : 'badge--neutral'}">${escHtml(it.type)}</span>`;
+      const createdTd = document.createElement('td');
+      createdTd.className = 'muted';
+      createdTd.textContent = it.createdAt ? new Date(it.createdAt).toLocaleString() : '—';
+      const changedTd = document.createElement('td');
+      changedTd.className = 'muted';
+      changedTd.innerHTML = it.changedAt ? `<b>${new Date(it.changedAt).toLocaleString()}</b>` : '—';
+      const sizeTd = document.createElement('td');
+      sizeTd.className = 'muted';
+      sizeTd.style.textAlign = 'right';
+      sizeTd.textContent = fmtBytes(it.sizeBytes);
+      tr.append(cbTd2, nameTd, typeTd, createdTd, changedTd, sizeTd);
+      tbody.appendChild(tr);
+    }
+  }
+  updateAppDataSelectionBar();
+}
+
+function updateAppDataSelectionBar() {
+  const visible = appDataVisibleItems();
+  const selectedVisible = visible.filter((it) => appDataSelected.has(it.id)).length;
+  $g('settingsAppDataSelCount').textContent = `${selectedVisible} of ${visible.length} selected`;
+  $g('settingsAppDataDeleteBtn').disabled = appDataSelected.size === 0;
+}
+
+$g('settingsAppDataSelectAllBtn').addEventListener('click', () => {
+  for (const it of appDataVisibleItems()) appDataSelected.add(it.id);
+  renderAppDataTable();
+});
+$g('settingsAppDataInvertBtn').addEventListener('click', () => {
+  for (const it of appDataVisibleItems()) {
+    if (appDataSelected.has(it.id)) appDataSelected.delete(it.id); else appDataSelected.add(it.id);
+  }
+  renderAppDataTable();
+});
+$g('settingsAppDataClearBtn').addEventListener('click', () => {
+  appDataSelected.clear();
+  renderAppDataTable();
+});
+
+$g('settingsOpenAppDataBtn').addEventListener('click', async () => {
+  const statusEl = $g('settingsDeleteAppDataStatus');
+  try {
+    await settingsApi('POST', '/api/settings/open-app-data-folder');
+  } catch (e) {
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+  }
+});
+
+$g('settingsAppDataDeleteBtn').addEventListener('click', () => {
+  const selectedItems = appDataAllItems().filter((it) => appDataSelected.has(it.id));
+  if (selectedItems.length === 0) return;
+  $g('settingsDeleteAppDataModalCount').textContent = `${selectedItems.length} item${selectedItems.length === 1 ? '' : 's'}`;
+  // One <li> per GROUP represented in the selection, not per item -- "{tool} ({n}): you'll lose
+  // {what}." (queue: logs-vs-app-data, copy #6). A group is identified by tool+type since two
+  // groups can share a tool name (Rebuild Collection's reports vs. its off-site imports).
+  const byGroup = new Map();
+  for (const it of selectedItems) {
+    const key = `${it.tool}::${it.type}`;
+    if (!byGroup.has(key)) byGroup.set(key, { tool: it.tool, lose: it.lose, listWarn: it.listWarn, count: 0 });
+    byGroup.get(key).count++;
+  }
+  const list = $g('settingsDeleteAppDataModalList');
+  list.innerHTML = '';
+  let anyListWarn = false;
+  for (const { tool, lose, listWarn, count } of byGroup.values()) {
+    const li = document.createElement('li');
+    li.innerHTML = `<b>${tool}</b> (${count}): you'll lose ${lose}.`;
+    list.appendChild(li);
+    if (listWarn) anyListWarn = true;
+  }
+  const warnEl = $g('settingsDeleteAppDataModalWarn');
+  // Generic enough to cover both hand-built lists this can apply to (Mod Exceptions, Mod Scrub) --
+  // names the specific one(s) actually selected rather than a fixed "Mod Exceptions" mention.
+  const warnedTools = Array.from(byGroup.values()).filter((g) => g.listWarn).map((g) => g.tool);
+  warnEl.classList.toggle('hidden', !anyListWarn);
+  if (anyListWarn) {
+    warnEl.textContent = `⚠️ Your ${warnedTools.join(' and ')} list${warnedTools.length > 1 ? 's were' : ' was'} built by hand. Once deleted, you'll have to add each ${warnedTools.length > 1 ? 'item' : 'mod'} back yourself.`;
+  }
+  $g('settingsDeleteAppDataModal').classList.remove('hidden');
+});
+$g('settingsDeleteAppDataCancelBtn').addEventListener('click', () => {
+  $g('settingsDeleteAppDataModal').classList.add('hidden');
+});
+$g('settingsDeleteAppDataConfirmBtn').addEventListener('click', async () => {
+  const statusEl = $g('settingsDeleteAppDataStatus');
+  const selectedItems = appDataAllItems().filter((it) => appDataSelected.has(it.id));
+  $g('settingsDeleteAppDataModal').classList.add('hidden');
+  statusEl.textContent = 'Starting…';
+  try {
+    await settingsApi('POST', '/api/settings/delete-app-data-items', { deletePaths: selectedItems.map((it) => it.deletePath) });
+  } catch (e) {
+    if (!handleSettingsApiError(e)) statusEl.textContent = `Failed: ${e.message}`;
+    return;
+  }
+  const es = new EventSource('/api/settings/delete-app-data-items/events');
+  es.onmessage = async (msg) => {
+    const frame = JSON.parse(msg.data);
+    if (frame.type === 'phase') {
+      statusEl.textContent = frame.message;
+    } else if (frame.type === 'done') {
+      es.close();
+      statusEl.textContent = frame.deletedCount > 0 ? `Deleted ${frame.deletedCount} item${frame.deletedCount === 1 ? '' : 's'}.` : 'Nothing to delete.';
+      appDataSelected.clear();
+      await loadAppDataInfo();
+    } else if (frame.type === 'error') {
+      es.close();
+      if (!handleSettingsApiError(new Error(frame.message))) statusEl.textContent = `Failed: ${frame.message || 'Something went wrong.'}`;
+    }
+  };
 });
 
 // ---------- Delete all Update Collection backups (two separate stores, same pattern as above) ----------

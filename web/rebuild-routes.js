@@ -21,6 +21,8 @@ const modExceptionStore = require('../lib/mod-exception-store');
 const { pickOpenFileAsync } = require('../lib/vortex-sync/win-dialog');
 const runState = require('./run-state');
 const { createSseSession } = require('./sse-session');
+const { detectFomodChoiceNeed } = require('../lib/fomod-picker-data');
+const { savePicksToVortex } = require('../lib/vortex-live-fomod-choices');
 
 const planSession = createSseSession();
 const vortexDataSession = createSseSession();
@@ -30,7 +32,21 @@ function createRouter(config) {
     const { staging, downloads, state, backupRoot } = config;
     const syncLib = runner.loadSyncLib();
     const sevenZipExe = findSevenZip();
-    const logsDir = appConfig.getLogsDir('rebuild-collection');
+    // App Data (2026-09-14, "split Logs from App Data") -- run reports (Resume, Retry, log pages,
+    // Stats, Work Through, "last extracted", plan reuse) are the tools' own remembered data, not
+    // troubleshooting logs, even though they used to live under getLogsDir('rebuild-collection').
+    // That call is kept here ONLY as the legacy fallback location for resolveDataDir -- once App
+    // Data is configured, this always resolves under it instead (see lib/app-data-migration.js for
+    // the one-time move of whatever was already sitting in the old location).
+    const logsDir = appConfig.resolveDataDir('rebuild-collection/reports', appConfig.getLogsDir('rebuild-collection'));
+    // App Data (2026-09-14) -- modExceptionListDir (the old Settings field, now retired from the
+    // Settings UI, see app-config.js's own LEGACY comment on it) is kept as the fallback legacy
+    // value for anyone who had customized it, same as every other retired field's own
+    // resolveDataDir call.
+    function resolveModExceptionListDir() {
+        const { modExceptionListDir } = appConfig.loadConfig();
+        return appConfig.resolveDataDir('mod-exceptions', modExceptionListDir);
+    }
 
     // Helper-first, state.v2-fallback (2026-08-21) -- same treatment Cycle Helper/Rules Generator
     // already have, per the approved design/mockup-rebuild-collection-helper-support.html (no UI
@@ -84,6 +100,62 @@ function createRouter(config) {
     // absent key = never attempted at all.
     const syncStateCache = new Map();
     let vortexDataLoadedAt = null;
+    // Reused-plan cache for Start Rebuild, keyed by collectionModId (same Map convention as
+    // syncStateCache above -- viewing collection A's plan then collection B's shouldn't evict A's
+    // still-fresh one). See "Rebuild Collection: Start reuses the check View Collection just did"
+    // (2026-09-14): a real 1,955-mod rebuild sat on a "Reading Vortex..." spinner for a long time
+    // after Start, because POST /runs always recomputed the WHOLE plan (re-classifying every mod)
+    // even though View Collection had just done exactly that, seconds or minutes earlier, with
+    // ZERO progress shown under a label describing the wrong phase. Entry shape: { resumeLogPath,
+    // configSnapshot, computedAt, result } where `result` is computePlan()'s own full return value.
+    // Cleared at every point listed in getReusablePlan()/clearCachedPlan()'s own comments below --
+    // NEVER trust an entry past those without re-deriving it, this is a correctness-sensitive cache,
+    // not just a speed one.
+    const cachedPlanByCollection = new Map();
+    const PLAN_REUSE_MAX_AGE_MS = 10 * 60 * 1000;
+
+    function clearCachedPlan(collectionModId) {
+        cachedPlanByCollection.delete(collectionModId);
+    }
+
+    // The config inputs computePlan()/buildPlan() actually read, beyond collectionModId/
+    // resumeLogPath/live Vortex+disk state -- a reused plan is only valid if NONE of these have
+    // changed since it was computed. modExceptionListDir's own CONTENTS matter, not just the path
+    // (the list can be edited without the folder changing) -- compared via mtime, cheap and avoids
+    // re-reading/hashing the whole file on every /runs call.
+    function computePlanConfigSnapshot() {
+        const { downloadMissingArchives, forceExtractOffSiteMismatches } = appConfig.loadConfig();
+        const modExceptionListDir = resolveModExceptionListDir();
+        let exceptionListMtimeMs = null;
+        if (modExceptionListDir) {
+            try {
+                exceptionListMtimeMs = fs.statSync(path.join(modExceptionListDir, modExceptionStore.FILE_NAME)).mtimeMs;
+            } catch { /* no exception list file yet -- null is itself a valid, comparable snapshot state */ }
+        }
+        return { downloadMissingArchives, forceExtractOffSiteMismatches, modExceptionListDir, exceptionListMtimeMs };
+    }
+
+    // Returns the cached plan for `collectionModId` iff it's still safe to reuse as-is:
+    //   - same resumeLogPath (including both being '' -- a resume plan and a fresh plan for the
+    //     SAME collection are never interchangeable),
+    //   - computed less than PLAN_REUSE_MAX_AGE_MS ago,
+    //   - none of computePlanConfigSnapshot()'s inputs have changed since.
+    // Does NOT check for "did staging/Vortex data change underneath it" -- that's handled by
+    // explicit invalidation at every point that can cause it (see clearCachedPlan()'s call sites:
+    // /vortex-data/refresh, the Import/Force Extract/Retry Download/delete-archive-candidate
+    // resolve actions, and every run-ending branch in POST /runs) PLUS runRebuild()'s own cheap
+    // per-mod staleness guard (lib/collection-runner.js) as a second, independent safety net for
+    // whatever those explicit points don't catch. Never mutates or removes the cache entry itself --
+    // the caller does that once it actually commits to reusing it (see POST /runs).
+    function getReusablePlan(collectionModId, resumeLogPath) {
+        const cached = cachedPlanByCollection.get(collectionModId);
+        if (!cached) return null;
+        if ((cached.resumeLogPath || '') !== (resumeLogPath || '')) return null;
+        if (Date.now() - cached.computedAt >= PLAN_REUSE_MAX_AGE_MS) return null;
+        const currentSnapshot = computePlanConfigSnapshot();
+        if (JSON.stringify(cached.configSnapshot) !== JSON.stringify(currentSnapshot)) return null;
+        return cached;
+    }
     // The current run's pause controller (lib/pause-controller.js) -- one per active run, created
     // fresh in POST /runs and cleared once that run ends (any way it ends), same lifecycle as
     // runState's own single-run session. null whenever no run is active, or the active run has no
@@ -245,6 +317,11 @@ function createRouter(config) {
             // to be GONE, not left in place, so computePlan's cache-miss branch does a fresh read
             // instead of silently reusing pre-fetch data.
             syncStateCache.delete(collectionModId);
+            // Same reasoning as the syncStateCache delete just above -- a fresh collection.json can
+            // carry different FOMOD choices/mod list, so a plan cached from before this fetch is
+            // exactly as stale as a syncStateCache entry would be. Not one of this feature's
+            // originally-listed invalidation points, but the same underlying bug class.
+            clearCachedPlan(collectionModId);
             // Also populate THIS one collection's Vortex-sync-state cache right away -- confirmed
             // live this was otherwise confusing: the collection appears correctly in the main
             // picker immediately (a plain filesystem scan), but with no "✓ Vortex data cached"
@@ -330,7 +407,9 @@ function createRouter(config) {
                     entries, stagingDir: staging,
                     onProgress: (p) => emitIfCurrent({ type: 'sync-state-progress', ...p }),
                 });
-                for (const [modId, result] of results) syncStateCache.set(modId, result);
+                // A cached plan for any of these collections was computed against the OLD Vortex
+                // data -- see getReusablePlan()'s own comment for the full invalidation list.
+                for (const [modId, result] of results) { syncStateCache.set(modId, result); clearCachedPlan(modId); }
                 vortexDataLoadedAt = new Date().toISOString();
                 // Same enrichment the main list gets (see GET /collections above) -- lost when a
                 // Workshop entry stopped being (mis)routed through the main list's own rendering.
@@ -364,18 +443,23 @@ function createRouter(config) {
             }));
         }
         const resumed = resumeLogPath ? runner.loadResumeLog(resumeLogPath) : new Map();
-        const { downloadMissingArchives, forceExtractOffSiteMismatches, modExceptionListDir } = appConfig.loadConfig();
+        const { downloadMissingArchives, forceExtractOffSiteMismatches } = appConfig.loadConfig();
         // Loaded fresh per plan computation (cheap, a small local JSON file), not cached across
         // calls -- same "read fresh, not stale-cached" convention as every other config-driven
         // toggle read via loadConfig() in this router. See lib/mod-exception-store.js's own header
         // for why this is checked here (classifyMod, via buildPlan) rather than bolted on after.
-        const exceptionMatcher = modExceptionStore.makeExceptionMatcher(modExceptionListDir);
+        const exceptionMatcher = modExceptionStore.makeExceptionMatcher(resolveModExceptionListDir());
+        // "Open FOMOD mods get an Install button" (2026-09-17) -- a real, live Helper check (cheap,
+        // same one loadSyncStateAnyPath's own Helper-first branch just did above for this exact
+        // call), so buildPlan can use Vortex's own recorded live installerChoices before ever
+        // reaching classifyMod's own archive-based SKIP_OPEN_FOMOD check.
+        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
         const { modEntries, rebuildQueue } = await runner.buildPlan({
             collectionModId, removedMods, keptMods, knownVortexModIds, resumed, otherVersionsByModId, sharedWithCollectionsByKey,
             downloadsDir: downloads, stagingDir: staging, sevenZipExe, logsDir, onModClassified,
             downloadMissingArchivesEnabled: downloadMissingArchives,
             forceExtractOffSiteMismatchesEnabled: forceExtractOffSiteMismatches,
-            exceptionMatcher,
+            exceptionMatcher, helperAvailable,
         });
         return { collectionInfo, ignored, keptMods, knownVortexModIds, modEntries, rebuildQueue, otherVersionsByModId, sharedWithCollectionsByKey };
     }
@@ -435,11 +519,21 @@ function createRouter(config) {
                     type: 'phase',
                     phase: syncStateCache.has(collectionModId) ? 'sync-state-cached' : 'sync-state',
                 });
-                const { collectionInfo, ignored, keptMods, knownVortexModIds, modEntries, rebuildQueue } = await computePlan(
+                const planResult = await computePlan(
                     collectionModId, resumeLogPath,
                     (entry, index, total) => emitIfCurrent({ type: 'classify-progress', name: entry.name, status: entry.status, index, total }),
                     (p) => emitIfCurrent({ type: 'sync-state-progress', ...p })
                 );
+                const { collectionInfo, ignored, keptMods, knownVortexModIds, modEntries, rebuildQueue } = planResult;
+                // Cached for a Start Rebuild that follows soon after -- see getReusablePlan()'s own
+                // header comment for the full reuse-eligibility story. Stored regardless of
+                // resumeLogPath (including a Resume-flow plan); reuse itself checks that it matches.
+                cachedPlanByCollection.set(collectionModId, {
+                    resumeLogPath: resumeLogPath || '',
+                    configSnapshot: computePlanConfigSnapshot(),
+                    computedAt: Date.now(),
+                    result: planResult,
+                });
                 emitIfCurrent({
                     type: 'plan-ready',
                     done: true,
@@ -483,6 +577,9 @@ function createRouter(config) {
         if (!picked) return res.json({ ok: false, cancelled: true });
         try {
             const { filename } = runner.importOffSiteArchive({ downloadsDir: downloads, collectionModId, name, pickedFilePath: picked });
+            // This mod would classify differently (REBUILD instead of SKIP_NO_ARCHIVE) on the very
+            // next plan for this collection -- a cached plan predating this Import is stale.
+            clearCachedPlan(collectionModId);
             res.json({ ok: true, filename });
         } catch (e) {
             res.status(500).json({ ok: false, error: e.message });
@@ -529,21 +626,39 @@ function createRouter(config) {
         res.status(202).json({ runId });
 
         // Detached background task -- the response has already been sent; everything from here
-        // reports progress exclusively through runState.emit() (SSE), matching the CLI's own
-        // never-trust-a-stale-plan discipline: the plan is recomputed fresh, not reused from a
-        // client's earlier /api/rebuild/plan call, since real time (and possibly Vortex state) may have
-        // passed since then.
+        // reports progress exclusively through runState.emit() (SSE). Reuses a recent /plan
+        // computation for this exact collection+resumeLogPath when one is still fresh and nothing
+        // has invalidated it (see getReusablePlan()'s own header comment) -- View Collection just
+        // did this exact classify pass, often seconds or minutes earlier, so redoing it under a
+        // "Reading Vortex..." label that describes the wrong phase was both slow AND misleading (a
+        // real 1,955-mod collection sat there with zero progress shown). Falls back to a full fresh
+        // computePlan(), WITH live classify-progress this time, whenever reuse isn't safe.
         (async () => {
             const startedAt = new Date().toISOString();
             const runTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
             let logPath;
             try {
                 const syncStateStart = Date.now();
-                runState.emit({ type: 'phase', phase: 'sync-state' });
-                const { collectionInfo, modEntries, rebuildQueue, knownVortexModIds, otherVersionsByModId, sharedWithCollectionsByKey } = await computePlan(
-                    collectionModId, resumeLogPath, undefined,
-                    (p) => runState.emit({ type: 'sync-state-progress', ...p })
-                );
+                const reusable = getReusablePlan(collectionModId, resumeLogPath || '');
+                let collectionInfo, modEntries, rebuildQueue, knownVortexModIds, otherVersionsByModId, sharedWithCollectionsByKey, planReuse;
+                if (reusable) {
+                    // Consumed -- never offered again, and this run now owns a COPY of its arrays
+                    // rather than the cached references themselves (this run pushes/splices entries
+                    // onto modEntries/rebuildQueue as it goes; the cache must never see that).
+                    clearCachedPlan(collectionModId);
+                    ({ collectionInfo, knownVortexModIds, otherVersionsByModId, sharedWithCollectionsByKey } = reusable.result);
+                    modEntries = [...reusable.result.modEntries];
+                    rebuildQueue = [...reusable.result.rebuildQueue];
+                    planReuse = { reused: true, ageMs: Date.now() - reusable.computedAt };
+                } else {
+                    runState.emit({ type: 'phase', phase: syncStateCache.has(collectionModId) ? 'sync-state-cached' : 'sync-state' });
+                    ({ collectionInfo, modEntries, rebuildQueue, knownVortexModIds, otherVersionsByModId, sharedWithCollectionsByKey } = await computePlan(
+                        collectionModId, resumeLogPath,
+                        (entry, index, total) => runState.emit({ type: 'classify-progress', name: entry.name, status: entry.status, index, total }),
+                        (p) => runState.emit({ type: 'sync-state-progress', ...p })
+                    ));
+                    planReuse = { reused: false };
+                }
                 logPath = path.join(logsDir, `rebuild-${collectionInfo.modId}-${runTimestamp}.json`);
 
                 // Stats Report data (schemaVersion 3) -- phaseDurationsMs/concurrentExtractionsForThisRun
@@ -556,7 +671,7 @@ function createRouter(config) {
                 const currentLog = (runStatus) => runner.buildLogData({
                     collectionInfo, stagingDir: staging, downloadsDir: downloads, backupRoot,
                     dryRun: false, startedAt, runStatus, modEntries, downloadResults,
-                    concurrentExtractions: concurrentExtractionsForThisRun, phaseDurationsMs,
+                    concurrentExtractions: concurrentExtractionsForThisRun, phaseDurationsMs, planReuse,
                 });
 
                 runState.emit({ type: 'phase', phase: 'plan-ready', modEntries, rebuildQueueCount: rebuildQueue.length, openFomodMods: runner.getOpenFomodMods(modEntries) });
@@ -587,20 +702,49 @@ function createRouter(config) {
                         });
                         downloadResults = { results: [], skippedReason: 'not-premium' };
                     } else {
-                        runState.emit({ type: 'phase', phase: 'downloading-missing', count: missingNexusMods.length });
+                        // modNames (2026-09-14, "the run table's status pill shows every stage, like
+                        // Update Collection"): these mods are SKIP_NO_ARCHIVE, so they were never in
+                        // rebuildQueue at plan-ready time and have no row in the run screen's live
+                        // table yet -- the client pre-creates a "Queued" row for each of them here, so
+                        // there's something for download-progress/mod-complete below to actually
+                        // update instead of the download phase happening invisibly outside the table.
+                        runState.emit({ type: 'phase', phase: 'downloading-missing', count: missingNexusMods.length, modNames: missingNexusMods.map((m) => m.name) });
                         downloadResults = await nexusModDownload.downloadMissingArchivesForPlan({
                             mods: missingNexusMods, downloadsDir: downloads, gameDomain: collectionInfo.collection.info?.domainName, apiKey,
                             onProgress: (p) => runState.emit({ type: 'download-progress', ...p }),
                         });
                         const downloadedMods = missingNexusMods.filter((m) =>
                             downloadResults.results.some((r) => r.modId === m.source.modId && r.fileId === m.source.fileId && r.status === 'DOWNLOADED'));
+                        let newItems = [];
                         if (downloadedMods.length > 0) {
-                            const newItems = await runner.reclassifyDownloadedMods({
+                            newItems = await runner.reclassifyDownloadedMods({
                                 downloadedMods, modEntries, knownVortexModIds,
                                 otherVersionsByModId, sharedWithCollectionsByKey,
                                 downloadsDir: downloads, stagingDir: staging, sevenZipExe, logsDir,
                             });
                             rebuildQueue.push(...newItems);
+                        }
+                        // A mod that got a "Queued" row above but did NOT make it into rebuildQueue --
+                        // its download failed outright, or it downloaded but reclassifyDownloadedMods
+                        // still couldn't resolve it (rare: e.g. genuinely the wrong file after all) --
+                        // will never fire a real mod-start/mod-complete of its own, so its row would
+                        // otherwise sit on "Queued" forever, silently implying it'll still run. Give it
+                        // a real final pill via the SAME mod-complete the normal rebuild loop uses (no
+                        // new client-side rendering path needed) instead of leaving it stuck.
+                        const queuedKeys = new Set(newItems.map((i) => runner.modKey(i.mod.source)));
+                        for (const mod of missingNexusMods) {
+                            const key = runner.modKey(mod.source);
+                            if (queuedKeys.has(key)) continue; // real mod-start/mod-complete coming from the rebuild loop itself
+                            const result = downloadResults.results.find((r) => r.modId === mod.source.modId && r.fileId === mod.source.fileId);
+                            if (result?.status === 'FAILED') {
+                                runState.emit({ type: 'mod-complete', name: mod.name, status: 'SKIP_NO_ARCHIVE', detail: result.error || 'Could not download this archive.' });
+                            } else {
+                                // Downloaded successfully but still not resolved -- reclassifyDownloadedMods
+                                // already wrote the real final entry into modEntries; surface that verbatim
+                                // rather than guessing at a status here.
+                                const entry = modEntries.find((e) => e.modId === mod.source.modId && e.fileId === mod.source.fileId);
+                                if (entry) runState.emit({ type: 'mod-complete', name: mod.name, status: entry.status, detail: entry.detail || '' });
+                            }
                         }
                         runState.emit({ type: 'download-complete', ...downloadResults });
                     }
@@ -610,6 +754,7 @@ function createRouter(config) {
                 if (rebuildQueue.length === 0) {
                     runner.writeLog(logPath, currentLog('completed'));
                     runState.emit({ type: 'run-complete', runStatus: 'completed', summary: runner.summarize(modEntries), totalMods: modEntries.length, logPath, backupRunDir: null, openFomodMods: runner.getOpenFomodMods(modEntries) });
+                    clearCachedPlan(collectionModId); // nothing rebuilt, but this run itself is now the freshest word on this collection
                     currentPauseController = null;
                     return;
                 }
@@ -618,11 +763,17 @@ function createRouter(config) {
                 // unlike the path settings, changing it never needs a restart. 0 means off (skip
                 // the backup step entirely); null means unlimited (back up, never prune); 1-3 means
                 // back up then prune down to that many most recent.
-                const { maxBackupsToKeep, concurrentExtractions } = appConfig.loadConfig();
+                const { maxBackupsToKeep, concurrentExtractions, forceExtractOffSiteMismatches } = appConfig.loadConfig();
                 // Recorded here, at the SAME fresh-read point the setting has always been read at
                 // (deliberately not hoisted earlier) -- a long download phase could see a real
                 // Settings change take effect before this point, exactly as before this feature.
                 concurrentExtractionsForThisRun = concurrentExtractions;
+                // Built fresh here too, right before the rebuild phase -- used only by runRebuild()'s
+                // own per-mod staleness guard (a REUSED plan's classification can be up to 10 minutes
+                // stale; see "Rebuild Collection: Start reuses the check View Collection just did").
+                // A freshly-computed plan re-classifies with this exact matcher moments earlier, so
+                // this is a no-op re-derivation for that path -- cheap either way.
+                const exceptionMatcherForRun = modExceptionStore.makeExceptionMatcher(resolveModExceptionListDir());
                 let backupRunDir = null;
                 // Two DIFFERENT skip reasons used to be reported identically ("Skipped (disabled in
                 // Settings)") -- confirmed live this was actively misleading for the second case:
@@ -664,14 +815,23 @@ function createRouter(config) {
                     rebuildQueue, collectionJsonPath: collectionInfo.collectionJsonPath,
                     downloadsDir: downloads, stagingDir: staging, modEntries,
                     concurrency: concurrentExtractions, pauseController: currentPauseController,
+                    // Staleness-guard inputs (see collection-runner.js's own header comment on the
+                    // guard) -- only actually exercised when a per-mod check fails, which a
+                    // freshly-computed plan should essentially never hit.
+                    collectionModId, knownVortexModIds, sevenZipExe,
+                    forceExtractOffSiteMismatchesEnabled: forceExtractOffSiteMismatches,
+                    exceptionMatcher: exceptionMatcherForRun,
                     onModStart: (mod) => runState.emit({ type: 'mod-start', modName: mod.name }),
+                    // No more separate 'critical-halt' event (2026-09-13) -- a locked/critical mod no
+                    // longer stops the run, so it's just another row update like any other outcome;
+                    // 'mod-complete' already carries the full entry (status, detail, lockError, the
+                    // three paths, etc.), which is all the live progress table needs. No mid-run
+                    // banner -- the Done screen's own attention callouts (built from
+                    // getLockedOrCriticalMods() below) are where this gets a real UI.
                     onModComplete: (entry) => {
                         rebuildCompletedCount += 1;
                         runState.emit({ type: 'mod-complete', ...entry, completed: rebuildCompletedCount, total: rebuildQueue.length });
                         runner.writeLog(logPath, currentLog('in-progress'));
-                        if (entry.status === 'CRITICAL_MANUAL_RESTORE_NEEDED') {
-                            runState.emit({ type: 'critical-halt', modName: entry.name, oldContentDir: entry.oldContentDir, rebuildingDir: entry.rebuildingDir, stagingModDir: entry.stagingModDir, logPath });
-                        }
                     },
                 });
                 phaseDurationsMs.rebuildMs = Date.now() - rebuildStart;
@@ -687,19 +847,32 @@ function createRouter(config) {
                         type: 'paused', summary: runner.summarize(modEntries),
                         totalMods: modEntries.length, logPath, backupRunDir,
                     });
+                    clearCachedPlan(collectionModId); // whatever DID get rebuilt before the pause makes any cached plan stale
                     currentPauseController = null;
                     return;
                 }
 
+                // haltedCritical is always false now (see runRebuild()'s own header comment) --
+                // finalRunStatus is kept as a computed value rather than hardcoded 'completed' so an
+                // OLD log's own halted-critical runStatus stays a real, reachable value in principle,
+                // not a magic string only this one line still remembers.
                 const finalRunStatus = haltedCritical ? 'halted-critical' : 'completed';
                 runner.writeLog(logPath, currentLog(finalRunStatus));
                 runState.emit({
                     type: 'run-complete', runStatus: finalRunStatus, summary: runner.summarize(modEntries),
                     totalMods: modEntries.length, logPath, backupRunDir, openFomodMods: runner.getOpenFomodMods(modEntries),
+                    // Done screen's Locked/Needs-restore callouts render straight from this -- no
+                    // re-read of the log file needed for the initial render (Retry/Restore & Retry
+                    // still go through the log file itself, same as the log page's own buttons).
+                    lockedOrCriticalMods: runner.getLockedOrCriticalMods(modEntries),
                 });
+                clearCachedPlan(collectionModId); // a completed rebuild of it -- see getReusablePlan()'s own comment
                 currentPauseController = null;
             } catch (e) {
                 runState.emit({ type: 'run-error', message: e.message });
+                // Over-cautious on purpose: whatever state this run left the collection in when it
+                // died, a stale cached plan from before the error is never worth risking reusing.
+                clearCachedPlan(collectionModId);
                 currentPauseController = null;
             }
         })();
@@ -916,17 +1089,22 @@ function createRouter(config) {
             let topBlock = '';
             if (m.sharedWithNote) topBlock += `<div class="file-list">Already included in:<br>${sharedWithLines(m.sharedWithNote).map(esc).join('<br>')}</div>`;
             if (m.archiveName) topBlock += `<div class="file-list">Archive: <code>${esc(m.archiveName)}</code></div>`;
-            // CRITICAL_MANUAL_RESTORE_NEEDED and an off-site hash-mismatch candidate both get a
-            // highlighted (not plain/muted) treatment -- both are cases where the instruction text is
-            // only useful if it's actually noticed, not lost among ordinary grey detail text.
+            // CRITICAL_MANUAL_RESTORE_NEEDED, FAILED_FOLDER_LOCKED_NOT_TOUCHED, and an off-site
+            // hash-mismatch candidate all get a highlighted (not plain/muted) treatment -- these are
+            // cases where the instruction text is only useful if it's actually noticed, not lost
+            // among ordinary grey detail text. Locked gets warning (amber), not critical (red) --
+            // it's the same "not touched, just needs a retry" severity as its own status pill.
             const offSiteMismatchForDetail = m.status === 'SKIP_NO_ARCHIVE' && m.offSite && m.code === 'HASH_MISMATCH' && m.candidateFile;
-            let rest = (m.status === 'CRITICAL_MANUAL_RESTORE_NEEDED' || offSiteMismatchForDetail)
+            let rest = m.status === 'CRITICAL_MANUAL_RESTORE_NEEDED' || offSiteMismatchForDetail
                 ? `<div class="callout callout--critical">${esc(m.detail || '')}</div>`
+                : m.status === 'FAILED_FOLDER_LOCKED_NOT_TOUCHED'
+                ? `<div class="callout callout--warning">${esc(m.detail || '')}</div>`
                 : esc(m.detail || '').replace(/\n/g, '<br>');
             rest += fileListBlock('Missing', m.missing);
             rest += fileListBlock('Changed', m.changed);
             if (m.eslPreserved?.length) rest += `<div class="file-list">Marked as Light, left unchanged: ${m.eslPreserved.map(esc).join(', ')}</div>`;
             if (m.ghostPreserved?.length) rest += `<div class="file-list">Vortex-disabled (.ghost), left untouched: ${m.ghostPreserved.map(esc).join(', ')}</div>`;
+            if (m.gameEditedFilesKept?.length) rest += `<div class="file-list">Game/plugin-edited (.log/.ini/.json), left untouched: ${m.gameEditedFilesKept.map(esc).join(', ')}</div>`;
             if (m.otherVersionsNote) rest += `<div class="file-list">A different version of this exact mod IS installed: ${esc(m.otherVersionsNote)}</div>`;
             const detail = topBlock ? `${topBlock}<div class="detail-group">${rest}</div>` : rest;
             // "Extract all" (full replace) / "Keep modified" (additive merge, never overwrites
@@ -979,8 +1157,14 @@ function createRouter(config) {
             // 7z-scratch copy step, not anything wrong with the archive itself. Simple retry of the
             // exact same classify+extract flow is the right recovery action, distinct from Retry
             // Download/Import (which only make sense when the archive itself was the problem).
-            const canRetryExtraction = (m.status === 'FAILED_EXTRACTION_NOT_TOUCHED' || m.status === 'FAILED_EXTRACTION_NO_PRIOR_DATA')
+            const canRetryExtraction = (m.status === 'FAILED_EXTRACTION_NOT_TOUCHED' || m.status === 'FAILED_EXTRACTION_NO_PRIOR_DATA'
+                    || m.status === 'FAILED_FOLDER_LOCKED_NOT_TOUCHED')
                 && !archiveMissingStatus && m.targetFolderName && (m.modId != null && m.fileId != null || m.name);
+            // CRITICAL_MANUAL_RESTORE_NEEDED gets its own "Restore & Retry" button instead -- unlike
+            // canRetryExtraction's statuses, the original folder here is NOT guaranteed to still be
+            // in place, so this needs the restore step first (see restoreAndRetryExtraction()).
+            const canRestoreAndRetry = m.status === 'CRITICAL_MANUAL_RESTORE_NEEDED'
+                && m.targetFolderName && (m.modId != null && m.fileId != null || m.name);
             const extractionCell = canResolve
                 ? `<div class="extraction-actions">`
                     + `<button class="btn btn--primary btn--small resolve-mismatch-btn" data-modid="${esc(m.modId ?? '')}" data-fileid="${esc(m.fileId ?? '')}" data-name="${esc(m.name)}" data-mode="all">Extract all</button>`
@@ -1003,6 +1187,10 @@ function createRouter(config) {
                 : canRetryExtraction
                 ? `<div class="extraction-actions">`
                     + `<button class="btn btn--primary btn--small retry-extraction-btn" data-modid="${esc(m.modId ?? '')}" data-fileid="${esc(m.fileId ?? '')}" data-name="${esc(m.name)}">Retry Extraction</button>`
+                    + `</div>`
+                : canRestoreAndRetry
+                ? `<div class="extraction-actions">`
+                    + `<button class="btn btn--primary btn--small restore-and-retry-extraction-btn" data-modid="${esc(m.modId ?? '')}" data-fileid="${esc(m.fileId ?? '')}" data-name="${esc(m.name)}">Restore & Retry</button>`
                     + `</div>`
                 : isAmbiguous
                 ? `<div class="ambiguous-candidates">${ambiguousCandidateRows(m)}</div>`
@@ -1222,6 +1410,7 @@ document.getElementById('logTableBody').addEventListener('click', async (e) => {
   const modId = btn.dataset.modid ? Number(btn.dataset.modid) : null;
   const fileId = btn.dataset.fileid ? Number(btn.dataset.fileid) : null;
   const name = btn.dataset.name;
+  const originalText = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Retrying…';
   try {
@@ -1232,10 +1421,54 @@ document.getElementById('logTableBody').addEventListener('click', async (e) => {
     });
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    // The retry itself ran fine, but landed on the EXACT same failure it started with -- reloading
+    // would just show the identical row again, looking like nothing happened (confirmed real,
+    // 2026-09-14: three FOMOD mods hit a real resolver bug that failed the same way on every single
+    // retry). Say so plainly instead of silently reloading; a genuinely different outcome (including
+    // success) still reloads as before.
+    if (data.entry.status === row.dataset.status) {
+      row.children[2].textContent = 'Tried again, but ran into the same issue: ' + (data.entry.detail || data.entry.status);
+      btn.disabled = false;
+      btn.textContent = originalText;
+      return;
+    }
     location.reload();
   } catch (err) {
     showErrorModal('Failed: ' + err.message);
     row.querySelectorAll('.retry-extraction-btn').forEach((b) => { b.disabled = false; b.textContent = 'Retry Extraction'; });
+  }
+});
+document.getElementById('logTableBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.restore-and-retry-extraction-btn');
+  if (!btn) return;
+  const row = btn.closest('tr');
+  const filename = document.getElementById('logTableBody').dataset.filename;
+  const modId = btn.dataset.modid ? Number(btn.dataset.modid) : null;
+  const fileId = btn.dataset.fileid ? Number(btn.dataset.fileid) : null;
+  const name = btn.dataset.name;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Restoring…';
+  try {
+    const res = await fetch('/api/rebuild/logs/' + encodeURIComponent(filename) + '/restore-and-retry-extraction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modId, fileId, name }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    // Same "don't silently reload into the identical row" fix as the plain Retry Extraction button
+    // above -- see its own comment.
+    if (data.entry.status === row.dataset.status) {
+      row.children[2].textContent = 'Tried again, but ran into the same issue: ' + (data.entry.detail || data.entry.status);
+      btn.disabled = false;
+      btn.textContent = originalText;
+      return;
+    }
+    location.reload();
+  } catch (err) {
+    showErrorModal('Failed: ' + err.message);
+    row.querySelectorAll('.restore-and-retry-extraction-btn').forEach((b) => { b.disabled = false; b.textContent = 'Restore & Retry'; });
   }
 });
 document.getElementById('logTableBody').addEventListener('click', async (e) => {
@@ -1377,9 +1610,11 @@ applyStatusFilter(new Set(initialStatusParam ? initialStatusParam.split(',') : [
 
     // "Retry Extraction" -- a FAILED_EXTRACTION_NOT_TOUCHED/NO_PRIOR_DATA mod whose failure wasn't
     // archive-not-found (that gets Retry Download/Import instead -- see isArchiveMissingStatus()
-    // above). Covers a genuinely transient failure (confirmed real-world this session: an EPERM on a
-    // freshly-extracted file during the 7z-scratch copy step, almost certainly antivirus/indexer
-    // briefly holding a handle) by just re-attempting the exact same classify+extract flow.
+    // above), OR a FAILED_FOLDER_LOCKED_NOT_TOUCHED mod (the swap itself couldn't get past a
+    // transient Windows lock after 3 tries -- see rebuild-mod.js's swapInRebuiltMod()). Both cover a
+    // genuinely transient failure by just re-attempting the exact same classify+extract flow; the
+    // original folder was never touched either way, so there's nothing to restore first (that's what
+    // the sibling restore-and-retry-extraction route below is for).
     router.post('/logs/:filename/retry-extraction', async (req, res) => {
         const { filename } = req.params;
         if (!/^rebuild-.+\.json$/.test(filename)) return res.status(400).json({ error: 'Invalid log filename.' });
@@ -1400,7 +1635,8 @@ applyStatusFilter(new Set(initialStatusParam ? initialStatusParam.split(',') : [
         ));
         if (entryIndex === -1) return res.status(404).json({ error: 'Mod not found in this log.' });
         const entry = log.mods[entryIndex];
-        if (entry.status !== 'FAILED_EXTRACTION_NOT_TOUCHED' && entry.status !== 'FAILED_EXTRACTION_NO_PRIOR_DATA') {
+        if (entry.status !== 'FAILED_EXTRACTION_NOT_TOUCHED' && entry.status !== 'FAILED_EXTRACTION_NO_PRIOR_DATA'
+            && entry.status !== 'FAILED_FOLDER_LOCKED_NOT_TOUCHED') {
             return res.status(400).json({ error: `This mod's status is "${entry.status}" -- refusing to touch it.` });
         }
         if (!entry.targetFolderName) {
@@ -1431,6 +1667,190 @@ applyStatusFilter(new Set(initialStatusParam ? initialStatusParam.split(',') : [
             res.json({ ok: true, entry: updatedEntry, summary: log.summary });
         } catch (e) {
             res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    // "Restore & Retry" -- a CRITICAL_MANUAL_RESTORE_NEEDED mod, the one outcome where the swap
+    // itself couldn't put the original back on its own (both the swap AND the rollback hit a lock --
+    // see rebuild-mod.js's swapInRebuiltMod()). Sibling route rather than a flag on retry-extraction
+    // above: the precondition (status check) and the runner call are both genuinely different, same
+    // as this file's other resolve-action pairs (e.g. retry-extraction vs. resolveMismatchedMod).
+    router.post('/logs/:filename/restore-and-retry-extraction', async (req, res) => {
+        const { filename } = req.params;
+        if (!/^rebuild-.+\.json$/.test(filename)) return res.status(400).json({ error: 'Invalid log filename.' });
+        const full = path.join(logsDir, filename);
+        if (path.dirname(full) !== logsDir) return res.status(400).json({ error: 'Invalid log filename.' });
+        const { modId, fileId, name } = req.body || {};
+        if ((modId == null || fileId == null) && !name) {
+            return res.status(400).json({ error: 'modId+fileId, or name, are required.' });
+        }
+        let log;
+        try {
+            log = JSON.parse(fs.readFileSync(full, 'utf8'));
+        } catch {
+            return res.status(404).json({ error: 'Log file not found.' });
+        }
+        const entryIndex = (log.mods || []).findIndex((m) => (
+            modId != null && fileId != null ? (m.modId === modId && m.fileId === fileId) : (m.name === name && m.modId == null && m.fileId == null)
+        ));
+        if (entryIndex === -1) return res.status(404).json({ error: 'Mod not found in this log.' });
+        const entry = log.mods[entryIndex];
+        if (entry.status !== 'CRITICAL_MANUAL_RESTORE_NEEDED') {
+            return res.status(400).json({ error: `This mod's status is "${entry.status}" -- refusing to touch it.` });
+        }
+        if (!entry.targetFolderName) {
+            return res.status(400).json({ error: 'This log entry has no recorded targetFolderName -- too old a log format to resolve this way.' });
+        }
+        try {
+            const outcome = await runner.restoreAndRetryExtraction({
+                collectionModId: log.collectionModId, stagingDir: staging, downloadsDir: downloads,
+                modId, fileId, name: entry.name, targetFolderName: entry.targetFolderName,
+            });
+            const updatedEntry = outcome.kind === 'SKIP_NO_ARCHIVE'
+                ? {
+                    name: entry.name, modId: entry.modId, fileId: entry.fileId, status: 'SKIP_NO_ARCHIVE',
+                    detail: outcome.detail, code: outcome.code, candidateFile: outcome.candidateFile, candidateFiles: outcome.candidateFiles,
+                }
+                : {
+                    name: entry.name, modId: entry.modId, fileId: entry.fileId,
+                    targetFolderName: entry.targetFolderName, archiveName: outcome.archiveName || entry.archiveName,
+                    ...outcome.result,
+                };
+            log.mods[entryIndex] = updatedEntry;
+            log.summary = runner.summarize(log.mods);
+            runner.writeLog(full, log);
+            res.json({ ok: true, entry: updatedEntry, summary: log.summary });
+        } catch (e) {
+            // RESTORE_FAILED (the original couldn't be moved back -- still locked) leaves both
+            // folders untouched, same as before this call; every other error is the same real-error
+            // path retry-extraction's own catch above uses.
+            res.status(e.code === 'RESTORE_FAILED' ? 409 : 500).json({ ok: false, error: e.message });
+        }
+    });
+
+    // "Open FOMOD mods get an Install button" (2026-09-17): fetches the picker's own data for one
+    // SKIP_OPEN_FOMOD log entry -- same shape as Rebuild Missing Files' own
+    // /api/rebuild-missing/fomod-picker-data (web/rebuild-missing-routes.js), so the SAME frontend
+    // showFomodPicker() (web/public/fomod-picker.js) drives both. Stateless: re-derives parsedFomod
+    // fresh via detectFomodChoiceNeed() every call rather than trusting anything cached -- the
+    // archive could change between this call and the install-fomod call below.
+    router.post('/logs/:filename/fomod-picker-data', async (req, res) => {
+        const { filename } = req.params;
+        if (!/^rebuild-.+\.json$/.test(filename)) return res.status(400).json({ error: 'Invalid log filename.' });
+        const full = path.join(logsDir, filename);
+        if (path.dirname(full) !== logsDir) return res.status(400).json({ error: 'Invalid log filename.' });
+        // ignoreFomodValidation (2026-09-15, "validate the installer against the real schema"): the
+        // picker's own "Install Anyway" retry re-POSTs this SAME route with this flag set, after its
+        // first call came back reason:'invalid'.
+        const { modId, fileId, name, ignoreFomodValidation } = req.body || {};
+        if ((modId == null || fileId == null) && !name) {
+            return res.status(400).json({ error: 'modId+fileId, or name, are required.' });
+        }
+        let log;
+        try {
+            log = JSON.parse(fs.readFileSync(full, 'utf8'));
+        } catch {
+            return res.status(404).json({ error: 'Log file not found.' });
+        }
+        const entryIndex = (log.mods || []).findIndex((m) => (
+            modId != null && fileId != null ? (m.modId === modId && m.fileId === fileId) : (m.name === name && m.modId == null && m.fileId == null)
+        ));
+        if (entryIndex === -1) return res.status(404).json({ error: 'Mod not found in this log.' });
+        const entry = log.mods[entryIndex];
+        if (entry.status !== 'SKIP_OPEN_FOMOD') {
+            return res.status(400).json({ error: `This mod's status is "${entry.status}" -- not an Open FOMOD.` });
+        }
+        try {
+            const collectionInfo = runner.resolveCollectionInfo(staging, log.collectionModId);
+            const mod = (entry.modId != null && entry.fileId != null)
+                ? collectionInfo.collection.mods.find((m) => m.source?.modId === entry.modId && m.source?.fileId === entry.fileId)
+                : collectionInfo.collection.mods.find((m) => m.name === entry.name && m.source?.modId == null);
+            if (!mod) return res.status(404).json({ error: 'Mod not found in this collection\'s collection.json.' });
+            const need = await detectFomodChoiceNeed(mod, downloads, sevenZipExe, false, undefined, !!ignoreFomodValidation);
+            if (!need) return res.status(409).json({ error: 'not-a-fomod', message: "This mod no longer looks like an unresolved Open FOMOD -- its archive may have changed." });
+            // Spread `need` whole (2026-09-15, "the Install picker never receives the installed-file
+            // state") rather than hand-listing its fields -- see web/rebuild-missing-routes.js's own
+            // `/fomod-picker-data` for the identical fix and full rationale.
+            res.json({ needs: [{ modId: String(entry.modId ?? entry.name), ...need }] });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // "Install" for a SKIP_OPEN_FOMOD log entry -- runs the shared picker's picks through the same
+    // classify+rebuild pipeline as any other REBUILD (see runner.installOpenFomodMod()'s own header
+    // comment), updates this ONE log entry + summary in place (same pattern as retry-extraction
+    // above), then -- after already responding -- best-effort saves the picks to Vortex's own live
+    // installerChoices via savePicksToVortex(), so this mod is never asked about again. Never blocks
+    // or alters the HTTP response already sent; logged either way.
+    router.post('/logs/:filename/install-fomod', async (req, res) => {
+        const { filename } = req.params;
+        if (!/^rebuild-.+\.json$/.test(filename)) return res.status(400).json({ error: 'Invalid log filename.' });
+        const full = path.join(logsDir, filename);
+        if (path.dirname(full) !== logsDir) return res.status(400).json({ error: 'Invalid log filename.' });
+        // ignoreFomodValidation (2026-09-15, "validate the installer against the real schema"): set
+        // when this Finish came from a picker session that went through the "Install Anyway"
+        // override -- persisted onto the resulting choices so a later background rebuild of this
+        // exact same mod doesn't re-block on the same already-confirmed archive.
+        const { modId, fileId, name, picks, ignoreFomodValidation } = req.body || {};
+        if ((modId == null || fileId == null) && !name) {
+            return res.status(400).json({ error: 'modId+fileId, or name, are required.' });
+        }
+        let log;
+        try {
+            log = JSON.parse(fs.readFileSync(full, 'utf8'));
+        } catch {
+            return res.status(404).json({ error: 'Log file not found.' });
+        }
+        const entryIndex = (log.mods || []).findIndex((m) => (
+            modId != null && fileId != null ? (m.modId === modId && m.fileId === fileId) : (m.name === name && m.modId == null && m.fileId == null)
+        ));
+        if (entryIndex === -1) return res.status(404).json({ error: 'Mod not found in this log.' });
+        const entry = log.mods[entryIndex];
+        if (entry.status !== 'SKIP_OPEN_FOMOD') {
+            return res.status(400).json({ error: `This mod's status is "${entry.status}" -- refusing to touch it.` });
+        }
+        try {
+            const outcome = await runner.installOpenFomodMod({
+                collectionModId: log.collectionModId, stagingDir: staging, downloadsDir: downloads, sevenZipExe,
+                modId, fileId, name: entry.name, picks, ignoreFomodValidation: !!ignoreFomodValidation,
+            });
+            // installOpenFomodMod()'s own REBUILD shape flattens rebuildMod()'s result fields
+            // directly onto the outcome (matching reclassifyMod()'s own convention), plus `mod`/
+            // `choices` for the best-effort savePicksToVortex call below -- neither of which belongs
+            // in the persisted log entry, so they're destructured out here rather than spread in.
+            const { mod: installedMod, choices: installedChoices, kind: outcomeKind, ...rebuiltFields } = outcome;
+            const updatedEntry = outcomeKind !== 'REBUILD'
+                ? {
+                    name: entry.name, modId: entry.modId, fileId: entry.fileId, status: outcomeKind,
+                    detail: outcome.detail, code: outcome.code, candidateFile: outcome.candidateFile, candidateFiles: outcome.candidateFiles,
+                }
+                : {
+                    name: entry.name, modId: entry.modId, fileId: entry.fileId,
+                    ...rebuiltFields,
+                };
+            log.mods[entryIndex] = updatedEntry;
+            log.summary = runner.summarize(log.mods);
+            runner.writeLog(full, log);
+            res.json({ ok: true, entry: updatedEntry, summary: log.summary });
+
+            if (outcomeKind === 'REBUILD') {
+                (async () => {
+                    try {
+                        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+                        const saveResult = await savePicksToVortex(installedMod, installedChoices, { helperAvailable });
+                        if (saveResult.saved) {
+                            console.log(`[rebuild-routes] Saved fresh FOMOD picks to Vortex's own live state for "${entry.name}" (vortexModId ${saveResult.vortexModId}).`);
+                        } else {
+                            console.warn(`[rebuild-routes] Could not save fresh FOMOD picks to Vortex's own live state for "${entry.name}": ${saveResult.reason}${saveResult.message ? ` (${saveResult.message})` : ''}`);
+                        }
+                    } catch (e) {
+                        console.warn(`[rebuild-routes] savePicksToVortex threw for "${entry.name}": ${e.message}`);
+                    }
+                })();
+            }
+        } catch (e) {
+            res.status(e.code === 'NOT_A_FOMOD' ? 409 : 500).json({ ok: false, error: e.message });
         }
     });
 
@@ -1468,6 +1888,9 @@ applyStatusFilter(new Set(initialStatusParam ? initialStatusParam.split(',') : [
         }
         try {
             runner.deleteArchiveCandidate({ downloadsDir: downloads, filePath });
+            // The archive-candidate landscape for this collection just changed -- see
+            // getReusablePlan()'s own comment for the full invalidation list.
+            clearCachedPlan(log.collectionModId);
         } catch (e) {
             return res.status(500).json({ ok: false, error: e.message });
         }
@@ -1543,6 +1966,9 @@ applyStatusFilter(new Set(initialStatusParam ? initialStatusParam.split(',') : [
             log.mods[entryIndex] = updatedEntry;
             log.summary = runner.summarize(log.mods);
             runner.writeLog(full, log);
+            // A newly-downloaded archive changes what this mod would classify to -- see
+            // getReusablePlan()'s own comment for the full invalidation list.
+            clearCachedPlan(log.collectionModId);
             res.json({ ok: true, entry: updatedEntry, summary: log.summary });
         } catch (e) {
             if (e.code === 'DOWNLOAD_FAILED') {
@@ -1592,6 +2018,9 @@ applyStatusFilter(new Set(initialStatusParam ? initialStatusParam.split(',') : [
             log.mods[entryIndex] = updatedEntry;
             log.summary = runner.summarize(log.mods);
             runner.writeLog(full, log);
+            // Force Extract just accepted a same-size-but-different-content archive for this mod --
+            // see getReusablePlan()'s own comment for the full invalidation list.
+            clearCachedPlan(log.collectionModId);
             res.json({ ok: true, entry: updatedEntry, summary: log.summary });
         } catch (e) {
             res.status(500).json({ ok: false, error: e.message });
@@ -1634,6 +2063,11 @@ applyStatusFilter(new Set(initialStatusParam ? initialStatusParam.split(',') : [
         if (!picked) return res.json({ ok: false, cancelled: true });
         try {
             runner.importOffSiteArchive({ downloadsDir: downloads, collectionModId: log.collectionModId, name, pickedFilePath: picked });
+            // The import mapping just changed for this collection -- see getReusablePlan()'s own
+            // comment for the full invalidation list. Before extractImportedOffSiteMod() runs, not
+            // after: importOffSiteArchive() itself is what changes the persisted mapping, regardless
+            // of whether the extraction attempt below succeeds.
+            clearCachedPlan(log.collectionModId);
             const outcome = await runner.extractImportedOffSiteMod({
                 collectionModId: log.collectionModId, stagingDir: staging, downloadsDir: downloads, sevenZipExe, name,
             });

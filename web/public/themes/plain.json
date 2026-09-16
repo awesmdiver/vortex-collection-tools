@@ -193,12 +193,20 @@
       "cardDesc": "Dismiss false \"Update Available\" badges so you can stick with the exact mod versions your collection needs."
     },
     "duplicate-version-cleanup": {
-      "name": "Duplicate Version Cleanup",
+      "name": "Cleanup Duplicates",
       "emoji": "♻️",
-      "function": "Duplicate Version Cleanup",
-      "heroTitle": "Working title: \"Duplicate Version Cleanup\"",
-      "heroBody": "Placeholder hero copy &mdash; the whole thing (name, tagline, hero text) still needs a Gemini pass before this is final. What it actually does: Vortex's own Version dropdown can show the same mod more than once &mdash; sometimes a genuinely older archived version kept on purpose, sometimes a leftover orphaned download that's really just clutter. This tool finds every group, lets you tell them apart, and cleans up the real duplicates for good: remove, redownload, reinstall, replay any FOMOD choices, and reassign it back to every collection it belonged to.",
-      "cardDesc": "Find every mod with more than one version showing in Vortex, tell the real duplicates apart from ones kept on purpose, and clean them up for good."
+      "function": "Cleanup Duplicates",
+      "heroTitle": "Cleanup Duplicates",
+      "heroBody": "Vortex often leaves behind duplicate mod versions in your dropdowns &mdash; some you meant to keep, others just leftover clutter. This tool sorts the keepers from the duplicates, removes the clutter, and cleanly reinstalls your chosen versions back into their collections with your saved installer choices.",
+      "cardDesc": "Clear duplicate mod versions from Vortex and cleanly reinstall the keepers back into your collections."
+    },
+    "add-mods-to-collections": {
+      "name": "Bulk Collection Editor",
+      "emoji": "🗂️",
+      "function": "Bulk Collection Editor",
+      "heroTitle": "Bulk Collection Editor",
+      "heroBody": "Vortex makes you update your collections one mod and one pop-up at a time. This tool lets you batch-edit multiple collections at once &mdash; quickly add new mods to your lists or strip out old ones without touching your actual installations.",
+      "cardDesc": "Add or remove mods across multiple collections at once without touching your installed files."
     },
     "archive-finder": {
       "name": "Archive Finder",

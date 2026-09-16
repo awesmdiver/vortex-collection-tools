@@ -19,6 +19,10 @@ const state = {
   // ("N extraction(s) still finishing"). Not the authoritative "is it safe to confirm" signal --
   // that's the server's own 'paused' event, see pauseModalOkBtn's handler below.
   inFlightMods: new Set(),
+  // Whether the CURRENT run on the Done screen actually rebuilt anything -- set fresh by
+  // finishProgressView every time a real run lands here, read by rebuildShowDeployResult's own
+  // post-deploy success wording (2026-09-15, "one All Set banner").
+  rebuiltThisRun: false,
 };
 
 // ---------- tiny helpers ----------
@@ -646,10 +650,18 @@ $('refreshVortexDataBtn').addEventListener('click', refreshVortexData);
 // and the tool-eyebrow's own area-segment link (DESIGN.md's "Tool page breadcrumb" section) -- the
 // breadcrumb replaces the old in-flow back buttons, all pointing at this same handler. preventDefault
 // is needed now that some triggers are real <a href="#"> elements, not just <button>s.
+//
+// "Back to Collections also starts clean" (2026-09-17): this used to be its own lighter
+// `showView('picker'); loadCollections();` pair -- loadCollections() deliberately PRESERVES the
+// `<select>`'s previous value across a reload (see its own comment, written for the "Load Vortex
+// Data" refresh button's benefit), so returning here left the just-viewed collection still selected.
+// Now reuses cancelPlan() outright -- the SAME real reset rebuildResetOnEntry already calls when
+// arriving at this whole area fresh, and the SAME one the Plan screen's own Cancel button already
+// used -- rather than keeping a second, weaker "reset" with different behavior for what the director
+// wants to be the exact same "start clean" action everywhere.
 document.querySelectorAll('[data-action="back-to-picker"]').forEach((b) => b.addEventListener('click', (e) => {
   e.preventDefault();
-  showView('picker');
-  loadCollections();
+  cancelPlan();
 }));
 
 // ---------- Plan view ----------
@@ -772,6 +784,17 @@ function renderPlan(plan) {
 
   if (plan.openFomodMods.length > 0) {
     $('openFomodSection').classList.remove('hidden');
+    // Retitled/reworded (2026-09-17, "Start Rebuild works when the only thing left is mods needing
+    // FOMOD picks") -- this used to say "Needs manual reinstall", written before this tool could do
+    // anything about an Open FOMOD mod itself. Now matches the Done screen's own already-approved
+    // wording/icon for the exact same case (renderOpenFomodSection in this file), since starting the
+    // rebuild is no longer a dead end for these -- the Done screen's own Install button picks up
+    // right where this leaves off.
+    $('openFomodTitle').textContent = plan.openFomodMods.length === 1 ? '🧩 One mod needs your picks' : `🧩 ${plan.openFomodMods.length} mods need your picks`;
+    // Copy by Gemini (2026-09).
+    $('openFomodBody').textContent = plan.openFomodMods.length === 1
+      ? "This mod has a FOMOD wizard with no saved choices yet. Start the rebuild, then make your picks from the Done screen when it finishes."
+      : "These mods have a FOMOD wizard with no saved choices yet. Start the rebuild, then make your picks from the Done screen when it finishes.";
     const list = $('openFomodList');
     list.innerHTML = '';
     for (const m of plan.openFomodMods) list.appendChild(el('li', {}, modNameCell(m.name)));
@@ -859,7 +882,14 @@ function renderPlan(plan) {
     ]));
   }
 
-  const hasWork = plan.rebuildQueue.length > 0;
+  // "Start Rebuild works when the only thing left is mods needing FOMOD picks" (2026-09-17,
+  // director's own decision: run the rebuild anyway with an empty queue, list the Open FOMOD mods
+  // needing intervention on the Done screen afterward, rather than showing each picker live during
+  // the run). A collection can genuinely have real Open FOMOD mods and NOTHING else to rebuild (every
+  // other mod already matches) -- that's still real work this tool can do something about (the Done
+  // screen's own Install button), so it must not read as "nothing to rebuild" the same way a
+  // collection with truly nothing at all does.
+  const hasWork = plan.rebuildQueue.length > 0 || plan.openFomodMods.length > 0;
   for (const id of ['startRebuildBtn', 'startRebuildBtnTop']) $(id).disabled = !hasWork;
   for (const id of ['nothingToRebuildNote', 'nothingToRebuildNoteTop']) $(id).classList.toggle('hidden', hasWork);
   planStatusFilter.clear(); // fresh plan render -- always start unfiltered, same as a fresh page load
@@ -900,9 +930,9 @@ $('resumeToggle').addEventListener('change', (e) => {
   openPlan(state.collectionModId, name, resumeLogPath);
 });
 
-// A FULL reset, not the breadcrumb's own lighter-weight "go back one step" nav (the
-// data-action="back-to-picker" link above this view's own title, which switches views but keeps
-// every piece of plan state exactly as it was -- confirmed by reading back-to-picker's own handler).
+// A FULL reset -- also now what the breadcrumb's own data-action="back-to-picker" link calls
+// directly (2026-09-17, "Back to Collections also starts clean"; this used to be a separate,
+// lighter-weight "go back one step" nav that kept every piece of plan state exactly as it was).
 // Clears every module-level piece of state openPlan/renderPlan/handlePlanEvent populate, not just
 // the obvious state.plan/state.collectionModId -- state.explicitResume/state.pendingOffSiteRecheck
 // are both read later by this same plan flow (renderPlan, handlePlanEvent's plan-ready case) and
@@ -911,6 +941,16 @@ $('resumeToggle').addEventListener('change', (e) => {
 // Cancel click WHILE a plan is still loading needs this too) and planStatusFilter (the summary-badge
 // filter Set) are both real state this same view creates, not just the state object's own fields.
 function cancelPlan() {
+  // Mid-operation guard ("coming back from another tool starts clean", 2026-09-17): a real Deploy
+  // still genuinely running (rebuildDeployProgress visible -- same DOM-based signal Rebuild Missing
+  // Files' own rmfResetOnEntry checks; Deploy's own poll interval is a private closure inside
+  // deploy-panel.js's startDeploy(), never exposed to this file as a state variable) must keep
+  // running in view when the user comes back or clicks Back to Collections mid-deploy -- resetting
+  // here would strand its own progress/result reporting. In practice this mostly can't be reached via
+  // Back to Collections itself (rebuildBackToCollectionsBtn is already disabled for the duration of a
+  // real deploy, same as Update Collection v2's own ucv2ApplyResultBackBtn), but arriving from
+  // elsewhere via rebuildResetOnEntry has no such button to gate it, so the check lives here instead.
+  if (!$('rebuildDeployProgress').classList.contains('hidden')) return;
   if (planEventSource) { planEventSource.close(); planEventSource = null; }
   state.collectionModId = null;
   state.plan = null;
@@ -919,6 +959,13 @@ function cancelPlan() {
   state.pendingOffSiteRecheck = false;
   planStatusFilter.clear();
   showView('picker');
+  // loadCollections() below deliberately PRESERVES the <select>'s previous value across a reload
+  // (its own comment -- built for the "Load Vortex Data" refresh button, where keeping the same
+  // collection selected is exactly the point). Cleared here FIRST so that preserve-logic finds
+  // nothing to restore, matching "starts clean" -- confirmed live 2026-09-17: without this, the
+  // dropdown kept showing the just-viewed collection highlighted even though state.collectionModId
+  // above was already correctly null, a residual staleness the director would still have noticed.
+  $('collectionSelect').value = '';
   loadCollections();
 }
 for (const id of ['cancelPlanBtn', 'cancelPlanBtnTop']) $(id).addEventListener('click', cancelPlan);
@@ -949,7 +996,16 @@ function backupConfirmText(cfg) {
 // Rebuild" (once a re-plan confirms the off-site mod(s) are actually resolved) -- kept as a single
 // function so that path gets the exact same backup-notice confirmation step, not a shortcut around it.
 async function openConfirmRebuildModal() {
-  $('confirmText').textContent = `This will rebuild ${state.plan.rebuildQueue.length} mod(s) in "${state.plan.collectionInfo.name}".`;
+  // "Start Rebuild works when the only thing left is mods needing FOMOD picks" (2026-09-17): a plain
+  // "This will rebuild 0 mod(s)" reads as a contradiction now that Start Rebuild can be clicked with
+  // an empty rebuildQueue -- the real explanation is that this run exists to reach the Done screen's
+  // own Install button for the Open FOMOD mod(s), not to rebuild anything.
+  // Copy by Gemini (2026-09).
+  $('confirmText').textContent = state.plan.rebuildQueue.length > 0
+    ? `This will rebuild ${state.plan.rebuildQueue.length} mod(s) in "${state.plan.collectionInfo.name}".`
+    : state.plan.openFomodMods.length === 1
+      ? `Nothing else to rebuild in "${state.plan.collectionInfo.name}" — this will check the mod needing your picks and take you to the Done screen to choose its options.`
+      : `Nothing else to rebuild in "${state.plan.collectionInfo.name}" — this will check the ${state.plan.openFomodMods.length} mods needing your picks and take you to the Done screen to choose their options.`;
   let backupText = '';
   try {
     backupText = backupConfirmText(await api('GET', '/api/settings'));
@@ -1015,6 +1071,8 @@ function startProgressView() {
   window.scrollTo({ top: 0, behavior: 'instant' });
   $('progressTitle').textContent = `Rebuilding ${state.plan.collectionInfo.name}…`;
   $('phaseIndicator').innerHTML = '';
+  $('progressPhaseBarWrap').classList.add('hidden');
+  $('progressPhaseBar').style.width = '0%';
   $('backupNotice').classList.add('hidden');
   $('downloadNotice').classList.add('hidden');
   $('progressTableBody').innerHTML = '';
@@ -1022,15 +1080,7 @@ function startProgressView() {
   state.inFlightMods.clear();
   $('pauseModal').classList.add('hidden');
 
-  for (const r of state.plan.rebuildQueue) {
-    const row = el('tr', {}, [
-      el('td', {}, modNameCell(r.name)),
-      el('td', {}, statusPill('pending')),
-      el('td', { class: 'detail-cell' }, ''),
-    ]);
-    state.progressRows.set(r.name, row);
-    $('progressTableBody').appendChild(row);
-  }
+  for (const r of state.plan.rebuildQueue) addProgressRow(r.name);
 
   if (state.eventSource) state.eventSource.close();
   const es = new EventSource('/api/rebuild/runs/current/events');
@@ -1061,6 +1111,7 @@ function truncatePhaseName(name, max = 40) {
 
 const PHASE_TEXT = {
   'sync-state': 'Reading Vortex… Please wait as this can take some time for a large collection.',
+  'sync-state-cached': 'Using cached Vortex data (no database read needed)…',
   'plan-ready': 'Plan ready',
   'checking-premium': 'Checking Nexus Premium status…',
   'downloading-missing': 'Downloading missing archive(s)…',
@@ -1068,11 +1119,45 @@ const PHASE_TEXT = {
   rebuilding: 'Rebuilding mods…',
 };
 
+// "Rebuild Collection: the run table's status pill shows every stage, like Update Collection"
+// (2026-09-14, director's own call: "one pill shows all statuses and colors" -- Rebuild Missing
+// Files' own Extract table just got the identical treatment). LIVE stages (a mod queued, its
+// archive being auto-downloaded, or its own extraction running) render through the SAME shared pill
+// lookup Update Collection v2's Apply Progress screen uses (ucv2ApplyPillHtml,
+// update-collection-v2-apply-pills.js) instead of this file's own statusPill(), which is reserved
+// for a mod's REAL final rebuild status (REBUILT, FAILED_MISMATCH_NOT_TOUCHED, …) -- those keep
+// their existing colors/labels unchanged, per the director's own explicit instruction not to touch
+// them. Keyed lowercase so a real final status (always UPPERCASE) can never collide with a live key.
+const LIVE_STAGE_LABELS = { pending: 'Queued', downloading: 'Downloading…', extracting: 'Extracting…' };
+
+// Builds one row (Mod | Status | Detail), starting Queued -- shared by the initial rebuildQueue
+// seeding above and by a mod added mid-run once it's known (an auto-downloaded SKIP_NO_ARCHIVE mod,
+// which was never in rebuildQueue at plan-ready time -- see the 'phase'/'downloading-missing' case
+// below). A no-op if this name already has a row (defensive; every real caller only ever adds a name
+// once, but silently overwriting an in-flight row here would be a strictly worse failure mode than a
+// harmless early return).
+function addProgressRow(name) {
+  if (state.progressRows.has(name)) return;
+  const statusCell = el('td', {});
+  statusCell.innerHTML = ucv2ApplyPillHtml('pending', LIVE_STAGE_LABELS.pending);
+  const row = el('tr', {}, [
+    el('td', {}, modNameCell(name)),
+    statusCell,
+    el('td', { class: 'detail-cell' }, ''),
+  ]);
+  state.progressRows.set(name, row);
+  $('progressTableBody').appendChild(row);
+}
+
 function updateProgressRow(name, status, detail) {
   const row = state.progressRows.get(name);
   if (!row) return;
-  row.children[1].innerHTML = '';
-  row.children[1].appendChild(statusPill(status));
+  if (LIVE_STAGE_LABELS[status] !== undefined) {
+    row.children[1].innerHTML = ucv2ApplyPillHtml(status, LIVE_STAGE_LABELS[status]);
+  } else {
+    row.children[1].innerHTML = '';
+    row.children[1].appendChild(statusPill(status));
+  }
   row.children[2].textContent = detail || '';
   // Scroll only the bounded inner wrap, not the page -- row.scrollIntoView() walks EVERY scrollable
   // ancestor (including the window itself) to center the row, which is what caused the whole page to
@@ -1092,20 +1177,59 @@ function updateProgressRow(name, status, detail) {
 function handleRunEvent(frame) {
   switch (frame.type) {
     case 'phase':
+      // The classify bar (if it was showing) belongs to a phase that's now over -- every other
+      // phase this run reaches means classification either finished or never needed to run at all
+      // (a reused plan skips it entirely). See "Rebuild Collection: Start reuses the check View
+      // Collection just did" (2026-09-14).
+      $('progressPhaseBarWrap').classList.add('hidden');
       if (frame.phase === 'backing-up' && frame.skipped) {
         setPhase(frame.skippedReason === 'not-configured'
           ? 'Skipping backup (no backup folder configured in Settings)…'
           : 'Skipping backup (disabled in Settings)…');
+      } else if (frame.phase === 'downloading-missing' && Array.isArray(frame.modNames)) {
+        // These mods are SKIP_NO_ARCHIVE -- never in rebuildQueue at plan-ready time, so they have no
+        // row yet. Added here (Queued) so download-progress/mod-complete below have a real row to
+        // update instead of this whole phase happening invisibly outside the table. See rebuild-
+        // routes.js's own comment on why a mod that never makes it into rebuildQueue afterward still
+        // gets a real final pill (a synthesized mod-complete), not left stuck on "Queued" forever.
+        for (const name of frame.modNames) addProgressRow(name);
+        if (PHASE_TEXT[frame.phase]) setPhase(PHASE_TEXT[frame.phase]);
       } else if (PHASE_TEXT[frame.phase]) setPhase(PHASE_TEXT[frame.phase]);
       break;
     case 'sync-state-progress':
       setPhase(`Reading Vortex — step ${frame.step} of ${frame.total}: ${frame.label}`);
       break;
+    // Only ever arrives when the run actually had to re-classify (a reused plan skips straight to
+    // 'plan-ready' with none of these) -- same frame shape and bar the Plan page's own
+    // handlePlanEvent() 'classify-progress' case uses, reusing its markup/classes rather than a new
+    // component. Name truncated (unlike the Plan page's own untouched version) so a long mod name
+    // can't make this header's height jump mid-run -- same reasoning as truncatePhaseName's other
+    // callers (backup/download progress) just below.
+    case 'classify-progress': {
+      $('progressPhaseBarWrap').classList.remove('hidden');
+      const pct = Math.round((frame.index / frame.total) * 100);
+      $('progressPhaseBar').style.width = `${pct}%`;
+      setPhase(`Checking mod ${frame.index} of ${frame.total} (${pct}%): ${truncatePhaseName(frame.name)}`);
+      break;
+    }
     case 'backup-progress':
       setPhase(`Backing up (${frame.index}/${frame.total}): ${truncatePhaseName(frame.modName)}`);
       break;
     case 'download-progress':
-      setPhase(`Downloading missing archive (${frame.index}/${frame.total}): ${truncatePhaseName(frame.modName)}…`);
+      // Fires TWICE per mod now (2026-09-14, "the run table's status pill shows every stage") --
+      // 'start' flips this row to Downloading…; 'done' flips it back to Queued the MOMENT its own
+      // download finishes, not whenever the next mod's download starts or the whole batch ends
+      // (otherwise this row would keep reading "Downloading…" for however long every later mod in
+      // the batch takes -- the exact "reads as stuck" complaint this feature exists to fix). A mod
+      // whose download failed (or that never resolves into a real rebuild afterward) gets its own
+      // real final pill moments later via rebuild-routes.js's synthesized mod-complete instead of
+      // hanging on "Queued" forever.
+      if (frame.phase === 'done') {
+        updateProgressRow(frame.modName, 'pending', '');
+      } else {
+        setPhase(`Downloading missing archive (${frame.index}/${frame.total}): ${truncatePhaseName(frame.modName)}…`);
+        updateProgressRow(frame.modName, 'downloading', '');
+      }
       break;
     case 'download-skipped':
       // Same "persistent, not just transient phase text" reasoning as backup-complete below --
@@ -1153,7 +1277,9 @@ function handleRunEvent(frame) {
       break;
     }
     case 'mod-start':
-      updateProgressRow(frame.modName, 'pending', 'Extracting…');
+      // The pill alone now carries "Extracting…" (Status column) -- Detail goes back to being for
+      // detail only, matching Rebuild Missing Files' own identical treatment.
+      updateProgressRow(frame.modName, 'extracting', '');
       state.inFlightMods.add(frame.modName);
       updatePauseModalCount();
       break;
@@ -1161,6 +1287,7 @@ function handleRunEvent(frame) {
       let detail = frame.detail || '';
       if (frame.restoredMissingFiles?.length) detail = `Restored ${frame.restoredMissingFiles.length} missing file(s)`;
       if (frame.eslPreserved?.length) detail = (detail ? detail + ' — ' : '') + `Marked as Light, left unchanged: ${frame.eslPreserved.join(', ')}`;
+      if (frame.gameEditedFilesKept?.length) detail = (detail ? detail + ' — ' : '') + `Game/plugin-edited (.log/.ini/.json), left untouched: ${frame.gameEditedFilesKept.join(', ')}`;
       if (frame.otherVersionsNote) detail = (detail ? detail + ' — ' : '') + `A different version of this exact mod IS installed: ${frame.otherVersionsNote}`;
       if (frame.sharedWithNote) detail = (detail ? detail + '\n\n' : '') + `Already included in:\n${frame.sharedWithNote.join('\n')}`;
       if (frame.archiveName && frame.status !== 'REBUILT') detail = (detail ? detail + ' — ' : '') + `Archive: ${frame.archiveName}`;
@@ -1176,9 +1303,6 @@ function handleRunEvent(frame) {
       }
       break;
     }
-    case 'critical-halt':
-      showCriticalBanner(frame);
-      break;
     case 'run-complete':
       finishProgressView(frame);
       break;
@@ -1260,44 +1384,291 @@ function onRunPaused() {
   loadCollections();
 }
 
-let pendingCritical = null;
-function showCriticalBanner(frame) { pendingCritical = frame; }
+// ---------- Done screen: locked/critical mods (2026-09-13) ----------
+// See "Rebuild Collection: a locked mod folder no longer stops the whole run" -- these no longer
+// halt the run, so instead of the old #criticalBanner (one mod, no way forward), the Done screen
+// gets a real attention list: one row per locked/critical mod, each with its own Retry/Restore &
+// Retry, plus a bulk "Retry all" for the locked (warning-severity) callout. Copy is exact, per that
+// task's own Gemini-polished strings -- report any you had to change.
+
+function renderSummaryBadges(summary) {
+  const summaryEl = $('summaryBadges');
+  summaryEl.innerHTML = '';
+  for (const [status, count] of Object.entries(summary)) {
+    summaryEl.appendChild(el('span', { class: 'badge badge--' + status.toLowerCase() }, [
+      el('span', { class: 'badge__count' }, String(count)), ' ' + (STATUS_TEXT[status] || status),
+    ]));
+  }
+}
+
+function attnBodyLocked(count) {
+  return count === 1
+    ? ["Something else had this mod's folder open during the swap, so we left your original files untouched and kept going. Close anything that might be using it, then hit ", el('strong', {}, 'Retry'), '.']
+    : ['Something else had these folders open during the swap, so we left your original files untouched and kept going. Close anything that might be using them, then hit ', el('strong', {}, 'Retry all'), '.'];
+}
+function attnBodyCritical(count) {
+  return count === 1
+    ? ["We couldn't finish the swap or put the original folder back, so this mod is missing from your staging folder right now. Both copies are safe on disk. Close Vortex and anything else that might be using the folder, then hit ", el('strong', {}, 'Restore & Retry'), '. The rest of the collection finished rebuilding normally.']
+    : ["We couldn't finish the swap or put the original folders back, so these mods are missing from your staging folder right now. Both copies of each are safe on disk. Close Vortex and anything else that might be using these folders, then hit ", el('strong', {}, 'Restore & Retry'), ' on each one. The rest of the collection finished rebuilding normally.'];
+}
+// "…{suffix}.old" / "…{suffix}.rebuilding" -- a bounded tail of the real folder name, like the
+// mockup (which showed "…1685907012.old" for a much longer real mod-name+id folder).
+const ATTN_FOLDER_TAIL_CHARS = 16;
+function folderTail(name) {
+  const s = String(name ?? '');
+  return s.length > ATTN_FOLDER_TAIL_CHARS ? '…' + s.slice(-ATTN_FOLDER_TAIL_CHARS) : s;
+}
+function lockedRowWhy(entry) {
+  return `Folder stayed locked after 3 tries (Windows error: ${entry.lockError?.code || '?'})`;
+}
+function criticalRowWhy(entry) {
+  return `Original is saved as ${folderTail(entry.targetFolderName)}.old, fresh copy as ${folderTail(entry.targetFolderName)}.rebuilding`;
+}
+
+// Re-attempts one locked/critical mod via the same log file the log page's own Retry Extraction/
+// Restore & Retry buttons use (retry-extraction / restore-and-retry-extraction) -- nothing else in
+// the collection gets re-checked. Updates the row in place: a real success replaces its actions
+// with "✓ Rebuilt"; landing on the SAME problem re-enables the button with a fresh "why"; landing on
+// a DIFFERENT status (e.g. the archive is now missing) hands off to the log page instead of
+// offering a button that would just be refused server-side (the log entry's status has moved on).
+async function retryAttnEntry(entry, kind, actionBtn) {
+  const row = actionBtn.closest('.rbc-attn-row');
+  const whyEl = row.querySelector('.rbc-attn-row__why');
+  const actionsEl = row.querySelector('.rbc-attn-row__actions');
+  const originalLabel = actionBtn.textContent;
+  actionBtn.disabled = true;
+  actionBtn.textContent = kind === 'locked' ? 'Retrying…' : 'Restoring…';
+  const route = kind === 'locked' ? 'retry-extraction' : 'restore-and-retry-extraction';
+  try {
+    const data = await api('POST', `/api/rebuild/logs/${encodeURIComponent(state.summaryLogFilename)}/${route}`, {
+      modId: entry.modId ?? null, fileId: entry.fileId ?? null, name: entry.name,
+    });
+    renderSummaryBadges(data.summary);
+    const updated = data.entry;
+    if (updated.status === 'REBUILT') {
+      actionsEl.innerHTML = '';
+      actionsEl.appendChild(el('span', { class: 'rbc-attn-row__status' }, '✓ Rebuilt'));
+      return true;
+    }
+    if (updated.status === entry.status) {
+      Object.assign(entry, updated);
+      whyEl.textContent = kind === 'locked' ? lockedRowWhy(updated) : criticalRowWhy(updated);
+      actionBtn.disabled = false;
+      actionBtn.textContent = originalLabel;
+      return false;
+    }
+    // Resolved into a genuinely different problem (e.g. SKIP_NO_ARCHIVE) -- this row's own button
+    // no longer applies; the log page has the right action for whatever this new status is.
+    whyEl.textContent = `${statusLabel(updated.status)}${updated.detail ? ' — ' + updated.detail : ''}`;
+    actionsEl.innerHTML = '';
+    actionsEl.appendChild(el('span', { class: 'rbc-attn-row__status' }, 'See log for next step'));
+    return false;
+  } catch (err) {
+    showErrorModal(err.message, 'Retry failed');
+    actionBtn.disabled = false;
+    actionBtn.textContent = originalLabel;
+    return false;
+  }
+}
+
+function buildAttnRow(entry, kind) {
+  const revealBtn = el('button', { class: 'btn btn--ghost btn--small' }, 'Reveal');
+  revealBtn.addEventListener('click', () => {
+    if (entry.stagingModDir) api('POST', '/api/rebuild/reveal', { targetPath: entry.stagingModDir }).catch(() => {});
+  });
+  const actionBtn = el('button', { class: 'btn btn--primary btn--small' }, kind === 'locked' ? 'Retry' : 'Restore & Retry');
+  actionBtn.addEventListener('click', () => retryAttnEntry(entry, kind, actionBtn));
+  const row = el('div', { class: 'rbc-attn-row' + (kind === 'critical' ? ' rbc-attn-row--critical' : '') }, [
+    el('div', { class: 'rbc-attn-row__main' }, [
+      el('div', { class: 'rbc-attn-row__name' }, entry.name),
+      el('div', { class: 'rbc-attn-row__why' }, kind === 'locked' ? lockedRowWhy(entry) : criticalRowWhy(entry)),
+    ]),
+    el('div', { class: 'rbc-attn-row__actions' }, [revealBtn, actionBtn]),
+  ]);
+  // Stashed for "Retry all" below, which needs to call retryAttnEntry directly (awaiting its result
+  // to run rows one at a time) rather than re-deriving the entry/button from the DOM.
+  row.__entry = entry;
+  row.__actionBtn = actionBtn;
+  return row;
+}
+
+function renderAttentionCallouts(mods) {
+  const locked = (mods || []).filter((m) => m.status === 'FAILED_FOLDER_LOCKED_NOT_TOUCHED');
+  const critical = (mods || []).filter((m) => m.status === 'CRITICAL_MANUAL_RESTORE_NEEDED');
+
+  const lockedCallout = $('rebuildLockedCallout');
+  if (locked.length > 0) {
+    lockedCallout.classList.remove('hidden');
+    $('rebuildLockedTitle').textContent = locked.length === 1 ? '⚠️ One mod needs another try' : `⚠️ ${locked.length} mods need another try`;
+    const body = $('rebuildLockedBody');
+    body.innerHTML = '';
+    for (const part of attnBodyLocked(locked.length)) body.appendChild(typeof part === 'string' ? document.createTextNode(part) : part);
+    const list = $('rebuildLockedList');
+    list.innerHTML = '';
+    for (const m of locked) list.appendChild(buildAttnRow(m, 'locked'));
+  } else {
+    lockedCallout.classList.add('hidden');
+  }
+
+  const criticalCallout = $('rebuildCriticalCallout');
+  if (critical.length > 0) {
+    criticalCallout.classList.remove('hidden');
+    $('rebuildCriticalTitle').textContent = critical.length === 1 ? "🛑 One mod's folder needs to be restored" : `🛑 ${critical.length} mod folders need to be restored`;
+    const body = $('rebuildCriticalBody');
+    body.innerHTML = '';
+    for (const part of attnBodyCritical(critical.length)) body.appendChild(typeof part === 'string' ? document.createTextNode(part) : part);
+    const list = $('rebuildCriticalList');
+    list.innerHTML = '';
+    for (const m of critical) list.appendChild(buildAttnRow(m, 'critical'));
+  } else {
+    criticalCallout.classList.add('hidden');
+  }
+}
+
+// ---------- Open FOMOD (2026-09-17, "Open FOMOD mods get an Install button") ----------
+// A real FOMOD wizard with no recorded choices anywhere (not in this collection.json, not live in
+// Vortex -- see lib/vortex-live-fomod-choices.js's own header comment for the case that's NOT this
+// one) genuinely needs a person to pick its options. Same shared picker
+// (web/public/fomod-picker.js) Rebuild Missing Files' own Install button and Update Collection use;
+// same server-side pipeline too (runner.installOpenFomodMod()), just reached via this log's own
+// /fomod-picker-data + /install-fomod routes instead of Rebuild Missing Files' equivalents.
+
+async function installOpenFomodEntry(entry, actionBtn) {
+  const row = actionBtn.closest('.rbc-attn-row');
+  const actionsEl = row.querySelector('.rbc-attn-row__actions');
+  const originalLabel = actionBtn.textContent;
+  actionBtn.disabled = true;
+  actionBtn.textContent = 'Loading…';
+  let needs;
+  try {
+    ({ needs } = await api('POST', `/api/rebuild/logs/${encodeURIComponent(state.summaryLogFilename)}/fomod-picker-data`, {
+      modId: entry.modId ?? null, fileId: entry.fileId ?? null, name: entry.name,
+    }));
+  } catch (err) {
+    actionBtn.disabled = false;
+    actionBtn.textContent = originalLabel;
+    showErrorModal(err.message, 'Could not open the installer');
+    return;
+  }
+  actionBtn.disabled = false;
+  actionBtn.textContent = originalLabel;
+  // Set true only if this session's own "Install Anyway" override (a real schema-validation
+  // failure, 2026-09-15) was actually used -- forwarded on Finish so the resulting recorded choices
+  // carry it too (buildFomodChoicesFromPicks), and a later background rebuild of this same mod
+  // doesn't re-block on the same already-confirmed archive.
+  let ignoreFomodValidationUsed = false;
+  showFomodPicker(needs, {
+    reinstallWarning: true,
+    onIgnoreValidation: async (need) => {
+      ignoreFomodValidationUsed = true;
+      const { needs: retried } = await api('POST', `/api/rebuild/logs/${encodeURIComponent(state.summaryLogFilename)}/fomod-picker-data`, {
+        modId: entry.modId ?? null, fileId: entry.fileId ?? null, name: entry.name, ignoreFomodValidation: true,
+      });
+      return retried[0];
+    },
+    onDone: async (picksByModId) => {
+      actionBtn.disabled = true;
+      actionBtn.textContent = 'Installing…';
+      try {
+        const data = await api('POST', `/api/rebuild/logs/${encodeURIComponent(state.summaryLogFilename)}/install-fomod`, {
+          modId: entry.modId ?? null, fileId: entry.fileId ?? null, name: entry.name,
+          picks: picksByModId[needs[0].modId] || {}, ignoreFomodValidation: ignoreFomodValidationUsed,
+        });
+        renderSummaryBadges(data.summary);
+        const updated = data.entry;
+        if (updated.status === 'REBUILT') {
+          actionsEl.innerHTML = '';
+          actionsEl.appendChild(el('span', { class: 'rbc-attn-row__status' }, '✓ Installed'));
+        } else {
+          // Same real-mismatch case Rebuild Missing Files' own install-fomod can hit (the archive
+          // doesn't actually contain everything these picks resolve to) -- left in place with the
+          // real reason rather than silently disappearing or guessing at a partial fix.
+          const whyEl = row.querySelector('.rbc-attn-row__why');
+          whyEl.textContent = updated.detail || `${statusLabel(updated.status)} — see the log for next steps.`;
+          actionBtn.disabled = false;
+          actionBtn.textContent = originalLabel;
+        }
+      } catch (err) {
+        actionBtn.disabled = false;
+        actionBtn.textContent = originalLabel;
+        showErrorModal(err.message, 'Install failed');
+      }
+    },
+  });
+}
+
+function buildOpenFomodRow(entry) {
+  // A legacy C# Script installer (item 13a) has no picker this tool can drive at all -- no Install
+  // button, just its own explicit detail text (set by classifyMod/collection-runner.js) telling the
+  // director to install it directly through Vortex instead.
+  if (entry.legacyInstaller) {
+    return el('div', { class: 'rbc-attn-row' }, [
+      el('div', { class: 'rbc-attn-row__main' }, [
+        el('div', { class: 'rbc-attn-row__name' }, entry.name),
+        el('div', { class: 'rbc-attn-row__why' }, entry.detail || "This mod uses an installer type this tool doesn't support."),
+      ]),
+    ]);
+  }
+  const installBtn = el('button', { class: 'btn btn--primary btn--small' }, 'Install');
+  installBtn.addEventListener('click', () => installOpenFomodEntry(entry, installBtn));
+  const row = el('div', { class: 'rbc-attn-row' }, [
+    el('div', { class: 'rbc-attn-row__main' }, [
+      el('div', { class: 'rbc-attn-row__name' }, entry.name),
+      el('div', { class: 'rbc-attn-row__why' }, "This mod's FOMOD has no saved choices — pick your options to install it."),
+    ]),
+    el('div', { class: 'rbc-attn-row__actions' }, [installBtn]),
+  ]);
+  return row;
+}
+
+function renderOpenFomodSection(mods) {
+  const section = $('summaryOpenFomodSection');
+  const list = $('summaryOpenFomodList');
+  if (mods?.length) {
+    section.classList.remove('hidden');
+    $('summaryOpenFomodTitle').textContent = mods.length === 1
+      ? '🧩 One mod needs your picks'
+      : `🧩 ${mods.length} mods need your picks`;
+    list.innerHTML = '';
+    for (const m of mods) list.appendChild(buildOpenFomodRow(m));
+  } else {
+    section.classList.add('hidden');
+  }
+}
+
+// One at a time, not Promise.all -- piling several retries onto the same lock at once defeats the
+// purpose (the mockup's own design note: "retry the rows one after another"). Disables itself for
+// the duration; a row that already succeeded (no more .btn--primary in its actions) is skipped.
+$('rebuildRetryAllBtn').addEventListener('click', async () => {
+  const btn = $('rebuildRetryAllBtn');
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = 'Retrying…';
+  for (const row of $('rebuildLockedList').querySelectorAll('.rbc-attn-row')) {
+    if (row.__actionBtn.disabled) continue; // already rebuilt, or moved to a different status
+    await retryAttnEntry(row.__entry, 'locked', row.__actionBtn);
+  }
+  btn.disabled = false;
+  btn.textContent = originalText;
+});
 
 function finishProgressView(frame) {
   if (state.eventSource) { state.eventSource.close(); state.eventSource = null; }
   showView('summary');
 
-  const summaryEl = $('summaryBadges');
-  summaryEl.innerHTML = '';
-  for (const [status, count] of Object.entries(frame.summary)) {
-    summaryEl.appendChild(el('span', { class: 'badge badge--' + status.toLowerCase() }, [
-      el('span', { class: 'badge__count' }, String(count)), ' ' + (STATUS_TEXT[status] || status),
-    ]));
-  }
-
-  if (pendingCritical) {
-    $('criticalBanner').classList.remove('hidden');
-    $('criticalDetail').innerHTML = '';
-    $('criticalDetail').appendChild(el('div', {}, [
-      el('div', {}, `Mod: ${pendingCritical.modName}`),
-      el('div', {}, `Old content folder: ${baseName(pendingCritical.oldContentDir)}`),
-      el('div', {}, `New content folder: ${baseName(pendingCritical.rebuildingDir)}`),
-      el('div', {}, `Real staging folder: ${baseName(pendingCritical.stagingModDir)}`),
-      el('div', { class: 'muted' }, 'Restore this one by hand, then resume this collection.'),
-    ]));
-    pendingCritical = null;
-  } else {
-    $('criticalBanner').classList.add('hidden');
-  }
-
-  if (frame.openFomodMods?.length) {
-    $('summaryOpenFomodSection').classList.remove('hidden');
-    const list = $('summaryOpenFomodList');
-    list.innerHTML = '';
-    for (const m of frame.openFomodMods) list.appendChild(el('li', {}, m.name));
-  } else {
-    $('summaryOpenFomodSection').classList.add('hidden');
-  }
+  // Un-hides summaryBadges every time a fresh run actually lands here -- rebuildShowDeployResult's
+  // own success branch below hides it (see that function's own comment), and nothing else ever
+  // brings it back; a NEW run reaching this screen is exactly the "starts clean" moment that should.
+  $('summaryBadges').classList.remove('hidden');
+  renderSummaryBadges(frame.summary);
+  state.summaryLogFilename = frame.logPath.split(/[\\/]/).pop();
+  // Whether THIS run rebuilt anything -- captured here (not re-derived later) so
+  // rebuildShowDeployResult's own success wording, reached well after this frame is gone, can still
+  // tell "Your collection has been rebuilt and deployed" apart from "All your mods are deployed"
+  // (director's own two wordings for Rebuild Collection, "one success banner" task).
+  state.rebuiltThisRun = frame.summary.REBUILT > 0;
+  renderAttentionCallouts(frame.lockedOrCriticalMods);
+  renderOpenFomodSection(frame.openFomodMods);
 
   // No raw path shown here -- the View Log/Reveal buttons represent the location, so the path
   // itself only needs to live in a dataset attribute, never in visible text. Backup-folder access
@@ -1305,7 +1676,115 @@ function finishProgressView(frame) {
   const logFilename = frame.logPath.split(/[\\/]/).pop();
   $('viewLogLink').href = `/api/rebuild/logs/view/${encodeURIComponent(logFilename)}`;
   $('revealLogBtn').dataset.path = frame.logPath;
+
+  renderDeployPanel(state.rebuiltThisRun);
 }
+
+// ---------- Deploy (Done screen, 2026-09-14, "the same Deploy step on every Done screen") ----------
+// This tool only ever re-extracts mods directly into staging; the game can't see any of it until a
+// real Vortex deploy runs. Shown on every Done landing, not just after a real rebuild -- the director
+// may not have deployed since an earlier run. The actual poll loop (percent/text, stall-hint,
+// rule-cycle detection) lives in deploy-panel.js's shared startDeploy -- Rebuild Missing Files' and
+// Update Collection v2's own Deploy panels use the identical engine, backed by the one shared
+// web/deploy-routes.js (/api/deploy/all + /api/deploy/all/progress).
+
+// rebuiltThisRun: whether frame.summary.REBUILT > 0 for this run -- picks between the two title/body
+// variants (a real rebuild gets "one step left" with the explanatory body; a run that rebuilt nothing
+// -- every mod already matched -- gets the plain title-only prompt, since nothing here changed
+// staging this run), same distinction Rebuild Missing Files' own rmfSetDoneUI makes.
+function renderDeployPanel(rebuiltThisRun) {
+  $('rebuildDeployResult').classList.add('hidden');
+  $('rebuildDeployProgress').classList.add('hidden');
+  $('rebuildDeployPending').classList.remove('hidden');
+  const title = $('rebuildDeployPendingTitle');
+  const body = $('rebuildDeployPendingBody');
+  if (rebuiltThisRun) {
+    title.textContent = '🚀 One step left';
+    body.textContent = "Your mods are rebuilt in staging, but your game can't see them yet. Deploy your mods to finish.";
+    body.classList.remove('hidden');
+  } else {
+    title.textContent = '🚀 Deploy your mods';
+    body.classList.add('hidden');
+  }
+}
+
+// noRetry (matching Update Collection v2's own ucv2ShowDeployResult): a real rule cycle comes right
+// back on a Retry Deploy click even though that path never re-touches rules at all -- this isn't
+// something a same-tool retry can ever fix, so the button is omitted entirely for that one specific
+// failure. The real fix has to happen in Vortex/Cycle Helper.
+function rebuildShowDeployResult(kind, message, noRetry) {
+  const box = $('rebuildDeployResult');
+  box.classList.remove('hidden');
+  box.className = `callout callout--${kind === 'success' ? 'success' : 'warning'}`;
+  box.innerHTML = '';
+  if (kind === 'success') {
+    // "After a successful deploy, the Done screen shows one All Set banner" (2026-09-15) -- hides
+    // summaryBadges (this screen's own compact "result" readout, the same role RMF's rmfSummaryBadges
+    // plays -- that one already hides once RMF reaches Done, so this matches) and the Deploy panel
+    // itself (pending/progress -- already hidden by rebuildStartDeploy's own onStart/onDone, these
+    // two extra hides are belt-and-suspenders so this function is correct even called on its own).
+    // rebuildLockedCallout/rebuildCriticalCallout/summaryOpenFomodSection and the Log file row are
+    // all deliberately left alone -- unfinished work and the log location, not a result banner
+    // (director's own explicit call, "one All Set banner" task). summaryBadges comes back the
+    // instant a fresh run lands (finishProgressView un-hides it before rendering) or Back to
+    // Collections/re-entry resets this whole view (cancelPlan -> showView('picker') hides the
+    // entire screen either way).
+    $('summaryBadges').classList.add('hidden');
+    $('rebuildDeployPending').classList.add('hidden');
+    $('rebuildDeployProgress').classList.add('hidden');
+    box.appendChild(el('div', { class: 'callout__title' }, "🎉 All Set — It's Game Time!"));
+    box.appendChild(el('p', {}, state.rebuiltThisRun
+      ? 'Your collection has been rebuilt and deployed. Your game is ready to launch!'
+      : 'All your mods are deployed. Your game is ready to launch!'));
+    return;
+  }
+  box.appendChild(el('div', { class: 'callout__title' }, '⚠️ Deploy failed'));
+  box.appendChild(el('p', {}, message || 'Vortex could not complete the deployment. You can try again from here, or open Vortex and click Deploy Mods directly.'));
+  if (!noRetry) {
+    const retry = el('button', { class: 'btn btn--primary btn--small' }, 'Retry Deploy');
+    retry.addEventListener('click', () => rebuildStartDeploy());
+    box.appendChild(el('div', { class: 'row-actions' }, retry));
+  }
+}
+
+function rebuildStartDeploy() {
+  startDeploy('/api/deploy', api, {
+    onStart: () => {
+      $('rebuildDeployResult').classList.add('hidden');
+      $('rebuildDeployPending').classList.add('hidden');
+      $('rebuildDeployProgress').classList.remove('hidden');
+      $('rebuildDeployPhase').textContent = 'Starting…';
+      $('rebuildDeployBar').style.width = '0%';
+      // Same precaution Update Collection v2's own Deploy already established (2026-08-28,
+      // director's own catch): leaving this screen mid-deploy doesn't stop the real Vortex deploy
+      // already running server-side, but it does orphan this screen's own live progress/result
+      // reporting for it, and Deploy is real file I/O that shouldn't be walked away from blind.
+      $('rebuildBackToCollectionsBtn').disabled = true;
+    },
+    onError: (e) => {
+      $('rebuildDeployProgress').classList.add('hidden');
+      rebuildShowDeployResult('error', e.message);
+      $('rebuildBackToCollectionsBtn').disabled = false;
+    },
+    onTick: (progress) => {
+      if (progress && typeof progress.percent === 'number') {
+        $('rebuildDeployBar').style.width = `${Math.round(progress.percent)}%`;
+      }
+      if (progress && progress.text) $('rebuildDeployPhase').textContent = progress.text;
+    },
+    onStall: (show, message) => {
+      const hint = $('rebuildDeployStallHint');
+      hint.innerHTML = message || '⚠️ Vortex is taking longer than usual to finish. Please be patient while it finishes.';
+      hint.classList.toggle('hidden', !show);
+    },
+    onDone: (progress) => {
+      $('rebuildDeployProgress').classList.add('hidden');
+      rebuildShowDeployResult(progress.error ? 'error' : 'success', themedCycleMessage(progress.error, progress.code, 'deploy-blocked-by-cycles'), progress.code === 'deploy-blocked-by-cycles');
+      $('rebuildBackToCollectionsBtn').disabled = false;
+    },
+  });
+}
+$('rebuildDeployBtn').addEventListener('click', () => rebuildStartDeploy());
 
 $('revealLogBtn').addEventListener('click', () => {
   const p = $('revealLogBtn').dataset.path;

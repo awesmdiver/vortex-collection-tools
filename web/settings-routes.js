@@ -16,22 +16,25 @@ const helperClient = require('../lib/vortex-helper-client');
 const { version: TOOL_VERSION } = require('../package.json');
 const syncLib = require('../lib/vortex-sync/lib');
 const saveScan = require('../lib/save-cleaner-scan');
+const appDataManager = require('../lib/app-data-manager');
 const { createSseSession } = require('./sse-session');
 
-// Every log file this project writes (currently only Rebuild Collection's) follows this exact
-// name shape -- same pattern used everywhere else a log filename is validated (rebuild-routes.js).
-// "Delete all logs" only ever removes files matching this, never a blind wipe of the whole folder,
-// in case a custom logsDir root is ever pointed at a folder shared with something else.
-const LOG_FILE_PATTERN = /^rebuild-.+\.json$/;
-
+// App Data (2026-09-14, "split Logs from App Data"): this used to filter for
+// /^rebuild-.+\.json$/ specifically, because that pattern was the ONLY thing this project ever
+// wrote under logsDir -- which meant "Delete all logs" actually deleted Rebuild Collection's own
+// run reports (Resume/Retry/Stats history), not troubleshooting logs at all. Those reports now live
+// under App Data (getAppDataDir('rebuild-collection/reports')), never under logsDir -- so logsDir is
+// finally what its name always claimed: troubleshooting-only (the app log, Merge Plugins failure
+// logs, and any future tool's own). Deleting EVERYTHING under it, recursively across every tool's
+// own subfolder, is now genuinely harmless, so no filename pattern is needed any more.
 function listLogFiles(dir) {
     let entries;
     try {
-        entries = fs.readdirSync(dir, { withFileTypes: true });
+        entries = fs.readdirSync(dir, { withFileTypes: true, recursive: true });
     } catch {
         return [];
     }
-    return entries.filter((e) => e.isFile() && LOG_FILE_PATTERN.test(e.name)).map((e) => e.name);
+    return entries.filter((e) => e.isFile()).map((e) => path.join(e.parentPath || e.path, e.name));
 }
 
 // Every real backup-run folder this project ever creates is named "<collectionModId>-<runTimestamp>"
@@ -52,23 +55,30 @@ function listBackupRunDirs(backupRoot) {
     return entries.filter((e) => e.isDirectory() && BACKUP_RUN_DIR_PATTERN.test(e.name)).map((e) => e.name);
 }
 
-const PATH_FIELDS = ['staging', 'downloads', 'backupRoot', 'syncBackupRoot', 'ucv2TrackingDir', 'state', 'logsDir', 'cleanupExcludeListDir', 'skyrimDataDir', 'pluginsListDir', 'dummyMastersOutputDir', 'archiveFinderDbDir', 'archiveFinderOutputDir', 'eslifierOutputDir', 'mergeOutputDir', 'mergeStagingCopyDir', 'modExceptionListDir', 'cycleHelperHistoryDir', 'pgpatcherCfgDir', 'pgpatcherOutputBackupDir', 'saveCleanerSavesDir', 'saveCleanerBackupRoot', 'saveCleanerSavesDirFO4', 'saveCleanerBackupRootFO4', 'saveCleanerSavesDirStarfield', 'saveCleanerBackupRootStarfield'];
-// No sensible blank/default state for these eight -- Rebuild Collection can't scan a collection
-// without staging/downloads, Update Collection can't save a backup without somewhere real (not
-// "wherever this project happens to think is a good place") to put it, and Clean Up's exclude list,
-// Missing Masters' three fields, and Archive Finder's index-database folder all get the same
-// treatment (standing rule confirmed 2026-07-27: every new data location this project adds must be
-// a user-chosen path, never a silent built-in default -- unlike backupRoot/logsDir/state below,
-// which predate that rule and weren't retrofitted). backupRoot/state/archiveFinderOutputDir/
-// eslifierOutputDir are deliberately NOT required: backupRoot only matters if maxBackupsToKeep is
-// turned on (0 = off, the default), state auto-detects a real default under %APPDATA%,
-// archiveFinderOutputDir is just an optional pre-filled default -- the user can always pick a
-// destination per extraction instead -- and eslifierOutputDir is simply inert (no ESLifier
+const PATH_FIELDS = ['staging', 'downloads', 'backupRoot', 'syncBackupRoot', 'state', 'logsDir', 'appDataDir', 'skyrimDataDir', 'pluginsListDir', 'dummyMastersOutputDir', 'archiveFinderOutputDir', 'eslifierOutputDir', 'mergeOutputDir', 'mergeStagingCopyDir', 'pgpatcherCfgDir', 'pgpatcherOutputBackupDir', 'saveCleanerSavesDir', 'saveCleanerBackupRoot', 'saveCleanerSavesDirFO4', 'saveCleanerBackupRootFO4', 'saveCleanerSavesDirStarfield', 'saveCleanerBackupRootStarfield'];
+// App Data (2026-09-14, "split Logs from App Data"): ucv2TrackingDir, cleanupExcludeListDir,
+// archiveFinderDbDir, modExceptionListDir, and cycleHelperHistoryDir are RETIRED from this list (and
+// from the Settings page entirely) -- appDataDir replaces all five. They stay real fields in
+// lib/app-config.js's own DEFAULT_CONFIG (read-only now, LEGACY-commented there) purely so the
+// one-time migration (lib/app-data-migration.js) can find whatever a returning user had customized
+// them to; nothing in this router reads or writes them anymore.
+//
+// No sensible blank/default state for these -- Rebuild Collection can't scan a collection without
+// staging/downloads, Update Collection can't save a backup without somewhere real (not "wherever
+// this project happens to think is a good place") to put it, Missing Masters' three fields need a
+// real answer, and appDataDir itself is the same "every new data location is a user-chosen path,
+// never a silent built-in default" standing rule as it replaced (confirmed 2026-07-27, restated
+// 2026-09-14 for App Data specifically: a cleanup of an unconfigured scratch/logs folder already
+// deleted every real Rebuild Collection run report once -- see TECHNICAL.md). backupRoot/state/
+// archiveFinderOutputDir/eslifierOutputDir are deliberately NOT required: backupRoot only matters if
+// maxBackupsToKeep is turned on (0 = off, the default), state auto-detects a real default under
+// %APPDATA%, archiveFinderOutputDir is just an optional pre-filled default -- the user can always
+// pick a destination per extraction instead -- and eslifierOutputDir is simply inert (no ESLifier
 // downgrade applied) until the user actually sets it, same "blank is a normal, supported state" as
 // archiveFinderOutputDir.
-const REQUIRED_PATH_FIELDS = ['staging', 'downloads', 'syncBackupRoot', 'ucv2TrackingDir', 'cleanupExcludeListDir', 'skyrimDataDir', 'pluginsListDir', 'dummyMastersOutputDir', 'archiveFinderDbDir', 'modExceptionListDir'];
+const REQUIRED_PATH_FIELDS = ['staging', 'downloads', 'syncBackupRoot', 'appDataDir', 'skyrimDataDir', 'pluginsListDir', 'dummyMastersOutputDir'];
 // pgpatcherCfgDir is deliberately NOT in REQUIRED_PATH_FIELDS above -- unlike skyrimDataDir/
-// modExceptionListDir (needed by tools most installs actually use), this is a single, brand-new,
+// appDataDir (needed by tools most installs actually use), this is a single, brand-new,
 // one-workflow integration; requiring it would block saving ANY OTHER setting for every install
 // that never touches PGPatcher. Same "optional, blank is a supported state" treatment as
 // archiveFinderOutputDir/mergeOutputDir/eslifierOutputDir -- the PGPatcher tool itself reports
@@ -247,19 +257,22 @@ function createSettingsRouter() {
             return res.status(400).json({ error: 'missing-required', missing, message: `Required setting(s) missing: ${missing.join(', ')}.` });
         }
 
-        // Archive Finder database folder vs. Vortex's own managed folders (2026-08-27, GitHub issue
-        // #4) -- checked against `merged`, not just `patch`, so this catches BOTH a fresh
-        // archiveFinderDbDir being pointed at Vortex's territory AND downloads/staging being changed
-        // to somewhere that now happens to contain an already-saved archiveFinderDbDir. Server-side
-        // backstop (same reasoning as the REQUIRED_PATH_FIELDS check above) -- the Settings page
-        // itself should also warn/block client-side, but a corrupt/manually-edited config.json or
-        // any future non-web caller must not be able to slip past this via this same endpoint. See
+        // App Data folder vs. Vortex's own managed folders (2026-08-27, GitHub issue #4; carried over
+        // to appDataDir 2026-09-14 -- this same check used to target archiveFinderDbDir specifically,
+        // since that was the one thing that opened a real SQLite connection inside a user-chosen
+        // folder; App Data now holds that same database, so the same collision risk applies to it
+        // instead). Checked against `merged`, not just `patch`, so this catches BOTH a fresh
+        // appDataDir being pointed at Vortex's territory AND downloads/staging being changed to
+        // somewhere that now happens to contain an already-saved appDataDir. Server-side backstop
+        // (same reasoning as the REQUIRED_PATH_FIELDS check above) -- the Settings page itself should
+        // also warn/block client-side, but a corrupt/manually-edited config.json or any future
+        // non-web caller must not be able to slip past this via this same endpoint. See
         // lib/vortex-managed-paths.js for exactly which folders count and why.
-        const dbConflict = findVortexManagedConflict(merged.archiveFinderDbDir, { downloads: merged.downloads, staging: merged.staging });
+        const dbConflict = findVortexManagedConflict(merged.appDataDir, { downloads: merged.downloads, staging: merged.staging });
         if (dbConflict) {
             return res.status(400).json({
-                error: 'archive-finder-db-in-vortex-folder',
-                message: `The Archive Finder database folder can't be the same as, or inside, your ${dbConflict.label} ("${dbConflict.path}"). Vortex actively manages that folder, and a database file left open there can block Vortex itself with a "File busy" error. Choose a different folder.`,
+                error: 'app-data-in-vortex-folder',
+                message: `The App Data folder can't be the same as, or inside, your ${dbConflict.label} ("${dbConflict.path}"). Vortex actively manages that folder, and the Archive Finder database that lives in App Data can block Vortex itself with a "File busy" error if left open there. Choose a different folder.`,
             });
         }
 
@@ -333,14 +346,14 @@ function createSettingsRouter() {
         });
     });
 
-    // Read-only count for the "Delete all logs" confirmation dialog, same reasoning as
-    // /backups-info above. Only Rebuild Collection writes logs today (getLogsDir('rebuild-collection')
-    // resolves to a flat logs/ folder in the default, unconfigured case) -- a future tool that starts
-    // logging should get its own subdir name here too, see TECHNICAL.md.
+    // Read-only count+size for the "Delete Logs" confirmation, same reasoning as /backups-info
+    // above. Recursive across every tool's own logs subfolder (app/, merge-plugins/, any future
+    // one) -- see listLogFiles' own comment for why this no longer needs a filename pattern.
     router.get('/logs-info', (req, res) => {
         const logsRoot = appConfig.getLogsRoot();
-        const logsDir = appConfig.getLogsDir('rebuild-collection');
-        res.json({ logsRoot, count: listLogFiles(logsDir).length });
+        const files = listLogFiles(logsRoot);
+        const totalBytes = files.reduce((sum, f) => { try { return sum + fs.statSync(f).size; } catch { return sum; } }, 0);
+        res.json({ logsRoot, count: files.length, totalBytes });
     });
 
     const deleteLogsSession = createSseSession();
@@ -351,13 +364,15 @@ function createSettingsRouter() {
         deleteLogsSession.subscribe(res, { afterSeq });
     });
 
-    // Deletes every real log file under Rebuild Collection's logs subfolder -- permanent, no undo.
-    // Only touches files matching LOG_FILE_PATTERN; anything else in the folder is left alone.
+    // Deletes every real file under the Logs folder, recursively across every tool's own subfolder --
+    // permanent, no undo, but genuinely harmless now that Logs holds nothing but troubleshooting
+    // notes (see listLogFiles' own comment). App Data is a completely separate folder tree and is
+    // never touched by this.
     router.post('/delete-logs', (req, res) => {
-        const logsDir = appConfig.getLogsDir('rebuild-collection');
-        const files = listLogFiles(logsDir);
-        deleteWithProgress(deleteLogsSession, res, 'log file', files, (name) => {
-            fs.rmSync(path.join(logsDir, name), { force: true });
+        const logsRoot = appConfig.getLogsRoot();
+        const files = listLogFiles(logsRoot);
+        deleteWithProgress(deleteLogsSession, res, 'log file', files, (fullPath) => {
+            fs.rmSync(fullPath, { force: true });
         });
     });
 
@@ -368,6 +383,60 @@ function createSettingsRouter() {
         const logsRoot = appConfig.getLogsRoot();
         fs.mkdirSync(logsRoot, { recursive: true });
         spawn(`explorer.exe "${logsRoot}"`, { shell: true, detached: true, stdio: 'ignore' }).unref();
+        res.json({ ok: true });
+    });
+
+    // ---------- App Data (2026-09-14, "split Logs from App Data") ----------
+
+    // Read-only total for the section's own header line ("N items · X MB") -- `configured: false`
+    // when appDataDir hasn't been set yet, so the client can show its own "set this up" prompt
+    // instead of an empty checklist that looks broken.
+    router.get('/app-data-info', (req, res) => {
+        const { appDataDir, staging } = appConfig.loadConfig();
+        if (!appDataDir) return res.json({ appDataDir: null, configured: false, count: 0, sizeBytes: 0 });
+        const groups = appDataManager.buildGroups(appDataDir, { staging });
+        const { count, sizeBytes } = appDataManager.totalCountAndSize(groups);
+        res.json({ appDataDir, configured: true, count, sizeBytes });
+    });
+
+    // The full checklist -- one group per tool+data-kind (see lib/app-data-manager.js's own
+    // buildGroups), each carrying its own director-approved "lose" copy so the delete confirmation
+    // never has to be rebuilt/duplicated client-side.
+    router.get('/app-data-items', (req, res) => {
+        const { appDataDir, staging } = appConfig.loadConfig();
+        if (!appDataDir) return res.json({ configured: false, groups: [] });
+        res.json({ configured: true, groups: appDataManager.buildGroups(appDataDir, { staging }) });
+    });
+
+    const deleteAppDataSession = createSseSession();
+
+    router.get('/delete-app-data-items/events', (req, res) => {
+        if (!deleteAppDataSession.get()) return res.status(404).end();
+        const afterSeq = Number(req.headers['last-event-id'] || 0);
+        deleteAppDataSession.subscribe(res, { afterSeq });
+    });
+
+    // Deletes exactly the items the client selected -- never a delete-all. Every path is
+    // re-validated server-side against the CURRENT appDataDir before anything is touched (never
+    // trust a client-supplied path without validating containment, same rule this app already
+    // applies to log filenames and merge history paths) -- a stale/tampered id can't escape App Data.
+    router.post('/delete-app-data-items', (req, res) => {
+        const { appDataDir } = appConfig.loadConfig();
+        if (!appDataDir) return res.status(400).json({ error: 'No App Data folder is configured.' });
+        const deletePaths = Array.isArray(req.body?.deletePaths) ? req.body.deletePaths : [];
+        const { valid, errors } = appDataManager.validateAndCollectPaths(appDataDir, deletePaths);
+        if (errors.length > 0) console.error(`[settings-routes] /delete-app-data-items: ${errors.join(' ')}`);
+        deleteWithProgress(deleteAppDataSession, res, 'item', valid, (p) => {
+            fs.rmSync(p, { recursive: true, force: true });
+        });
+    });
+
+    // Same "navigate INTO it" treatment as /open-logs-folder above.
+    router.post('/open-app-data-folder', (req, res) => {
+        const { appDataDir } = appConfig.loadConfig();
+        if (!appDataDir) return res.status(400).json({ error: 'No App Data folder is configured.' });
+        fs.mkdirSync(appDataDir, { recursive: true });
+        spawn(`explorer.exe "${appDataDir}"`, { shell: true, detached: true, stdio: 'ignore' }).unref();
         res.json({ ok: true });
     });
 

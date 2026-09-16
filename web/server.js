@@ -43,10 +43,13 @@ const { createClearUpdateFlagsRouter } = require('./clear-update-flags-routes');
 const { createSaveCleanerRouter } = require('./save-cleaner-routes');
 const { createFileRetrieverRouter } = require('./file-retriever-routes');
 const { createDuplicateVersionCleanupRouter } = require('./duplicate-version-cleanup-routes');
+const { createAddModsToCollectionsRouter } = require('./add-mods-to-collections-routes');
+const { createDeployRouter } = require('./deploy-routes');
 const { loadSyncLib } = require('../lib/collection-runner');
 const appConfig = require('../lib/app-config');
 const helperClient = require('../lib/vortex-helper-client');
 const syncLib = require('../lib/vortex-sync/lib');
+const fomodPickerData = require('../lib/fomod-picker-data');
 
 function parseArgs(argv) {
     const args = {
@@ -91,14 +94,22 @@ function main() {
 
     // Application-level log (2026-08-26, lib/app-logger.js) -- opt-in, off by default. Initialized
     // as early as possible in main() (right after config is readable at all) so it captures as much
-    // of real startup as it can, including the resolved-config dump right below. Genuinely can't be
-    // any earlier than this -- the decision itself comes from config.json, which isn't loaded until
+    // of real startup as it can, including the resolved-config dump right below, and the App Data
+    // migration's own console.log/error calls right after this block -- genuinely can't be any
+    // earlier than this -- the decision itself comes from config.json, which isn't loaded until
     // the line above.
     let appLogPath = null;
     if (fileConfig.appLogEnabled) {
         appLogPath = require('../lib/app-logger').initAppLogger();
         console.log(`[startup] Application log enabled -- writing to ${appLogPath}`);
     }
+
+    // App Data one-time migration (2026-09-14, "split Logs from App Data") -- a no-op until
+    // appDataDir is actually set, and a no-op again on every startup after the real move already
+    // happened (see lib/app-data-migration.js's own header for why it's always safe to re-run). Runs
+    // before the `config` object below is built so every resolved*Dir field it reads already
+    // reflects the post-migration location.
+    require('../lib/app-data-migration').migrateIfConfigured(fileConfig);
 
     const config = {
         port: cliArgs.port || fileConfig.serverPort || 4321,
@@ -112,7 +123,10 @@ function main() {
         syncBackupRoot: cliArgs.syncBackupRoot || fileConfig.syncBackupRoot || null,
         state: cliArgs.state || fileConfig.state || syncLib.DEFAULT_STATE_DIR,
         // No CLI flag for this one (same as logsDir) -- config.json/Settings is the only path in.
-        cleanupExcludeListDir: fileConfig.cleanupExcludeListDir || null,
+        // App Data (2026-09-14): cleanupExcludeListDir is retired from Settings but kept as the
+        // legacy fallback for anyone who had customized it -- see app-config.js's own LEGACY
+        // comment on the field and resolveDataDir's own header.
+        cleanupExcludeListDir: appConfig.resolveDataDir('mod-scrub', fileConfig.cleanupExcludeListDir),
         // Missing Masters utility -- no CLI flags for these either, config.json/Settings only.
         skyrimDataDir: fileConfig.skyrimDataDir || null,
         pluginsListDir: fileConfig.pluginsListDir || null,
@@ -121,11 +135,15 @@ function main() {
         // comment). No CLI flag, config.json/Settings only.
         eslifierOutputDir: fileConfig.eslifierOutputDir || null,
         // Archive Finder utility -- no CLI flag, config.json/Settings only. Deliberately reuses
-        // `downloads` above as its own scan folder, no separate field for that.
-        archiveFinderDbDir: fileConfig.archiveFinderDbDir || null,
+        // `downloads` above as its own scan folder, no separate field for that. App Data (2026-09-14):
+        // archiveFinderDbDir is retired from Settings but kept as the legacy fallback -- see
+        // cleanupExcludeListDir's own comment just above.
+        archiveFinderDbDir: appConfig.resolveDataDir('archive-finder/index', fileConfig.archiveFinderDbDir),
         // Mod Exceptions list (lib/mod-exception-store.js) -- shared between Rebuild Collection and
-        // Rebuild Missing Files. No CLI flag, config.json/Settings only.
-        modExceptionListDir: fileConfig.modExceptionListDir || null,
+        // Rebuild Missing Files. No CLI flag, config.json/Settings only. App Data (2026-09-14):
+        // modExceptionListDir is retired from Settings but kept as the legacy fallback -- see
+        // cleanupExcludeListDir's own comment above.
+        modExceptionListDir: appConfig.resolveDataDir('mod-exceptions', fileConfig.modExceptionListDir),
         // PGPatcher Load Order Editor -- optional, blank is a supported state (see app-config.js's
         // own comment). No CLI flag, config.json/Settings only.
         pgpatcherCfgDir: fileConfig.pgpatcherCfgDir || null,
@@ -169,6 +187,46 @@ function main() {
     app.use('/api/save-cleaner', createSaveCleanerRouter(config));
     app.use('/api/file-retriever', createFileRetrieverRouter());
     app.use('/api/duplicate-version-cleanup', createDuplicateVersionCleanupRouter(config));
+    app.use('/api/add-mods-to-collections', createAddModsToCollectionsRouter());
+    // Shared Deploy step (2026-09-14) -- Rebuild Collection, Rebuild Missing Files, and Update
+    // Collection v2 all call this one router now; see its own header comment.
+    app.use('/api/deploy', createDeployRouter());
+
+    // Shared FOMOD preview-image route (2026-09-17, "Open FOMOD mods get an Install button") -- was
+    // update-collection-v2-routes.js's own private /fomod-image; now a whole-app route (not scoped
+    // to any one tool area) since Rebuild Missing Files and Rebuild Collection's own new Install
+    // action populate the SAME server-side image cache (lib/fomod-picker-data.js's
+    // registerFomodImages, keyed by the mod's own Nexus modId, not by which tool detected it) via
+    // their own detectFomodChoiceNeed calls. A plain GET (not POST) -- exactly what an <img src>
+    // tag needs to request directly, and a read-only, side-effect-free lookup either way.
+    app.get('/api/fomod-image', (req, res) => {
+        const { modId, imagePath } = req.query || {};
+        if (!modId || !imagePath) return res.status(400).end();
+        const resolved = fomodPickerData.serveFomodImage(String(modId), String(imagePath));
+        if (!resolved) return res.status(404).end();
+        res.sendFile(resolved);
+    });
+
+    // Best-effort cleanup for a cancelled FOMOD picker (2026-09-17, item 12b,
+    // diagnostics/fomod-parity/findings-log.md -- "clean up after a cancelled FOMOD picker"). Real
+    // Vortex's own cancel path is fully transactional; ours leaked a scratch preview-image dir per
+    // cancelled-and-never-reopened mod until this. closeFomodPicker() fires this once per mod still
+    // in the abandoned session (fire-and-forget, never awaited) -- always responds ok regardless of
+    // outcome, since a cleanup failure must never surface to someone who just pressed Cancel.
+    // releaseFomodImages() itself is already a safe no-op when `imageCacheToken` doesn't match the
+    // CURRENTLY registered entry (e.g. the same mod reopened immediately after cancelling already
+    // registered a fresh one), so this never risks deleting a dir a live session is using.
+    app.post('/api/fomod-image-cleanup', (req, res) => {
+        const { modId, imageCacheToken } = req.body || {};
+        if (modId && imageCacheToken) {
+            try {
+                fomodPickerData.releaseFomodImages(String(modId), String(imageCacheToken));
+            } catch {
+                // Best-effort -- see comment above.
+            }
+        }
+        res.json({ ok: true });
+    });
 
     // Shared, whole-app route (not scoped to any one tool area) -- shell.js's Home "Update
     // Collection" card uses this to decide LIVE, on every click, whether to open Update Collection

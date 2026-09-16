@@ -420,7 +420,7 @@ $g('cleanupCrossCheckDeleteAllBtn').addEventListener('click', () => {
 // missing-masters-app.js manages its own refresh timing; this just calls its exposed hook via the
 // same "deliberate seam" pattern reports-rulesgen-app.js already uses (a plain `typeof === function`
 // check, since missing-masters-app.js loads after this file and can't be referenced directly here).
-const UTILITIES_SUB_TABS = ['missingmasters', 'scrub', 'archivefinder', 'fileretriever', 'missingfiles', 'cyclehelper', 'clearflags', 'duplicateversions'];
+const UTILITIES_SUB_TABS = ['missingmasters', 'scrub', 'archivefinder', 'fileretriever', 'missingfiles', 'cyclehelper', 'clearflags', 'duplicateversions', 'addmodstocollections'];
 let currentUtilitiesSubTab = null; // track previous sub-tab for cyclehelper reset on entry
 // Called by shell.js's navigateToArea right before re-entering Utilities from a DIFFERENT top-level
 // area, so the upcoming showUtilitiesSubTab call sees previousSubTab as null and re-fires that
@@ -428,6 +428,11 @@ let currentUtilitiesSubTab = null; // track previous sub-tab for cyclehelper res
 // utilities-reentry-reset-bugfix) -- without this, currentUtilitiesSubTab never clears on a Home
 // round-trip, so returning to the same sub-tab looks like "no change" and skips the reset.
 window.utilitiesClearSubTabTracking = () => { currentUtilitiesSubTab = null; };
+// "coming back from another tool starts clean" (2026-09-17): shell.js's navigateToArea needs to know
+// which Utilities sub-tab was last visible so it can still fire that tab's own reset-on-entry hook
+// when arriving via a path that names no explicit sub-tab at all (see navigateToArea's own comment on
+// the line that calls this) -- read there BEFORE utilitiesClearSubTabTracking above wipes it.
+window.getCurrentUtilitiesSubTab = () => currentUtilitiesSubTab;
 function showUtilitiesSubTab(id) {
   const previousSubTab = currentUtilitiesSubTab;
   currentUtilitiesSubTab = id;
@@ -475,6 +480,12 @@ function showUtilitiesSubTab(id) {
   // Retriever/Rebuild Missing Files/Cycle Helper above) -- this is a real destructive tool, so a stale
   // Screen 2/3 selection sitting on screen after switching away and back would be actively misleading.
   if (id === 'duplicateversions' && previousSubTab !== 'duplicateversions' && typeof window.dvcResetOnEntry === 'function') window.dvcResetOnEntry();
+  // Same seam again -- add-mods-to-collections-app.js loads after this file. Full reset to Step 1
+  // fires only when arriving from a DIFFERENT sub-tab (same previousSubTab-guarded pattern as every
+  // other multi-step Utilities tool above) -- a stale picked-mods/collections selection sitting on
+  // screen after switching away and back would be actively misleading, same reasoning as Duplicate
+  // Version Cleanup's own entry reset just above.
+  if (id === 'addmodstocollections' && previousSubTab !== 'addmodstocollections' && typeof window.amcResetOnEntry === 'function') window.amcResetOnEntry();
 
   // Keeps the URL in sync so a browser refresh returns to this exact sub-tab, not just the
   // Utilities area generically -- same fix as showReportsSubTab (stats-app.js) / showToolArea

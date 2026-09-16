@@ -1,6 +1,6 @@
 'use strict';
 // Rebuild Missing Files -- thin Express handlers. Real logic lives in
-// lib/missing-files-scan.js (scan) and lib/sevenzip.js's extractMany (fix). See DESIGN.md's own
+// lib/missing-files-scan.js (scan) and lib/extract-resolved-files.js (fix). See DESIGN.md's own
 // section on this tool and TECHNICAL.md for the full writeup.
 //
 // GET /collections is deliberately its OWN listing here, not a reuse of Rebuild Collection's
@@ -10,33 +10,36 @@
 // authoring collection that DOES have a local collection.json (Vortex writes one while a Workshop
 // collection is actively being edited) -- see missing-files-scan.js's own header comment.
 //
-// The scan itself needs no "Vortex must be closed" gate (same reasoning as Missing Masters' own
-// /scan) -- it only ever reads collection.json files, archive listings, and the staging folder,
-// never Vortex's live state.v2. /extract is one write in this router (staging folder files), gated
-// exactly like every other staging-folder write in this app. /refresh-from-nexus is the other
-// (collection.json itself) -- see its own comment below. /nexus-slug is the one place this router
-// reads Vortex's live state at all, and only as a one-off, explicitly user-triggered lookup (see
-// its own comment) -- it doesn't touch the read-only scan path above.
+// The scan's own file-by-file diff needs no gate at all -- it only ever reads collection.json files,
+// archive listings, and the staging folder (same reasoning as Missing Masters' own /scan). /scan DOES
+// also read Vortex's live state per collection now (Helper-first, state.v2 disk-fallback -- see that
+// route's own comment, "never scan without knowing which mods are Ignored", 2026-09-14), which is why
+// /scan carries the same "Helper busy / Vortex running" 409 gate every other live-state read in this
+// router already has (see /nexus-slug's own comment below for why that read needs the same gate).
+// /extract is one write in this router (staging folder files), gated exactly like every other
+// staging-folder write in this app. /refresh-from-nexus is the other (collection.json itself) -- see
+// its own comment below.
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const express = require('express');
 
-const { listPickableCollections, scanCollections, scanOneMod } = require('../lib/missing-files-scan');
+const { listPickableCollections, scanCollections, scanOneMod, loadIgnoredAndKnownIds } = require('../lib/missing-files-scan');
 const { loadCollection } = require('../lib/collection-parser');
 const { resolveDomainDownloadsDir } = require('../lib/archive-locator');
-const { findSevenZip, extractMany } = require('../lib/sevenzip');
+const { findSevenZip } = require('../lib/sevenzip');
+const { extractResolvedFiles } = require('../lib/extract-resolved-files');
 const { existsPlainOrGhosted } = require('../lib/ghost-files');
 const modExceptionStore = require('../lib/mod-exception-store');
 const nexusModDownload = require('../lib/nexus-mod-download');
 const nexusCollectionDownload = require('../lib/nexus-collection-download');
 const runner = require('../lib/collection-runner');
-const syncRunner = require('../lib/sync-runner');
 const syncLib = require('../lib/vortex-sync/lib');
 const helperClient = require('../lib/vortex-helper-client');
 const appConfig = require('../lib/app-config');
+const { detectFomodChoiceNeed, buildFomodChoicesFromPicks } = require('../lib/fomod-picker-data');
+const { buildLiveIdentityIndex, resolveLiveModId, loadLiveModsData, savePicksToVortex } = require('../lib/vortex-live-fomod-choices');
 const lastFixedState = require('../lib/rebuild-missing-last-fixed-state');
 const workshopReportFetchState = require('../lib/workshop-report-fetch-state');
 const { createSseSession } = require('./sse-session');
@@ -382,11 +385,11 @@ function createRebuildMissingRouter(config) {
     // on isVortexRunning() up front, synchronously, before the SSE session even starts -- every
     // refresh needs a real state.v2 read to resolve its own slug, so this fails fast with the normal
     // 409 shape instead of starting a scan session that's doomed to fail partway through.
-    // Ignored-mod awareness (queue: rebuild-missing-ignored-mods) is why this now ALWAYS needs
-    // Vortex closed, not just when refreshFirst is non-empty -- listIgnoredMods is a genuinely new
-    // live Vortex-state read for this scan (previously it was pure filesystem, see
-    // missing-files-scan.js's own header comment), gated the exact same way every other live-state
-    // read in this router already is.
+    // Ignored-mod awareness (queue: rebuild-missing-ignored-mods) is why this now ALWAYS needs the
+    // same gate below, not just when refreshFirst is non-empty -- the per-collection Vortex-state
+    // read further down (Ignored mods + knownVortexModIds) is a genuinely new live-state read for
+    // this scan (previously it was pure filesystem, see missing-files-scan.js's own header comment),
+    // gated the exact same way every other live-state read in this router already is.
     router.post('/scan', async (req, res) => {
         if (!requireConfigured(res)) return;
         const collectionModIds = Array.isArray(req.body?.collectionModIds) ? req.body.collectionModIds : [];
@@ -395,13 +398,15 @@ function createRebuildMissingRouter(config) {
         if (scanSession.isActive()) return res.status(409).json({ error: 'A scan is already in progress.' });
         // Helper-first (2026-08-21, same treatment as /nexus-slug's own gate above) -- BOTH real
         // state.v2 dependencies inside this scan are Helper-capable now, not just refreshFirst's own
-        // per-collection slug lookups (resolveSlugForCollection, already Helper-aware): the ignored-
-        // mod loop below also gets a Helper path, since listIgnoredMods (sync-runner.js) has no
-        // Helper equivalent of its own and, left as the only path, would make this gate's removal
-        // unsafe -- its own try/catch already fails OPEN (empty ignored list) rather than aborting the
-        // scan, so simply skipping this outer 409 without also fixing that loop would have silently
-        // degraded scan ACCURACY (genuinely-ignored mods misreported as missing) for every collection,
-        // every time, whenever Vortex is open -- a real correctness regression, not a neutral no-op.
+        // per-collection slug lookups (resolveSlugForCollection, already Helper-aware): the
+        // ignored/knownVortexModIds loop below also gets a Helper path (runner.loadSyncStateViaHelper),
+        // falling back to a real state.v2 disk read (runner.loadSyncState) rather than sync-runner.js's
+        // old listIgnoredMods, which had no Helper equivalent and no knownVortexModIds of its own. A
+        // read failure there no longer fails open (silently treating every mod as not-Ignored) -- it
+        // excludes that one collection from the scan and reports it as its own failure instead (see
+        // that loop's own comment, "never scan without knowing which mods are Ignored", 2026-09-14).
+        // This outer 409 gate still matters: without it, the Helper-unavailable branch could try to
+        // open state.v2 while Vortex is concurrently writing it.
         const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
         if (!helperAvailable && syncLib.isVortexRunning()) {
             // "Currently busy", not "close it" -- this gate only ever trips when the Helper (which
@@ -439,53 +444,122 @@ function createRebuildMissingRouter(config) {
                     }
                 }
 
-                // One ignored-mod lookup per collection, turned into a plain identity-matching
-                // function via vortex-sync/lib.js's own makeIdentityMatcher -- that's the SAME
-                // cross-shape matcher this codebase already uses everywhere an Ignored/Disabled ref
-                // needs to be matched against a collection.json mod's own source, not new logic.
-                // Fails open per-collection (empty ignored list, not an aborted scan) -- a lookup
-                // failure here should never wrongly SUPPRESS the ignored check by crashing the whole
-                // run, and should never silently mislabel a real problem as ignored either; failing
-                // open just means this one collection's ignored mods (if any) show up as normal
-                // missing/archive-issue rows instead, same as before this feature existed.
-                //
-                // Helper-first (2026-08-21): when the Helper's reachable, `ignored` comes from
-                // loadSyncStateViaHelper's own already-computed field instead of the state.v2-only
-                // syncRunner.listIgnoredMods -- both are syncLib.extractIgnored(mod.rules) under the
-                // hood (confirmed by reading collection-runner.js's own queryLiveStateBatch), so this
-                // is the identical value, just read live instead of from a closed-Vortex DB copy. This
-                // is what makes skipping the gate above actually safe, not just permissive -- without
-                // this, a Helper-available scan would still silently lose ignored-mod accuracy for
-                // every collection, since listIgnoredMods itself has no Helper equivalent.
-                const ignoredMatchers = new Map();
-                for (const collectionModId of collectionModIds) {
-                    try {
-                        let ignored;
-                        if (helperAvailable) {
-                            const collectionInfo = runner.resolveCollectionInfo(staging, collectionModId);
-                            const syncState = await runner.loadSyncStateViaHelper({
-                                helperClient, syncLib, collectionModId, collection: collectionInfo.collection, stagingDir: staging,
-                            });
-                            ignored = syncState.ignored;
-                        } else {
-                            ignored = await syncRunner.listIgnoredMods({ stateDir: state, modId: collectionModId });
-                        }
-                        ignoredMatchers.set(collectionModId, syncLib.makeIdentityMatcher(ignored));
-                    } catch {
-                        ignoredMatchers.set(collectionModId, () => null);
-                    }
+                // One Vortex-state read per collection -- Ignored mods AND each kept mod's real,
+                // Vortex-assigned staging folder name (knownVortexModIds), from the SAME call. See
+                // loadIgnoredAndKnownIds' own comment (lib/missing-files-scan.js) for the full
+                // "never scan without knowing which mods are Ignored" reasoning (2026-09-14) and why
+                // a read failure here is never allowed to fail open into an empty ignored list. Kept
+                // as a shared lib function (not a second per-router thin wrapper like
+                // resolveSlugForCollection above) since the "isolate the collections that failed"
+                // behavior below is genuinely batch/RMF-specific, not something Rebuild Collection's
+                // own single-collection computePlan() needs.
+                const { ignoredMatchers, knownVortexModIdsByCollection, unreadableCollections } =
+                    await loadIgnoredAndKnownIds(collectionModIds, { stagingDir: staging, state, helperAvailable });
+                for (const [collectionModId, message] of unreadableCollections) {
+                    console.error(`[rebuild-missing-routes] /scan: could not read Vortex's mod data for "${collectionModId}" -- excluding it from this scan rather than guessing: ${message}`);
                 }
+                // Never scan blind: a collection this couldn't read real Ignored/folder-name data for
+                // is never handed to scanCollections() at all -- only the collections that DID resolve
+                // are. If every selected collection failed, there is nothing left to scan; stop with a
+                // clear error instead of showing an empty/misleading results screen.
+                const scannableCollectionIds = collectionModIds.filter((id) => !unreadableCollections.has(id));
+                if (scannableCollectionIds.length === 0) {
+                    const [firstMessage] = unreadableCollections.values();
+                    emitIfCurrent({
+                        type: 'scan-error', done: true, error: true,
+                        message: `Could not read Vortex's mod data for any of the selected collection(s): ${firstMessage}`,
+                    });
+                    return;
+                }
+
                 // Mod Exceptions list (queue: rebuild-missing-hand-pick-exceptions) -- a plain local
                 // file read (unlike ignoredMatchers above), loaded once per scan, same convention as
                 // lib/mod-exception-store.js's own header comment on why this is checked here rather
                 // than bolted on after scanOneMod's real classification.
                 const { modExceptionListDir } = appConfig.loadConfig();
-                const exceptionMatcher = modExceptionStore.makeExceptionMatcher(modExceptionListDir);
+                const exceptionMatcher = modExceptionStore.makeExceptionMatcher(appConfig.resolveDataDir('mod-exceptions', modExceptionListDir));
 
-                const collectionResults = await scanCollections(collectionModIds, {
+                const collectionResults = await scanCollections(scannableCollectionIds, {
                     stagingDir: staging, downloadsDir: downloads, sevenZipExe, ignoredMatchers, exceptionMatcher,
+                    knownVortexModIdsByCollection, helperAvailable,
                     onProgress: (p) => emitIfCurrent({ type: 'mod-scanned', ...p }),
                 });
+                // Add the excluded collections back into the report, in the SAME {collectionModId,
+                // name, error} shape scanCollections() already uses for an unreadable collection.json
+                // -- rmfRenderReport's own existing failedCollections handling already surfaces this
+                // correctly, no client change needed.
+                for (const [collectionModId, message] of unreadableCollections) {
+                    collectionResults.push({
+                        collectionModId, name: collectionDisplayName(collectionModId),
+                        error: `Could not read Vortex's mod data: ${message}`,
+                    });
+                }
+
+                // Auto-download missing archives during the scan (2026-09-14, director's own ask:
+                // "there is no reason to say 'hey, the file is missing', then have someone click on
+                // Download Archive, then have them click on extract archive -- it should be
+                // automated"). Same opt-in setting and Premium-only policy Rebuild Collection's own
+                // POST /runs already applies (web/rebuild-routes.js) -- reusing the setting rather than
+                // adding a second toggle. Runs AFTER scanCollections finishes classifying everything,
+                // so it only re-resolves mods that came back archive-missing with a real "we don't have
+                // the right file" reason (NOT_FOUND/HASH_MISMATCH -- missing-files-scan.js's own
+                // scanOneMod now threads classifyMod's own `code` through for exactly this). AMBIGUOUS
+                // (several byte-identical local candidates) is excluded -- that needs a human pick, the
+                // same exclusion Rebuild Collection's own eligibleForDownload applies. A mod that isn't
+                // actually Nexus-hosted (an off-site mod can also land on NOT_FOUND/HASH_MISMATCH --
+                // see rebuild-mod.js's own classifyMod) is caught by resolveAndDownloadArchive's own
+                // existing 'not-nexus' check below and just skipped, not treated as a failure.
+                const { downloadMissingArchives: autoDownloadEnabled } = appConfig.loadConfig();
+                const eligibleArchiveMissing = [];
+                for (const c of collectionResults) {
+                    if (c.error) continue;
+                    for (const m of c.modsArchiveMissing) {
+                        if (m.code === 'NOT_FOUND' || m.code === 'HASH_MISMATCH') eligibleArchiveMissing.push({ collectionModId: c.collectionModId, mod: m });
+                    }
+                }
+                // Reported to the client regardless of whether anything was actually eligible this
+                // scan -- rmfBuildActionsCell (rebuild-missing-app.js) uses `premium` to decide whether
+                // an archive-missing row still gets its own Download Archive button (hidden only when
+                // the setting is on AND the account is confirmed non-Premium; every other case --
+                // setting off, or Premium but this specific row wasn't eligible/still failed -- keeps
+                // the button as the real fallback, per the director's own enumerated cases).
+                const archiveAutoDownload = { enabled: !!autoDownloadEnabled, premium: null };
+                if (autoDownloadEnabled && eligibleArchiveMissing.length > 0) {
+                    emitIfCurrent({ type: 'checking-premium' });
+                    const apiKey = nexusModDownload.resolveApiKey();
+                    const premium = await nexusModDownload.checkPremiumStatus(apiKey);
+                    archiveAutoDownload.premium = !!premium.isPremium;
+                    if (!premium.isPremium) {
+                        emitIfCurrent({
+                            type: 'download-skipped', reason: 'not-premium', count: eligibleArchiveMissing.length,
+                            message: "Nexus API only allows automated downloads for Premium accounts -- this respects Nexus's ad-supported download model for free users. Download these archives manually from Nexus, or upgrade to Premium.",
+                        });
+                    } else {
+                        for (let i = 0; i < eligibleArchiveMissing.length; i++) {
+                            const { collectionModId, mod } = eligibleArchiveMissing[i];
+                            emitIfCurrent({ type: 'downloading-missing-archive', index: i + 1, total: eligibleArchiveMissing.length, name: mod.name });
+                            try {
+                                const { result } = await downloadAndRescan({ collectionModId, modId: mod.modId, fileId: mod.fileId, apiKey, skipPremiumCheck: true });
+                                // Move this mod out of its stale archive-missing entry and into the
+                                // bucket its fresh re-scan actually landed in, on the SAME collectionResults
+                                // entry the client is about to receive -- no second round trip needed.
+                                const cResult = collectionResults.find((c) => c.collectionModId === collectionModId);
+                                cResult.modsArchiveMissing = cResult.modsArchiveMissing.filter((x) => x !== mod);
+                                if (result.bucket === 'missing') cResult.modsWithMissing.push(result);
+                                else if (result.bucket === 'archive-missing') cResult.modsArchiveMissing.push(result);
+                                // bucket 'ok' -- nothing missing after all; simply drops off the report.
+                            } catch (e) {
+                                // 'not-nexus' (an off-site mod that happened to get NOT_FOUND/HASH_MISMATCH
+                                // too) or 'download-failed' (network/Nexus error) -- the row stays
+                                // archive-missing with its ORIGINAL reason either way. A failed auto-
+                                // download must never abort the rest of the scan.
+                                console.warn(`[rebuild-missing-routes] auto-download during scan: "${mod.name}" failed: ${e.message}`);
+                            }
+                        }
+                        emitIfCurrent({ type: 'downloading-missing-archives-complete' });
+                    }
+                }
+
                 // "Last checked" (queue: rebuild-missing-last-checked) -- unlike markFixed, this
                 // fires for every collection that reached scan completion here, unconditionally,
                 // regardless of whether it turned up anything missing. Matches lastFixedState's own
@@ -496,7 +570,7 @@ function createRebuildMissingRouter(config) {
                 const statMods = collectionResults.reduce((n, c) => n + (c.modsWithMissing?.length || 0), 0);
                 const statFiles = collectionResults.reduce((n, c) => n + (c.modsWithMissing || []).reduce((m, mod) => m + mod.missing.length, 0), 0);
                 emitIfCurrent({
-                    type: 'scan-complete', done: true, collectionResults, refreshFailures,
+                    type: 'scan-complete', done: true, collectionResults, refreshFailures, archiveAutoDownload,
                     stats: { collectionsChecked: statColls, modsWithMissing: statMods, filesMissing: statFiles },
                 });
             } catch (e) {
@@ -510,15 +584,13 @@ function createRebuildMissingRouter(config) {
     // fs.existsSync checks) rather than trusting the client-held scan result outright -- real time
     // may have passed since the scan ran.
     //
-    // Each file is a {source, destination} pair (see missing-files-scan.js's own resolveExpectedDestinations
-    // header comment) -- source is the file's REAL archive-internal path, destination is where it
-    // belongs in the staging folder, and the two differ whenever a mod-root wrapper was stripped
-    // (e.g. an archive with everything under a "Patches\" subfolder that Vortex's installer strips
-    // on install). extractMany needs the real SOURCE path to find the member at all, and preserves
-    // the archive's own internal folder structure verbatim into destDir -- only correct when nothing
-    // was stripped -- so this replays the same scratch-dir-then-copy pattern extract-mod.js's own
-    // installResolvedFiles already uses for a real rebuild: extract every source into a scratch temp
-    // dir in one 7z call, then copy each into its real destination under the staging folder.
+    // Each file is a {source, destination} pair (see lib/mod-install-plan.js's own
+    // resolveFomodOrSimpleFiles/resolveBundleFiles) -- source is the file's REAL archive-internal
+    // path, destination is where it belongs in the staging folder, and the two differ whenever a
+    // mod-root wrapper was stripped (e.g. an archive with everything under a "Patches\" subfolder
+    // that Vortex's installer strips on install). lib/extract-resolved-files.js's own
+    // extractResolvedFiles needs the real SOURCE path to find the member at all -- the exact same
+    // shared scratch-dir-then-copy Rebuild Collection's own extract-mod.js uses for a real rebuild.
     async function extractOneMod(item) {
         const { name, targetFolderName, archivePath, files } = item || {};
         if (!targetFolderName || !archivePath || !Array.isArray(files) || files.length === 0) {
@@ -536,30 +608,24 @@ function createRebuildMissingRouter(config) {
         if (stillMissing.length === 0) {
             return { name, ok: true, extracted: [], note: 'Already fixed -- nothing was actually missing anymore.' };
         }
-        const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rmf-extract-'));
+        // Shared scratch-extract-then-copy (2026-09-14, "share one install and extraction engine")
+        // -- used to run its own separate copy of this exact sequence, scratching under os.tmpdir()
+        // (typically C:) regardless of which drive staging actually lives on. `staging` itself is
+        // passed as scratchRoot (same convention Rebuild Collection's own extract-mod.js already
+        // uses -- scratch as a sibling of the real destination) so the final copy stays a fast
+        // same-drive operation and a large restore never risks filling a small C: drive.
         try {
-            await extractMany(sevenZipExe, archivePath, stillMissing.map((f) => f.source), scratchDir);
-            const reallyThere = [];
-            const stillGone = [];
-            for (const f of stillMissing) {
-                const scratchPath = path.join(scratchDir, f.source);
-                if (!fs.existsSync(scratchPath)) {
-                    stillGone.push(f.destination);
-                    continue;
-                }
-                const destFullPath = path.join(stagingModDir, f.destination);
-                fs.mkdirSync(path.dirname(destFullPath), { recursive: true });
-                fs.copyFileSync(scratchPath, destFullPath);
-                reallyThere.push(f.destination);
-            }
+            const skipped = await extractResolvedFiles(sevenZipExe, archivePath, stillMissing, stagingModDir, staging);
+            const skippedDestinations = stillMissing
+                .filter((f) => skipped.some((s) => s.path === f.source))
+                .map((f) => f.destination);
+            const reallyThere = stillMissing.filter((f) => !skippedDestinations.includes(f.destination)).map((f) => f.destination);
             return {
-                name, ok: stillGone.length === 0, extracted: reallyThere,
-                error: stillGone.length > 0 ? `${stillGone.length} file(s) were not found inside the archive: ${stillGone.join(', ')}` : undefined,
+                name, ok: skippedDestinations.length === 0, extracted: reallyThere,
+                error: skippedDestinations.length > 0 ? `${skippedDestinations.length} file(s) were not found inside the archive: ${skippedDestinations.join(', ')}` : undefined,
             };
         } catch (e) {
             return { name, ok: false, error: e.message };
-        } finally {
-            fs.rmSync(scratchDir, { recursive: true, force: true });
         }
     }
 
@@ -609,12 +675,24 @@ function createRebuildMissingRouter(config) {
                 for (let index = 0; index < items.length; index += 1) {
                     const item = items[index];
                     let result;
+                    // "Rebuild Missing Files: real per-mod status pills during Extract" (2026-09-14):
+                    // emitted BEFORE this item's own work starts, so the row shows what's actually
+                    // happening right now instead of the PREVIOUS item's finished state for the entire
+                    // duration of a long download or a large extraction.
+                    emitIfCurrent({
+                        type: 'mod-started', index: index + 1, total, name: item.name,
+                        phase: item.kind === 'archive-missing' ? 'downloading' : 'extracting',
+                    });
                     if (item.kind === 'archive-missing') {
                         // Checked alongside ordinary 'missing' rows (2026-09-02 v5 addendum) -- goes
                         // through the exact same download-then-extract chain the single-row Download
-                        // Archive button uses, not a second copy of that logic.
+                        // Archive button uses, not a second copy of that logic. onPhase moves this row
+                        // from "Downloading…" to "Extracting…" once the download itself finishes and a
+                        // real extraction actually starts (skipped entirely when the download alone
+                        // already resolved everything).
+                        const onPhase = (phase) => emitIfCurrent({ type: 'mod-phase', index: index + 1, name: item.name, phase });
                         try {
-                            const outcome = await downloadThenExtract({ collectionModId: item.collectionModId, modId: item.modId, fileId: item.fileId });
+                            const outcome = await downloadThenExtract({ collectionModId: item.collectionModId, modId: item.modId, fileId: item.fileId }, onPhase);
                             result = outcome.extractResult
                                 // extractResult already has {name, ok, extracted, error} -- reuse verbatim.
                                 ? outcome.extractResult
@@ -633,7 +711,14 @@ function createRebuildMissingRouter(config) {
                     if (result.ok && result.extracted?.length > 0 && item.collectionModId) {
                         fixedCollectionIds.add(item.collectionModId);
                     }
-                    emitIfCurrent({ type: 'mod-extracted', index: index + 1, total, name: result.name, ok: result.ok });
+                    // extracted/error/note carried through (previously just {ok}) so the row's own
+                    // final pill/detail can say what actually happened -- a real extracted count, the
+                    // real failure reason, or "already fixed, nothing was actually missing anymore"
+                    // (extractOneMod's own note) -- instead of a bare ok/fail with no detail at all.
+                    emitIfCurrent({
+                        type: 'mod-extracted', index: index + 1, total, name: result.name, ok: result.ok,
+                        extracted: result.extracted?.length || 0, error: result.error, note: result.note,
+                    });
                 }
                 for (const collectionModId of fixedCollectionIds) lastFixedState.markFixed(collectionModId);
                 emitIfCurrent({ type: 'extract-complete', done: true, results });
@@ -650,7 +735,15 @@ function createRebuildMissingRouter(config) {
     // download-failed) -- never partially downloads. Factored out (2026-09-02 v5 addendum) so both
     // /download-archive (one mod) and /extract's batch loop (a whole checked selection, mixed with
     // ordinary 'missing' items) share this exact real-download logic instead of it existing twice.
-    async function resolveAndDownloadArchive({ collectionModId, modId, fileId }) {
+    //
+    // apiKey/skipPremiumCheck (2026-09-14, "download missing archives automatically during the
+    // scan"): the scan's own auto-download loop checks Premium ONCE for the whole batch (same
+    // reasoning Rebuild Collection's own POST /runs already applies -- see its "checking-premium"
+    // phase), then passes the already-resolved key through here for every mod so this function
+    // doesn't re-hit the Nexus validate endpoint per mod. Both existing callers (/download-archive,
+    // downloadAndRescan's own default use inside downloadThenExtract) omit these and get the exact
+    // same per-call resolve+check as before this feature.
+    async function resolveAndDownloadArchive({ collectionModId, modId, fileId, apiKey: providedApiKey, skipPremiumCheck = false }) {
         if (!collectionModId || modId == null || fileId == null) {
             const err = new Error('collectionModId, modId, and fileId are required.'); err.code = 'bad-request'; throw err;
         }
@@ -670,12 +763,14 @@ function createRebuildMissingRouter(config) {
         // written to console) and the "downloaded, but the file still doesn't resolve everything" path
         // were completely silent.
         console.log(`[rebuild-missing-routes] downloading: "${mod.name}" (modId=${modId}, fileId=${fileId}, collection="${collectionModId}")`);
-        const apiKey = nexusModDownload.resolveApiKey();
-        const premium = await nexusModDownload.checkPremiumStatus(apiKey);
-        if (!premium.isPremium) {
-            console.warn(`[rebuild-missing-routes] downloading: "${mod.name}" refused -- account is not Premium.`);
-            const err = new Error("Nexus only allows automated downloads for Premium accounts -- this respects Nexus's ad-supported download model for free users. Download this archive manually from Nexus instead.");
-            err.code = 'not-premium'; throw err;
+        const apiKey = providedApiKey || nexusModDownload.resolveApiKey();
+        if (!skipPremiumCheck) {
+            const premium = await nexusModDownload.checkPremiumStatus(apiKey);
+            if (!premium.isPremium) {
+                console.warn(`[rebuild-missing-routes] downloading: "${mod.name}" refused -- account is not Premium.`);
+                const err = new Error("Nexus only allows automated downloads for Premium accounts -- this respects Nexus's ad-supported download model for free users. Download this archive manually from Nexus instead.");
+                err.code = 'not-premium'; throw err;
+            }
         }
         // mod.domainName (a real, per-mod field Nexus/Vortex's own collection.json schema carries --
         // confirmed live 2026-08-25, "TES Arena Bikini Armor"/modId 106393: collection info.domainName
@@ -706,6 +801,18 @@ function createRebuildMissingRouter(config) {
         return mod;
     }
 
+    // Download + re-scan only, no extraction (2026-09-14, "download missing archives automatically
+    // during the scan" -- factored out of downloadThenExtract below, which is now just this plus its
+    // own extract step). Used by the scan's own auto-download loop (which deliberately stops here --
+    // extraction is still a Continue-time action, same as every other row) AND by downloadThenExtract
+    // itself, so the "resolve, download, re-scan" sequence exists in exactly one place. apiKey/
+    // skipPremiumCheck pass straight through to resolveAndDownloadArchive (see its own header).
+    async function downloadAndRescan({ collectionModId, modId, fileId, apiKey, skipPremiumCheck }) {
+        const mod = await resolveAndDownloadArchive({ collectionModId, modId, fileId, apiKey, skipPremiumCheck }); // throws on failure
+        const result = await scanOneMod(mod, { downloadsDir: downloads, stagingDir: staging, sevenZipExe });
+        return { mod, result };
+    }
+
     // The shared download-then-extract chain (2026-09-02 v5 addendum): a freshly-downloaded Nexus
     // archive is definitionally the correct file (fetched by modId/fileId, not a guessed local
     // candidate), so there's nothing left to verify before extracting -- always re-scans then
@@ -716,9 +823,15 @@ function createRebuildMissingRouter(config) {
     // chained extraction, same as before this was factored out) for /download-archive's own
     // unchanged response shape; `extractResult` (null if no extraction was attempted) carries
     // extractOneMod's own {name, ok, extracted, error} shape for the batch route to reuse directly.
-    async function downloadThenExtract({ collectionModId, modId, fileId }) {
-        const mod = await resolveAndDownloadArchive({ collectionModId, modId, fileId }); // throws on failure
-        let result = await scanOneMod(mod, { downloadsDir: downloads, stagingDir: staging, sevenZipExe });
+    //
+    // onPhase (optional, "Rebuild Missing Files: real per-mod status pills during Extract", 2026-09-14):
+    // called with 'extracting' right before this function's own extractOneMod call, so the /extract
+    // batch loop below can tell its per-row pill apart from "still downloading" -- the single-row
+    // /download-archive route below doesn't pass one (it has no per-row pill of its own to update), and
+    // this function works exactly as before when omitted.
+    async function downloadThenExtract({ collectionModId, modId, fileId }, onPhase) {
+        const { mod, result: rescanResult } = await downloadAndRescan({ collectionModId, modId, fileId });
+        let result = rescanResult;
         let extractResult = null;
         // The download itself can succeed while the re-scan STILL reports this mod as missing
         // something (e.g. the freshly-downloaded archive doesn't actually contain what collection.json
@@ -729,6 +842,7 @@ function createRebuildMissingRouter(config) {
             console.log(`[rebuild-missing-routes] downloadThenExtract: "${mod.name}" re-scan confirms fully resolved.`);
         } else if (result?.bucket === 'missing') {
             console.warn(`[rebuild-missing-routes] downloadThenExtract: "${mod.name}" downloaded, but re-scan still reports ${result.missing.length} missing file(s) -- extracting now.`);
+            onPhase?.('extracting');
             extractResult = await extractOneMod({
                 name: result.name, targetFolderName: result.targetFolderName,
                 archivePath: result.archivePath, files: result.missing,
@@ -750,6 +864,134 @@ function createRebuildMissingRouter(config) {
     // so the report row can update in place without a full re-scan. Response shape unchanged from
     // before this was factored out (2026-09-02) -- rmfDownloadArchive's own frontend handling needs
     // no changes.
+    // "Open FOMOD mods get an Install button" (2026-09-17) -- looks up a mod purely by
+    // collectionModId+modId+fileId (same identity every other per-mod route in this router already
+    // uses), never by array position (a fresh scan could have reordered/removed rows since the
+    // client last rendered them).
+    function findModInCollection(collectionModId, modId, fileId) {
+        if (!collectionModId || modId == null || fileId == null) {
+            const err = new Error('collectionModId, modId, and fileId are required.'); err.code = 'bad-request'; throw err;
+        }
+        let collection;
+        try {
+            collection = loadCollection(path.join(staging, collectionModId, 'collection.json'));
+        } catch (e) {
+            const err = new Error(`Could not read this collection's collection.json: ${e.message}`); err.code = 'bad-request'; throw err;
+        }
+        const mod = collection.mods.find((m) => m.source?.modId === modId && m.source?.fileId === fileId);
+        if (!mod) { const err = new Error('That mod was not found in this collection anymore -- try re-scanning.'); err.code = 'not-found'; throw err; }
+        return mod;
+    }
+
+    // Peeks the mod's own real ModuleConfig.xml so the shared picker (web/public/fomod-picker.js)
+    // has something to render -- the exact same lib/fomod-picker-data.js detectFomodChoiceNeed
+    // Update Collection v2 already uses for its own gate, called here for a SINGLE mod at Install
+    // click time rather than a whole batch. allowAutoDownload is always false here: an archive-
+    // missing mod already has its own separate Download Archive action -- Install only ever offers
+    // itself on a Couldn't Check row, which by definition already has a real, locatable archive
+    // (scanOneMod only reaches 'skipped' for a mod whose archive it COULD read).
+    router.post('/fomod-picker-data', async (req, res) => {
+        if (!requireConfigured(res)) return;
+        // ignoreFomodValidation (2026-09-15, "validate the installer against the real schema"): the
+        // picker's own "Install Anyway" retry re-POSTs this SAME route with this flag set, after its
+        // first call came back reason:'invalid'.
+        const { collectionModId, modId, fileId, ignoreFomodValidation } = req.body || {};
+        try {
+            const mod = findModInCollection(collectionModId, modId, fileId);
+            const need = await detectFomodChoiceNeed(mod, downloads, sevenZipExe, false, undefined, !!ignoreFomodValidation);
+            if (!need) {
+                return res.status(409).json({ error: 'not-a-fomod', message: "This mod's archive couldn't be read as a FOMOD installer right now -- try re-scanning." });
+            }
+            // Spread `need` whole (2026-09-15, "the Install picker never receives the installed-file
+            // state") rather than hand-listing its fields -- the old hand-list silently dropped
+            // detectFomodChoiceNeed's own `installedFileState` (added after this hand-list was
+            // written), which is why the picker never had anything to pre-select against for either
+            // Install action. `need` already contains only client-meant fields (name/reason/
+            // parsedFomod/warnings/existingChoices/installedFileState) -- nothing internal to strip.
+            res.json({ needs: [{ modId: String(modId), ...need }] });
+        } catch (e) {
+            const status = e.code === 'bad-request' ? 400 : e.code === 'not-found' ? 404 : 500;
+            res.status(status).json({ error: e.message });
+        }
+    });
+
+    // Real Install action -- REWRITTEN 2026-09-17 ("Install opens an invisible picker, and Install
+    // should do a clean reinstall of the mod") from an additive-only extractResolvedFiles call (which
+    // only ever ADDED missing files into whatever was already in the staging folder) to a genuine
+    // clean reinstall: the SAME runner.installOpenFomodMod() Rebuild Collection's own install-fomod
+    // route already uses (web/rebuild-routes.js, `/logs/:filename/install-fomod`), reused verbatim
+    // rather than kept as a second, additive-only path. That function classifies the mod fresh with
+    // these picks applied, then rebuildMod() extracts into a temp folder and swapInRebuiltMod()
+    // replaces the staging folder outright (lock retries, rollback, and lib/game-edited-files.js's
+    // own rule all included) -- an Open FOMOD mod's staging folder can hold files from whatever
+    // options were picked before, so only adding missing files left the wrong mix behind. The end
+    // state matches a fresh Vortex install with these exact picks, not a patched-up old one.
+    router.post('/install-fomod', async (req, res) => {
+        if (!requireConfigured(res)) return;
+        // ignoreFomodValidation (2026-09-15, "validate the installer against the real schema"): set
+        // when this Finish came from a picker session that went through the "Install Anyway"
+        // override -- persisted onto the resulting choices so a later background rebuild of this
+        // exact same mod doesn't re-block on the same already-confirmed archive.
+        const { collectionModId, modId, fileId, picks, ignoreFomodValidation } = req.body || {};
+        if (!collectionModId || modId == null || fileId == null) {
+            return res.status(400).json({ error: 'collectionModId, modId, and fileId are required.' });
+        }
+        try {
+            const outcome = await runner.installOpenFomodMod({
+                collectionModId, stagingDir: staging, downloadsDir: downloads, sevenZipExe, modId, fileId, picks,
+                ignoreFomodValidation: !!ignoreFomodValidation,
+            });
+            // installOpenFomodMod()'s own REBUILD shape flattens rebuildMod()'s result fields (status,
+            // detail, ...) directly onto the outcome -- destructured out here so `mod`/`choices` (only
+            // needed for the best-effort savePicksToVortex call below) never leak into the response,
+            // and so `status` means the same thing (a real rebuildMod() status OR a non-REBUILD
+            // classifyMod() action kind, e.g. SKIP_NO_ARCHIVE) whichever branch this outcome took --
+            // status-labels.js's own STATUS_TEXT already maps both vocabularies, so the row can show
+            // either one the same way.
+            const { mod: installedMod, choices: installedChoices, kind: outcomeKind, ...rebuiltFields } = outcome;
+            const status = outcomeKind === 'REBUILD' ? rebuiltFields.status : outcomeKind;
+            const detail = outcomeKind === 'REBUILD' ? rebuiltFields.detail : outcome.detail;
+            console.log(`[rebuild-missing-routes] install-fomod: modId=${modId} fileId=${fileId} -- ${status}${detail ? `: ${detail}` : ''}`);
+            res.json({
+                result: {
+                    ok: status === 'REBUILT', status, detail,
+                    targetFolderName: outcome.targetFolderName, archiveName: outcome.archiveName,
+                    code: outcomeKind === 'REBUILD' ? undefined : outcome.code,
+                    candidateFile: outcomeKind === 'REBUILD' ? undefined : outcome.candidateFile,
+                    candidateFiles: outcomeKind === 'REBUILD' ? undefined : outcome.candidateFiles,
+                },
+            });
+
+            // Save the picks back to Vortex's own live state -- best-effort, AFTER the real response
+            // above, never something a save failure should block the Install action itself on. Fires
+            // whenever classification itself reached REBUILD, regardless of whether the rebuild's own
+            // status came back REBUILT or a failure (a lock, etc.) -- classification succeeding means
+            // the picks themselves were valid even if the file-swap transiently failed, same
+            // convention Rebuild Collection's own install-fomod route already established. See
+            // lib/vortex-live-fomod-choices.js's own savePicksToVortex for what each outcome means.
+            //
+            // Own try/catch, deliberately NOT sharing the outer one below (2026-09-17, carried over
+            // from this same route's prior version): res.json() already fired above, so anything
+            // throwing after that point must never reach a catch block that tries to send a SECOND
+            // response -- Express throws ERR_HTTP_HEADERS_SENT for exactly that.
+            if (outcomeKind === 'REBUILD') {
+                try {
+                    const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+                    const saveResult = await savePicksToVortex(installedMod, installedChoices, { helperAvailable });
+                    if (saveResult.saved) {
+                        console.log(`[rebuild-missing-routes] install-fomod: "${installedMod.name}" picks saved to Vortex's own live state (vortexModId=${saveResult.vortexModId}) -- won't show as Open FOMOD again.`);
+                    } else {
+                        console.warn(`[rebuild-missing-routes] install-fomod: "${installedMod.name}" picks NOT saved to Vortex (${saveResult.reason}${saveResult.message ? `: ${saveResult.message}` : ''}) -- this mod may still show as Open FOMOD on a future scan.`);
+                    }
+                } catch (e) {
+                    console.warn(`[rebuild-missing-routes] install-fomod: saving picks to Vortex threw for "${installedMod.name}": ${e.message}`);
+                }
+            }
+        } catch (e) {
+            res.status(e.code === 'NOT_A_FOMOD' ? 409 : 500).json({ error: e.message });
+        }
+    });
+
     router.post('/download-archive', async (req, res) => {
         if (!requireConfigured(res)) return;
         const { collectionModId, modId, fileId } = req.body || {};
@@ -763,46 +1005,10 @@ function createRebuildMissingRouter(config) {
         }
     });
 
-    // Real Deploy step (2026-09-01, replacing the old static "External Changes" warning on the Done
-    // screen -- director's own ask: "add Deploy button... replace with our standard deploy modal
-    // used elsewhere (Update collection)"). Same fire-and-poll shape and the exact same generic
-    // helperClient.deployAllMods()/getDeployAllProgress() pair Missing Masters' own /deploy-all
-    // already established (web/missing-masters-routes.js) -- deliberately not a per-mod-scoped
-    // deploy (this tool restores plain files into staging rather than tracking specific mod ids the
-    // way Update Collection does), same reasoning that route's own header comment gives. Module-scoped
-    // single-flight, same as that precedent: this is a real, out-of-band, whole-install Vortex
-    // operation, not something scoped to one scan.
-    let deployAllInProgress = false;
-    router.post('/deploy-all', async (req, res) => {
-        if (deployAllInProgress) {
-            return res.status(409).json({ error: 'A deploy is already in progress.' });
-        }
-        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-        if (!helperAvailable) {
-            return res.status(409).json({
-                error: 'helper-unavailable',
-                message: 'The Vortex Collection Helper extension must be reachable (Vortex genuinely open) to deploy from here.',
-            });
-        }
-        deployAllInProgress = true;
-        res.status(202).json({});
-        (async () => {
-            try {
-                await helperClient.deployAllMods();
-            } catch {
-                // deployAllMods never throws by contract; the progress endpoint below is what
-                // actually reports a real failure, so there is nothing useful to do here.
-            }
-        })().finally(() => { deployAllInProgress = false; });
-    });
-
-    router.get('/deploy-all/progress', async (req, res) => {
-        const progress = await helperClient.getDeployAllProgress();
-        // A null here means "no fresh update right now", NOT that the deploy failed -- the same
-        // event-loop congestion that makes a deploy slow can also time out this poll. Falls back to
-        // this route's own in-flight flag rather than reporting a false "not active".
-        res.json(progress || { active: deployAllInProgress, done: !deployAllInProgress });
-    });
+    // Real Deploy step -- MOVED to the shared web/deploy-routes.js (2026-09-14, "the same Deploy
+    // step on every Done screen"), mounted at /api/deploy. The client (rebuild-missing-app.js's
+    // rmfStartDeploy) now calls /api/deploy/all + /api/deploy/all/progress instead of this router's
+    // own copies.
 
     // Same "navigate straight into it" pattern as Missing Masters' own /open-staging-folder --
     // validated to actually be inside the configured staging directory first (cheap

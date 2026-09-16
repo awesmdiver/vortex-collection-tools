@@ -228,6 +228,11 @@ let ucv2GapsFixedForActiveReview = false;
 let ucv2KeepRemovedModIds = new Set();
 let ucv2DeleteArchives = true; // whether to also delete the archive for whatever ends up actually removed -- default ON (director's own call, 2026-08-28: cleaner reruns, less orphaned disk cruft)
 let ucv2FomodPicks = {}; // modId (string) -> {[stepIdx]: {[groupIdx]: number[]}} -- resolved FOMOD picks, carried across re-apply calls the same way keepInstalledModIds is
+// modId (string) set -- mods whose installer failed real schema validation and this session already
+// confirmed "Install Anyway" for (2026-09-15, "validate the installer against the real schema").
+// Carried across re-apply calls the SAME way ucv2FomodPicks is (the retry re-runs prepareApply's own
+// FOMOD gate from scratch, which would otherwise re-block on the identical already-confirmed mod).
+let ucv2IgnoreFomodValidationModIds = new Set();
 let ucv2PrerequisiteChoices = {}; // addedModKey -> 'install'|'skip' -- resolved missing-prerequisite gate choices, carried across re-apply calls the SAME way ucv2FomodPicks is (2026-08-31 fix: a transitive prerequisite chain re-shows the gate on a later round trip for a NEW mod, and without accumulating here, that later round's POST would only carry the newest round's choices, silently forgetting an earlier round's already-confirmed installs and re-asking about them from scratch)
 function ucv2UpdateReviewLockUI() {
   document.querySelectorAll('.ucv2-review-btn').forEach((btn) => {
@@ -687,6 +692,7 @@ async function ucv2StartReview(modId) {
   ucv2DeleteArchives = true;
   $ucv2('ucv2DeleteArchivesCheckbox').checked = true;
   ucv2FomodPicks = {};
+  ucv2IgnoreFomodValidationModIds = new Set();
   ucv2PrerequisiteChoices = {};
   ucv2UpdateReviewLockUI();
   ucv2HideCriticalError();
@@ -742,6 +748,15 @@ async function ucv2StartReview(modId) {
 window.ucv2StartReview = ucv2StartReview;
 
 function ucv2CancelReview() {
+  // Mid-operation guard ("coming back from another tool starts clean", 2026-09-17): a real Apply or
+  // Deploy still genuinely running (ucv2ApplyEventSource open, or ucv2DeployInFlight) must keep
+  // running in view when the user comes back or clicks Back -- resetting here would strand its own
+  // progress/result reporting. ucv2ApplyResultBackBtn is already disabled for the duration of a real
+  // deploy (ucv2UpdateDeployBanner's own toggle), but ucv2ResetOnEntry (arriving from elsewhere) has
+  // no such button to gate it, so the check lives here instead, covering both callers. Can't be
+  // reached mid-apply via the Review screen's own Cancel/Back -- ucv2ConfirmApply already navigates
+  // away to the dedicated Apply Progress screen before the apply's own stream even opens.
+  if (ucv2ApplyEventSource || ucv2DeployInFlight) return;
   ucv2ActiveReviewModId = null;
   ucv2CurrentReview = null;
   ucv2OptionalFlowActive = false;
@@ -774,6 +789,7 @@ function ucv2ResetOnEntry() {
   ucv2DeleteArchives = true;
   $ucv2('ucv2DeleteArchivesCheckbox').checked = true;
   ucv2FomodPicks = {};
+  ucv2IgnoreFomodValidationModIds = new Set();
   ucv2PrerequisiteChoices = {};
   ucv2CancelReview();
   // Real Refresh (2026-08-28, director's own explicit rule: "anytime we leave the tool and come
@@ -1798,458 +1814,13 @@ $ucv2('ucv2MissingPrereqContinue').addEventListener('click', () => {
   ucv2ConfirmApply();
 });
 
-// ---- FOMOD picker (2026-08-18, rebuilt same day) -- a real interactive step, deliberately
-// reusable (Phase 3's own Added-mod FOMOD needs can drive this same component later). Paginates
-// one real <installStep> at a time (left column: that step's own groups; right column: a fixed,
-// independently-scrolling image+description panel on hover), matching Vortex's own real FOMOD
-// wizard -- built directly against the approved
-// design/vortex-update-collection-v2-fomod-picker-mockup.html, confirmed current against real
-// Vortex source (installer_fomod_shared/views/InstallerDialog.tsx + dialog-fomod.scss). Renders
-// the real install-step/group/plugin tree (fomod-parser.js's own parsed structure, now carrying
-// visible/description/image/typeDescriptor too) for whichever mods need a fresh real choice:
-// "open" (no recorded choices at all) or "mismatch" (recorded choices no longer cleanly map to the
-// new revision's own ModuleConfig.xml). Steps through multiple mods one at a time -- a real patch
-// hub can have a dozen groups and 100+ plugins, so stacking several such mods in one modal would be
-// unusable -- and accumulates picks into the SAME ucv2FomodPicks object every apply call sends.
-//
-// This project has no live native engine to ask a real answer from (unlike real Vortex, which asks
-// its own C# fomod-installer process after every selection) -- so step visibility and each
-// plugin's real type (Required/Optional/Recommended/NotUsable/CouldBeUsable, both the static
-// <type> form and the condition-pattern <dependencyType> form) are re-derived HERE, client-side,
-// from the condition flags set by whatever the user has already picked in earlier steps/groups --
-// confirmed against the real engine's own evaluation order (Nexus-Mods/fomod-installer,
-// ConditionalOptionTypeResolver.ResolveOptionType: first matching pattern wins, else the default
-// type). "(Preset)" is genuinely NOT tied to a plugin's own "Recommended" type (an initial wrong
-// assumption, corrected by reading the real engine's XmlScriptExecutor.cs) -- it only ever marks an
-// option that matches a SUPPLIED prior choice by name, which for this project means the
-// "mismatch" case's own `existingChoices` (the collection's own recorded-but-no-longer-cleanly-
-// replayable picks). "open" mods never get preset marks, matching real Vortex exactly (nothing
-// supplied there either). Real images aren't fetched/rendered here (this project has no live
-// archive-image-serving path, and the approved mockup itself only shows a bracketed placeholder,
-// not a real image) -- the panel shows the real relative image PATH from the archive as text.
-let ucv2FomodPickerNeeds = [];
-let ucv2FomodPickerIndex = 0;
-let ucv2FomodPickerOnDone = null;
-let ucv2FomodPickerStepIdx = 0;
-let ucv2FomodPickerAnswers = {}; // {[stepIdx]: {[groupIdx]: number[]}} -- this mod's own picks so far
-let ucv2FomodPickerInitedSteps = new Set(); // `${modIndex}:${stepIdx}` -- Required/preset auto-pick runs once per step, not every render
-// `${modIndex}:${stepIdx}` of the step ucv2FomodRenderStep last drew -- lets it tell "genuinely
-// entered a new step" apart from "just toggled an option and re-rendered the same one" (see that
-// function's own comment on why it re-renders in place on every selection change).
-let ucv2FomodPickerLastRenderedStepKey = null;
-let ucv2FomodPickerPrevStepIdx = -1;
-let ucv2FomodPickerNextStepIdx = -1;
-// Which screen Cancel/Close returns to (2026-08-30) -- this picker is shared by two real gate flows
-// (main Apply -> Review screen, Optional Installs -> its own screen), and since prepareApply's own
-// gates now run AFTER navigating to the Apply Progress screen (see routes.js's own /apply handler),
-// closing the picker has to know which screen to go back to rather than assuming whichever one was
-// already showing, the way the old purely-synchronous gate could.
-let ucv2FomodPickerReturnScreenId = null;
-
-function ucv2ShowFomodPicker(needs, onDone, returnScreenId) {
-  ucv2FomodPickerNeeds = needs;
-  ucv2FomodPickerIndex = 0;
-  ucv2FomodPickerStepIdx = 0;
-  ucv2FomodPickerAnswers = {};
-  ucv2FomodPickerInitedSteps = new Set();
-  ucv2FomodPickerLastRenderedStepKey = null;
-  ucv2FomodPickerOnDone = onDone;
-  ucv2FomodPickerReturnScreenId = returnScreenId || null;
-  $ucv2('ucv2FomodPickerModal').classList.add('open');
-  ucv2FomodRenderStep();
-}
-
-function ucv2FomodGroupInputName(stepIdx, groupIdx) {
-  return `ucv2fomod-s${stepIdx}-g${groupIdx}`;
-}
-
-// A composite condition (an installStep's <visible>, or a typeDescriptor pattern's <dependencies>)
-// -- {operator: 'And'|'Or', flagDependencies: [{flag, value}]}. No dependencies at all (a bare
-// self-closing tag, or absent entirely) is vacuously true -- confirmed against a real archive
-// ("Window Shadows Ultimate - Patch Hub") whose own <visible operator="And"></visible> blocks have
-// zero children, meaning "always visible".
-function ucv2FomodEvalCondition(cond, flags) {
-  if (!cond) return true;
-  const deps = cond.flagDependencies || [];
-  if (deps.length === 0) return true;
-  const test = (d) => (flags.get(d.flag) ?? '') === d.value;
-  return cond.operator === 'Or' ? deps.some(test) : deps.every(test);
-}
-
-// First matching pattern wins; falls back to the default type if none match -- exact real engine
-// order (ConditionalOptionTypeResolver.ResolveOptionType).
-function ucv2FomodResolveType(typeDescriptor, flags) {
-  if (!typeDescriptor) return 'Optional';
-  for (const p of typeDescriptor.patterns || []) {
-    if (ucv2FomodEvalCondition(p.condition, flags)) return p.type;
-  }
-  return typeDescriptor.default || 'Optional';
-}
-
-function ucv2FomodAddGroupFlags(flags, group, selectedIndices) {
-  const selected = group.type === 'SelectAll'
-    ? group.plugins.map((_, idx) => idx)
-    : (selectedIndices || []);
-  selected.forEach((idx) => {
-    const plugin = group.plugins[idx];
-    if (!plugin) return;
-    (plugin.conditionFlags || []).forEach((f) => flags.set(f.name, f.value));
-  });
-}
-
-// Condition flags contributed by every group answered so far, STRICTLY BEFORE (stepIdx, groupIdx)
-// in document order -- every group of every earlier step, plus (when groupIdx is given) the
-// earlier groups of stepIdx itself. Rebuilt from scratch on every call (not cached) so going back
-// and changing an earlier answer correctly un-sets whatever flags that old pick had contributed --
-// mirrors choice-resolver.js's own flags-building, just done incrementally at pick-time instead of
-// after the fact. Pass groupIdx=undefined to get flags for the WHOLE of stepIdx (step-visibility
-// checks, which only care about steps strictly before stepIdx).
-function ucv2FomodFlagsUpTo(need, answers, stepIdx, groupIdx) {
-  const flags = new Map();
-  const steps = need.parsedFomod.installSteps;
-  for (let s = 0; s < stepIdx && s < steps.length; s++) {
-    const stepAnswers = answers[s] || {};
-    steps[s].groups.forEach((group, gi) => ucv2FomodAddGroupFlags(flags, group, stepAnswers[gi]));
-  }
-  if (groupIdx !== undefined && steps[stepIdx]) {
-    const stepAnswers = answers[stepIdx] || {};
-    for (let g = 0; g < groupIdx; g++) ucv2FomodAddGroupFlags(flags, steps[stepIdx].groups[g], stepAnswers[g]);
-  }
-  return flags;
-}
-
-// Visibility for every step, index-aligned -- each entry evaluated against flags from every step
-// strictly before it (a step's own answers can't affect its own visibility).
-function ucv2FomodComputeStepVisibility(need, answers) {
-  const steps = need.parsedFomod.installSteps;
-  return steps.map((step, i) => ucv2FomodEvalCondition(step.visible, ucv2FomodFlagsUpTo(need, answers, i)));
-}
-
-// The "mismatch" case's own existingChoices (the collection's own recorded-but-stale picks) --
-// matched by GROUP NAME (trimmed), same convention choice-resolver.js's resolveChoices() already
-// uses for its own recorded-choices matching. Returns the set of plugin NAMES (trimmed) that were
-// previously chosen for this exact step+group -- empty for "open" (need.existingChoices absent) or
-// any step/group with no corresponding recorded entry.
-function ucv2FomodPresetNames(need, stepIdx, groupIdx) {
-  if (!need.existingChoices || !need.existingChoices.options) return new Set();
-  const recordedStep = need.existingChoices.options[stepIdx];
-  if (!recordedStep) return new Set();
-  const step = need.parsedFomod.installSteps[stepIdx];
-  const groupNameTrimmed = (step.groups[groupIdx].name || '').trim();
-  const recordedGroup = (recordedStep.groups || []).find((g) => (g.name || '').trim() === groupNameTrimmed);
-  if (!recordedGroup) return new Set();
-  return new Set((recordedGroup.choices || []).map((c) => (c.name || '').trim()));
-}
-
-// Auto-picks Required-type plugins (can't be deselected, matches the real engine's own
-// `readOnly = plugin.type === 'Required'`) and, for the "mismatch" case only, whatever matches a
-// recorded preset choice by name -- runs exactly ONCE per (mod, step) so revisiting a step via
-// Back/Next never clobbers the user's own subsequent edits.
-function ucv2FomodInitStepAnswersOnce(need, stepIdx) {
-  const key = `${ucv2FomodPickerIndex}:${stepIdx}`;
-  if (ucv2FomodPickerInitedSteps.has(key)) return;
-  ucv2FomodPickerInitedSteps.add(key);
-  const step = need.parsedFomod.installSteps[stepIdx];
-  ucv2FomodPickerAnswers[stepIdx] = ucv2FomodPickerAnswers[stepIdx] || {};
-  step.groups.forEach((group, groupIdx) => {
-    if (group.type === 'SelectAll') return; // nothing to init -- server auto-includes these regardless
-    const flags = ucv2FomodFlagsUpTo(need, ucv2FomodPickerAnswers, stepIdx, groupIdx);
-    const presetNames = ucv2FomodPresetNames(need, stepIdx, groupIdx);
-    const forced = [];
-    group.plugins.forEach((plugin, idx) => {
-      const type = ucv2FomodResolveType(plugin.typeDescriptor, flags);
-      if (type === 'Required' || presetNames.has((plugin.name || '').trim())) forced.push(idx);
-    });
-    const isRadio = group.type === 'SelectExactlyOne' || group.type === 'SelectAtMostOne';
-    if (forced.length > 0) {
-      ucv2FomodPickerAnswers[stepIdx][groupIdx] = isRadio ? [forced[0]] : forced;
-    } else {
-      ucv2FomodPickerAnswers[stepIdx][groupIdx] = [];
-    }
-  });
-}
-
-function ucv2FomodBuildOptionRow({
-  id, inputType, name, value, checked, disabled, label, preset, title, onChange,
-}) {
-  const row = document.createElement('label');
-  row.className = `ucv2-fomod-option${disabled ? ' is-disabled' : ''}`;
-  row.htmlFor = id;
-  if (title) row.title = title;
-  const input = document.createElement('input');
-  input.type = inputType;
-  input.id = id;
-  input.name = name;
-  input.value = value;
-  input.checked = checked;
-  input.disabled = disabled;
-  input.addEventListener('change', onChange);
-  row.appendChild(input);
-  const span = document.createElement('span');
-  span.textContent = label;
-  if (preset) {
-    const presetSpan = document.createElement('span');
-    presetSpan.className = 'ucv2-fomod-option__preset';
-    presetSpan.textContent = ' (Preset)';
-    span.appendChild(presetSpan);
-  }
-  row.appendChild(span);
-  return row;
-}
-
-// Real DOM nodes with real event listeners (closures over the plugin object), NOT innerHTML with
-// inline attribute strings -- a real option name like "JK's Castle Dour" contains an apostrophe,
-// which breaks out of a single-quoted inline attribute string (confirmed live while building the
-// approved mockup).
-function ucv2FomodBuildGroupEl(need, stepIdx, group, groupIdx) {
-  const groupEl = document.createElement('div');
-  groupEl.className = 'ucv2-fomod-group';
-  const nameEl = document.createElement('div');
-  nameEl.className = 'ucv2-fomod-group__name';
-  nameEl.textContent = group.name;
-  // (required) (2026-08-28, director's own live catch: hit ucv2FomodValidateStep's own "needs
-  // exactly one pick" refusal with no advance warning this group even had that requirement) -- same
-  // two group types that refusal already gates on, so the label and the real validation can never
-  // drift out of sync.
-  if (group.type === 'SelectExactlyOne' || group.type === 'SelectAtLeastOne') {
-    const reqSpan = document.createElement('span');
-    reqSpan.className = 'muted';
-    reqSpan.style.fontWeight = '400';
-    reqSpan.style.textTransform = 'none';
-    reqSpan.style.letterSpacing = 'normal';
-    reqSpan.textContent = ' (required)';
-    nameEl.appendChild(reqSpan);
-  }
-  groupEl.appendChild(nameEl);
-
-  if (group.type === 'SelectAll') {
-    const p = document.createElement('p');
-    p.className = 'ucv2-fomod-group__all';
-    p.textContent = 'Everything in this group installs automatically -- nothing to choose.';
-    groupEl.appendChild(p);
-    return groupEl;
-  }
-
-  const isRadio = group.type === 'SelectExactlyOne' || group.type === 'SelectAtMostOne';
-  const inputName = ucv2FomodGroupInputName(stepIdx, groupIdx);
-  const flags = ucv2FomodFlagsUpTo(need, ucv2FomodPickerAnswers, stepIdx, groupIdx);
-  const presetNames = ucv2FomodPresetNames(need, stepIdx, groupIdx);
-  const selected = new Set((ucv2FomodPickerAnswers[stepIdx] && ucv2FomodPickerAnswers[stepIdx][groupIdx]) || []);
-
-  // A real "(None)" radio, so a genuine zero-selection SelectAtMostOne choice is representable
-  // without needing custom radio-deselect behavior no browser supports natively.
-  if (group.type === 'SelectAtMostOne') {
-    groupEl.appendChild(ucv2FomodBuildOptionRow({
-      id: `${inputName}-none`, inputType: 'radio', name: inputName, value: '-1',
-      checked: selected.size === 0, disabled: false, label: '(None)', preset: false,
-      onChange: () => ucv2FomodOnSelect(stepIdx, groupIdx, []),
-    }));
-  }
-
-  group.plugins.forEach((plugin, idx) => {
-    const type = ucv2FomodResolveType(plugin.typeDescriptor, flags);
-    const isRequired = type === 'Required';
-    const isNotUsable = type === 'NotUsable';
-    const row = ucv2FomodBuildOptionRow({
-      id: `${inputName}-${idx}`,
-      inputType: isRadio ? 'radio' : 'checkbox',
-      name: inputName,
-      value: String(idx),
-      checked: selected.has(idx),
-      disabled: isNotUsable || isRequired,
-      label: plugin.name,
-      preset: presetNames.has((plugin.name || '').trim()),
-      title: isNotUsable ? 'Not available with your other current picks' : (isRequired ? 'Required -- always installed' : undefined),
-      onChange: () => {
-        let next;
-        if (isRadio) {
-          next = [idx];
-        } else {
-          const cur = new Set((ucv2FomodPickerAnswers[stepIdx] && ucv2FomodPickerAnswers[stepIdx][groupIdx]) || []);
-          if (cur.has(idx)) cur.delete(idx); else cur.add(idx);
-          next = [...cur];
-        }
-        ucv2FomodOnSelect(stepIdx, groupIdx, next);
-      },
-    });
-    row.addEventListener('mouseenter', () => ucv2FomodShowPreview(plugin, row));
-    groupEl.appendChild(row);
-  });
-
-  return groupEl;
-}
-
-// Selecting an option can change OTHER options' real type (a dynamic typeDescriptor pattern keyed
-// on this group's own conditionFlags) or a later step's own visibility -- re-rendering the whole
-// step on every change is simple and correct (matches the real engine's own re-evaluate-on-select
-// behavior) and the DOM here is small enough that this is never a real performance concern.
-function ucv2FomodOnSelect(stepIdx, groupIdx, next) {
-  ucv2FomodPickerAnswers[stepIdx] = ucv2FomodPickerAnswers[stepIdx] || {};
-  ucv2FomodPickerAnswers[stepIdx][groupIdx] = next;
-  ucv2FomodRenderStep();
-}
-
-// Hover-driven, not click/selection-driven -- confirmed against real Vortex (InstallerDialog.tsx's
-// own `onMouseOver={this.showDescription}`). Real image bytes now (2026-08-28, director's own
-// build-out -- checked against Vortex's own real FOMOD wizard first, InstallerDialog.tsx's
-// renderImage(): it points a plain <img> at an already-fully-extracted file, no per-hover
-// extraction or data URI) -- lib/update-collection-v2-runner.js's own detectFomodChoiceNeed already
-// extracted this mod's real Images/ folder up front, served here via GET /fomod-image. onerror falls
-// back to the plain-text path (a genuinely missing/failed extraction, or a stale cache entry
-// overwritten by a later mod's own detection pass) rather than a broken-image icon.
-function ucv2FomodShowPreview(plugin, rowEl) {
-  document.querySelectorAll('#ucv2FomodPickerOptions .ucv2-fomod-option.is-active').forEach((r) => r.classList.remove('is-active'));
-  if (rowEl) rowEl.classList.add('is-active');
-  const el = $ucv2('ucv2FomodPickerPreview');
-  if (!plugin || (!plugin.image && !plugin.description)) {
-    el.innerHTML = '<div class="ucv2-fomod-preview__empty">Hover over an option to see its image and description.</div>';
-    return;
-  }
-  const need = ucv2FomodPickerNeeds[ucv2FomodPickerIndex];
-  const imgSrc = plugin.image && need && need.modId
-    ? `/api/update-collection-v2/fomod-image?modId=${encodeURIComponent(need.modId)}&imagePath=${encodeURIComponent(plugin.image)}`
-    : null;
-  const imgHtml = imgSrc
-    ? `<div class="ucv2-fomod-preview__image"><img src="${escHtmlUcv2(imgSrc)}" alt="" onerror="this.parentElement.innerHTML='🖼️ ${escHtmlUcv2(plugin.image)}'"></div>`
-    : '';
-  const descHtml = plugin.description
-    ? `<div class="ucv2-fomod-preview__desc">${escHtmlUcv2(plugin.description).replace(/\r?\n/g, '<br>')}</div>`
-    : '';
-  el.innerHTML = imgHtml + descHtml;
-}
-
-function ucv2FomodRenderStep() {
-  const need = ucv2FomodPickerNeeds[ucv2FomodPickerIndex];
-  const steps = need.parsedFomod.installSteps;
-  const stepIdx = ucv2FomodPickerStepIdx;
-  const step = steps[stepIdx];
-  const total = ucv2FomodPickerNeeds.length;
-
-  $ucv2('ucv2FomodPickerTitle').textContent = need.parsedFomod.moduleName || need.name;
-  $ucv2('ucv2FomodPickerStepName').textContent = step.name;
-  $ucv2('ucv2FomodPickerCounter').textContent = total > 1 ? `Mod ${ucv2FomodPickerIndex + 1} of ${total}` : '';
-  const introEl = $ucv2('ucv2FomodPickerIntro');
-  // The framing sentence only makes sense once -- real Vortex's own wizard drops it after page 1
-  // too (just the title + step name from then on).
-  introEl.style.display = stepIdx === 0 ? '' : 'none';
-  introEl.textContent = need.reason === 'open'
-    ? "This collection didn't record a choice for this mod's installer -- pick what you want installed, same as Vortex's own FOMOD wizard would ask."
-    : "This mod's real install options changed since the collection recorded its choice, so it can't be replayed automatically -- make a fresh pick. Anything marked (Preset) matches what the collection originally recorded.";
-  $ucv2('ucv2FomodPickerError').classList.add('hidden');
-
-  ucv2FomodInitStepAnswersOnce(need, stepIdx);
-
-  const optionsEl = $ucv2('ucv2FomodPickerOptions');
-  // Only a genuine step change (Next/Back, or advancing to the next mod) resets the scroll position
-  // -- a re-render triggered by just toggling one option within THIS SAME step (see
-  // ucv2FomodOnSelect's own comment on why it re-renders the whole step) preserves wherever you were
-  // scrolled to, instead of jumping back to the top of a long options list (2026-08-28, director's
-  // own live catch).
-  const stepKey = `${ucv2FomodPickerIndex}:${stepIdx}`;
-  const preservedScrollTop = optionsEl.scrollTop;
-  const isSameStep = ucv2FomodPickerLastRenderedStepKey === stepKey;
-  optionsEl.innerHTML = '';
-  step.groups.forEach((group, groupIdx) => optionsEl.appendChild(ucv2FomodBuildGroupEl(need, stepIdx, group, groupIdx)));
-  optionsEl.scrollTop = isSameStep ? preservedScrollTop : 0;
-  ucv2FomodPickerLastRenderedStepKey = stepKey;
-  ucv2FomodShowPreview(null); // empty until hover, matches real Vortex
-
-  const visibility = ucv2FomodComputeStepVisibility(need, ucv2FomodPickerAnswers);
-  let lastVisibleIdx = -1;
-  for (let i = 0; i < stepIdx; i++) if (visibility[i]) lastVisibleIdx = i;
-  let nextVisibleIdx = -1;
-  for (let i = stepIdx + 1; i < steps.length; i++) { if (visibility[i]) { nextVisibleIdx = i; break; } }
-  ucv2FomodPickerPrevStepIdx = lastVisibleIdx;
-  ucv2FomodPickerNextStepIdx = nextVisibleIdx;
-
-  const backBtn = $ucv2('ucv2FomodPickerBack');
-  if (lastVisibleIdx === -1) {
-    backBtn.style.visibility = 'hidden';
-  } else {
-    backBtn.style.visibility = 'visible';
-    backBtn.textContent = steps[lastVisibleIdx].name;
-  }
-
-  const nextBtn = $ucv2('ucv2FomodPickerNext');
-  const isLastMod = ucv2FomodPickerIndex === total - 1;
-  nextBtn.textContent = nextVisibleIdx === -1
-    ? (isLastMod ? 'Apply These Choices' : 'Finish & Next Mod →')
-    : steps[nextVisibleIdx].name;
-
-  // Real formula, confirmed from source: ProgressBar now={idx} max={steps.length-1}.
-  $ucv2('ucv2FomodPickerProgressFill').style.width = `${Math.round((stepIdx / Math.max(steps.length - 1, 1)) * 100)}%`;
-}
-
-// Validates the CURRENT step's own answers before advancing -- SelectExactlyOne/SelectAtLeastOne
-// actually got a real selection, matching the real FOMOD spec's own requirement rather than
-// leaving it for the server to reject after the fact.
-function ucv2FomodValidateStep(need, stepIdx) {
-  const step = need.parsedFomod.installSteps[stepIdx];
-  const stepAnswers = ucv2FomodPickerAnswers[stepIdx] || {};
-  for (let groupIdx = 0; groupIdx < step.groups.length; groupIdx++) {
-    const group = step.groups[groupIdx];
-    if (group.type === 'SelectAll') continue;
-    const indices = stepAnswers[groupIdx] || [];
-    if (group.type === 'SelectExactlyOne' && indices.length !== 1) {
-      return `"${step.name}" / "${group.name}" needs exactly one pick.`;
-    }
-    if (group.type === 'SelectAtLeastOne' && indices.length < 1) {
-      return `"${step.name}" / "${group.name}" needs at least one pick.`;
-    }
-  }
-  return null;
-}
-
-function ucv2FomodGoBack() {
-  if (ucv2FomodPickerPrevStepIdx === -1) return;
-  ucv2FomodPickerStepIdx = ucv2FomodPickerPrevStepIdx;
-  ucv2FomodRenderStep();
-}
-$ucv2('ucv2FomodPickerBack').addEventListener('click', ucv2FomodGoBack);
-
-function ucv2FomodPickerAdvance() {
-  const need = ucv2FomodPickerNeeds[ucv2FomodPickerIndex];
-  const error = ucv2FomodValidateStep(need, ucv2FomodPickerStepIdx);
-  if (error) {
-    const err = $ucv2('ucv2FomodPickerError');
-    err.innerHTML = `<div class="callout__title">⚠️ Can't advance this step</div><p>${escHtmlUcv2(error)}</p>`;
-    err.classList.remove('hidden');
-    return;
-  }
-  if (ucv2FomodPickerNextStepIdx !== -1) {
-    ucv2FomodPickerStepIdx = ucv2FomodPickerNextStepIdx;
-    ucv2FomodRenderStep();
-    return;
-  }
-  // Done with every visible step for this mod -- commit its picks (the same {[stepIdx]:
-  // {[groupIdx]: number[]}} shape buildFomodChoicesFromPicks already expects, unchanged), then
-  // move to the next mod in the queue, or finish entirely.
-  ucv2FomodPicks = { ...ucv2FomodPicks, [need.modId]: ucv2FomodPickerAnswers };
-  if (ucv2FomodPickerIndex < ucv2FomodPickerNeeds.length - 1) {
-    ucv2FomodPickerIndex += 1;
-    ucv2FomodPickerStepIdx = 0;
-    ucv2FomodPickerAnswers = {};
-    ucv2FomodRenderStep();
-  } else {
-    $ucv2('ucv2FomodPickerModal').classList.remove('open');
-    const onDone = ucv2FomodPickerOnDone;
-    ucv2FomodPickerOnDone = null;
-    if (onDone) onDone();
-  }
-}
-$ucv2('ucv2FomodPickerNext').addEventListener('click', ucv2FomodPickerAdvance);
-function ucv2CloseFomodPicker() {
-  $ucv2('ucv2FomodPickerModal').classList.remove('open');
-  ucv2SetApplyBtnState(false, 'Apply Update →');
-  // This gate can now arrive via the Apply Progress stream (2026-08-30, prepareApply's own gates run
-  // AFTER navigating there, not before -- see routes.js's own /apply handler) instead of only while
-  // still sitting on whichever screen started it -- see ucv2ShowFomodPicker's own returnScreenId
-  // comment. Only navigates when a caller actually supplied one (a no-op otherwise, matching the old
-  // behavior for any call site that never needs this).
-  if (ucv2FomodPickerReturnScreenId) ucv2GoScreen(ucv2FomodPickerReturnScreenId);
-}
-$ucv2('ucv2FomodPickerClose').addEventListener('click', ucv2CloseFomodPicker);
-$ucv2('ucv2FomodPickerCancel').addEventListener('click', ucv2CloseFomodPicker);
+// FOMOD picker moved to web/public/fomod-picker.js 2026-09-17 ("Open FOMOD mods get an Install
+// button") -- Rebuild Missing Files and Rebuild Collection now drive the SAME shared component
+// for their own new Install action against a real Open FOMOD row. showFomodPicker(needs, {onDone,
+// onCancel}) is the new public entry point; see that file's own header comment for the full API.
+// ucv2FomodPicks (declared near the top of this file) is still this file's OWN cross-retry
+// accumulator -- the shared picker itself holds no opinion on what a caller does with finished
+// picks, it just hands them back via onDone(picksByModId).
 
 // Real, live streamed progress (2026-08-21) -- mirrors pgpatcher-app.js's own pgpatcherBuild/
 // pgpHandleBuildEvent shape exactly: POST kicks off the real work and returns immediately, a paired
@@ -2387,7 +1958,35 @@ function ucv2HandleApplyEvent(frame) {
       return;
     }
     if (frame.code === 'fomod-choices-needed') {
-      ucv2ShowFomodPicker(frame.fomodChoiceNeeds || [], retry, returnScreen);
+      // Shared picker (web/public/fomod-picker.js) hands back this session's OWN picks directly
+      // (picksByModId) instead of relying on it to have mutated a shared global itself -- merge into
+      // this file's own cross-retry accumulator (a FOMOD gate can fire more than once across one
+      // overall apply attempt) before re-running the exact same retry the gate itself already needed.
+      showFomodPicker(frame.fomodChoiceNeeds || [], {
+        onIgnoreValidation: (need) => {
+          // No single-mod recheck endpoint exists for this batched gate -- record the override and
+          // re-run the WHOLE apply request from scratch (this file's own existing retry mechanism,
+          // already idempotent across FOMOD gate round-trips via ucv2FomodPicks). prepareApply/
+          // prepareApplyOptional will then either resolve this mod straight through (if a pick was
+          // already supplied for it) or reopen a fresh picker for its normal 'open'/'mismatch'
+          // choices -- returning a falsy value here tells fomod-picker.js this session is handling
+          // its own next step, so it must not try to continue this SAME modal in place.
+          ucv2IgnoreFomodValidationModIds = new Set([...ucv2IgnoreFomodValidationModIds, need.modId]);
+          hideFomodPickerModal();
+          retry();
+          return null;
+        },
+        onDone: (picksByModId) => {
+          ucv2FomodPicks = { ...ucv2FomodPicks, ...picksByModId };
+          retry();
+        },
+        onCancel: () => {
+          ucv2SetApplyBtnState(false, 'Apply Update →');
+          // Only navigates when a caller actually supplied one (a no-op otherwise, matching the old
+          // ucv2FomodPickerReturnScreenId behavior for any call site that never needed this).
+          if (returnScreen) ucv2GoScreen(returnScreen);
+        },
+      });
       return;
     }
     if (frame.code === 'helper-unavailable') {
@@ -2432,6 +2031,7 @@ async function ucv2ConfirmApply(extra) {
       keepInstalledModIds: [...ucv2KeepInstalledModIds],
       deleteArchives: ucv2DeleteArchives,
       fomodPicks: ucv2FomodPicks,
+      ignoreFomodValidationModIds: [...ucv2IgnoreFomodValidationModIds],
       prerequisiteChoices: ucv2PrerequisiteChoices,
       ...(extra || {}),
     });
@@ -2623,23 +2223,11 @@ $ucv2('ucv2ApplyResultSummary').addEventListener('click', (e) => {
   ucv2AttemptProblemRetry(btn, li, kind, modId);
 });
 
-// Shared "ThemedName (Cycle Helper)" cross-tool reference substitution (2026-08-31, extracted out of
-// ucv2RenderApplyResult's own resolveProblemMessage -- now used there AND by ucv2DeployAll's own
-// deploy-blocked-by-cycles handling, diagnostics/2026-08-30-real-apply-marathon-findings.md finding
-// #1). The server has no access to the browser's active theme, so it sends the plain "using Cycle
-// Helper" fallback wording with a distinct `code`; this is the one place that swap happens, for
-// EVERY server-authored cycle message, not just the retry-pass guard's own. Only substitutes when the
-// theme's own name for 'cycle-helper' actually differs from the plain "Cycle Helper" fallback (the
-// plain theme's own entry IS "Cycle Helper", so this never renders the redundant "Cycle Helper (Cycle
-// Helper)"). `matchCode` lets each caller gate on its own real code (`'cycle-detected'` for the
-// retry-pass guard, `'deploy-blocked-by-cycles'` for the deploy-progress poll) rather than assuming
-// every themed message uses the same one.
-function ucv2ThemedCycleMessage(rawMessage, code, matchCode) {
-  if (code !== matchCode) return rawMessage;
-  const themedName = window.themedToolName ? window.themedToolName('cycle-helper', 'Cycle Helper') : 'Cycle Helper';
-  const cycleHelperRef = themedName === 'Cycle Helper' ? 'Cycle Helper' : `${themedName} (Cycle Helper)`;
-  return rawMessage.replace('using Cycle Helper', `using ${cycleHelperRef}`);
-}
+// ucv2ThemedCycleMessage moved to deploy-panel.js as themedCycleMessage (2026-09-14, "the same
+// Deploy step on every Done screen") -- the logic was already tool-agnostic (used here for the
+// retry-pass guard's own 'cycle-detected' code, right below, AND by ucv2DeployAll's own
+// deploy-blocked-by-cycles handling), just namespaced to this one file. deploy-panel.js loads before
+// this file in index.html.
 
 // isOptionalPass (2026-08-28) -- true only when this 'done' came from the /apply-optional route
 // (frame.optional, set by ucv2HandleApplyEvent). Controls ONLY the Optional Mods Gate block at the
@@ -2710,7 +2298,7 @@ function ucv2RenderApplyResult(result, isOptionalPass) {
   // VIEW_SUFFIXES comment, window.themedToolName) -- only shown when the theme's own name for
   // 'cycle-helper' actually differs from the plain "Cycle Helper" fallback (the plain theme's own
   // entry IS "Cycle Helper", so this never renders the redundant "Cycle Helper (Cycle Helper)").
-  const resolveProblemMessage = (x) => ucv2ThemedCycleMessage(x.error, x.code, 'cycle-detected');
+  const resolveProblemMessage = (x) => themedCycleMessage(x.error, x.code, 'cycle-detected');
   (result.updatedResults || []).filter((x) => x.ok === false)
     .forEach((x) => pushProblem('Update', x.name, x.error, x.modId ? { kind: 'mod', modId: x.modId } : null, x.code));
   (result.removedResults || []).filter((x) => x.ok === false)
@@ -2905,6 +2493,7 @@ async function ucv2StartOptionalApply(mods) {
       optionalModKeys: mods.map(ucv2OptionalModId),
       targetRevisionNumber: r.newRevisionNumber,
       fomodPicks: ucv2FomodPicks,
+      ignoreFomodValidationModIds: [...ucv2IgnoreFomodValidationModIds],
     });
   } catch (e) {
     ucv2HandleError(e, () => ucv2StartOptionalApply(mods));
@@ -3019,7 +2608,6 @@ $ucv2('ucv2OptionalFinishBtn').addEventListener('click', () => {
 // Missing Masters' own mmDeployAll (web/public/missing-masters-app.js) already establishes for the
 // identical problem -- not a new pattern, mirrored directly rather than inventing a second one.
 let ucv2DeployInFlight = false;
-let ucv2DeployPollInterval = null;
 // Set by ucv2RenderApplyResult, read by ucv2ShowDeployComplete -- see that render function's own
 // comment for why the Optional Mods Gate waits for a real deploy success instead of showing here.
 let ucv2ApplyResultIsOptionalPass = false;
@@ -3036,44 +2624,23 @@ function ucv2UpdateDeployBanner() {
   $ucv2('ucv2ApplyResultBackBtn').disabled = ucv2DeployInFlight;
 }
 
-function ucv2StopDeployPolling() {
-  if (ucv2DeployPollInterval) {
-    clearInterval(ucv2DeployPollInterval);
-    ucv2DeployPollInterval = null;
-  }
-  ucv2UpdateDeployStallHint(false);
-}
-
-// See ucv2DeployAll's own header comment (right above where this is called) for the full real
-// reasoning. 15 ticks (the poll runs once per second) -- long enough that a normal, briefly-slow
-// response never trips it, short enough that the director isn't left wondering for a full minute
-// before getting a nudge to go check Vortex. Now only a FALLBACK -- see ucv2DeployStallMessage below
-// for the real, helper-reported signal that fires immediately instead of waiting this out.
-const UCV2_DEPLOY_STALL_THRESHOLD_TICKS = 15;
+// Used by ucv2StartApplyStallPolling below (the Apply-progress screen's own separate stall poller --
+// unrelated to the Deploy panel's own polling, which now runs entirely through deploy-panel.js's
+// shared startDeploy). Just an alias onto that file's own DEPLOY_STALL_THRESHOLD_TICKS so the two
+// don't drift -- deploy-panel.js loads before this file in index.html. 15 ticks (the poll runs once
+// per second) -- long enough that a normal, briefly-slow response never trips it, short enough that
+// the director isn't left wondering for a full minute before getting a nudge to go check Vortex. Now
+// only a FALLBACK -- see deploy-panel.js's own deployStallMessage for the real, helper-reported
+// signal that fires immediately instead of waiting this out.
+const UCV2_DEPLOY_STALL_THRESHOLD_TICKS = DEPLOY_STALL_THRESHOLD_TICKS;
 // Shared by both Deploy's own tick-count fallback and Apply's own SSE-quiet fallback below --
 // renamed from the old DEPLOY-only name (2026-08-29) once Apply started using it too.
 const UCV2_STALL_HINT_DEFAULT = '⚠️ Vortex is taking longer than usual to apply this update. Please be patient while it finishes.';
 
-// Real, helper-reported fact instead of a guess (2026-08-29, replacing pure tick-count guessing --
-// see diagnostics/2026-08-28-helper-live-vortex-events-spec.md). GET /mods/deploy-all/progress now
-// folds in externalChangesPending/blockingDialogs, read live from Vortex's own Redux state
-// (state.session.mods.changes / state.session.notifications.dialogs) by the helper -- when either is
-// set, Vortex genuinely IS sitting on a dialog right now, so the hint can show immediately instead of
-// waiting out UCV2_DEPLOY_STALL_THRESHOLD_TICKS. blockingDialogs' own `title` is the exact string a
-// person sees in Vortex's own dialog titlebar (the helper's own read), named directly rather than
-// left generic. externalChangesPending has no dialog title of its own (it's a dedicated state slice,
-// not the generic dialog queue) -- returns null when neither signal is set, so the caller falls back
-// to the tick-count-only default.
-function ucv2DeployStallMessage(progress) {
-  const dialogs = (progress && progress.blockingDialogs) || [];
-  if (dialogs.length > 0 && dialogs[0].title) {
-    return `⚠️ Vortex is waiting on you — check its window (<b>${escHtmlUcv2(dialogs[0].title)}</b>) to continue.`;
-  }
-  if (progress && progress.externalChangesPending) {
-    return '⚠️ Vortex has a popup open — check it and confirm the external changes.';
-  }
-  return null;
-}
+// ucv2DeployStallMessage moved to deploy-panel.js as deployStallMessage (2026-09-14, "the same
+// Deploy step on every Done screen") -- still used directly below by ucv2StartApplyStallPolling
+// (the Apply-progress screen's own separate poll, reading the same shared /api/deploy/all/progress
+// purely for its externalChangesPending/blockingDialogs fields).
 // Shared DOM update for both screens' own stall-hint element -- Deploy and Apply each keep their own
 // thin wrapper below (own element id) rather than callers passing an id around everywhere.
 function ucv2UpdateStallHint(elementId, show, message) {
@@ -3113,11 +2680,15 @@ function ucv2StartApplyStallPolling() {
   ucv2ApplyPollInterval = setInterval(async () => {
     let progress;
     try {
-      progress = await ucv2Api('GET', '/api/update-collection-v2/deploy-all/progress');
+      // Shared /api/deploy/all/progress (2026-09-14, "the same Deploy step on every Done screen") --
+      // this poll only ever reads its externalChangesPending/blockingDialogs fields, both still
+      // present regardless of which tool's Deploy (if any) is actually running, same as before this
+      // route moved.
+      progress = await ucv2Api('GET', '/api/deploy/all/progress');
     } catch {
       return; // best-effort only -- a failed read here just means no fresh signal this tick
     }
-    const factMessage = ucv2DeployStallMessage(progress);
+    const factMessage = deployStallMessage(progress);
     const quietMs = Date.now() - ucv2ApplyLastEventAt;
     const genuinelySlow = quietMs >= UCV2_DEPLOY_STALL_THRESHOLD_TICKS * 1000;
     ucv2UpdateApplyStallHint(!!factMessage || genuinelySlow, factMessage);
@@ -3130,7 +2701,13 @@ function ucv2StartApplyStallPolling() {
 // just toggled off for the duration of the poll via ucv2UpdateDeployBanner) -- once a deploy has
 // actually succeeded there's no "one step left" left to prompt for.
 function ucv2ShowDeployComplete() {
-  $ucv2('ucv2ApplyResultSuccessBanner').innerHTML = '<div class="callout__title">🎉 Deploy complete — your game is ready to launch. Happy gaming!</div>';
+  // "After a successful deploy, the Done screen shows one All Set banner" (2026-09-15) -- same
+  // wording/title all three tools sharing the Deploy step now use (Rebuild Missing Files,
+  // Rebuild Collection, Update Collection); Update Collection only has the one situation (its own
+  // Apply already finished by the time Deploy can even run, so there's no "nothing to update"
+  // variant the way the other two tools have a "nothing missing/rebuilt" case).
+  $ucv2('ucv2ApplyResultSuccessBanner').innerHTML = '<div class="callout__title">🎉 All Set — It\'s Game Time!</div>'
+    + '<div class="callout__body">Your collection has been updated and deployed. Your game is ready to launch!</div>';
   $ucv2('ucv2DeployPending').classList.add('hidden');
   // Only now -- not at the top of ucv2RenderApplyResult -- since offering optional mods before the
   // just-applied update is even deployed to the game reads as a step out of order.
@@ -3151,7 +2728,11 @@ function ucv2ShowDeployResult(kind, message, noRetry) {
   box.className = `callout callout--${kind === 'success' ? 'success' : 'warning'}`;
   box.innerHTML = '';
   if (kind === 'success') {
-    box.innerHTML = '<div class="callout__title">🎉 Deploy complete — your game is ready to launch. Happy gaming!</div>';
+    // Dead in practice (ucv2DeployAll's own onDone calls ucv2ShowDeployComplete() directly on
+    // success, never this with kind:'success') -- kept in sync anyway so no stale copy of the old
+    // wording lingers next to the live path above.
+    box.innerHTML = '<div class="callout__title">🎉 All Set — It\'s Game Time!</div>'
+      + '<div class="callout__body">Your collection has been updated and deployed. Your game is ready to launch!</div>';
     return;
   }
   box.innerHTML = `<div class="callout__title">⚠️ Deploy didn't confirm success</div><p>${escHtmlUcv2(message || "Vortex didn't confirm the deploy completed. You can try again from here, or open Vortex and click Deploy Mods directly.")}</p>`;
@@ -3227,79 +2808,47 @@ async function ucv2DeployAll() {
   }
   $ucv2('ucv2DeployPhase').textContent = 'Starting…';
 
-  try {
-    await ucv2Api('POST', '/api/update-collection-v2/deploy-all', {});
-  } catch (e) {
-    ucv2DeployInFlight = false;
-    $ucv2('ucv2DeployProgress').classList.add('hidden');
-    ucv2HandleError(e, () => ucv2DeployAll());
-    ucv2ShowDeployResult('error', e.message);
-    ucv2UpdateDeployBanner();
-    return;
-  }
-
-  ucv2StopDeployPolling();
-  // Stall reminder (2026-08-29, director's own ask) -- a real, repeatedly-confirmed pattern this
-  // whole testing session: when Vortex's own main thread is blocked (most often a native dialog it's
-  // waiting on -- "External Changes", "Mod not found" -- but sometimes just genuinely heavy work,
-  // e.g. an external-changes scan across a huge library), THIS poll starts failing/timing out
-  // repeatedly, and the director has no way to know that from our own tool's screen -- Vortex gives
-  // no indication either unless you're already looking at its window. Can't tell the two cases apart
-  // from here (a blocked dialog and slow-but-real work look identical from outside), but the right
-  // response is the same either way: nudge the director to go check Vortex. Tracks consecutive ticks
-  // with NO real progress (a failed poll, or a successful one reporting the exact same percent/text
-  // as last time) -- reset the instant real progress is seen, so a genuinely fast deploy never shows
-  // this at all.
-  let noProgressStreak = 0;
-  let lastProgressKey = null;
-  ucv2DeployPollInterval = setInterval(async () => {
-    let progress;
-    try {
-      progress = await ucv2Api('GET', '/api/update-collection-v2/deploy-all/progress');
-    } catch {
-      noProgressStreak += 1;
-      ucv2UpdateDeployStallHint(noProgressStreak >= UCV2_DEPLOY_STALL_THRESHOLD_TICKS);
-      return; // one failed poll is not evidence the deploy failed -- try again next tick
-    }
-    const progressKey = progress ? `${progress.percent ?? ''}|${progress.text ?? ''}` : null;
-    if (progressKey !== null && progressKey === lastProgressKey) {
-      noProgressStreak += 1;
-    } else {
-      noProgressStreak = 0;
-    }
-    lastProgressKey = progressKey;
-    // Real signal wins over the tick-count guess (see ucv2DeployStallMessage's own header comment) --
-    // shows the instant the helper reports Vortex is genuinely blocked, named by its real dialog
-    // title, rather than waiting out the old threshold. Falls back to the tick-count-only default
-    // hint when neither signal is set -- a genuinely slow deploy with no dialog open still needs
-    // SOME nudge.
-    const factMessage = ucv2DeployStallMessage(progress);
-    ucv2UpdateDeployStallHint(!!factMessage || noProgressStreak >= UCV2_DEPLOY_STALL_THRESHOLD_TICKS, factMessage);
-    if (progress && typeof progress.percent === 'number') {
-      $ucv2('ucv2DeployBar').style.width = `${Math.round(progress.percent)}%`;
-    }
-    if (progress && progress.text) $ucv2('ucv2DeployPhase').textContent = progress.text;
-    if (!progress || !progress.done) return;
-
-    ucv2StopDeployPolling(); // also clears the stall hint, see that function's own body
-    ucv2DeployInFlight = false;
-    $ucv2('ucv2DeployProgress').classList.add('hidden');
-    // Re-enables the Back button either way (2026-08-28, director's own catch -- the success branch
-    // below never called this, so a successful deploy left it disabled forever).
-    ucv2UpdateDeployBanner();
-    if (progress.error) {
-      // deployBlockedByCycles (2026-08-31, diagnostics/2026-08-30-real-apply-marathon-findings.md
-      // finding #1) -- the ONE real thing that lands here despite the Helper's own deploy call having
-      // returned/resolved normally: Vortex can silently abort a deploy because of a rule cycle, so
-      // "the call didn't throw" was never actually proof of success. Same theme-substitution every
-      // other server-authored cycle message already gets (ucv2ThemedCycleMessage), just gated on this
-      // route's own real code instead of the retry-pass guard's.
-      ucv2ShowDeployResult('error', ucv2ThemedCycleMessage(progress.error, progress.code, 'deploy-blocked-by-cycles'), progress.code === 'deploy-blocked-by-cycles');
-    } else {
-      ucv2ShowDeployComplete();
-      ucv2QuickVerifyAfterDeploy();
-    }
-  }, 1000);
+  // The actual fire-and-poll loop (percent/text tracking, stall-hint fact-message-or-tick-count,
+  // rule-cycle detection) now lives in deploy-panel.js's shared startDeploy (2026-09-14, "the same
+  // Deploy step on every Done screen") -- Rebuild Collection's and Rebuild Missing Files' own Deploy
+  // panels use the identical engine. Everything below is unchanged behavior, just reached through
+  // that engine's callbacks instead of this function's own setInterval.
+  await startDeploy('/api/deploy', ucv2Api, {
+    onError: (e) => {
+      ucv2DeployInFlight = false;
+      $ucv2('ucv2DeployProgress').classList.add('hidden');
+      ucv2HandleError(e, () => ucv2DeployAll());
+      ucv2ShowDeployResult('error', e.message);
+      ucv2UpdateDeployBanner();
+    },
+    onTick: (progress) => {
+      if (progress && typeof progress.percent === 'number') {
+        $ucv2('ucv2DeployBar').style.width = `${Math.round(progress.percent)}%`;
+      }
+      if (progress && progress.text) $ucv2('ucv2DeployPhase').textContent = progress.text;
+    },
+    onStall: (show, message) => ucv2UpdateDeployStallHint(show, message),
+    onDone: (progress) => {
+      ucv2DeployInFlight = false;
+      $ucv2('ucv2DeployProgress').classList.add('hidden');
+      // Re-enables the Back button either way (2026-08-28, director's own catch -- the success
+      // branch below never called this, so a successful deploy left it disabled forever).
+      ucv2UpdateDeployBanner();
+      if (progress.error) {
+        // deployBlockedByCycles (2026-08-31, diagnostics/2026-08-30-real-apply-marathon-findings.md
+        // finding #1) -- the ONE real thing that lands here despite the Helper's own deploy call
+        // having returned/resolved normally: Vortex can silently abort a deploy because of a rule
+        // cycle, so "the call didn't throw" was never actually proof of success. Same theme-
+        // substitution every other server-authored cycle message already gets (themedCycleMessage,
+        // deploy-panel.js), just gated on this route's own real code instead of the retry-pass
+        // guard's.
+        ucv2ShowDeployResult('error', themedCycleMessage(progress.error, progress.code, 'deploy-blocked-by-cycles'), progress.code === 'deploy-blocked-by-cycles');
+      } else {
+        ucv2ShowDeployComplete();
+        ucv2QuickVerifyAfterDeploy();
+      }
+    },
+  });
 }
 // Post-deploy quick reconciliation (2026-09-01, director's own explicit design) -- see
 // runner.quickVerifyAndFinalize's own header comment for the full "why". Fires automatically the

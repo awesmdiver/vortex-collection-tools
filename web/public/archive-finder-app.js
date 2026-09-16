@@ -797,11 +797,35 @@ $g('afShowSelectedOnlyInput').addEventListener('change', (e) => {
 
 // ---------- Extraction ----------
 
+// One modal, four inner states, toggled by section visibility -- mirrors the file-retriever's own
+// #frProgress/#frResult sibling-section pattern rather than stacking separate modal overlays:
+//   form     -- destination picker (today's only state)
+//   warning  -- some selected items collide with an existing destination file; confirm-first
+//   progress -- spinner while the real (or overwrite) extract request is in flight
+//   result   -- summary callout (+ failures list, if any) and a Return button
+function afExtractSetState(state) {
+  $g('afExtractFormSection').classList.toggle('hidden', state !== 'form');
+  $g('afExtractOverwriteWarning').classList.toggle('hidden', state !== 'warning');
+  $g('afExtractProgress').classList.toggle('hidden', state !== 'progress');
+  $g('afExtractResult').classList.toggle('hidden', state !== 'result');
+  $g('afExtractCancelBtn').classList.toggle('hidden', state === 'progress' || state === 'result');
+  $g('afExtractConfirmBtn').classList.toggle('hidden', state !== 'form');
+  $g('afExtractOverwriteConfirmBtn').classList.toggle('hidden', state !== 'warning');
+  $g('afExtractReturnBtn').classList.toggle('hidden', state !== 'result');
+}
+
+// Keys of items the most recent extraction actually wrote (ok:true) -- read by the Return button to
+// clear only those rows out of the main results table, per-key so a partial-failure batch correctly
+// leaves the failed rows in place for a retry.
+let afExtractLastOkKeys = [];
+
 $g('afExtractBtn').addEventListener('click', () => {
   if (!afState.selected.size) return;
   $g('afExtractCount').textContent = afState.selected.size;
   $g('afExtractDestInput').value = afState.outputFolder;
   $g('afExtractResults').innerHTML = '';
+  $g('afExtractResults').classList.add('hidden');
+  afExtractSetState('form');
   $g('afExtractModal').classList.remove('hidden');
 });
 $g('afExtractCancelBtn').addEventListener('click', () => {
@@ -815,30 +839,103 @@ $g('afExtractBrowseBtn').addEventListener('click', async () => {
     afHandleError(e);
   }
 });
-$g('afExtractConfirmBtn').addEventListener('click', async () => {
+
+// Shared by both the no-collision path (confirm click) and the overwrite-confirmed path (warning's
+// own confirm click) -- only the `overwrite` flag differs between them.
+async function afRunExtraction(overwrite) {
   const outputFolder = $g('afExtractDestInput').value.trim();
   const flat = $g('afExtractFlatInput').checked;
   const items = Array.from(afState.selected.values()).map((it) => ({ archivePath: it.archivePath, internalPath: it.internalPath }));
   const labels = Array.from(afState.selected.values());
-  $g('afExtractConfirmBtn').disabled = true;
-  const resultsEl = $g('afExtractResults');
-  resultsEl.textContent = 'Extracting…';
+  afExtractSetState('progress');
   try {
-    const res = await afApi('POST', '/api/archive-finder/extract', { items, outputFolder, flat });
+    const res = await afApi('POST', '/api/archive-finder/extract', { items, outputFolder, flat, overwrite });
     afState.outputFolder = res.outputFolder;
-    resultsEl.innerHTML = '';
+
+    const archivePaths = new Set();
+    const failedRows = [];
     res.results.forEach((r, i) => {
-      const label = labels[i] ? labels[i].fileName : r.key;
-      resultsEl.appendChild(r.ok
-        ? el('p', { class: 'ok' }, `✓ ${label} → ${r.path}`)
-        : el('p', { class: 'fail' }, `✗ ${label}: ${r.error}`));
+      if (r.ok) {
+        archivePaths.add(items[i].archivePath);
+      } else {
+        const label = labels[i] ? labels[i].fileName : r.key;
+        failedRows.push(`✗ ${label}: ${r.error}`);
+      }
     });
+    afExtractLastOkKeys = res.results.filter((r) => r.ok).map((r) => r.key);
+    const okCount = res.results.length - failedRows.length;
+    const allOk = failedRows.length === 0;
+
+    const resultsEl = $g('afExtractResults');
+    resultsEl.innerHTML = '';
+    if (failedRows.length > 0) {
+      failedRows.forEach((line) => resultsEl.appendChild(el('li', { class: 'fail' }, line)));
+      resultsEl.classList.remove('hidden');
+    } else {
+      resultsEl.classList.add('hidden');
+    }
+
+    $g('afExtractResultCallout').className = `callout ${allOk ? 'callout--success' : 'callout--warning'}`;
+    // Full-success copy is the reviewed pick from the archive-finder-overwrite-and-completion-copy
+    // queue item ("All done!" / "Successfully extracted {n} files from {m} archives."). The
+    // partial-failure line is this task's own (that copy pass only covered the full-success case) --
+    // matches this app's own established "N of M -- X failed (see below)" convention (see
+    // clear-update-flags-app.js's cufRenderResult), so it's consistent house style, not an
+    // unreviewed placeholder, but flagging it since it wasn't part of that Gemini pass.
+    $g('afExtractResultTitle').textContent = allOk ? '🎉 All done!' : '⚠️ Extracted with some problems';
+    $g('afExtractResultBody').textContent = allOk
+      ? `Successfully extracted ${okCount} file${okCount === 1 ? '' : 's'} from ${archivePaths.size} archive${archivePaths.size === 1 ? '' : 's'}.`
+      : `${okCount} of ${res.results.length} extracted (${failedRows.length} failed) — see below.`;
+    afExtractSetState('result');
   } catch (e) {
-    resultsEl.textContent = '';
-    resultsEl.appendChild(el('p', { class: 'fail' }, e.message));
+    afExtractSetState('form'); // let the user see the error and retry rather than stranding them mid-flow
+    afHandleError(e);
+  }
+}
+
+$g('afExtractConfirmBtn').addEventListener('click', async () => {
+  const outputFolder = $g('afExtractDestInput').value.trim();
+  const flat = $g('afExtractFlatInput').checked;
+  const items = Array.from(afState.selected.values()).map((it) => ({ archivePath: it.archivePath, internalPath: it.internalPath }));
+  $g('afExtractConfirmBtn').disabled = true;
+  try {
+    const check = await afApi('POST', '/api/archive-finder/extract', { items, outputFolder, flat, checkOnly: true });
+    if (check.results.some((r) => r.collides)) {
+      afExtractSetState('warning');
+    } else {
+      await afRunExtraction(false);
+    }
+  } catch (e) {
+    afHandleError(e);
   } finally {
     $g('afExtractConfirmBtn').disabled = false;
   }
+});
+$g('afExtractOverwriteConfirmBtn').addEventListener('click', async () => {
+  $g('afExtractOverwriteConfirmBtn').disabled = true;
+  try {
+    await afRunExtraction(true);
+  } finally {
+    $g('afExtractOverwriteConfirmBtn').disabled = false;
+  }
+});
+$g('afExtractReturnBtn').addEventListener('click', () => {
+  $g('afExtractModal').classList.add('hidden');
+  const okKeys = afExtractLastOkKeys;
+  afExtractLastOkKeys = [];
+  if (!okKeys.length) return;
+  const okKeySet = new Set(okKeys);
+  for (const key of okKeySet) afState.selected.delete(key);
+  // Individual file rows only exist in 'files' mode's currentUnits (archive-grouped items);
+  // 'archives' mode's currentUnits are whole-archive rows with no per-file entries to remove.
+  if (afState.renderMode === 'files') {
+    for (const group of afState.currentUnits) {
+      group.items = group.items.filter((it) => !okKeySet.has(AF_ITEM_KEY(it.archivePath, it.internalPath)));
+    }
+    afState.currentUnits = afState.currentUnits.filter((g) => g.items.length > 0);
+    afRenderCurrentPage();
+  }
+  afUpdateSelectionCount();
 });
 
 // ---------- Failed archives ----------

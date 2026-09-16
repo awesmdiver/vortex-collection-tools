@@ -20,6 +20,12 @@
       "whatItDoes": "Scans your active load order against the log of every merge you've built using the Forge. If an update to your collection quietly re-enabled the original separated plugins, or if a merged file went missing, The Crucible identifies the discrepancy and lets you resolve it instantly with one-click Revert or Restore actions."
     },
     {
+      "toolId": "add-mods-to-collections",
+      "banner": "theme-assets/skyrim/book/book-banner-the-high-scribe.png",
+      "lore": "When an elder moot revises the realm's roll of arms, no stonemason is dispatched to chisel the armories empty. The court archivist merely re-indexes the master scrolls across each stronghold's library at once, leaving the vault relics undisturbed while the inventories realign.",
+      "whatItDoes": "Adds or removes mods across multiple collections in a single pass. Pick your target collections first, choose the mods you want to adjust, and update the manifests all at once without touching any installed files on your drive."
+    },
+    {
       "toolId": "rebuild",
       "banner": "theme-assets/skyrim/book/book-banner-restoration.png",
       "lore": "Restoration is a perfectly valid school of magic because it wastes no time re-inventing the body it tends to; it simply closes wounds and returns weary flesh to full vigor. When a traveler collapses, a priest of Arkay does not demand they be born anew from infancy. The spell simply reaches down, knits the torn fibers back together in a burst of light, and sets you back on the road in moments.",
