@@ -1265,7 +1265,7 @@ $m('mergeStartBtn').addEventListener('click', mergeStartMerge);
 
 async function mergeProceedWithMerge(included, outputDir, overwrite) {
   mergeGoToStep(3);
-  $m('mergeProgressSub').innerHTML = `Building <strong>${mergeOutputFileName()}</strong> from ${included.length} plugin${included.length === 1 ? '' : 's'}.`;
+  $m('mergeProgressSub').innerHTML = `Building <strong>${escMergeHtml(mergeOutputFileName())}</strong> from ${included.length} plugin${included.length === 1 ? '' : 's'}.`;
   $m('mergeProgressBar').style.width = '0%';
   $m('mergeProgressText').textContent = 'Starting…';
 

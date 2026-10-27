@@ -7,7 +7,7 @@ const express = require('express');
 const syncLib = require('../lib/vortex-sync/lib');
 const cleanupScan = require('../lib/cleanup-scan');
 const excludeStore = require('../lib/cleanup-exclude-store');
-const helperClient = require('../lib/vortex-helper-client');
+const bridgeClient = require('../lib/vortex-bridge-client');
 const { createSseSession } = require('./sse-session');
 
 // Real SSE-streamed progress for scan-staging/scan-archives (2026-08-25, closes
@@ -46,11 +46,11 @@ function createCleanupRouter(config) {
     // from its own data file on every scan (no restart needed) -- only the FOLDER it lives in
     // (cleanupExcludeListDir) is baked in at startup, same as every other path field.
     //
-    // Opportunistic helper-extension path (2026-08-18, same "remove the Vortex-must-be-closed
+    // Opportunistic bridge-extension path (2026-08-18, same "remove the Vortex-must-be-closed
     // requirement" pattern already shipped for Cycle Helper/Rules Generator/Missing Masters -- see
     // TECHNICAL.md's "Clean Up report" section). Checked BEFORE vortexRunningGate, same as every
-    // other helper-integrated route: source the live mods data from
-    // helperClient.getAllMods()/getAllDownloads() when reachable, fall through to the exact
+    // other bridge-integrated route: source the live mods data from
+    // bridgeClient.getAllMods()/getAllDownloads() when reachable, fall through to the exact
     // original gated state.v2 path, untouched, when it's not.
     const scanStagingSession = createSseSession();
 
@@ -77,12 +77,12 @@ function createCleanupRouter(config) {
             const stopTicking = tickingPhase(emitIfCurrent, 'scanning', 'Scanning your staging folder…');
             try {
                 const { staging: ignoredStaging } = excludeStore.load(cleanupExcludeListDir);
-                const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-                const modsData = helperAvailable ? await helperClient.getAllMods() : null;
+                const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+                const modsData = bridgeAvailable ? await bridgeClient.getAllMods() : null;
                 let source = 'state.v2';
                 let result;
                 if (modsData) {
-                    source = 'helper-extension';
+                    source = 'bridge-extension';
                     result = cleanupScan.scanStagingFromLiveData(modsData.mods, staging, ignoredStaging);
                 } else {
                     // vortexRunningGate can't be used here -- the 202 response has already gone out,
@@ -108,7 +108,7 @@ function createCleanupRouter(config) {
     });
 
     // Needs BOTH getAllMods() (usedArchiveIds) and getAllDownloads() (the download-side lookups) --
-    // only takes the helper path when BOTH calls succeed, so a "helper answered /mods but not
+    // only takes the Vortex Bridge path when BOTH calls succeed, so a "Vortex Bridge answered /mods but not
     // /downloads" moment falls all the way through to state.v2 rather than a partial/wrong result.
     const scanArchivesSession = createSseSession();
 
@@ -133,17 +133,17 @@ function createCleanupRouter(config) {
             const stopTicking = tickingPhase(emitIfCurrent, 'scanning', 'Scanning your downloaded archives…');
             try {
                 const { archives: ignoredArchives } = excludeStore.load(cleanupExcludeListDir);
-                const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+                const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
                 let modsData = null;
                 let downloadsData = null;
-                if (helperAvailable) {
-                    modsData = await helperClient.getAllMods();
-                    downloadsData = modsData ? await helperClient.getAllDownloads() : null;
+                if (bridgeAvailable) {
+                    modsData = await bridgeClient.getAllMods();
+                    downloadsData = modsData ? await bridgeClient.getAllDownloads() : null;
                 }
                 let source = 'state.v2';
                 let result;
                 if (modsData && downloadsData) {
-                    source = 'helper-extension';
+                    source = 'bridge-extension';
                     result = cleanupScan.scanArchivesFromLiveData(modsData.mods, downloadsData.files, downloads, ignoredArchives);
                 } else {
                     if (syncLib.isVortexRunning()) {
@@ -168,7 +168,7 @@ function createCleanupRouter(config) {
     // kind = the side that was just scanned/deleted ('staging' | 'archives'); this checks the
     // OTHER side for exact-basename matches, THEN re-validates each against Vortex's real state --
     // a name match alone isn't proof (see crossCheck's own header comment for the real near-miss
-    // that made this necessary). Same opportunistic helper-extension path -- only ever needs ONE
+    // that made this necessary). Same opportunistic bridge-extension path -- only ever needs ONE
     // side's live data (mods for kind==='archives', downloads for kind==='staging'), so only that
     // one call is made, same reasoning as crossCheckFromLiveData's own comment.
     router.post('/cross-check', async (req, res) => {
@@ -182,15 +182,15 @@ function createCleanupRouter(config) {
         const otherDir = kind === 'staging' ? downloads : staging;
         if (!otherDir) return res.json({ matches: [] });
         try {
-            const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+            const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
             let liveData = null;
-            if (helperAvailable) {
-                liveData = kind === 'archives' ? await helperClient.getAllMods() : await helperClient.getAllDownloads();
+            if (bridgeAvailable) {
+                liveData = kind === 'archives' ? await bridgeClient.getAllMods() : await bridgeClient.getAllDownloads();
             }
             let source = 'state.v2';
             let matches;
             if (liveData) {
-                source = 'helper-extension';
+                source = 'bridge-extension';
                 matches = kind === 'archives'
                     ? cleanupScan.crossCheckFromLiveData(liveData.mods, null, kind, names, otherDir)
                     : cleanupScan.crossCheckFromLiveData(null, liveData.files, kind, names, otherDir);

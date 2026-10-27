@@ -41,6 +41,10 @@ async function pgpatcherApi(method, path, body, signal) {
 let pgpModsByName = new Map(); // name -> full mod object from /load (isNew, priority, conflicts, shaders, enabled, ...)
 let pgpRanked = [];    // mod names, top -> bottom = highest -> lowest priority
 let pgpUnranked = [];  // mod names still at priority -1
+// "Show mods that only hold BodySlide shape data" switch (off by default) and whether the current load
+// was a first-time setup -- both read by pgpDeriveRankedUnranked / pgpApplyShapeDataSwitch.
+let pgpShowShapeDataOnly = false;
+let pgpFreshSetup = false;
 let pgpOriginalRankedOrder = []; // snapshot of pgpRanked exactly as loaded, before any Sort A-Z/drag
                                   // -- lets "Priority order" restore the real priority order after
                                   // sorting A-Z to find a mod (director's own real workflow).
@@ -218,9 +222,9 @@ function pgpHideError() {
   $g('pgpatcherError').classList.add('hidden');
 }
 
-// The standardized "never available from the start" Helper message (DESIGN.md, "Helper-unavailable
+// The standardized "never available from the start" Vortex Bridge message (DESIGN.md, "Bridge-unavailable
 // messaging -- two real scenarios, two different messages"). Deliberately case 1 of the two, not
-// case 2's shared showHelperUnavailableModal: the check that produces this runs at the very START
+// case 2's shared showBridgeUnavailableModal: the check that produces this runs at the very START
 // of Deploy All, before anything has been re-enabled or deployed, so nothing is half-done and
 // nothing is at risk -- a flat refusal, not "it died on you partway through."
 //
@@ -231,15 +235,15 @@ function pgpHideError() {
 //
 // Kept separate from pgpShowError rather than folded into it: this needs the caller's own retry
 // action, which pgpShowError has no way to know. Takes retryFn so a future PGPatcher endpoint that
-// hard-requires the Helper can reuse it with its own action.
-function pgpShowHelperUnavailable(retryFn) {
+// hard-requires the Vortex Bridge can reuse it with its own action.
+function pgpShowBridgeUnavailable(retryFn) {
   const box = $g('pgpatcherError');
   box.textContent = '';
   box.appendChild(el('div', { class: 'callout__title' }, '🛑 Vortex Connection Required'));
-  box.appendChild(el('p', {}, 'This tool requires a live connection to the Vortex Collection Helper extension to run.'));
+  box.appendChild(el('p', {}, 'This tool requires a live connection to the Vortex Bridge extension to run.'));
   box.appendChild(el('ul', {}, [
     el('li', {}, [el('strong', {}, 'If you already have the extension installed:'), ' Make sure Vortex is actively running.']),
-    el('li', {}, [el('strong', {}, "If you haven't installed it yet:"), ' Install the Vortex Collection Helper extension into Vortex, restart Vortex, and then launch this tool again.']),
+    el('li', {}, [el('strong', {}, "If you haven't installed it yet:"), ' Install the Vortex Bridge extension into Vortex, restart Vortex, and then launch this tool again.']),
   ]));
   // Its own right-justified row below the text, never inline with the prose -- DESIGN.md records
   // that as a real finding rather than a preference: inline, it gets lost in the copy.
@@ -249,12 +253,12 @@ function pgpShowHelperUnavailable(retryFn) {
   box.classList.remove('hidden');
 }
 
-// Is this the Helper being unreachable, as opposed to any other failure? Matches on BOTH the status
+// Is this the Vortex Bridge being unreachable, as opposed to any other failure? Matches on BOTH the status
 // and the error code, the same pair cufHandleError checks -- the code alone would also match a
 // different route that happened to reuse the string, and the status alone is just "conflict"
 // (this route already returns a 409 for a deploy that's genuinely already running).
-function pgpIsHelperUnavailable(e) {
-  return e && e.status === 409 && e.body && e.body.error === 'helper-unavailable';
+function pgpIsBridgeUnavailable(e) {
+  return e && e.status === 409 && e.body && e.body.error === 'bridge-unavailable';
 }
 
 // ---------- Loading (step 1: read the data) ----------
@@ -387,7 +391,7 @@ async function pgpatcherLoad() {
     if (e.body && e.body.error === 'not-configured') {
       $g('pgpatcherIdle').classList.add('hidden');
       $g('pgpatcherNotConfigured').classList.remove('hidden');
-    } else if (pgpIsHelperUnavailable(e)) {
+    } else if (pgpIsBridgeUnavailable(e)) {
       // Vortex isn't running, so the DynDoLOD/output-mod gates never even ran -- say THAT, rather
       // than letting their own "couldn't disable it automatically" message stand in for it.
       // pgpTryWithGateConfirms deliberately rethrows this rather than branching on it: it is not a
@@ -395,8 +399,8 @@ async function pgpatcherLoad() {
       //
       // Retrying re-enters pgpatcherLoad from the very top, so once Vortex is open it runs the whole
       // preflight afresh and walks straight into the real DynDoLOD/output-mod confirms exactly as it
-      // would have if the Helper had been reachable first time.
-      pgpShowHelperUnavailable(pgpatcherLoad);
+      // would have if the Vortex Bridge had been reachable first time.
+      pgpShowBridgeUnavailable(pgpatcherLoad);
     } else {
       pgpShowError(e);
     }
@@ -469,7 +473,16 @@ async function pgpHandleReenableOffers(frame, outputModMessage, oneMoreStepEl) {
 // `mods`: an array of the full per-mod objects (same shape /load's own `data.mods` and
 // `pgpModsByName`'s own values already carry). `freshSetup` (default false): true only when /load's
 // own backend check found NO existing modrules.json at all -- see the /load route's own comment.
-function pgpDeriveRankedUnranked(mods, freshSetup) {
+// BodySlide ShapeData (pgtools 2.3.1+): `onlyShapeData` is true for a mod whose every mesh is ShapeData
+// (fork's `conflicts` JSON, additive field -- absent from older pgtools, which counts as false). The game
+// never loads those meshes, so such a mod has nothing to rank; it behaves as 2.1.1 did (as if it had no
+// meshes) unless the "Show mods that only hold BodySlide shape data" switch is on. A real shader still
+// lists it, same as a meshless mod with PBR textures.
+function pgpHasListableMeshes(mod, showShapeDataOnly) {
+  return mod.hasMeshes === true && (!!showShapeDataOnly || mod.onlyShapeData !== true);
+}
+
+function pgpDeriveRankedUnranked(mods, freshSetup, showShapeDataOnly) {
   // Real first-time-collection-install case (director's own spec, 2026-09-05): a brand-new
   // modrules.json doesn't exist yet, so real PGPatcher's own GUI has no "new mods" concept to fall
   // back to at all -- every scanned mod just lands in its one list, alphabetically (its own last-
@@ -499,7 +512,7 @@ function pgpDeriveRankedUnranked(mods, freshSetup) {
     // priority was off from a real PGPatcher save by the exact same constant (243), meaning the
     // RELATIVE order was already right and only the total was short.
     const ranked = mods
-      .filter((m) => m.hasMeshes === true || (Array.isArray(m.shaders) && m.shaders.length > 0))
+      .filter((m) => pgpHasListableMeshes(m, showShapeDataOnly) || (Array.isArray(m.shaders) && m.shaders.length > 0))
       .sort((a, b) => {
         const rankDiff = pgpMaxShaderRank(b) - pgpMaxShaderRank(a);
         if (rankDiff !== 0) return rankDiff;
@@ -531,7 +544,7 @@ function pgpDeriveRankedUnranked(mods, freshSetup) {
   // isNew doc comment). Sorted descending by priority -- highest first at the top, matching
   // PGModManager's own getModsByPriority() and the real GUI's own ranked-list convention.
   const ranked = mods
-    .filter((m) => m.priority !== -1 && (m.hasMeshes === true || pgpHasPatchableShader(m)))
+    .filter((m) => m.priority !== -1 && (pgpHasListableMeshes(m, showShapeDataOnly) || pgpHasPatchableShader(m)))
     .sort((a, b) => b.priority - a.priority)
     .map((m) => m.name);
   // Only show a GENUINELY NEW, patchable mod in "New mods" -- confirmed real bug, 2026-08-19:
@@ -543,8 +556,11 @@ function pgpDeriveRankedUnranked(mods, freshSetup) {
   // wrongly including every one of those already-known-but-unranked mods -- confirmed live
   // against the real GUI's own count (36 shown here vs. 2 actually pink/new in PGPatcher itself).
   // `isNew` is the real, authoritative field for this -- use it directly, not the priority proxy.
+  // `priority === -1` is ALSO required here (2026-10-25): `isNew` is fixed at /load time, but a
+  // ModruleSync import gives a new mod a real priority afterwards -- without this check it stayed
+  // "new" AND became ranked, so it showed in both lists. A mod with a real rank is Ranked only.
   const unranked = mods
-    .filter((m) => m.isNew === true && pgpHasPatchableShader(m))
+    .filter((m) => m.isNew === true && m.priority === -1 && pgpHasPatchableShader(m))
     .map((m) => m.name);
   return { ranked, unranked };
 }
@@ -564,7 +580,8 @@ function pgpHandleLoadEvent(frame) {
     pgpActiveShaderLabels = new Set(
       (Array.isArray(data.patchers) ? data.patchers : []).map((id) => PGP_PATCHER_ID_TO_SHADER_LABEL[id]).filter(Boolean)
     );
-    const derived = pgpDeriveRankedUnranked(data.mods, data.modrulesExisted === false);
+    pgpFreshSetup = data.modrulesExisted === false;
+    const derived = pgpDeriveRankedUnranked(data.mods, pgpFreshSetup, pgpShowShapeDataOnly);
     pgpRanked = derived.ranked;
     pgpUnranked = derived.unranked;
     pgpOriginalRankedOrder = [...pgpRanked]; // snapshot BEFORE anything (Sort A-Z, drag) can mutate it
@@ -689,8 +706,8 @@ async function pgpatcherBuild() {
     result = await pgpTryWithGateConfirms('POST', '/api/pgpatcher/build', pgpBuildRequestBody());
   } catch (e) {
     // The build twin of pgpatcherLoad's own branch just above -- same reasoning, same retry shape.
-    if (pgpIsHelperUnavailable(e)) {
-      pgpShowHelperUnavailable(pgpatcherBuild);
+    if (pgpIsBridgeUnavailable(e)) {
+      pgpShowBridgeUnavailable(pgpatcherBuild);
       return;
     }
     pgpShowError(e);
@@ -794,7 +811,7 @@ function pgpHandleBuildEvent(frame) {
 // IS the re-enable (the backend flips the flag first, then deploys), not a separate step after one
 // already happened. Poll-driven, not SSE -- the
 // backend's own deployAllMods()/getDeployAllProgress() pair is itself poll-shaped
-// (lib/vortex-helper-client.js), so this reuses that same shape rather than wrapping it in an SSE
+// (lib/vortex-bridge-client.js), so this reuses that same shape rather than wrapping it in an SSE
 // session the underlying primitive doesn't have. Reuses the SAME progress-bar/phase-text visual
 // pattern the build's own progress view already established (pgpSetBuildingPhase), just against the
 // deploy-specific elements.
@@ -829,12 +846,12 @@ async function pgpDeployAll() {
     // caller triggered this deploy -- the copy ("one step left, Deploy to finish") is still accurate
     // either way, since a build genuinely did complete and deploying genuinely is what's left.
     $g('pgpatcherDeployPending').classList.remove('hidden');
-    // Deploy All is the one PGPatcher action that genuinely cannot work without the Helper -- it
+    // Deploy All is the one PGPatcher action that genuinely cannot work without the Vortex Bridge -- it
     // runs Vortex's own real deploy through it, with no read-only fallback. That earns the
     // standardized callout and a Retry rather than a bare error dump, since "start Vortex and try
     // again" is a real, achievable fix the user can act on right there.
-    if (pgpIsHelperUnavailable(e)) {
-      pgpShowHelperUnavailable(pgpDeployAll);
+    if (pgpIsBridgeUnavailable(e)) {
+      pgpShowBridgeUnavailable(pgpDeployAll);
       return;
     }
     pgpShowError(e);
@@ -1118,8 +1135,12 @@ function pgpApplyConflictHighlights() {
     if (selIdx === -1) continue; // the selected mod itself isn't ranked -- nothing to compare against
     const mod = pgpModsByName.get(selName);
     if (!mod) continue;
+    // A conflict that only arises on BodySlide ShapeData meshes (`shapeDataConflicts`, a subset of
+    // `conflicts`) is not marked: the game never loads those meshes. It stays in the data.
+    const shapeDataOnly = new Set(Array.isArray(mod.shapeDataConflicts) ? mod.shapeDataConflicts : []);
     for (const conflictName of mod.conflicts) {
       if (selectedNames.has(conflictName)) continue; // don't highlight another selected row
+      if (shapeDataOnly.has(conflictName)) continue;
       const idx = pgpRanked.indexOf(conflictName);
       if (idx === -1) continue; // conflicting mod isn't ranked either -- no resolved winner yet
       const row = document.querySelector(`.pgp-row[data-panel="ranked"][data-name="${CSS.escape(conflictName)}"]`);
@@ -1186,6 +1207,65 @@ function pgpWireToolbar(panel) {
 pgpWireToolbar('ranked');
 pgpWireToolbar('unranked');
 $g('pgpatcherConflictHighlightToggle').addEventListener('change', pgpApplyConflictHighlights);
+
+// "Show mods that only hold BodySlide shape data": adds to / removes from the two lists exactly the mods
+// that switch decides, without re-deriving them -- a re-derive would throw away drags, cuts and imports
+// done since the load. Hidden mods are simply not in `pgpRanked`/`pgpUnranked`, so /save leaves their
+// modrules.json entries as they are (same as before 2.3.1, when pgtools did not list them at all). The
+// load-time snapshots (Priority order, Revert Changes) are kept in step so they never resurrect a mod the
+// switch has hidden or forget one it has shown.
+function pgpInsertByReference(list, names, referenceOrder) {
+  // Lands right after the closest mod that precedes it in the reference order and is in `list` (so a
+  // list the user has re-ordered since the load keeps its order), else before the closest follower.
+  for (const name of names) {
+    if (list.includes(name)) continue;
+    const at = referenceOrder.indexOf(name);
+    let insertAt = list.length;
+    let found = false;
+    for (let i = at - 1; i >= 0 && !found; i--) {
+      const pos = list.indexOf(referenceOrder[i]);
+      if (pos !== -1) { insertAt = pos + 1; found = true; }
+    }
+    for (let i = at + 1; i < referenceOrder.length && !found; i++) {
+      const pos = list.indexOf(referenceOrder[i]);
+      if (pos !== -1) { insertAt = pos; found = true; }
+    }
+    list.splice(insertAt, 0, name);
+  }
+}
+
+function pgpApplyShapeDataSwitch() {
+  const mods = [...pgpModsByName.values()];
+  const withIt = pgpDeriveRankedUnranked(mods, pgpFreshSetup, true);
+  const without = pgpDeriveRankedUnranked(mods, pgpFreshSetup, false);
+  const keptRanked = new Set(without.ranked);
+  const keptUnranked = new Set(without.unranked);
+  const extraRanked = withIt.ranked.filter((n) => !keptRanked.has(n));
+  const extraUnranked = withIt.unranked.filter((n) => !keptUnranked.has(n));
+  const extra = new Set([...extraRanked, ...extraUnranked]);
+  if (extra.size === 0) return;
+
+  if (pgpShowShapeDataOnly) {
+    const placed = new Set([...pgpRanked, ...pgpUnranked]);
+    pgpInsertByReference(pgpRanked, extraRanked.filter((n) => !placed.has(n)), withIt.ranked);
+    pgpInsertByReference(pgpOriginalRankedOrder, extraRanked, withIt.ranked);
+    pgpInsertByReference(pgpUnranked, extraUnranked.filter((n) => !placed.has(n)), withIt.unranked);
+    pgpInsertByReference(pgpOriginalUnranked, extraUnranked, withIt.unranked);
+  } else {
+    pgpRanked = pgpRanked.filter((n) => !extra.has(n));
+    pgpUnranked = pgpUnranked.filter((n) => !extra.has(n));
+    pgpOriginalRankedOrder = pgpOriginalRankedOrder.filter((n) => !extra.has(n));
+    pgpOriginalUnranked = pgpOriginalUnranked.filter((n) => !extra.has(n));
+    for (const key of [...pgpSelected]) if (extra.has(key.slice(key.indexOf(':') + 1))) pgpSelected.delete(key);
+    pgpClipboard = pgpClipboard.filter((n) => !extra.has(n));
+  }
+  pgpRenderAll();
+}
+
+$g('pgpatcherShowShapeDataToggle').addEventListener('change', () => {
+  pgpShowShapeDataOnly = $g('pgpatcherShowShapeDataToggle').checked;
+  pgpApplyShapeDataSwitch();
+});
 
 // Ranked panel only -- director's own real workflow: Sort A-Z to FIND a mod, then need a way back to
 // the real priority order without reloading from PGPatcher. Restores pgpOriginalRankedOrder's own
@@ -1493,7 +1573,7 @@ function pgpApplyImportedModrules(modrules, filename) {
     if (imported.priority !== -1) pgpEnabled.set(name, true);
     matched += 1;
   }
-  const derived = pgpDeriveRankedUnranked([...pgpModsByName.values()]);
+  const derived = pgpDeriveRankedUnranked([...pgpModsByName.values()], false, pgpShowShapeDataOnly);
   pgpRanked = derived.ranked;
   pgpUnranked = derived.unranked;
   pgpDirty = true;

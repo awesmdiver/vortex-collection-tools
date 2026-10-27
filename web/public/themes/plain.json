@@ -95,6 +95,26 @@
       "heroBody": "Removing a collection in Vortex can easily wipe out mods that your other collections are still using behind the scenes. This tool checks your entire setup first, highlights every shared mod, and lets you choose individually what to keep or delete. You can safely clear out old collections without worrying about breaking anything else.",
       "cardDesc": "Checks for mods shared with your other collections before removing anything, so nothing else breaks."
     },
+    "removed-from-main": {
+      "name": "Removed From Main",
+      "emoji": "🍂",
+      "function": "Removed From Main",
+      "heroTitle": "Clear Out What Main Dropped",
+      "heroBody": "When a main collection drops a mod, the upgrade you matched to it is left behind. This finds those leftovers and clears them out, keeping your collection in step with the original.",
+      "cardDesc": "Clears out your matching mods when the main collection drops the originals.",
+      "tagline": "When main drops a mod, its upgrade goes too.",
+      "howTo": [
+        "Pick your main collection and your new collection.",
+        "Press Compare.",
+        "Untick anything you want to keep, then delete the rest."
+      ],
+      "lead": "These mods are gone from main. The mods you matched to them go too.",
+      "colGone": "Gone from main",
+      "colMine": "Your matching mod",
+      "confirm": "They are uninstalled and deleted, and taken out of your new collection. A backup is made first.",
+      "empty": "Nothing to delete. Your new collection matches main.",
+      "noLinks": "{rg} has not saved the matches for this pair. Open {rg}, press Save the links for this pair, then come back."
+    },
     "report-stats": {
       "name": "Stats",
       "emoji": "📊",

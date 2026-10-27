@@ -16,6 +16,8 @@
   if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
 })();
 </script>
+<!-- Adds the X-VCT header the server requires on every changing request; must load before any page script. -->
+<script src="vct-fetch.js"></script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -59,6 +61,19 @@
   </div>
 </div>
 
+<!-- Shown by shell.js's showServerUnreachableError() when the server DOES answer: the failure was a bug in
+     the page, not a stopped server. New words: needs its Gemini pass. -->
+<div id="pageErrorModal" class="modal-overlay hidden">
+  <div class="modal modal--warning">
+    <h2>⚠️ Something Went Wrong</h2>
+    <p>Something went wrong on this page.</p>
+    <div class="modal-actions">
+      <button id="pageErrorCloseBtn" class="btn btn--ghost">Close</button>
+      <button id="pageErrorRetryBtn" class="btn btn--primary">Try again</button>
+    </div>
+  </div>
+</div>
+
 <!-- Shown by shell.js's showVortexRunningModal() whenever ANY page's api() call hits the
      vortex-running 409 with no local callout of its own to show it in. Replaces the old
      #vortexBanner/#syncVortexBanner (one per tool area, scroll-to-top since they weren't
@@ -75,8 +90,8 @@
   </div>
 </div>
 
-<!-- Shown by shell.js's showHelperUnavailableModal() whenever the Helper isn't reachable -- both when
-     a v2 flow started but the Helper stops responding partway through, AND (2026-08-30, added when
+<!-- Shown by shell.js's showBridgeUnavailableModal() whenever the Vortex Bridge isn't reachable -- both when
+     a v2 flow started but the Vortex Bridge stops responding partway through, AND (2026-08-30, added when
      reviewUpdateCore picked up its own upfront hard block -- see that function's header comment) when
      it was never reachable to begin with, e.g. Vortex genuinely closed when Review is clicked. Copy
      is the director's own exact wording (2026-08-30 revision -- covers "Vortex isn't running" AND
@@ -85,14 +100,14 @@
      actions that trigger a real Vortex deploy already show their own visible progress (DESIGN.md's
      "never run a real action silently" rule) -- a user watching that progress never hits this modal
      during it. -->
-<div id="helperUnavailableModal" class="modal-overlay hidden">
+<div id="bridgeUnavailableModal" class="modal-overlay hidden">
   <div class="modal modal--warning">
     <h2>⚠️ Can't reach Vortex right now</h2>
-    <p>Make sure Vortex is running and the helper extension is installed. If the extension is missing, please install it and restart Vortex, or switch to Classic mode.</p>
+    <p>Make sure Vortex is running and the Vortex Bridge is installed. If the extension is missing, please install it and restart Vortex, or switch to Classic mode.</p>
     <div class="modal-actions">
-      <button id="helperUnavailableCloseBtn" class="btn btn--ghost">Close</button>
-      <button id="helperUnavailableClassicBtn" class="btn btn--ghost">Switch to Classic instead</button>
-      <button id="helperUnavailableRetryBtn" class="btn btn--primary">Try Again</button>
+      <button id="bridgeUnavailableCloseBtn" class="btn btn--ghost">Close</button>
+      <button id="bridgeUnavailableClassicBtn" class="btn btn--ghost">Switch to Classic instead</button>
+      <button id="bridgeUnavailableRetryBtn" class="btn btn--primary">Try Again</button>
     </div>
   </div>
 </div>
@@ -127,22 +142,22 @@
     <p class="tool-hero__body" data-brand-slot="heroBody">Pick a tool below to get started. Everything here works directly with your installed Vortex collections&mdash;rebuild them faster, protect your Ignored and Disabled mods through updates, untangle rule conflicts, and review your progress.</p>
   </div>
 
-  <!-- Second mount point for the outdated-Helper warning (2026-08-23, director's own find: it only
+  <!-- Second mount point for the outdated-Bridge warning (2026-08-23, director's own find: it only
        showed in Settings, and someone can land on Home and start using tools without ever opening
-       Settings). Body cloned from #helperOutdatedBodyTpl -- see that template for why the wording is
+       Settings). Body cloned from #bridgeOutdatedBodyTpl -- see that template for why the wording is
        authored once rather than twice. Same visibility rule as its Settings twin, driven by the same
-       single helperInfo result in settings-app.js, so the two can never disagree.
-       Sits ABOVE the golden-rule warning below on purpose: an outdated Helper means results can be
+       single bridgeInfo result in settings-app.js, so the two can never disagree.
+       Sits ABOVE the golden-rule warning below on purpose: an outdated Vortex Bridge means results can be
        silently WRONG across every tool, which is a more fundamental problem than the concurrent-use
        risk (which is a real hazard, but one the user controls by waiting). Both are callout--warning;
        this is an ordering judgment, not a severity one.
        Also unlike the golden-rule banner, this has NO "Don't show this again" dismiss -- it's a real
-       condition that resolves by updating the Helper, not a standing tip to acknowledge once, and it
-       disappears on its own the moment the Helper is current. -->
-  <div id="homeHelperOutdatedBanner" class="callout callout--warning hidden" style="margin-bottom:20px"></div>
+       condition that resolves by updating the Vortex Bridge, not a standing tip to acknowledge once, and it
+       disappears on its own the moment the Vortex Bridge is current. -->
+  <div id="homeBridgeOutdatedBanner" class="callout callout--warning hidden" style="margin-bottom:20px"></div>
 
   <!-- Whole-app standing caution (2026-08-18), not scoped to Update Collection v2 specifically --
-       any tool here that writes through the Helper extension while Vortex is open carries the same
+       any tool here that writes through the Vortex Bridge while Vortex is open carries the same
        concurrent-write risk. Serious register (plain-language-writer skill) since this is a genuine
        "don't do this" caution, not a casual tip -- warning severity (amber), not critical: nothing
        here is refused or blocked, this is a real risk to avoid, not a hard stop. -->
@@ -181,10 +196,10 @@
     </div>
     <!-- One "Update Collection" entry point, not two (2026-08-18) -- this single card replaces what
          used to be two separate home cards (Classic + the v2 Preview). data-area is the new
-         "update-collection" sentinel shell.js's navigateToArea() special-cases: it checks the Helper
+         "update-collection" sentinel shell.js's navigateToArea() special-cases: it checks the Vortex Bridge
          extension LIVE on every click and opens v2 if reachable, Classic otherwise -- the user never
          sees or picks between the two. data-tool-id themed as "update-collection-v2" ("The Herald",
-         director's own call 2026-08-18: v2 is what most people land in once Helper's the common
+         director's own call 2026-08-18: v2 is what most people land in once Vortex Bridge's the common
          case, Classic is increasingly the fallback exception) -- data-pin-key stays "sync" (unchanged)
          so an existing pin from before this change keeps working. -->
     <div class="home-card-wrap" data-section="homeSectionMainTools">
@@ -214,6 +229,15 @@
         <div class="home-card__open">Open <span>→</span></div>
       </button>
       <button class="home-card__star" data-pin-key="removecollection" title="Pin to top">☆</button>
+    </div>
+    <div class="home-card-wrap" data-section="homeSectionMainTools">
+      <button class="home-card" data-area="removed-from-main" data-tool-id="removed-from-main">
+        <div class="home-card__icon" data-brand-slot="emoji">🍂</div>
+        <div class="home-card__name" data-brand-slot="name">Removed From Main</div>
+        <div class="home-card__desc" data-brand-slot="cardDesc">Clears out your matching mods when the main collection drops the originals.</div>
+        <div class="home-card__open">Open <span>→</span></div>
+      </button>
+      <button class="home-card__star" data-pin-key="removedfrommain" title="Pin to top">☆</button>
     </div>
     <!-- "Save Cleaner" is a placeholder name (design/mockup-save-cleaner.html's own explicit note) --
          a Gemini naming pass for the real name + both themed names is queued separately, per this
@@ -710,7 +734,7 @@
       <div class="callout__title">Deploying mods in Vortex&hellip;</div>
       <div class="progress-bar-wrap"><div id="rebuildDeployBar" class="progress-bar"></div></div>
       <p class="muted" id="rebuildDeployPhase">Starting&hellip;</p>
-      <!-- Stall reminder -- same real, helper-reported signal as Update Collection v2's own
+      <!-- Stall reminder -- same real, bridge-reported signal as Update Collection v2's own
            #ucv2DeployStallHint (deploy-panel.js's shared deployStallMessage/startDeploy). -->
       <p class="muted hidden" id="rebuildDeployStallHint" style="color:var(--warning)">⚠️ Vortex is taking longer than usual to finish. Please be patient while it finishes.</p>
     </div>
@@ -1052,7 +1076,7 @@
   </div>
 
   <!-- Same first-run condition as the three banners above (shown/hidden together by shell.js).
-       This replaced the installer's own "Install the Helper.txt" (2026-08-23, director's own call):
+       This replaced the installer's own "Install the Vortex Bridge.txt" (2026-08-23, director's own call):
        that was a plain text file opened in Notepad from a finish-page checkbox, which the installer
        no longer offers at all -- build-installer.ps1 no longer writes the file and the .nsi no
        longer has the SHOWREADME checkbox or the Start Menu shortcut to it. The wording below is the
@@ -1060,72 +1084,72 @@
        install method is a genuine <ol>, not the text file's own hand-typed "1. 2. 3." prose.
        .callout ol / .callout ol li are already styled (styles.css), so no new CSS is needed.
        The one deliberate wording change is the file's location line -- the text file said
-       "vortex-collection-helper.zip (right here, in this same folder)", which only made sense while
+       "vortex-bridge.zip (right here, in this same folder)", which only made sense while
        the reader was looking at a folder on disk; from a web page it has to name the folder instead.
        Placed last of the four on purpose: the first three are things to do NOW (paths, expectations,
        the tour), this one is genuinely optional and can be done any time. -->
-  <div id="settingsFirstRunHelperBanner" class="callout callout--info hidden">
-    <div class="callout__title">&#129513; Optional: add the Vortex Collection Helper</div>
-    <p><strong>What it's for.</strong> Some tools normally ask you to close Vortex before running. With the Helper installed, those tools work while Vortex stays open. Everything runs fine without it&mdash;the Helper just saves you from closing and reopening Vortex.</p>
-    <p><strong>How to add it.</strong> The Helper is a Vortex extension, so Vortex installs it directly. You'll find <code>vortex-collection-helper.zip</code> inside your Vortex Collection Tools folder.</p>
-    <div class="helper-install-methods"></div>
+  <div id="settingsFirstRunBridgeBanner" class="callout callout--info hidden">
+    <div class="callout__title">&#129513; Optional: add the Vortex Bridge</div>
+    <p><strong>What it's for.</strong> Some tools normally ask you to close Vortex before running. With the Vortex Bridge installed, those tools work while Vortex stays open. Everything runs fine without it&mdash;the Vortex Bridge just saves you from closing and reopening Vortex.</p>
+    <p><strong>How to add it.</strong> The Vortex Bridge is a Vortex extension, so Vortex installs it directly. You'll find <code>vortex-bridge.zip</code> inside your Vortex Collection Tools folder.</p>
+    <div class="bridge-install-methods"></div>
     <p>Once installed, Vortex Collection Tools detects it automatically&mdash;no restart needed.</p>
   </div>
 
-  <!-- The connected Helper is real, but older than this app needs (2026-08-23, director's own ask).
-       A real ongoing state, NOT a first-run one -- an outdated Helper stays wrong until it's updated,
+  <!-- The connected Vortex Bridge is real, but older than this app needs (2026-08-23, director's own ask).
+       A real ongoing state, NOT a first-run one -- an outdated Vortex Bridge stays wrong until it's updated,
        so shell.js's first-run gate has nothing to do with this banner; settings-app.js's own
-       renderHelperBanners() shows it whenever /helper-info reports connected + outdated, however
+       renderBridgeBanners() shows it whenever /bridge-info reports connected + outdated, however
        Settings was reached. callout--warning, not --info, per DESIGN.md's severity rule: results can
        genuinely be wrong here, which is "tread carefully", not information. Not a hard blocker
        (nothing is refused), so warning rather than critical.
-       Deliberately distinct from the "add the Helper" banner above: someone who HAS the Helper
+       Deliberately distinct from the "add the Vortex Bridge" banner above: someone who HAS the Vortex Bridge
        installed should never be told to install it. The two share only the install steps, which are
        identical for both cases -- Vortex's own "Install from File" replaces an existing extension in
-       place -- via #helperInstallMethodsTpl below, cloned into each banner's own
-       .helper-install-methods slot rather than authored twice and left to drift. -->
-  <!-- Body cloned in from #helperOutdatedBodyTpl below -- deliberately empty here. The identical
-       warning also lives on Home (#homeHelperOutdatedBanner), and authoring the wording twice is
+       place -- via #bridgeInstallMethodsTpl below, cloned into each banner's own
+       .bridge-install-methods slot rather than authored twice and left to drift. -->
+  <!-- Body cloned in from #bridgeOutdatedBodyTpl below -- deliberately empty here. The identical
+       warning also lives on Home (#homeBridgeOutdatedBanner), and authoring the wording twice is
        exactly how two copies of the same message drift apart after one of them gets a copy pass.
        One template, two mount points, one wording. -->
-  <div id="settingsHelperOutdatedBanner" class="callout callout--warning hidden"></div>
+  <div id="settingsBridgeOutdatedBanner" class="callout callout--warning hidden"></div>
 
-  <!-- Single source for the Helper install steps, shared by every banner that needs them. Cloned in
-       by settings-app.js's renderHelperBanners(); a <template> is inert until then, so nothing here
+  <!-- Single source for the Vortex Bridge install steps, shared by every banner that needs them. Cloned in
+       by settings-app.js's renderBridgeBanners(); a <template> is inert until then, so nothing here
        renders on its own. -->
-  <template id="helperInstallMethodsTpl">
+  <template id="bridgeInstallMethodsTpl">
     <p><strong>Method 1: Through Vortex (Recommended)</strong></p>
     <p><strong>To Install:</strong></p>
     <ol>
       <li>Open Vortex and go to <strong>Settings</strong> &gt; <strong>Extensions</strong>.</li>
-      <li>Click <strong>Install from File</strong> and select <code>vortex-collection-helper.zip</code>.</li>
+      <li>Click <strong>Install from File</strong> and select <code>vortex-bridge.zip</code>.</li>
       <li>Restart Vortex.</li>
     </ol>
     <p><strong>To Remove:</strong></p>
     <ol>
       <li>Open Vortex and go to <strong>Settings</strong> &gt; <strong>Extensions</strong>.</li>
-      <li>Locate <strong>Vortex Collection Helper</strong> and click <strong>Remove</strong> (or toggle it off to disable).</li>
+      <li>Locate <strong>Vortex Bridge</strong> and click <strong>Remove</strong> (or toggle it off to disable).</li>
       <li>Restart Vortex to finish uninstalling.</li>
     </ol>
     <p><strong>Method 2: Manual</strong></p>
     <ol>
-      <li>Extract <code>vortex-collection-helper.zip</code> into its own folder.</li>
-      <li>Copy the <code>vortex-collection-helper</code> folder into <code>%APPDATA%\Vortex\plugins\</code> and overwrite the existing files.</li>
+      <li>Extract <code>vortex-bridge.zip</code> into its own folder.</li>
+      <li>Copy the <code>vortex-bridge</code> folder into <code>%APPDATA%\Vortex\plugins\</code> and overwrite the existing files.</li>
       <li>Restart Vortex.</li>
     </ol>
   </template>
 
-  <!-- The ONE authored copy of the outdated-Helper warning (2026-08-23). Cloned into BOTH
-       #settingsHelperOutdatedBanner above and #homeHelperOutdatedBanner on the Home page -- the same
+  <!-- The ONE authored copy of the outdated-Bridge warning (2026-08-23). Cloned into BOTH
+       #settingsBridgeOutdatedBanner above and #homeBridgeOutdatedBanner on the Home page -- the same
        warning has to reach someone who never opens Settings, and duplicating the wording is how two
        copies of one message end up disagreeing after a copy pass touches only one of them.
        The version numbers are classes, not ids, precisely because this renders twice: two elements
        sharing an id would be invalid, and only the first would ever get filled. -->
-  <template id="helperOutdatedBodyTpl">
-    <div class="callout__title">&#9888;&#65039; Your Vortex Collection Helper is out of date</div>
-    <p>Vortex is running Helper <strong>v<span class="helper-outdated-current"></span></strong>, but this version of Vortex Collection Tools requires <strong>v<span class="helper-outdated-min"></span></strong> or newer. Until it's updated, tools that work through the Helper can report incorrect results without raising any errors.</p>
-    <p><strong>How to update it.</strong> It's the same as installing it&mdash;Vortex replaces the old version in place. We've included the current <code>vortex-collection-helper.zip</code> in your Vortex Collection Tools folder.</p>
-    <div class="helper-install-methods"></div>
+  <template id="bridgeOutdatedBodyTpl">
+    <div class="callout__title">&#9888;&#65039; Your Vortex Bridge is out of date</div>
+    <p>Vortex is running Vortex Bridge <strong>v<span class="bridge-outdated-current"></span></strong>, but this version of Vortex Collection Tools requires <strong>v<span class="bridge-outdated-min"></span></strong> or newer. Until it's updated, tools that work through the Vortex Bridge can report incorrect results without raising any errors.</p>
+    <p><strong>How to update it.</strong> It's the same as installing it&mdash;Vortex replaces the old version in place. We've included the current <code>vortex-bridge.zip</code> in your Vortex Collection Tools folder.</p>
+    <div class="bridge-install-methods"></div>
     <p>Once Vortex restarts, the updated version is detected automatically.</p>
   </template>
 
@@ -1656,7 +1680,7 @@
         </div>
         <div class="settings-version-info">
           <div>Vortex Collection Tools <span id="settingsToolVersion">&mdash;</span></div>
-          <div id="settingsHelperVersionRow" class="muted">Helper: <span id="settingsHelperVersion">checking&hellip;</span></div>
+          <div id="settingsBridgeVersionRow" class="muted">Vortex Bridge: <span id="settingsBridgeVersion">checking&hellip;</span></div>
         </div>
       </div>
 
@@ -1773,6 +1797,14 @@
         </label>
       </div>
 
+      <div class="field-group">
+        <label class="checkbox">
+          <input type="checkbox" id="settingsPauseHealthCheckInput">
+          Pause Vortex's Health Check while this tool works
+        </label>
+      </div>
+      <p class="muted">Vortex re-checks your whole mod list after every install, which slows big jobs down. We switch its Health Check off just while a job runs, then put it back the way you had it.</p>
+
       <!-- Moved here from Rebuild Collection 2026-07-27 -- this now also drives Missing Masters' own
            single-mod rebuild auto-download, not just Rebuild Collection, so it belongs as a general,
            tool-agnostic setting rather than living under one specific tool's own section. -->
@@ -1883,6 +1915,8 @@
 
     </div>
   </div>
+
+  <div id="moreFromMe"></div>
 </main>
 
 <div id="settingsRestartModal" class="modal-overlay hidden">
@@ -2843,8 +2877,8 @@
     <p class="tool-hero__body" data-brand-slot="heroBody">Easily pinpoint missing master files and instantly see every mod relying on them&mdash;all in one clear view! Designed to streamline your troubleshooting, this tool takes the hassle out of tracking down broken dependencies so you can get everything sorted with confidence.</p>
   </div>
 
-  <!-- The fallback instruction, shown ONLY when the Helper is unavailable (2026-08-23). With the
-       Helper there, the Deploy Mods button below replaces it -- telling someone to go do a thing by
+  <!-- The fallback instruction, shown ONLY when the Vortex Bridge is unavailable (2026-08-23). With the
+       Vortex Bridge there, the Deploy Mods button below replaces it -- telling someone to go do a thing by
        hand while offering to do it for them reads as broken. Starts hidden and is revealed by
        mmRenderDeployBanners(); wording deliberately unchanged from its earlier pass. -->
   <div class="callout callout--info hidden" id="mmDeployTip">
@@ -2899,19 +2933,19 @@
        the scan ran and nothing was refused, it just couldn't cover everything. -->
   <div id="mmUnreadable" class="callout callout--warning hidden"></div>
 
-  <!-- Helper-unavailable note (2026-08-23). Deliberately callout--info, NOT this app's hard
+  <!-- Bridge-unavailable note (2026-08-23). Deliberately callout--info, NOT this app's hard
        "🛑 Vortex Connection Required" blocker: that one is for tools that genuinely cannot function
-       without the Helper, and Missing Masters works fine without it -- only Enable and Restore
-       (items 2 and 3, not built yet) need it. Populated by mmRenderHelperNote(); outside #mmResults
+       without the Vortex Bridge, and Missing Masters works fine without it -- only Enable and Restore
+       (items 2 and 3, not built yet) need it. Populated by mmRenderBridgeNote(); outside #mmResults
        for the same reason as #mmUnreadable above. -->
-  <div id="mmHelperNote" class="callout callout--info hidden"></div>
+  <div id="mmBridgeNote" class="callout callout--info hidden"></div>
 
   <!-- All-clear success banner (2026-08-23) -- replaces the flat grey sentence that used to live in
        mmResultsMeta for this case. Populated by mmRenderDeployBanners(). -->
   <div id="mmAllClear" class="callout callout--success hidden"></div>
 
   <!-- "Fixes applied, one step left" + the real Deploy Mods button. Shown only when there is at
-       least one ready-to-deploy row AND the Helper is genuinely available; without the Helper the
+       least one ready-to-deploy row AND the Vortex Bridge is genuinely available; without the Vortex Bridge the
        tip above carries the same message as an instruction instead. -->
   <div id="mmPendingDeploy" class="callout callout--info hidden"></div>
 
@@ -3114,6 +3148,10 @@
     <div id="rmfUnfetchedSection" class="hidden">
       <div class="group-head"><h2>Not yet downloaded</h2><span class="n" id="rmfUnfetchedCount"></span></div>
       <p class="muted" style="margin:4px 0 10px">Tracked in Vortex's Workshop, but never fetched here — nothing to scan against yet. Fetch one to add it to "Workshop collections" above.</p>
+      <div class="callout callout--info" style="margin-bottom:12px">
+        <div class="callout__title">&#8505;&#65039; Fetch Unavailable for Workshop Collections</div>
+        <div class="callout__body">Fetch from Nexus is disabled for Workshop-only collections. Publish the collection to Nexus Mods to enable direct archive retrieval.</div>
+      </div>
       <div class="picker-grid" id="rmfUnfetchedGrid"></div>
     </div>
 
@@ -3171,6 +3209,8 @@
       <div class="summary-badges" id="rmfSummaryBadges"></div>
 
       <div id="rmfSummaryCallout" class="callout callout--warning hidden"></div>
+      <!-- Only shown when the scan left out optional mods this person never installed (2026-10-24). -->
+      <p id="rmfOptionalSkippedNote" class="muted hidden">Optional mods you didn't install were skipped.</p>
       <!-- "standard Done banner" (2026-09-14) -- real title+body, matching every other success banner
            on this screen (e.g. the "No Missing Files Detected" one just below), not a one-liner. -->
       <div id="rmfAllClearCallout" class="callout callout--success hidden">
@@ -3232,7 +3272,7 @@
         <div class="callout__title">Deploying mods in Vortex&hellip;</div>
         <div class="progress-bar-wrap"><div id="rmfDeployBar" class="progress-bar"></div></div>
         <p class="muted" id="rmfDeployPhase">Starting&hellip;</p>
-        <!-- Stall reminder -- same real, helper-reported signal as Update Collection v2's own
+        <!-- Stall reminder -- same real, bridge-reported signal as Update Collection v2's own
              #ucv2DeployStallHint (deploy-panel.js's shared deployStallMessage/startDeploy). -->
         <p class="muted hidden" id="rmfDeployStallHint" style="color:var(--warning)">⚠️ Vortex is taking longer than usual to finish. Please be patient while it finishes.</p>
       </div>
@@ -3965,6 +4005,13 @@
   </div>
   <div id="rgEmpty" class="empty-row hidden"></div>
 
+  <!-- Link list for this pair (which main mod matches which new mod) -- shown once a pair is analyzed. -->
+  <div id="rgLinksRow" class="hidden">
+    <span id="rgLinksCount" class="muted"></span>
+    <button id="rgLinksBtn" class="btn btn--ghost btn--small">Save the links for this pair</button>
+    <span id="rgLinksStatus" class="muted"></span>
+  </div>
+
   <div id="rgCriticalError" class="callout callout--critical hidden"></div>
   <div id="rgLoading" class="loading-row hidden">
     <span class="spinner"></span><span id="rgLoadingText"> Reading Vortex's database&hellip;</span>
@@ -4123,10 +4170,6 @@
          rather than the mockup's own always-visible dimmed rows -- a deliberate deviation, flagged in
          the handoff: real collections can easily carry 8-10+ items per category here, which would be
          a lot of un-collapsed visual noise for something with zero action attached. -->
-    <div id="rgExcOldVersionSection" class="hidden" style="margin-top:26px">
-      <p class="lbl-section" style="font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--text-muted);margin:0 0 10px">Old version still installed <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:normal">&mdash; informational, no action needed</span></p>
-      <div id="rgExcOldVersionBody"></div>
-    </div>
     <div id="rgExcDisabledSection" class="hidden" style="margin-top:26px">
       <p class="lbl-section" style="font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--text-muted);margin:0 0 10px">Disabled mods <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:normal">&mdash; informational, no action needed</span></p>
       <div id="rgExcDisabledBody"></div>
@@ -4166,6 +4209,19 @@
     </div>
   </div>
 </main>
+
+<!-- Link list: the matches the tool is unsure about, one pick each. Same modal shape as above. -->
+<div id="rgLinksModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Confirm the matches</h2>
+    <p>Not sure about these. Pick the match, or skip.</p>
+    <div id="rgLinksModalList"></div>
+    <div class="modal-actions">
+      <button id="rgLinksModalCancel" class="btn btn--ghost">Cancel</button>
+      <button id="rgLinksModalOk" class="btn btn--primary">Save links</button>
+    </div>
+  </div>
+</div>
 
 <!-- Same shared "message + Cancel/Confirm" shape as Update Collection's own syncApplyConfirmModal
      -- this one gates the "Apply to Vortex" write specifically. -->
@@ -4262,6 +4318,7 @@
   <!-- ============================================================ -->
   <div id="ucv2Screen1">
 
+    <p id="ucv2SlowVortexLine" class="muted hidden" style="color:var(--warning)"></p>
     <div id="ucv2Empty" class="empty-row hidden"></div>
 
     <!-- Plain label, not a .tab component (2026-08-28, director's own catch, settled in
@@ -4271,6 +4328,12 @@
          removed entirely -- replaced with this heading so the grid below isn't left unlabeled. Exact
          size/weight/color per the mockup's own settled inline style, after two live corrections. -->
     <div style="font-size:17px;font-weight:600;color:var(--text);margin-bottom:20px">Currently installed collections</div>
+
+    <!-- One Deploy for every collection whose update finished but is not deployed yet. -->
+    <div id="ucv2DeployAllBanner" class="callout callout--info hidden" style="margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:16px">
+      <span id="ucv2DeployAllText"></span>
+      <button class="btn btn--primary btn--small" id="ucv2DeployAllBtn" onclick="ucv2DeployFromList()">Deploy</button>
+    </div>
 
     <div class="ucv2-grid" id="ucv2CollectionGrid"></div>
   </div>
@@ -4317,6 +4380,7 @@
       <div class="callout__body" id="ucv2RemovedInstructionsBody" style="white-space:pre-line"></div>
     </div>
 
+    <p class="muted hidden" id="ucv2RemovedRenameNote"></p>
     <p class="lead" id="ucv2RemovedLead"></p>
 
     <!-- "Shared with another collection" warning (2026-08-21, per-mod checkboxes since 2026-08-26) --
@@ -4391,7 +4455,10 @@
       <div class="callout__body" id="ucv2ReviewInstructionsBody" style="white-space:pre-line"></div>
     </div>
 
+    <p class="muted hidden" id="ucv2ReviewRenameNote"></p>
     <p class="lead" id="ucv2ReviewLead"></p>
+    <!-- Continue Update groups (finish saving details / duplicate copies); filled by ucv2RenderContinueGroups -->
+    <div id="ucv2ReviewContinueGroups"></div>
 
     <!-- Shown ONLY when this revision's own mod list is unchanged (totalChanged === 0) -- see
          DESIGN.md's severity table: Info/blue/💡 is the tip/suggestion treatment, matching the
@@ -4457,12 +4524,6 @@
     <p class="lead" style="color:var(--warning)">⚠️ Warning: Update in progress. Please do not make any changes in Vortex until the process is complete.</p>
     <div class="phase-indicator"><span class="spinner"></span><span id="ucv2ApplyProgressPhaseText">Starting&hellip;</span></div>
     <div class="progress-bar-wrap"><div id="ucv2ApplyProgressFill" class="progress-bar"></div></div>
-    <!-- Same real, helper-reported signal as the Deploy screen's own #ucv2DeployStallHint (see
-         ucv2DeployStallMessage's own header comment in update-collection-v2-app.js) -- extended here
-         (2026-08-29, director's own follow-up) since Apply/Install can sit on a real Vortex dialog or
-         genuinely slow work just as easily as Deploy can, and this screen had no live signal at all
-         before this. -->
-    <p class="muted hidden" id="ucv2ApplyStallHint" style="color:var(--warning)">⚠️ Vortex is taking longer than usual to apply this update. Please be patient while it finishes.</p>
     <div class="plan-table-wrap plan-table-wrap--scrollable" id="ucv2ApplyProgressTableWrap">
       <table class="plan-table">
         <thead><tr><th>Status</th><th>Mod</th><th>Version</th></tr></thead>
@@ -4538,8 +4599,8 @@
          screen, after Back to Collections in DOM order doesn't matter since Deploy sits in its own
          callout above the row, but this is deliberately the final STEP in the apply flow. -->
     <div id="ucv2DeployPending" class="callout callout--info hidden">
-      <div class="callout__title">🚀 Update complete — one step left</div>
-      <p>Your mods are extracted and registered with Vortex, but your game can't see them yet. Deploy your mods to finish.</p>
+      <div class="callout__title" id="ucv2DeployPendingTitle">🚀 Update complete — one step left</div>
+      <p id="ucv2DeployPendingBody">Your mods are extracted and registered with Vortex, but your game can't see them yet. Deploy your mods to finish.</p>
       <div class="row-actions"><button class="btn btn--primary btn--small" id="ucv2DeployBtn">Deploy →</button></div>
     </div>
     <div id="ucv2DeployProgress" class="callout callout--info hidden">
@@ -4602,23 +4663,6 @@
         <button class="btn btn--ghost" id="ucv2DependencyBreakCancel">Cancel</button>
         <button class="btn btn--ghost" id="ucv2DependencyBreakKeepInstalled">Keep my installed version</button>
         <button class="btn btn--primary" id="ucv2DependencyBreakIgnore">Ignore</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Missing-prerequisite gate (2026-08-31, diagnostics/2026-08-30-added-mod-prerequisite-check-
-       scoping.md) -- same modal shell as the dependency-break modal just above, reused as-is. The
-       interaction shape is genuinely different, though (per-mod choice, not one global action for
-       everything at once), so the body/footer are new rather than a straight copy: each affected new
-       mod gets its own checkbox ("also install this too"), unchecked by default (never a silent
-       auto-install), and one Continue button submits every row's choice together. -->
-  <div class="ucv2-modal-backdrop" id="ucv2MissingPrereqModal">
-    <div class="ucv2-modal">
-      <div class="ucv2-modal__head"><strong>⚠️ Some new mods are missing required mods</strong><button class="ucv2-modal__close" id="ucv2MissingPrereqClose">&times;</button></div>
-      <div class="ucv2-modal__body" id="ucv2MissingPrereqBody"></div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;padding:0 18px 16px;flex-wrap:wrap">
-        <button class="btn btn--ghost" id="ucv2MissingPrereqCancel">Cancel</button>
-        <button class="btn btn--primary" id="ucv2MissingPrereqContinue">Continue</button>
       </div>
     </div>
   </div>
@@ -4736,6 +4780,91 @@
           </div>
         </div>
         <div id="rcOnlyList"></div>
+      </div>
+    </div>
+  </div>
+</main>
+</section>
+
+<!-- ============================================================ -->
+<!-- Removed From Main ("The Unbinding" / "RobCo Redundancy Purge" / "Stage Jettison") -- lists the mods the -->
+<!-- main collection dropped next to the player's matching mods, and deletes them. Reference mockup: -->
+<!-- design/mockup-removed-from-main.html, Revision 3 (the short list, one-line done). Words are theme data -->
+<!-- (themes/*.json, tools["removed-from-main"]); the fallbacks written here are the Standard theme's. -->
+<!-- ============================================================ -->
+<section id="area-removed-from-main" class="tool-area hidden">
+<main class="app-main" data-tool-id="removed-from-main">
+  <div class="tool-eyebrow"><a class="tool-eyebrow__home" href="#">Home</a><span class="tool-eyebrow__sep">›</span><span data-brand-slot="name">Removed From Main</span></div>
+  <div class="tool-hero" data-tool-id="removed-from-main">
+    <h2 class="tool-hero__title" data-brand-slot="heroTitle">🍂 Clear Out What Main Dropped</h2>
+    <p class="tool-hero__body" data-brand-slot="heroBody">When a main collection drops a mod, the upgrade you matched to it is left behind. This finds those leftovers and clears them out, keeping your collection in step with the original.</p>
+  </div>
+
+  <div class="merge-stepper" id="rfmStepper"></div>
+  <div id="rfmCriticalError" class="callout callout--critical hidden"></div>
+
+  <!-- Screen 1: the two collections -->
+  <div id="rfmScreen1">
+    <div class="callout callout--info">
+      <ol id="rfmHowTo" style="margin:0;padding-left:20px">
+        <li>Pick your main collection and your new collection.</li>
+        <li>Press Compare.</li>
+        <li>Untick anything you want to keep, then delete the rest.</li>
+      </ol>
+    </div>
+    <div class="collection-picker">
+      <select id="rfmMainSelect" class="select"><option value="">-- Main collection --</option></select>
+      <select id="rfmNewSelect" class="select"><option value="">-- Your new collection --</option></select>
+      <button id="rfmCompareBtn" class="btn btn--primary" disabled>Compare</button>
+    </div>
+    <div id="rfmLoading" class="loading-row hidden"><span class="spinner"></span><span id="rfmLoadingText"> Looking…</span></div>
+  </div>
+
+  <!-- Screen 2: the list, then the live progress, then the one-line result -->
+  <div id="rfmScreen2" class="hidden">
+    <div id="rfmNotice" class="callout callout--info hidden">
+      <div class="callout__title" id="rfmNoticeTitle"></div>
+      <p id="rfmNoticeText"></p>
+    </div>
+    <div id="rfmResult" class="hidden"></div>
+
+    <!-- Real progress for the real delete. Sits above the list, as DESIGN.md's progress rule asks. -->
+    <div id="rfmProgress" class="hidden" style="margin-bottom:20px">
+      <div class="progress-bar-wrap"><div id="rfmProgressBar" class="progress-bar"></div></div>
+      <p class="muted" id="rfmProgressText"></p>
+    </div>
+
+    <div id="rfmListBlock" class="hidden">
+      <p class="lead" id="rfmLead">These mods are gone from main. The mods you matched to them go too.</p>
+      <div class="plan-table-wrap">
+        <table class="plan-table">
+          <thead><tr>
+            <th style="width:36px"><input type="checkbox" id="rfmCheckAll" title="Select all"></th>
+            <th id="rfmColGone">Gone from main</th>
+            <th id="rfmColMine">Your matching mod</th>
+          </tr></thead>
+          <tbody id="rfmRows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="actions" id="rfmActions" style="display:flex;gap:12px;margin-top:20px;align-items:center;justify-content:flex-end">
+      <button class="btn btn--ghost hidden" id="rfmBackBtn">Back</button>
+      <button class="btn btn--ghost hidden" id="rfmRetryBtn">Try again</button>
+      <button class="btn btn--danger hidden" id="rfmDeleteBtn">Delete 0 mods</button>
+      <button class="btn btn--primary hidden" id="rfmDoneBtn">Done</button>
+      <button class="btn btn--primary hidden" id="rfmOpenRgBtn">Open Rules Generator</button>
+    </div>
+  </div>
+
+  <!-- Confirm (serious register: this deletes). Title is built in removed-from-main-app.js; the body is theme data. -->
+  <div id="rfmConfirmModal" class="modal-overlay hidden">
+    <div class="modal modal--critical">
+      <h2 id="rfmConfirmTitle"></h2>
+      <p id="rfmConfirmText"></p>
+      <div class="modal-actions">
+        <button id="rfmConfirmCancelBtn" class="btn btn--ghost">Cancel</button>
+        <button id="rfmConfirmOkBtn" class="btn btn--danger">Delete</button>
       </div>
     </div>
   </div>
@@ -5394,7 +5523,12 @@
             <input type="checkbox" id="pgpatcherConflictHighlightToggle">
             Conflict highlights
           </label>
+          <label class="pgp-conflict-toggle" for="pgpatcherShowShapeDataToggle">
+            <input type="checkbox" id="pgpatcherShowShapeDataToggle">
+            Show mods that only hold BodySlide shape data
+          </label>
         </div>
+        <div class="pgp-unranked-hint">Mods that only hold BodySlide shape data are hidden, because the game never loads those files. Turn on the switch to list them.</div>
         <div class="pgp-col-header">
           <span class="pgp-row__handle" aria-hidden="true"></span>
           <span class="pgp-row__toggle" aria-hidden="true" style="visibility:hidden"></span>
@@ -5865,6 +5999,7 @@
 <script src="app.js"></script>
 <script src="sync-app.js"></script>
 <script src="settings-app.js"></script>
+<script src="more-from-me.js"></script>
 <script src="stats-app.js"></script>
 <script src="work-through-app.js"></script>
 <script src="rules-generator-app.js"></script>
@@ -5874,6 +6009,9 @@
 <script src="archive-finder-app.js"></script>
 <script src="file-retriever-app.js"></script>
 <script src="merge-app.js"></script>
+<!-- Pure Extract-request chunking logic for Rebuild Missing Files, split out so
+     scripts/test-rmf-extract-chunking.js can require() it headlessly -- see its own header comment. -->
+<script src="rebuild-missing-extract-chunking.js"></script>
 <script src="rebuild-missing-app.js"></script>
 <!-- Cycle Helper's Graph View (2026-08-18) -- the first third-party frontend library this project
      uses. Vendored locally (scripts/vendor-cytoscape.js, run automatically by `npm install`), not
@@ -5895,8 +6033,10 @@
 <script src="update-collection-v2-problem-grouping.js"></script>
 <script src="update-collection-v2-error-copy.js"></script>
 <script src="update-collection-v2-apply-pills.js"></script>
+<script src="update-collection-v2-apply-rows.js"></script>
 <script src="update-collection-v2-app.js"></script>
 <script src="remove-collection-app.js"></script>
+<script src="removed-from-main-app.js"></script>
 <script src="mod-exceptions-report-app.js"></script>
 <script src="book-app.js"></script>
 <script src="pgpatcher-app.js"></script>

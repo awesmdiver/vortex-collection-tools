@@ -36,14 +36,14 @@ function rcHideCriticalError(elId) {
 
 // Same shared-modal error handling every other Vortex-gated tool in this app already uses
 // (isServerUnreachableError/showServerUnreachableError/showVortexRunningModal/
-// showHelperUnavailableModal -- defined in shell.js, loaded before this file).
+// showBridgeUnavailableModal -- defined in shell.js, loaded before this file).
 function rcHandleError(e, elId, retryFn) {
   if (window.isServerUnreachableError && window.isServerUnreachableError(e)) {
     window.showServerUnreachableError(retryFn || (() => {}));
     return;
   }
-  if (e.status === 409 && e.body?.error === 'helper-unavailable') {
-    window.showHelperUnavailableModal(retryFn || (() => {}));
+  if (e.status === 409 && e.body?.error === 'bridge-unavailable') {
+    window.showBridgeUnavailableModal(retryFn || (() => {}));
     return;
   }
   rcShowCriticalError(elId, e.message);
@@ -114,10 +114,19 @@ function rcRenderCollections() {
       </div>
     </div>
     <div class="ucv2-card__actions">
-      <button class="btn btn--danger btn--small" style="width:100%" onclick="rcOpenReview('${escHtmlRc(c.modId)}')">Remove collection</button>
+      <button class="btn btn--danger btn--small" data-rc-open-review data-mod-id="${escHtmlRc(c.modId)}" style="width:100%">Remove collection</button>
     </div>
   </div>`;
   }).join('');
+  // One listener on the grid instead of an inline onclick per button: the collection id is outside text and must never
+  // be part of script. Wired once; the grid element stays for the life of the page.
+  if (!grid.dataset.actionsWired) {
+    grid.dataset.actionsWired = '1';
+    grid.addEventListener('click', (ev) => {
+      const btn = ev.target.closest && ev.target.closest('button[data-rc-open-review]');
+      if (btn && !btn.disabled && grid.contains(btn)) rcOpenReview(btn.dataset.modId);
+    });
+  }
 }
 
 // Same server-side-cache polling pattern as Update Collection v2's own ucv2LoadCollections -- the
@@ -350,7 +359,7 @@ function rcSetApplyProgress(frame) {
     bar.style.width = `${Math.round((frame.current / frame.total) * 100)}%`;
     text.textContent = `${frame.current} / ${frame.total} — Deleting archives…`;
   } else {
-    // No real per-item count exists for 'resolving'/'removing' (a single atomic Helper call, no
+    // No real per-item count exists for 'resolving'/'removing' (a single atomic Vortex Bridge call, no
     // progress possible from this side) -- an indeterminate-looking, mostly-full bar plus the real
     // status text is honest about that, same "Starting…" phase-only treatment Clear Update Flags
     // already uses before its own first per-mod event arrives.

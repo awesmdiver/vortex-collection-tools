@@ -145,6 +145,26 @@
       "heroBody": "Purge old collections safely with a pre-removal audit that flags and protects shared mods still used by your other setups.",
       "cardDesc": "Audit shared dependencies before removal—nothing shared goes missing."
     },
+    "removed-from-main": {
+      "name": "Stage Jettison",
+      "emoji": "🛰️",
+      "function": "Removed From Main",
+      "heroTitle": "Stage Jettison",
+      "heroBody": "When a main collection drops a mod, your custom upgrade for it becomes dead weight. This tool spots those spent modules and jettisons them, keeping your loadout light and perfectly synced with the original.",
+      "cardDesc": "Jettisons your matching mods when the main collection leaves the originals behind.",
+      "tagline": "Dropping spent stages as the main ship moves on.",
+      "howTo": [
+        "Select the main collection and your new collection.",
+        "Hit Compare to scan for decoupled mods.",
+        "Untick any modules you want to keep, then jettison the rest."
+      ],
+      "lead": "The following core modules are gone from the main collection.",
+      "colGone": "Gone from main",
+      "colMine": "Your decoupled module",
+      "confirm": "You are about to permanently delete these mods from Vortex and remove them from your active collection. A backup is created before deletion begins.",
+      "empty": "Nothing to jettison. Your collection matches the main telemetry.",
+      "noLinks": "{rg} hasn't logged the links for this pair yet. Run {rg} first."
+    },
     "report-stats": {
       "name": "Starborn Telemetry",
       "emoji": "📡",

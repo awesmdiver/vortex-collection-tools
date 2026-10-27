@@ -8,13 +8,14 @@ const syncLib = require('../lib/vortex-sync/lib');
 const syncRunner = require('../lib/sync-runner');
 const rgRunner = require('../lib/rules-generator-runner');
 const rgLib = require('../lib/rules-generator');
-const helperClient = require('../lib/vortex-helper-client');
+const bridgeClient = require('../lib/vortex-bridge-client');
+const { withHealthCheckPaused } = require('../lib/health-check-pause');
 const { createSseSession } = require('./sse-session');
 
 // Real SSE-streamed progress for Analyze and Apply to Vortex (2026-08-25, closes
 // docs/UI-PATTERN-MAP.md's "Rules Generator — Analyze"/"Apply to Vortex" findings: static text, no
 // SSE, on an action that writes to potentially many mods). Both are a single opaque
-// helperClient/isolated-worker call under the hood -- rgRunner.analyze(ViaHelper)/apply(ViaHelper)
+// bridgeClient/isolated-worker call under the hood -- rgRunner.analyze(ViaBridge)/apply(ViaBridge)
 // has no internal per-item hook to report through (unlike Clear Update Flags' own real per-mod
 // for-loop), so there's no honest numeric count to show mid-flight. Rather than fake one, this
 // streams real phase text plus a live elapsed-time tick every second while the real call is
@@ -37,7 +38,7 @@ function createRulesGeneratorRouter(config) {
 
     function vortexRunningGate(res) {
         if (syncLib.isVortexRunning()) {
-            // "Currently busy", not "close it" -- every caller here always tries the Helper first,
+            // "Currently busy", not "close it" -- every caller here always tries the Vortex Bridge first,
             // so this only ever trips once that's already failed to answer while Vortex is running --
             // a genuine "must be closed" case is unreachable (Vortex actually closed would make
             // isVortexRunning() false and fall through to the real state.v2 path instead). Same
@@ -75,17 +76,17 @@ function createRulesGeneratorRouter(config) {
     // the one currently-selected id (see rules-generator-app.js's own picker-exclusion logic) -- this
     // route just returns the full, real Workshop list, unfiltered.
     //
-    // Opportunistic helper-extension path (2026-08-18, Tier 2 of "remove the Vortex-must-be-closed
+    // Opportunistic bridge-extension path (2026-08-18, Tier 2 of "remove the Vortex-must-be-closed
     // requirement" -- this is the front door Tier 1's own write routes were stuck behind: this route
     // fires on every Rules Generator page load, so leaving it gated meant the picker itself never
     // populated with Vortex open, no matter how capable the write routes downstream had become).
     // Same pattern as every other route in this file: checked BEFORE vortexRunningGate, falls
-    // through to the exact original gated path, untouched, when the helper isn't reachable.
+    // through to the exact original gated path, untouched, when the Vortex Bridge isn't reachable.
     router.get('/workshop-collections', async (req, res) => {
         try {
-            const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-            let result = helperAvailable ? await rgRunner.listWorkshopCollectionsViaHelper() : null;
-            let source = 'helper-extension';
+            const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+            let result = bridgeAvailable ? await rgRunner.listWorkshopCollectionsViaBridge() : null;
+            let source = 'bridge-extension';
             if (!result) {
                 source = 'state.v2';
                 if (vortexRunningGate(res)) return;
@@ -122,11 +123,11 @@ function createRulesGeneratorRouter(config) {
     // SAME /analyze response (not a second round-trip) so the new Step 1 screen has everything it
     // needs the moment "Find matching rules" resolves, no extra loading state required.
     //
-    // Opportunistic helper-extension path (2026-08-18, Tier 2) -- same pattern as /workshop-collections
+    // Opportunistic bridge-extension path (2026-08-18, Tier 2) -- same pattern as /workshop-collections
     // above: checked before vortexRunningGate, falls through to the exact original gated path when
-    // the helper isn't reachable.
+    // the Vortex Bridge isn't reachable.
     const analyzeSession = createSseSession();
-    // No child process and no per-item loop here (analyzeViaHelper/analyze is a single opaque await,
+    // No child process and no per-item loop here (analyzeViaBridge/analyze is a single opaque await,
     // see this file's own top-of-file comment) -- PGPatcher's own /load/cancel and /build/cancel both
     // require a live tracked child process to `.kill()`, which doesn't exist for this route at all, so
     // neither is a real fit to copy verbatim. This mirrors their SHARED underlying idea instead (a
@@ -164,7 +165,7 @@ function createRulesGeneratorRouter(config) {
         // brand new one.
         analyzeCancelled = false;
         // vortexRunningGate only applies to the state.v2 fallback path, and that path is only known
-        // once the (fast) helper-availability check below resolves -- checked inside the background
+        // once the (fast) bridge-availability check below resolves -- checked inside the background
         // task, same as every other route here, rather than duplicated up front.
         const mySession = analyzeSession.start({ id: `rg-analyze-${Date.now()}` });
         res.status(202).json({});
@@ -175,9 +176,9 @@ function createRulesGeneratorRouter(config) {
         (async () => {
             const stopTicking = tickingPhase(emitIfCurrent, 'analyzing', 'Comparing your two collections…');
             try {
-                const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-                let result = helperAvailable ? await rgRunner.analyzeViaHelper(oldCollectionKey, newCollectionKey) : null;
-                let source = 'helper-extension';
+                const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+                let result = bridgeAvailable ? await rgRunner.analyzeViaBridge(oldCollectionKey, newCollectionKey) : null;
+                let source = 'bridge-extension';
                 if (!result) {
                     source = 'state.v2';
                     if (syncLib.isVortexRunning()) {
@@ -207,16 +208,16 @@ function createRulesGeneratorRouter(config) {
     });
 
     // Completed/Exceptions report -- read-only, same shape/gate as /analyze, including the same
-    // opportunistic helper-extension path (2026-08-18, Tier 2).
+    // opportunistic bridge-extension path (2026-08-18, Tier 2).
     router.post('/report', async (req, res) => {
         const { oldCollectionKey, newCollectionKey, anomalyOverrides } = req.body || {};
         if (!oldCollectionKey || !newCollectionKey) {
             return res.status(400).json({ error: 'oldCollectionKey and newCollectionKey are both required.' });
         }
         try {
-            const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-            let result = helperAvailable ? await rgRunner.reportViaHelper(oldCollectionKey, newCollectionKey, anomalyOverrides) : null;
-            let source = 'helper-extension';
+            const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+            let result = bridgeAvailable ? await rgRunner.reportViaBridge(oldCollectionKey, newCollectionKey, anomalyOverrides) : null;
+            let source = 'bridge-extension';
             if (!result) {
                 source = 'state.v2';
                 if (vortexRunningGate(res)) return;
@@ -231,9 +232,9 @@ function createRulesGeneratorRouter(config) {
     // Read-only dry run -- an accurate rule/mod count for the confirm dialog, no writes. Always
     // called fresh right before showing that dialog, never trusting a client-held count.
     //
-    // Opportunistic helper-extension path (2026-08-18, Tier 1 of "remove the Vortex-must-be-closed
+    // Opportunistic bridge-extension path (2026-08-18, Tier 1 of "remove the Vortex-must-be-closed
     // requirement" -- same treatment Cycle Helper's own routes already got): checked BEFORE
-    // vortexRunningGate, source data from the optional Vortex Collection Helper extension when it's
+    // vortexRunningGate, source data from the optional Vortex Bridge extension when it's
     // reachable, fall through to the exact original gated/backed-up state.v2 path, untouched, when
     // it's not (or its own /mods read fails for any reason even after /health answered).
     router.post('/apply-preview', async (req, res) => {
@@ -242,11 +243,11 @@ function createRulesGeneratorRouter(config) {
             return res.status(400).json({ error: 'oldCollectionKey and newCollectionKey are both required.' });
         }
         try {
-            const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-            let result = helperAvailable
-                ? await rgRunner.applyPreviewViaHelper(oldCollectionKey, newCollectionKey, ruleOverrides, anomalyOverrides, relationshipOverrides)
+            const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+            let result = bridgeAvailable
+                ? await rgRunner.applyPreviewViaBridge(oldCollectionKey, newCollectionKey, ruleOverrides, anomalyOverrides, relationshipOverrides)
                 : null;
-            let source = 'helper-extension';
+            let source = 'bridge-extension';
             if (!result) {
                 source = 'state.v2';
                 if (vortexRunningGate(res)) return;
@@ -259,7 +260,7 @@ function createRulesGeneratorRouter(config) {
     });
 
     // The real write -- opens Vortex's LIVE state.v2 directly (full backup taken first, refuses if
-    // Vortex is running). Same params as /apply-preview. Same opportunistic helper-extension path as
+    // Vortex is running). Same params as /apply-preview. Same opportunistic bridge-extension path as
     // above -- see its own comment. Real SSE-streamed progress (2026-08-25) -- same ticking-phase
     // shape as /analyze above, same reasoning (a single opaque write call, writes to potentially many
     // mods, no per-item hook to report through).
@@ -288,11 +289,14 @@ function createRulesGeneratorRouter(config) {
         (async () => {
             const stopTicking = tickingPhase(emitIfCurrent, 'applying', 'Writing rules to Vortex…');
             try {
-                const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-                let result = helperAvailable
-                    ? await rgRunner.applyViaHelper(oldCollectionKey, newCollectionKey, ruleOverrides, anomalyOverrides, relationshipOverrides)
+                const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+                let result = bridgeAvailable
+                    ? await withHealthCheckPaused(() => rgRunner.applyViaBridge(oldCollectionKey, newCollectionKey, ruleOverrides, anomalyOverrides, relationshipOverrides), {
+                        onPaused: (line) => console.log(`[rules-generator-routes] ${line}`),
+                        onRestoreFailed: (line) => console.warn(`[rules-generator-routes] ${line}`),
+                    })
                     : null;
-                let source = 'helper-extension';
+                let source = 'bridge-extension';
                 if (!result) {
                     source = 'state.v2';
                     if (syncLib.isVortexRunning()) {
@@ -307,7 +311,7 @@ function createRulesGeneratorRouter(config) {
                 }
                 stopTicking();
                 // freshAnalysis/freshExceptions (rules-generator-worker.js's own apply-write mode, or
-                // its helper-backed equivalent) are computed from the SAME in-memory modIndex the
+                // its bridge-backed equivalent) are computed from the SAME in-memory modIndex the
                 // write itself just patched -- zero staleness risk, no second read.
                 // relationshipCandidates still needs computing here (filesystem work, same reasoning
                 // as /analyze), fed this fresh, just-written analysis rather than a possibly-stale
@@ -327,19 +331,41 @@ function createRulesGeneratorRouter(config) {
         })();
     });
 
+    // "Save the links for this pair" (which main mod matches which new mod). save false reports what
+    // the matching found (the sure count plus the rows that need the player's pick); save true
+    // writes the sure links plus the picks in `confirmed`. Never writes to Vortex -- only the small
+    // link file in App Data -- so it needs no backup and no Vortex-closed gate beyond the read.
+    router.post('/links', async (req, res) => {
+        const { oldCollectionKey, newCollectionKey, save, confirmed } = req.body || {};
+        if (!oldCollectionKey || !newCollectionKey) {
+            return res.status(400).json({ error: 'oldCollectionKey and newCollectionKey are both required.' });
+        }
+        try {
+            const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+            let result = bridgeAvailable ? await rgRunner.linksViaBridge(oldCollectionKey, newCollectionKey, save, confirmed) : null;
+            if (!result) {
+                if (vortexRunningGate(res)) return;
+                result = await rgRunner.links(state, oldCollectionKey, newCollectionKey, save, confirmed);
+            }
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // Exception report's "Clear all rules" -- read-only dry run for the confirm dialog. Same
-    // gate/shape as /apply-preview, including the same opportunistic helper-extension path.
+    // gate/shape as /apply-preview, including the same opportunistic bridge-extension path.
     router.post('/clear-skipped-preview', async (req, res) => {
         const { oldCollectionKey, newCollectionKey, anomalyOverrides } = req.body || {};
         if (!oldCollectionKey || !newCollectionKey) {
             return res.status(400).json({ error: 'oldCollectionKey and newCollectionKey are both required.' });
         }
         try {
-            const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-            let result = helperAvailable
-                ? await rgRunner.clearSkippedPreviewViaHelper(oldCollectionKey, newCollectionKey, anomalyOverrides)
+            const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+            let result = bridgeAvailable
+                ? await rgRunner.clearSkippedPreviewViaBridge(oldCollectionKey, newCollectionKey, anomalyOverrides)
                 : null;
-            let source = 'helper-extension';
+            let source = 'bridge-extension';
             if (!result) {
                 source = 'state.v2';
                 if (vortexRunningGate(res)) return;
@@ -354,18 +380,18 @@ function createRulesGeneratorRouter(config) {
     // The real clear -- opens Vortex's LIVE state.v2 directly (full backup taken first, refuses if
     // Vortex is running). Removes ONLY the specific rules the exception report identified (see
     // lib/rules-generator.js's clearSkippedRules), never anything else on those mods. Same
-    // opportunistic helper-extension path as /apply above.
+    // opportunistic bridge-extension path as /apply above.
     router.post('/clear-skipped', async (req, res) => {
         const { oldCollectionKey, newCollectionKey, anomalyOverrides } = req.body || {};
         if (!oldCollectionKey || !newCollectionKey) {
             return res.status(400).json({ error: 'oldCollectionKey and newCollectionKey are both required.' });
         }
         try {
-            const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-            let result = helperAvailable
-                ? await rgRunner.clearSkippedViaHelper(oldCollectionKey, newCollectionKey, anomalyOverrides)
+            const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+            let result = bridgeAvailable
+                ? await rgRunner.clearSkippedViaBridge(oldCollectionKey, newCollectionKey, anomalyOverrides)
                 : null;
-            let source = 'helper-extension';
+            let source = 'bridge-extension';
             if (!result) {
                 source = 'state.v2';
                 if (vortexRunningGate(res)) return;
@@ -380,18 +406,18 @@ function createRulesGeneratorRouter(config) {
     // Step 3 (Exceptions)'s "switch to match the old collection" -- read-only dry run for the
     // confirm dialog. switchModKeys: array of newModKeys the user picked "Switch" for (per-mod picks
     // via "Save my picks", or every currently-known skip's modKey for the bulk "Switch all" button).
-    // Same opportunistic helper-extension path as /apply-preview above.
+    // Same opportunistic bridge-extension path as /apply-preview above.
     router.post('/switch-skipped-preview', async (req, res) => {
         const { oldCollectionKey, newCollectionKey, anomalyOverrides, switchModKeys } = req.body || {};
         if (!oldCollectionKey || !newCollectionKey) {
             return res.status(400).json({ error: 'oldCollectionKey and newCollectionKey are both required.' });
         }
         try {
-            const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-            let result = helperAvailable
-                ? await rgRunner.switchSkippedPreviewViaHelper(oldCollectionKey, newCollectionKey, anomalyOverrides, switchModKeys)
+            const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+            let result = bridgeAvailable
+                ? await rgRunner.switchSkippedPreviewViaBridge(oldCollectionKey, newCollectionKey, anomalyOverrides, switchModKeys)
                 : null;
-            let source = 'helper-extension';
+            let source = 'bridge-extension';
             if (!result) {
                 source = 'state.v2';
                 if (vortexRunningGate(res)) return;
@@ -406,7 +432,7 @@ function createRulesGeneratorRouter(config) {
     // The real switch -- opens Vortex's LIVE state.v2 directly (full backup taken first, refuses if
     // Vortex is running). Removes the conflicting literal rule AND writes the old collection's
     // intended rule in its place, for ONLY the mods in switchModKeys (see
-    // lib/rules-generator.js's switchSkippedRules). Same opportunistic helper-extension path as
+    // lib/rules-generator.js's switchSkippedRules). Same opportunistic bridge-extension path as
     // /apply above.
     router.post('/switch-skipped', async (req, res) => {
         const { oldCollectionKey, newCollectionKey, anomalyOverrides, switchModKeys } = req.body || {};
@@ -414,11 +440,11 @@ function createRulesGeneratorRouter(config) {
             return res.status(400).json({ error: 'oldCollectionKey and newCollectionKey are both required.' });
         }
         try {
-            const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-            let result = helperAvailable
-                ? await rgRunner.switchSkippedViaHelper(oldCollectionKey, newCollectionKey, anomalyOverrides, switchModKeys)
+            const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+            let result = bridgeAvailable
+                ? await rgRunner.switchSkippedViaBridge(oldCollectionKey, newCollectionKey, anomalyOverrides, switchModKeys)
                 : null;
-            let source = 'helper-extension';
+            let source = 'bridge-extension';
             if (!result) {
                 source = 'state.v2';
                 if (vortexRunningGate(res)) return;

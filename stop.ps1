@@ -28,7 +28,7 @@ if ($hostName -eq "0.0.0.0") { $hostName = "127.0.0.1" }
 $trayRunning = $null -ne (Get-Process -Name "VortexCollectionTools" -ErrorAction SilentlyContinue)
 
 try {
-    Invoke-RestMethod -Uri "http://${hostName}:$port/api/shutdown" -Method Post -TimeoutSec 5 | Out-Null
+    Invoke-RestMethod -Uri "http://${hostName}:$port/api/shutdown" -Method Post -Headers @{ 'X-VCT' = '1' } -TimeoutSec 5 | Out-Null
     Write-Host "Server stopped." -ForegroundColor Green
     if ($trayRunning) {
         Write-Host "The system tray icon will update to show it as stopped -- right-click it any time to start it again." -ForegroundColor Green

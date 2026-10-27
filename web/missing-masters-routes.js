@@ -11,14 +11,14 @@
 // state.v2-touching route elsewhere in this app.
 
 const path = require('path');
-const { spawn } = require('child_process');
+const { openFolderInExplorer, revealInExplorer } = require('../lib/open-in-explorer');
 const express = require('express');
 const missingMastersScan = require('../lib/missing-masters-scan');
 const espWriter = require('../lib/esp-writer');
 const syncLib = require('../lib/vortex-sync/lib');
 const appConfig = require('../lib/app-config');
 const { rebuildSingleMod } = require('../lib/rebuild-single-mod');
-const helperClient = require('../lib/vortex-helper-client');
+const bridgeClient = require('../lib/vortex-bridge-client');
 // Restore (2026-08-23) reads Archive Finder's own index and reuses Rebuild Missing Files' own
 // extract-to-scratch-then-copy shape. Deliberately NOT archive-finder-routes.js's POST /extract:
 // that route persists its outputFolder as the user's new Archive Finder default, so restoring into
@@ -149,13 +149,13 @@ function createMissingMastersRouter(config) {
     // missing-masters-scan.js's hollowInstalls/possibleHollowInstall). Reuses Rebuild Collection's
     // own classify/extract/verify/swap engine unchanged (lib/rebuild-single-mod.js).
     //
-    // Opportunistic helper-extension path (2026-08-18, same "remove the Vortex-must-be-closed
+    // Opportunistic bridge-extension path (2026-08-18, same "remove the Vortex-must-be-closed
     // requirement" pattern already shipped for Cycle Helper and Rules Generator -- see
     // TECHNICAL.md's Missing Masters section). The only step here that ever needed Vortex closed was
     // the mod-record lookup (buildModFromVortexState's own state.v2 read) -- the actual rebuild
     // itself is pure filesystem work (staging/downloads), never a Vortex database write. Checked
-    // BEFORE vortexRunningGate, same as every other helper-integrated route: source the live mod
-    // data from helperClient.getAllMods() when reachable, fall through to the exact original
+    // BEFORE vortexRunningGate, same as every other bridge-integrated route: source the live mod
+    // data from bridgeClient.getAllMods() when reachable, fall through to the exact original
     // gated state.v2 path, untouched, when it's not (or its own /mods read fails).
     router.post('/rebuild-mod', async (req, res) => {
         if (!staging || !downloads) {
@@ -166,11 +166,11 @@ function createMissingMastersRouter(config) {
             return res.status(400).json({ error: 'No mod given to rebuild.' });
         }
         try {
-            const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-            const helperData = helperAvailable ? await helperClient.getAllMods() : null;
+            const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+            const bridgeData = bridgeAvailable ? await bridgeClient.getAllMods() : null;
             let source = 'state.v2';
-            if (helperData) {
-                source = 'helper-extension';
+            if (bridgeData) {
+                source = 'bridge-extension';
             } else if (vortexRunningGate(res)) {
                 return;
             }
@@ -183,7 +183,7 @@ function createMissingMastersRouter(config) {
             const result = await rebuildSingleMod({
                 vortexModId, gameId: syncLib.GAME_ID, stateDir: state, downloadsDir: downloads, stagingDir: staging,
                 allowAutoDownload: !!downloadMissingArchives,
-                liveMods: helperData ? helperData.mods : null,
+                liveMods: bridgeData ? bridgeData.mods : null,
             });
             res.json({ ...result, source });
         } catch (e) {
@@ -195,7 +195,7 @@ function createMissingMastersRouter(config) {
     // page itself (not Settings, unlike this project's other toggles), so it gets its own small,
     // immediate-save route rather than going through /api/settings' Save button.
     // Turns one plugin back on in Vortex (2026-08-23). The whole mechanism already existed --
-    // helperClient.setPluginEnabled, live-verified and already used by web/pgpatcher-routes.js at
+    // bridgeClient.setPluginEnabled, live-verified and already used by web/pgpatcher-routes.js at
     // four call sites -- so this is a thin relay, not new machinery. It takes the raw filename
     // exactly as it appears in plugins.txt, which is precisely the shape `master.name` already has.
     //
@@ -206,22 +206,22 @@ function createMissingMastersRouter(config) {
     // Disabled and look broken). setPluginEnabled self-verifies against Vortex's own before/after
     // readback, so its return value is the truth.
     //
-    // 409 + 'helper-unavailable' matches the convention already used elsewhere in this app
-    // (web/clear-update-flags-routes.js's requireHelper) rather than inventing a status for it.
+    // 409 + 'bridge-unavailable' matches the convention already used elsewhere in this app
+    // (web/clear-update-flags-routes.js's requireBridge) rather than inventing a status for it.
     router.post('/set-plugin-enabled', async (req, res) => {
         const { name } = req.body || {};
         if (!name || typeof name !== 'string') {
             return res.status(400).json({ error: 'A plugin name is required.' });
         }
         try {
-            const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-            if (!helperAvailable) {
+            const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+            if (!bridgeAvailable) {
                 return res.status(409).json({
-                    error: 'helper-unavailable',
-                    message: 'The Vortex Collection Helper extension must be reachable (Vortex genuinely open) to turn a plugin back on.',
+                    error: 'bridge-unavailable',
+                    message: 'The Vortex Bridge extension must be reachable (Vortex genuinely open) to turn a plugin back on.',
                 });
             }
-            const ok = await helperClient.setPluginEnabled(name, true);
+            const ok = await bridgeClient.setPluginEnabled(name, true);
             if (!ok) {
                 // A real, reproducible case, not a generic failure: a plugin whose owning mod isn't
                 // deployed has no load-order entry to flip at all, so Vortex's own readback can't
@@ -243,7 +243,7 @@ function createMissingMastersRouter(config) {
     // Same call and the same fire-and-poll shape PGPatcher's own Deploy All already uses
     // (web/pgpatcher-routes.js) rather than a second pattern: POST kicks it off and returns 202
     // immediately, the client polls /deploy-all/progress. deployAllMods()/getDeployAllProgress() are
-    // themselves a poll-shaped pair in lib/vortex-helper-client.js, so an SSE wrapper would be
+    // themselves a poll-shaped pair in lib/vortex-bridge-client.js, so an SSE wrapper would be
     // inventing push semantics the underlying primitive doesn't have.
     //
     // Module-scoped single-flight, matching PGPatcher's: this is a real, out-of-band, whole-install
@@ -253,18 +253,18 @@ function createMissingMastersRouter(config) {
         if (deployAllInProgress) {
             return res.status(409).json({ error: 'A deploy is already in progress.' });
         }
-        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-        if (!helperAvailable) {
+        const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+        if (!bridgeAvailable) {
             return res.status(409).json({
-                error: 'helper-unavailable',
-                message: 'The Vortex Collection Helper extension must be reachable (Vortex genuinely open) to deploy from here.',
+                error: 'bridge-unavailable',
+                message: 'The Vortex Bridge extension must be reachable (Vortex genuinely open) to deploy from here.',
             });
         }
         deployAllInProgress = true;
         res.status(202).json({});
         (async () => {
             try {
-                await helperClient.deployAllMods();
+                await bridgeClient.deployAllMods();
             } catch {
                 // deployAllMods never throws by contract; the progress endpoint below is what
                 // actually reports a real failure, so there is nothing useful to do here.
@@ -273,7 +273,7 @@ function createMissingMastersRouter(config) {
     });
 
     router.get('/deploy-all/progress', async (req, res) => {
-        const progress = await helperClient.getDeployAllProgress();
+        const progress = await bridgeClient.getDeployAllProgress();
         // A null here means "no fresh update right now", NOT that the deploy failed -- the same
         // event-loop congestion that makes a deploy slow can also time out this poll. Falls back to
         // this route's own in-flight flag rather than reporting a false "not active", exactly as
@@ -381,11 +381,11 @@ function createMissingMastersRouter(config) {
             return res.status(409).json({ error: 'A restore is already in progress.' });
         }
         if (!staging) return res.status(400).json({ error: 'not-configured', message: 'Set up the staging folder under Settings first.' });
-        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-        if (!helperAvailable) {
+        const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+        if (!bridgeAvailable) {
             return res.status(409).json({
-                error: 'helper-unavailable',
-                message: 'The Vortex Collection Helper extension must be reachable (Vortex genuinely open) to add the restored mod to Vortex.',
+                error: 'bridge-unavailable',
+                message: 'The Vortex Bridge extension must be reachable (Vortex genuinely open) to add the restored mod to Vortex.',
             });
         }
         restoreState = { active: true, done: false, percent: 0, text: 'Extracting mod files from archive\u2026' };
@@ -446,11 +446,11 @@ function createMissingMastersRouter(config) {
                     id: targetFolderName, state: 'installed', type: '', installationPath: targetFolderName,
                     attributes: { name: mod.name || targetFolderName, installTime: new Date().toISOString() },
                 };
-                const created = await helperClient.createMod(targetFolderName, vortexMod);
+                const created = await bridgeClient.createMod(targetFolderName, vortexMod);
                 if (!created) throw new Error("Files were extracted, but Vortex couldn't register this as a new mod -- check Vortex's own log.");
                 // Director's call: enabled by default. A restored mod the user then has to go and
                 // switch on themselves isn't really restored.
-                const enabled = await helperClient.setModEnabled(targetFolderName, true);
+                const enabled = await bridgeClient.setModEnabled(targetFolderName, true);
                 restoreState = {
                     active: false, done: true, percent: 100,
                     result: {
@@ -496,7 +496,7 @@ function createMissingMastersRouter(config) {
         if (!isInside(staging, folderPath)) {
             return res.status(400).json({ error: 'That folder is not inside your configured staging directory.' });
         }
-        spawn(`explorer.exe "${path.resolve(folderPath)}"`, { shell: true, detached: true, stdio: 'ignore' }).unref();
+        try { openFolderInExplorer(folderPath); } catch (e) { return res.status(400).json({ error: e.message }); }
         res.json({ ok: true });
     });
 
@@ -517,7 +517,7 @@ function createMissingMastersRouter(config) {
         if (!isInside(skyrimDataDir, folderPath)) {
             return res.status(400).json({ error: 'That folder is not inside your Skyrim Data folder.' });
         }
-        spawn(`explorer.exe "${path.resolve(folderPath)}"`, { shell: true, detached: true, stdio: 'ignore' }).unref();
+        try { openFolderInExplorer(folderPath); } catch (e) { return res.status(400).json({ error: e.message }); }
         res.json({ ok: true });
     });
 

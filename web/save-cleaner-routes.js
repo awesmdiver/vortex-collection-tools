@@ -2,7 +2,7 @@
 // Save Cleaner -- wraps the bundled ReSaver_Renewed.exe (lib/save-cleaner-runner.js) into the real
 // Phase 1 flow from design/mockup-save-cleaner.html: pick a save, health report, choose what to
 // clean, save out (Save or Save As, never silently). See that mockup for the full design writeup,
-// and F:\Claude Workspace\skyrim-modding\fallrimtools-resaver-renewed's own prompts/handoff-latest.md
+// and skyrim-modding\fallrimtools-resaver-renewed's own prompts/handoff-latest.md
 // (commit 02e8065) for the exe's real CLI shape this file drives.
 //
 // Real progress caveat (read before changing the SSE wiring below): unlike pgtools.exe, ReSaver_
@@ -23,7 +23,7 @@ const semver = require('semver');
 const appConfig = require('../lib/app-config');
 const syncLib = require('../lib/vortex-sync/lib');
 const syncRunner = require('../lib/sync-runner');
-const helperClient = require('../lib/vortex-helper-client');
+const bridgeClient = require('../lib/vortex-bridge-client');
 const resaverRunner = require('../lib/save-cleaner-runner');
 const saveScan = require('../lib/save-cleaner-scan');
 const saveBackups = require('../lib/save-cleaner-backups');
@@ -64,39 +64,39 @@ function createSaveCleanerRouter(config) {
         return saveCleanerSavesDir || saveScan.resolveDefaultSavesDir('skyrim');
     }
 
-    // The Helper version /profiles was actually added in (SCOPE ADDENDUM v0.13.0, confirmed via
-    // vortex-collection-helper/index.js's own header) -- a Helper reachable but older than this
+    // The Vortex Bridge version /profiles was actually added in (SCOPE ADDENDUM v0.13.0, confirmed via
+    // vortex-bridge/index.js's own header) -- a Vortex Bridge reachable but older than this
     // genuinely doesn't have the endpoint yet, a PERMANENT gap for this session, never a busy/retry
-    // case. Distinct from MIN_HELPER_VERSION (this project's own overall floor) -- deliberately not
+    // case. Distinct from MIN_BRIDGE_VERSION (this project's own overall floor) -- deliberately not
     // reused here, since a version between the two floors legitimately supports this ONE endpoint.
     const PROFILES_ENDPOINT_MIN_VERSION = '0.13.0';
 
     // Cross-references each save's raw profileFolderId (a Vortex profile ID, when the install uses
     // per-profile save separation) against Vortex's own real profile list to attach the actual
-    // display name. Prefers the live Helper extension (getLiveProfiles) -- no "close Vortex first"
-    // gate at all, matches every other read this app has moved onto the Helper for -- and only falls
+    // display name. Prefers the live Vortex Bridge (getLiveProfiles) -- no "close Vortex first"
+    // gate at all, matches every other read this app has moved onto the Vortex Bridge for -- and only falls
     // back to the on-disk state.v2 read (which genuinely does need Vortex closed, since it can't open
-    // the same LevelDB Vortex already has locked) when the Helper isn't installed, isn't running, or
+    // the same LevelDB Vortex already has locked) when the Vortex Bridge isn't installed, isn't running, or
     // is an older version that predates GET /profiles. Best-effort either way: a lookup failure just
     // leaves saves ungrouped by name (raw ID still shown) rather than failing the whole saves list.
     //
     // profileNamesError (2026-09-05, director's own direct ask): "Unknown profile" reads as broken
-    // even when it's really just a transient Vortex-busy moment (the exact HELPER_TIMEOUT_MS issue
+    // even when it's really just a transient Vortex-busy moment (the exact BRIDGE_TIMEOUT_MS issue
     // fixed elsewhere this session, commit bb4df28) -- the director's own words: "if someone sees
     // Unknown, I think something is broken - add the modal... but if a user cancels the modal because
     // Vortex is having issues, Unknown is fine." Distinguishes 3 real cases, only one of which is
     // actually "Vortex busy right now":
-    //   1. Helper unreachable/not installed at all -> falls to state.v2 exactly as before, no flag
+    //   1. Vortex Bridge unreachable/not installed at all -> falls to state.v2 exactly as before, no flag
     //      (state.v2 itself might then find Vortex genuinely running -- THAT'S case 3 below).
-    //   2. Helper reachable but genuinely older than PROFILES_ENDPOINT_MIN_VERSION -> falls to
+    //   2. Vortex Bridge reachable but genuinely older than PROFILES_ENDPOINT_MIN_VERSION -> falls to
     //      state.v2 exactly as before, no flag -- this is a PERMANENT gap for this session (updating
-    //      the Helper, not retrying, is what actually fixes it), never worth a busy modal.
-    //   3. Helper's own /health JUST succeeded (so Vortex is confirmed reachable this instant) and
+    //      the Vortex Bridge, not retrying, is what actually fixes it), never worth a busy modal.
+    //   3. Vortex Bridge's own /health JUST succeeded (so Vortex is confirmed reachable this instant) and
     //      the version supports this endpoint, yet the /profiles call itself came back empty -- this
     //      can only be a real, transient failure (timeout, brief main-thread stall), so it's flagged.
     //      Vortex is confirmed running in this case, so a state.v2 fallback attempt would be
     //      guaranteed to fail too (it needs Vortex closed) -- skipped rather than tried and failed a
-    //      second time. The state.v2 path's OWN direct "Vortex is running" failure (no Helper at all,
+    //      second time. The state.v2 path's OWN direct "Vortex is running" failure (no Vortex Bridge at all,
     //      case 1's fallback) is flagged the same way for the identical real reason.
     async function attachProfileNames(saves) {
         const ids = new Set(saves.map((s) => s.profileFolderId).filter(Boolean));
@@ -104,28 +104,28 @@ function createSaveCleanerRouter(config) {
 
         let profiles = null;
         let genuinelyBusy = false;
-        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-        if (helperAvailable) {
-            const health = await helperClient.getHelperHealth();
+        const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+        if (bridgeAvailable) {
+            const health = await bridgeClient.getBridgeHealth();
             const version = health && health.version;
             const clean = version && semver.valid(semver.coerce(version));
             const supportsProfiles = !!clean && semver.gte(clean, PROFILES_ENDPOINT_MIN_VERSION);
             if (supportsProfiles) {
-                const live = await helperClient.getLiveProfiles();
+                const live = await bridgeClient.getLiveProfiles();
                 if (live) {
                     profiles = live.profiles;
                 } else {
                     genuinelyBusy = true; // case 3 above
                 }
             }
-            // else: Helper reachable but too old for /profiles -- case 2, fall through, no flag.
+            // else: Vortex Bridge reachable but too old for /profiles -- case 2, fall through, no flag.
         }
 
         if (!profiles && !genuinelyBusy) {
             try {
                 ({ profiles } = await syncRunner.listProfiles(state));
             } catch {
-                // Vortex running (and no/too-old Helper) is the one real "busy" reason this specific
+                // Vortex running (and no/too-old Vortex Bridge) is the one real "busy" reason this specific
                 // read can fail this way -- anything else (no state.v2 yet, corrupt file) is a
                 // genuine, non-transient gap, not worth a retry prompt.
                 if (syncLib.isVortexRunning()) genuinelyBusy = true;
@@ -146,16 +146,16 @@ function createSaveCleanerRouter(config) {
     }
 
     // Whether the "Regional Save Names" mod (github.com/powerof3/RegionalSaveNames) is installed --
-    // prefers the live Helper's own real mod list (matches by display name, immune to the shipped
+    // prefers the live Vortex Bridge's own real mod list (matches by display name, immune to the shipped
     // DLL's own filename ever changing -- confirmed real 2026-08-25: the file is actually named
     // "po3_RegionalSaveNames.dll", not the repo's own name, and a future mod update could rename it
     // again), falling back to the on-disk staging-folder DLL scan (isRegionalSaveNamesInstalled) only
-    // when the Helper isn't installed/running -- same helper-first-then-fall-back shape as
+    // when the Vortex Bridge isn't installed/running -- same bridge-first-then-fall-back shape as
     // attachProfileNames above.
     async function detectRegionalSaveNames() {
-        const live = await helperClient.getAllMods();
+        const live = await bridgeClient.getAllMods();
         if (live && live.mods) {
-            // A real, successful Helper answer either way -- trust it rather than falling through to
+            // A real, successful Vortex Bridge answer either way -- trust it rather than falling through to
             // the disk scan, which could be stale (mod present in staging but disabled in Vortex).
             // Matching against live.mods alone isn't enough: a mod stays in that list even when
             // disabled, only enabledModKeys reflects its real profile-level Enabled/Disabled state --
@@ -168,7 +168,7 @@ function createSaveCleanerRouter(config) {
                 return /regional save names/i.test(name);
             });
         }
-        // Helper not installed/running -- fall back to the on-disk staging-folder scan.
+        // Vortex Bridge not installed/running -- fall back to the on-disk staging-folder scan.
         return staging ? saveScan.isRegionalSaveNamesInstalled(staging) : false;
     }
 

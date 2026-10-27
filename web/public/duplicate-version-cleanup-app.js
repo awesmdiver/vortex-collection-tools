@@ -13,6 +13,7 @@ const dvcState = {
   groups: [], // Map-like lookup by id -- see dvcGroupById below
   selected: new Set(), // group.id
   eventSource: null,
+  actions: new Map(), // group.id -> 'light' | 'recipe' (the person's choice for a group that offers both)
   picked: new Set(), // Screen 1's own scope picker -- collectionModId
   collectionsById: new Map(), // collectionModId -> { name, modCount }
 };
@@ -43,7 +44,7 @@ function dvcHandleError(e) {
     return;
   }
   const box = $g('dvcCriticalError');
-  const title = (e.body && e.body.error === 'helper-unavailable') ? '🛑 Vortex Connection Required'
+  const title = (e.body && e.body.error === 'bridge-unavailable') ? '🛑 Vortex Connection Required'
     : (e.body && e.body.error === 'not-configured') ? '🛑 Setup Required'
       : '🛑 Something Went Wrong';
   box.innerHTML = `<div class="callout__title">${escHtmlDvc(title)}</div><p>${escHtmlDvc(e.message)}</p>`;
@@ -81,11 +82,32 @@ function dvcVersionCellHtml(g) {
     : `<span class="status-pill status-pill--version">${escHtmlDvc(r.version)}</span>`)).join('');
 }
 
+// New words (Claude-drafted, need their Gemini pass).
+const DVC_LIGHT_LABEL = 'Link its new download';
+const DVC_LIGHT_HELP = 'Points the mod at its newer download and removes the old one. Nothing is reinstalled.';
+const DVC_FULL_LABEL = 'Full cleanup';
+const DVC_FULL_HELP = 'Removes the extra entries, downloads the file again and reinstalls the mod.';
+
+function dvcGroupAction(g) {
+  return g.action === 'light' && dvcState.actions.get(g.id) !== 'recipe' ? 'light' : 'recipe';
+}
+
+// One muted line per entry: what it holds, so nobody has to guess which copy has the details and files.
+function dvcHoldsHtml(g) {
+  if (!g.survivorHolds) return '';
+  const lines = [g.survivorHolds, ...g.removable.filter((r) => r.holds).map((r) => r.holds)];
+  const action = dvcGroupAction(g);
+  const choice = g.action === 'light'
+    ? `<div><select data-action-for="${escHtmlDvc(g.id)}"><option value="light" ${action === 'light' ? 'selected' : ''}>${DVC_LIGHT_LABEL}</option><option value="recipe" ${action === 'recipe' ? 'selected' : ''}>${DVC_FULL_LABEL}</option></select></div><div class="muted">${action === 'light' ? DVC_LIGHT_HELP : DVC_FULL_HELP}</div>`
+    : (g.actionReason ? `<div class="muted">${escHtmlDvc(g.actionReason)}</div>` : '');
+  return lines.map((l) => `<div class="muted" style="font-size:12px">${escHtmlDvc(l)}</div>`).join('') + choice;
+}
+
 function dvcRowHtml(g) {
   const checked = dvcState.selected.has(g.id);
   return `<tr class="${checked ? 'selected' : ''}">
     <td><input type="checkbox" data-id="${escHtmlDvc(g.id)}" ${checked ? 'checked' : ''} ${g.removable.every((r) => r.kind !== 'orphan') ? 'disabled' : ''}></td>
-    <td class="mod-name-cell" title="${escHtmlDvc(g.mod)}">${escHtmlDvc(g.mod)}</td>
+    <td class="mod-name-cell" title="${escHtmlDvc(g.mod)}">${escHtmlDvc(g.mod)}${dvcHoldsHtml(g)}</td>
     <td>${dvcVersionCellHtml(g)}</td>
     <td class="collections-cell">${g.collections.map((c) => `<div>${escHtmlDvc(c)}</div>`).join('') || '<div class="muted">(none)</div>'}</td>
   </tr>`;
@@ -93,6 +115,9 @@ function dvcRowHtml(g) {
 
 function dvcRenderGroups() {
   $g('dvcGroupsTbody').innerHTML = dvcState.groups.map(dvcRowHtml).join('');
+  document.querySelectorAll('#dvcGroupsTbody select[data-action-for]').forEach((sel) => {
+    sel.addEventListener('change', () => { dvcState.actions.set(sel.dataset.actionFor, sel.value); dvcRenderGroups(); });
+  });
   document.querySelectorAll('#dvcGroupsTbody input[type="checkbox"]').forEach((cb) => {
     cb.addEventListener('change', () => {
       if (cb.checked) dvcState.selected.add(cb.dataset.id); else dvcState.selected.delete(cb.dataset.id);
@@ -262,7 +287,7 @@ async function dvcStartClean() {
 
   const selections = [...dvcState.selected].map((id) => {
     const g = dvcGroupById(id);
-    return { modId: g.modId, installedVortexModId: g.installedVortexModId };
+    return { modId: g.modId, installedVortexModId: g.installedVortexModId, action: dvcGroupAction(g) };
   });
 
   try {
@@ -280,12 +305,17 @@ async function dvcStartClean() {
   es.onmessage = (msg) => dvcHandleCleanEvent(JSON.parse(msg.data));
 }
 
-function dvcRowLine(name, ok, error, skipped) {
+const DVC_ONE_ENTRY_NOW = 'One entry now';
+
+function dvcRowLine(name, ok, error, skipped, oneEntry, reason) {
   const div = document.createElement('div');
   div.className = 'apply-row';
   const icon = skipped ? '↷' : ok ? '✓' : '✗';
+  // The check line comes from a fresh read of Vortex, never from the calls' own answers.
+  const check = skipped ? '' : (oneEntry === true ? DVC_ONE_ENTRY_NOW : (oneEntry === false && reason ? reason : ''));
   div.innerHTML = `<div><div class="apply-row__name">${icon} ${escHtmlDvc(name)}</div>`
-    + (error ? `<div class="apply-row__step">${escHtmlDvc(error)}</div>` : '') + '</div>';
+    + (error ? `<div class="apply-row__step">${escHtmlDvc(error)}</div>` : '')
+    + (check && check !== error ? `<div class="apply-row__step">${escHtmlDvc(check)}</div>` : '') + '</div>';
   return div;
 }
 
@@ -296,11 +326,11 @@ function dvcHandleCleanEvent(frame) {
     $g('dvcCleanPhaseText').textContent = `Group ${frame.index} of ${frame.total} — ${frame.name}`;
     $g('dvcCleanBar').style.width = `${Math.round(((frame.index - 1) / frame.total) * 100)}%`;
   } else if (frame.type === 'group-phase') {
-    const phaseLabel = { capturing: 'Checking what needs to survive…', removing: 'Removing old entries…', downloading: 'Downloading…', reinstalling: 'Reinstalling…', registering: 'Registering with Vortex…', reassigning: 'Reassigning to collections…' }[frame.phase] || frame.phase;
+    const phaseLabel = { capturing: 'Checking what needs to survive…', removing: 'Removing old entries…', downloading: 'Downloading…', reinstalling: 'Reinstalling…', registering: 'Registering with Vortex…', reassigning: 'Reassigning to collections…', linking: 'Linking its new download…' }[frame.phase] || frame.phase;
     $g('dvcCleanPhaseText').textContent = `Group ${frame.index} of ${frame.total} — ${frame.name}: ${phaseLabel}`;
   } else if (frame.type === 'group-complete') {
     $g('dvcCleanBar').style.width = `${Math.round((frame.index / frame.total) * 100)}%`;
-    $g('dvcCleanRowsContainer').appendChild(dvcRowLine(frame.name, frame.ok, frame.error, frame.skipped));
+    $g('dvcCleanRowsContainer').appendChild(dvcRowLine(frame.name, frame.ok, frame.error, frame.skipped, frame.oneEntry, frame.reason));
     if (frame.refusedOrphans && frame.refusedOrphans.length > 0) {
       for (const r of frame.refusedOrphans) {
         const div = document.createElement('div');
@@ -333,7 +363,7 @@ function dvcRenderCleanResult(results, cancelled, totalSelected) {
   const body = $g('dvcCleanResultBody');
   if (cancelled) {
     // A cancelled run is a real, honest partial success, not a failure -- whatever groups already
-    // finished before this landed genuinely stayed cleaned up (their Helper writes already happened
+    // finished before this landed genuinely stayed cleaned up (their Vortex Bridge writes already happened
     // and can't be un-sent), same reasoning clear-update-flags-app.js's own cancelled branch uses.
     callout.className = 'callout callout--warning';
     title.textContent = `⚠️ Cancelled — ${okCount} of ${totalSelected} group${totalSelected === 1 ? '' : 's'} cleaned up`;

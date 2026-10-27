@@ -210,7 +210,7 @@ async function mmEnablePlugin(master, btn) {
         mmLocallyFixed.set(master.name, 'enabled');
         // Marks HOW this row reached ready-to-deploy, purely so its callout can open with an accurate
         // sentence -- see the callout below. Nothing else branches on it.
-        master.enabledViaHelper = true;
+        master.enabledViaBridge = true;
         mmRenderSummaryBadges(); // its counts are per display-status, which just changed for this row
         mmRenderMasterList();
         mmRenderDeployBanners(); // this row is now ready-to-deploy, so there's a deploy worth offering
@@ -262,12 +262,12 @@ function mmRenderDeployBanners() {
   const allClear = $g('mmAllClear');
   const pending = $g('mmPendingDeploy');
   const tip = $g('mmDeployTip');
-  const helperUp = mmHelperStatus === MM_HELPER_AVAILABLE;
+  const bridgeUp = mmBridgeStatus === MM_BRIDGE_AVAILABLE;
   const pendingCount = mmPendingDeployCount();
 
-  // The fallback instruction, and ONLY when we genuinely know the Helper is missing -- not while the
+  // The fallback instruction, and ONLY when we genuinely know the Vortex Bridge is missing -- not while the
   // probe is still in flight ('unknown'), which would flash it and then pull it away.
-  tip.classList.toggle('hidden', mmHelperStatus !== MM_HELPER_UNAVAILABLE);
+  tip.classList.toggle('hidden', mmBridgeStatus !== MM_BRIDGE_UNAVAILABLE);
 
   // Nothing wrong at all AND nothing waiting on a deploy.
   const showAllClear = mmLastProblemMasters.length === 0 && pendingCount === 0;
@@ -282,9 +282,9 @@ function mmRenderDeployBanners() {
     ]));
   }
 
-  // Only offered when the Helper can actually run it -- without it the tip above already says the
+  // Only offered when the Vortex Bridge can actually run it -- without it the tip above already says the
   // same thing in the form the user can act on.
-  const showPending = pendingCount > 0 && helperUp && !mmDeployInFlight;
+  const showPending = pendingCount > 0 && bridgeUp && !mmDeployInFlight;
   pending.classList.toggle('hidden', !showPending);
   if (showPending) {
     pending.innerHTML = '';
@@ -406,8 +406,8 @@ function mmApplyLocalFixes() {
     const how = mmLocallyFixed.get(m.name);
     if (!how) continue;
     m.readyToDeploy = true;
-    if (how === 'restored') m.restoredViaHelper = true;
-    else m.enabledViaHelper = true;
+    if (how === 'restored') m.restoredViaBridge = true;
+    else m.enabledViaBridge = true;
   }
 }
 
@@ -636,7 +636,7 @@ function mmShowRestoreResult(master, result) {
   }
   // Same landing state as Enable -- fixed, but Vortex hasn't deployed it yet. No new state invented.
   master.readyToDeploy = true;
-  master.restoredViaHelper = true;
+  master.restoredViaBridge = true;
   mmLocallyFixed.set(master.name, 'restored');
   mmRenderSummaryBadges();
   mmRenderMasterList();
@@ -714,8 +714,8 @@ function mmRenderMasterRow(master) {
   // activeAlternate, no deployedMisplaced and no possibleHollowInstall. A hollow install is Rebuild
   // This Mod's territory (its staging folder still exists and Vortex still has the record); Restore
   // exists precisely because that record is gone, which is why it goes searching instead.
-  // Helper-gated on AVAILABLE, same reasoning as Enable: registering the restored mod needs it.
-  if (mmCanRestore(master) && mmHelperStatus === MM_HELPER_AVAILABLE) {
+  // Bridge-gated on AVAILABLE, same reasoning as Enable: registering the restored mod needs it.
+  if (mmCanRestore(master) && mmBridgeStatus === MM_BRIDGE_AVAILABLE) {
     const restoreBtn = el('button', { class: 'btn btn--primary btn--small' }, 'Restore');
     restoreBtn.addEventListener('click', () => mmStartRestore(master, restoreBtn));
     actions.push(restoreBtn);
@@ -723,7 +723,7 @@ function mmRenderMasterRow(master) {
   if (!mmActionsSuppressed(master) && master.status === 'missing') {
     // Secondary, not primary, whenever Restore is also on this row: putting the real mod back is
     // strictly the better fix, and two primary buttons side by side says neither is.
-    const dummyClass = mmCanRestore(master) && mmHelperStatus === MM_HELPER_AVAILABLE
+    const dummyClass = mmCanRestore(master) && mmBridgeStatus === MM_BRIDGE_AVAILABLE
       ? 'btn btn--secondary btn--small'
       : 'btn btn--primary btn--small';
     const btn = el('button', { class: dummyClass }, 'Create Dummy Master');
@@ -743,15 +743,15 @@ function mmRenderMasterRow(master) {
   // Enable (2026-08-23) -- the master's file is right there, Vortex just has it switched off. One
   // click instead of going to Vortex to flip it by hand.
   //
-  // Only when the Helper is genuinely AVAILABLE, not merely "not known to be unavailable": while the
-  // probe is still in flight mmHelperStatus is 'unknown', and rendering the button then would make it
+  // Only when the Vortex Bridge is genuinely AVAILABLE, not merely "not known to be unavailable": while the
+  // probe is still in flight mmBridgeStatus is 'unknown', and rendering the button then would make it
   // appear and vanish. That's the flicker the three-way state exists to prevent.
   //
   // Inserted BEFORE mmCopyNameBtn below, deliberately -- with the actions column right-aligned, Copy
   // Name must stay last/rightmost on every row or it visibly jumps position between rows with
   // different button counts (a real report, 2026-07-27; see the ordering comment above).
   if (!mmActionsSuppressed(master) && master.status === 'present-but-inactive'
-      && mmHelperStatus === MM_HELPER_AVAILABLE) {
+      && mmBridgeStatus === MM_BRIDGE_AVAILABLE) {
     const enableBtn = el('button', { class: 'btn btn--primary btn--small' }, 'Enable');
     enableBtn.addEventListener('click', () => mmEnablePlugin(master, enableBtn));
     actions.push(enableBtn);
@@ -921,9 +921,9 @@ function mmRenderMasterRow(master) {
       // false after an Enable, where the file was never missing and nothing was restored; only
       // Vortex's own plugin flag changed. The deploy half is identical either way, which is the part
       // that matters. NEW COPY, flagged for a pass -- see the handoff.
-      el('p', {}, master.restoredViaHelper
+      el('p', {}, master.restoredViaBridge
         ? 'This mod is restored and switched on in Vortex. Deploy your mods in Vortex to finish applying it — this will clear automatically once deployment finishes.'
-        : master.enabledViaHelper
+        : master.enabledViaBridge
         ? 'This plugin is switched back on in Vortex — nothing else to do. This row clears itself in a moment.'
         : 'This mod’s files are back in staging. Deploy your mods in Vortex to finish moving them into the game — this will clear automatically once deployment finishes.'),
     ]);
@@ -1026,7 +1026,7 @@ function mmRender(data) {
   mmApplyLocalFixes(); // before anything reads the list -- see mmLocallyFixed for why
   // After mmLastProblemMasters is set (the note's own "is this worth showing" test reads it) and
   // before the all-clear early return below, which would otherwise leave a stale note on screen.
-  mmRenderHelperNote();
+  mmRenderBridgeNote();
   mmLastTotal = data.total || 0;
   mmRenderDeployBanners();
   if (mmLastProblemMasters.length === 0) {
@@ -1054,37 +1054,37 @@ function mmRender(data) {
   $g('mmResults').classList.remove('hidden');
 }
 
-// ---------- Vortex Collection Helper availability (2026-08-23) ----------
+// ---------- Vortex Bridge availability (2026-08-23) ----------
 // Groundwork for Enable and Restore (items 2 and 3), neither of which exists yet. Missing Masters had
-// zero Helper awareness: /rebuild-mod checks server-side and falls back to requiring Vortex closed,
+// zero Vortex Bridge awareness: /rebuild-mod checks server-side and falls back to requiring Vortex closed,
 // but the frontend never knew either way.
 //
 // THREE-WAY, not a boolean. "Haven't found out yet" is genuinely different from "not there": the
 // probe is deliberately not awaited (see runMissingMastersScan), so a boolean defaulting to false
 // would render the note -- and later, hide the two buttons -- for the moment before the answer lands,
 // then flip. That flicker is the whole reason for the third state.
-const MM_HELPER_UNKNOWN = 'unknown';
-const MM_HELPER_AVAILABLE = 'available';
-const MM_HELPER_UNAVAILABLE = 'unavailable';
-let mmHelperStatus = MM_HELPER_UNKNOWN;
+const MM_BRIDGE_UNKNOWN = 'unknown';
+const MM_BRIDGE_AVAILABLE = 'available';
+const MM_BRIDGE_UNAVAILABLE = 'unavailable';
+let mmBridgeStatus = MM_BRIDGE_UNKNOWN;
 
-// Reuses Settings' own GET /api/settings/helper-info rather than adding a second endpoint answering
+// Reuses Settings' own GET /api/settings/bridge-info rather than adding a second endpoint answering
 // the same question. Only `connected` matters here -- `outdated` is Settings' concern (it owns the
-// "your Helper is too old" warning); a connected-but-old Helper still answers these calls.
+// "your Vortex Bridge is too old" warning); a connected-but-old Vortex Bridge still answers these calls.
 //
 // A probe that fails outright resolves to UNAVAILABLE, not back to unknown: if we can't even ask,
 // Enable and Restore could not work either, so that's the honest answer. In practice the only way
 // this fails is our own server being unreachable, in which case the scan itself already failed and
 // mmHandleError has surfaced the real problem.
-async function mmProbeHelper() {
+async function mmProbeBridge() {
   try {
-    const info = await mmApi('GET', '/api/settings/helper-info');
-    mmHelperStatus = info && info.connected ? MM_HELPER_AVAILABLE : MM_HELPER_UNAVAILABLE;
+    const info = await mmApi('GET', '/api/settings/bridge-info');
+    mmBridgeStatus = info && info.connected ? MM_BRIDGE_AVAILABLE : MM_BRIDGE_UNAVAILABLE;
   } catch {
-    mmHelperStatus = MM_HELPER_UNAVAILABLE;
+    mmBridgeStatus = MM_BRIDGE_UNAVAILABLE;
   }
-  mmRenderHelperNote();
-  // The tip and the Deploy button both key off Helper availability, so they re-decide here too.
+  mmRenderBridgeNote();
+  // The tip and the Deploy button both key off Vortex Bridge availability, so they re-decide here too.
   mmRenderDeployBanners();
 }
 
@@ -1094,20 +1094,20 @@ async function mmProbeHelper() {
 // would never grow an Enable or Restore button either. Deliberately NOT modelled per-button --
 // neither button exists yet, and guessing their exact conditions now would just be wrong later.
 // Consequence worth knowing: an all-clear scan never shows this note, which is correct.
-function mmHelperNoteWorthShowing() {
+function mmBridgeNoteWorthShowing() {
   return mmLastProblemMasters.some((m) => !mmActionsSuppressed(m));
 }
 
-function mmRenderHelperNote() {
-  const box = $g('mmHelperNote');
-  const show = mmHelperStatus === MM_HELPER_UNAVAILABLE && mmHelperNoteWorthShowing();
+function mmRenderBridgeNote() {
+  const box = $g('mmBridgeNote');
+  const show = mmBridgeStatus === MM_BRIDGE_UNAVAILABLE && mmBridgeNoteWorthShowing();
   box.classList.toggle('hidden', !show);
   if (!show) return;
   box.innerHTML = '';
-  box.appendChild(el('div', { class: 'callout__title' }, '\u2139\ufe0f Enable and Restore need the Vortex Helper'));
+  box.appendChild(el('div', { class: 'callout__title' }, '\u2139\ufe0f Enable and Restore need the Vortex Bridge'));
   box.appendChild(el('p', {}, [
     'You can still inspect plugins and build dummy masters without it. To turn plugins back on or extract missing mods directly from this page, install the ',
-    el('strong', {}, 'Vortex Collection Helper'),
+    el('strong', {}, 'Vortex Bridge'),
     ' extension and keep Vortex open.',
   ]));
   // Its own right-justified row rather than inline after the prose -- an action button trailing a
@@ -1117,7 +1117,7 @@ function mmRenderHelperNote() {
   retry.addEventListener('click', async () => {
     retry.disabled = true;
     retry.textContent = 'Checking\u2026';
-    await mmProbeHelper(); // a real re-probe -- never just hides the callout
+    await mmProbeBridge(); // a real re-probe -- never just hides the callout
     retry.disabled = false;
     retry.textContent = 'Retry Connection';
   });
@@ -1179,10 +1179,10 @@ async function runMissingMastersScan() {
     const data = await mmApi('GET', '/api/missing-masters/scan');
     mmLastResponseJSON = JSON.stringify(data);
     mmRender(data);
-    // Deliberately NOT awaited -- the Helper probe is a real network round-trip that needs Vortex
+    // Deliberately NOT awaited -- the Vortex Bridge probe is a real network round-trip that needs Vortex
     // open, and the scan results must render (and stay fully usable) without waiting on it. It
-    // re-renders just the note when it lands; mmHelperStatus stays 'unknown' until then.
-    mmProbeHelper();
+    // re-renders just the note when it lands; mmBridgeStatus stays 'unknown' until then.
+    mmProbeBridge();
   } catch (e) {
     mmHandleError(e, runMissingMastersScan);
   }
@@ -1203,9 +1203,9 @@ $g('mmRecognizeEslifierInput').addEventListener('change', async (e) => {
     mmRenderSummaryBadges();
     mmRenderMasterList();
     // This toggle flips whether ESLifier-swap rows count as actionable, which is exactly the test
-    // mmHelperNoteWorthShowing() uses -- so the note can become relevant (or stop being) without a
+    // mmBridgeNoteWorthShowing() uses -- so the note can become relevant (or stop being) without a
     // re-scan.
-    mmRenderHelperNote();
+    mmRenderBridgeNote();
   } catch (err) {
     e.target.checked = !enabled; // revert -- the save didn't actually take
     // Re-clicking the (just-reverted-to-!enabled) checkbox flips it back to `enabled` and re-fires

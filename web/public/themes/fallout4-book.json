@@ -98,6 +98,12 @@
       "whatItDoes": "Removing a collection in Vortex can easily wipe out mods that your other collections are still using behind the scenes. This tool checks your entire setup first, highlights every shared mod, and lets you choose individually what to keep or delete. You can safely clear out old collections without worrying about breaking anything else."
     },
     {
+      "toolId": "removed-from-main",
+      "banner": "theme-assets/fallout4/book/book-banner-fallout4-robco-redundancy-purge.png",
+      "lore": "Scavenging a high-tech targeting lens does you no good if the laser rifle it was built for gets scrapped for loose screws. Out in the wasteland, carrying around attachments for weapons you don't even own just weighs down your pack and clutters your workbench. A proper maintenance subroutine scans the inventory, identifies these useless leftover parts, and cleanly purges them before they turn your stash into a junk heap.",
+      "whatItDoes": "Finds your own upgraded mods that are no longer needed because the main collection dropped the originals. It gives you a checklist to uncheck anything you want to keep, then backs up your collection and deletes only what you left checked when you confirm."
+    },
+    {
       "toolId": "report-stats",
       "banner": "theme-assets/fallout4/book/book-banner-fallout4-report-stats.png",
       "lore": "A functional terminal in the overseer's private office doesn't make you walk the whole floor to check if the water purifiers are failing — it aggregates the run data and throws up a red flag the second a bottleneck starts choking the output. Sifting through raw system dumps from past rebuilding runs one by one is a waste of precious pre-war battery life. This log tracks every historical cycle in one place, instantly highlighting which mods are dragging down the processing speed and demanding immediate maintenance. It keeps the whole settlement running at peak efficiency without requiring a manual sweep of every terminal in the sector.",

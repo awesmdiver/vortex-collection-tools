@@ -20,9 +20,9 @@ function escHtmlDeploy(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-// Real, helper-reported fact instead of a tick-count guess (2026-08-29, originally
+// Real, bridge-reported fact instead of a tick-count guess (2026-08-29, originally
 // ucv2DeployStallMessage) -- GET .../all/progress folds in externalChangesPending/blockingDialogs,
-// read live from Vortex's own Redux state by the helper: when either is set, Vortex genuinely IS
+// read live from Vortex's own Redux state by the Vortex Bridge: when either is set, Vortex genuinely IS
 // sitting on a dialog right now, so the hint can show immediately instead of waiting out
 // DEPLOY_STALL_THRESHOLD_TICKS. Returns null when neither signal is set, so the caller falls back to
 // its own tick-count-only default hint.
@@ -61,12 +61,28 @@ function themedCycleMessage(rawMessage, code, matchCode) {
 //
 // Callbacks (all optional):
 //   onStart()             -- right before the POST fires (hide pending/result, show progress at 0%)
-//   onError(err)           -- the POST itself failed (helper unreachable, network error, etc.)
+//   onError(err)           -- the POST itself failed (Vortex Bridge unreachable, network error, etc.)
 //   onTick(progress)       -- every successful poll, real percent/text
-//   onStall(show, message) -- whenever the stall-hint state changes (message is the real helper-
+//   onStall(show, message) -- whenever the stall-hint state changes (message is the real bridge-
 //                             reported fact when available, null for the generic tick-count fallback)
 //   onDone(progress)       -- once, when the poll reports done:true. progress.error set means
 //                             failure (possibly deploy-blocked-by-cycles -- check progress.code)
+// Poll cadence (2026-09-28, follow-up to the Apply screen's own version in commit 49c46cb) -- this
+// used to be a bare, fixed-1s repeating timer: a GET that took longer than a second (or timed out)
+// did NOT delay the next one, so while Vortex was struggling the loop kept stacking new requests on
+// top of ones still waiting. Now exactly ONE poll is ever in flight, and the wait doubles (up to
+// DEPLOY_POLL_MAX_MS) whenever a poll fails or comes back slow, dropping straight back to the normal
+// rate once one is quick again -- same shape as ucv2NextApplyPollDelay in
+// update-collection-v2-apply-rows.js, kept as its own copy here since this file loads before that one
+// and is shared by every tool's Done screen, not just Update Collection's.
+const DEPLOY_POLL_BASE_MS = 1000;
+const DEPLOY_POLL_MAX_MS = 15000;
+const DEPLOY_POLL_SLOW_MS = 3000;
+function deployNextPollDelay(currentDelay, ok, tookMs) {
+  if (!ok || tookMs > DEPLOY_POLL_SLOW_MS) return Math.min(currentDelay * 2, DEPLOY_POLL_MAX_MS);
+  return DEPLOY_POLL_BASE_MS;
+}
+
 async function startDeploy(apiBase, apiFn, { onStart, onError, onTick, onStall, onDone } = {}) {
   onStart?.();
   try {
@@ -75,32 +91,56 @@ async function startDeploy(apiBase, apiFn, { onStart, onError, onTick, onStall, 
     onError?.(e);
     return;
   }
-  // Tracks consecutive ticks with NO real progress (a failed poll, or a successful one reporting the
-  // exact same percent/text as last time) -- reset the instant real progress is seen, so a genuinely
-  // fast deploy never shows a stall hint at all. Same approach ucv2DeployAll's own poll always used.
-  let noProgressStreak = 0;
+  // "No real progress" is now tracked by REAL elapsed time since the last progress change, not a
+  // count of polling ticks (2026-09-28) -- once the poll cadence above can back off to 15s, a fixed
+  // tick count would take up to 15x longer (real time) to reach the same threshold, which is exactly
+  // the "Vortex is stuck, why isn't the hint showing" moment the threshold exists to catch. Measuring
+  // wall-clock time instead keeps DEPLOY_STALL_THRESHOLD_TICKS meaning the same real ~15 seconds
+  // regardless of how slow polling itself has backed off.
   let lastProgressKey = null;
-  const interval = setInterval(async () => {
-    let progress;
+  let lastProgressAt = Date.now();
+  let stopped = false;
+  let delay = DEPLOY_POLL_BASE_MS;
+  const tick = async () => {
+    if (stopped) return;
+    const startedAt = Date.now();
+    let progress = null;
+    let ok = true;
     try {
       progress = await apiFn('GET', `${apiBase}/all/progress`);
     } catch {
-      noProgressStreak += 1;
-      onStall?.(noProgressStreak >= DEPLOY_STALL_THRESHOLD_TICKS, null);
+      ok = false;
+    }
+    if (stopped) return;
+    if (!ok) {
+      onStall?.((Date.now() - lastProgressAt) >= DEPLOY_STALL_THRESHOLD_TICKS * 1000, null);
+      delay = deployNextPollDelay(delay, false, Date.now() - startedAt);
+      if (!stopped) setTimeout(tick, delay);
       return; // one failed poll is not evidence the deploy failed -- try again next tick
     }
     const progressKey = progress ? `${progress.percent ?? ''}|${progress.text ?? ''}` : null;
-    if (progressKey !== null && progressKey === lastProgressKey) noProgressStreak += 1;
-    else noProgressStreak = 0;
+    if (progressKey !== null && progressKey !== lastProgressKey) lastProgressAt = Date.now();
     lastProgressKey = progressKey;
-    // Real signal wins over the tick-count guess -- shows the instant the helper reports Vortex is
+    // Real signal wins over the elapsed-time guess -- shows the instant the Vortex Bridge reports Vortex is
     // genuinely blocked, named by its real dialog title, rather than waiting out the threshold.
     const factMessage = deployStallMessage(progress);
-    onStall?.(!!factMessage || noProgressStreak >= DEPLOY_STALL_THRESHOLD_TICKS, factMessage);
+    onStall?.(!!factMessage || (Date.now() - lastProgressAt) >= DEPLOY_STALL_THRESHOLD_TICKS * 1000, factMessage);
     onTick?.(progress);
-    if (!progress || !progress.done) return;
-    clearInterval(interval);
+    if (!progress || !progress.done) {
+      delay = deployNextPollDelay(delay, true, Date.now() - startedAt);
+      if (!stopped) setTimeout(tick, delay);
+      return;
+    }
+    stopped = true;
     onStall?.(false);
     onDone?.(progress);
-  }, 1000);
+  };
+  setTimeout(tick, delay);
+}
+
+// Dual-context export (2026-09-28), same pattern update-collection-v2-apply-rows.js already uses --
+// classic <script> global in the browser, plain require()-able Node module for
+// scripts/test-deploy-panel-poll-backoff.js.
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { deployNextPollDelay, DEPLOY_POLL_BASE_MS, DEPLOY_POLL_MAX_MS, DEPLOY_POLL_SLOW_MS };
 }

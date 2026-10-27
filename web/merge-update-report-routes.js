@@ -10,7 +10,7 @@
 //   - web/merge-history-routes.js's findAllMergeJsons -- the SAME saved-merge discovery Merge
 //     History already uses (one per "merge - <name>" subfolder under mergeOutputDir).
 //   - lib/build-mod-from-vortex-state.js's buildModFromLiveData/readModFromOpenDb -- the SAME
-//     Helper-first, state.v2-fallback pattern web/merge-routes.js's own /merge route now uses to
+//     Bridge-first, state.v2-fallback pattern web/merge-routes.js's own /merge route now uses to
 //     RECORD a mod's version/fileId/fileMD5 at build time (see that route's own comment). This
 //     report reads the SAME 3 fields back and compares them against what's live NOW.
 //
@@ -26,7 +26,7 @@
 //
 // A plugin with no recorded version/fileId/fileMD5 at all (built before this schema existed) is
 // "can't check", not "up to date" -- same treatment when the live lookup itself can't resolve this
-// specific mod (Helper unreachable AND Vortex running, or the mod's been uninstalled since) --
+// specific mod (Vortex Bridge unreachable AND Vortex running, or the mod's been uninstalled since) --
 // matching the mockup's own EarlyTestMerge.esp greyed-out row exactly, just applied per-plugin so a
 // mix of old and new merges (or a merge with one mod that's since vanished) degrades gracefully
 // instead of an all-or-nothing report-wide failure.
@@ -34,7 +34,7 @@
 const express = require('express');
 const appConfig = require('../lib/app-config');
 const syncLib = require('../lib/vortex-sync/lib');
-const helperClient = require('../lib/vortex-helper-client');
+const bridgeClient = require('../lib/vortex-bridge-client');
 const { findAllMergeJsons } = require('./merge-history-routes');
 const { buildModFromLiveData, readModFromOpenDb } = require('../lib/build-mod-from-vortex-state');
 
@@ -60,7 +60,7 @@ function createMergeUpdateReportRouter(config) {
     }
 
     // Resolves live {version, fileId, fileMD5} for every name in modNames (a Set of stagingFolderName
-    // strings), Helper-first, ONE state.v2 session for the whole batch when falling back (see
+    // strings), Bridge-first, ONE state.v2 session for the whole batch when falling back (see
     // readModFromOpenDb's own header for why looping buildModFromVortexState per mod would be far too
     // expensive here -- a report can easily touch dozens of unique mods across several merges).
     // Best-effort throughout: any failure just leaves fewer names resolved, never throws -- a merge
@@ -69,8 +69,8 @@ function createMergeUpdateReportRouter(config) {
     async function resolveLiveAttrs(modNames) {
         const liveAttrsByModName = new Map();
         if (!modNames.size) return liveAttrsByModName;
-        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID).catch(() => false);
-        const liveModsData = helperAvailable ? await helperClient.getAllMods().catch(() => null) : null;
+        const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID).catch(() => false);
+        const liveModsData = bridgeAvailable ? await bridgeClient.getAllMods().catch(() => null) : null;
         if (liveModsData) {
             for (const modName of modNames) {
                 try {

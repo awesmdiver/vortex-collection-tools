@@ -5,7 +5,8 @@
 
 const express = require('express');
 const runner = require('../lib/remove-collection-runner');
-const helperClient = require('../lib/vortex-helper-client');
+const bridgeClient = require('../lib/vortex-bridge-client');
+const { withHealthCheckPaused } = require('../lib/health-check-pause');
 const syncLib = require('../lib/vortex-sync/lib');
 const { createSseSession } = require('./sse-session');
 
@@ -39,7 +40,7 @@ function createRemoveCollectionRouter(config) {
     });
 
     // Screen 2's review -- cross-references the chosen collection's mods against every OTHER
-    // installed collection. Purely a filesystem read; never requires the helper extension.
+    // installed collection. Purely a filesystem read; never requires the Vortex Bridge.
     router.post('/review', async (req, res) => {
         if (!staging) return res.status(400).json({ error: 'Set up the staging folder under Settings first.' });
         const { collectionModId } = req.body || {};
@@ -55,7 +56,7 @@ function createRemoveCollectionRouter(config) {
     });
 
     // The real Apply -- removes the collection itself, plus every mod the caller selected, from
-    // Vortex's live state. Requires the helper extension reachable (Vortex genuinely open) -- there is
+    // Vortex's live state. Requires the Vortex Bridge reachable (Vortex genuinely open) -- there is
     // no state.v2 equivalent for a real remove-mods dispatch, same real constraint Update Collection
     // v2's own Apply already has.
     router.post('/apply', async (req, res) => {
@@ -71,15 +72,15 @@ function createRemoveCollectionRouter(config) {
             return res.status(409).json({ error: 'A removal is already in progress.' });
         }
 
-        // HELPER_UNAVAILABLE is checked synchronously up front (mirroring the not-configured checks
+        // BRIDGE_UNAVAILABLE is checked synchronously up front (mirroring the not-configured checks
         // above) so a caller with no Vortex open gets a normal, immediate 4xx rather than an SSE
         // session that just opens and instantly errors -- the real, possibly-slow work only starts
         // once this fast precondition is known good.
-        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-        if (!helperAvailable) {
+        const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+        if (!bridgeAvailable) {
             return res.status(409).json({
-                error: 'helper-unavailable',
-                message: "The Vortex Collection Helper extension must be reachable (Vortex genuinely open) to remove a collection -- this real remove-mods/unlink work only exists through it, unlike this tool's read-only Review screen, which never needs it.",
+                error: 'bridge-unavailable',
+                message: "The Vortex Bridge extension must be reachable (Vortex genuinely open) to remove a collection -- this real remove-mods/unlink work only exists through it, unlike this tool's read-only Review screen, which never needs it.",
             });
         }
 
@@ -91,9 +92,12 @@ function createRemoveCollectionRouter(config) {
 
         (async () => {
             try {
-                const result = await runner.applyRemoval({
+                const result = await withHealthCheckPaused(() => runner.applyRemoval({
                     collectionModId, staging, downloads, selectedModIds, deleteArchives,
                     onProgress: (p) => emitIfCurrent({ type: 'phase', ...p }),
+                }), {
+                    onPaused: (message) => emitIfCurrent({ type: 'phase', message }),
+                    onRestoreFailed: (message) => emitIfCurrent({ type: 'phase', message }),
                 });
                 emitIfCurrent({ type: 'done', done: true, ...result });
             } catch (e) {

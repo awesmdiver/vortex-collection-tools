@@ -31,9 +31,14 @@ function createUpdateCollectionV2Router(config) {
     // call itself -- purely a cache read, instant either way. `refreshing:true` with `collections:
     // null` means the startup auto-refresh (or a manual Refresh) is still in flight -- the frontend
     // polls this same route again shortly rather than showing a blank/stale state.
-    router.get('/collections', (req, res) => {
+    router.get('/collections', async (req, res) => {
         if (!staging) return res.json({ collections: [], configured: false, refreshing: false, checkedAt: null });
         try {
+            // An older unfinished record that Vortex shows nothing open for is closed here, silently. Bounded wait:
+            // a slow Vortex must not hold the list back (the check carries on and the next load sees the result).
+            if (!applySession.isActive()) {
+                await Promise.race([runner.repairStaleRecords(staging).catch(() => 0), new Promise((r) => setTimeout(r, 8000))]);
+            }
             const local = runner.listCollections(staging).map((c) => ({
                 modId: c.modId, name: c.name, author: c.author, modCount: c.modCount,
             }));
@@ -41,7 +46,8 @@ function createUpdateCollectionV2Router(config) {
             // Cache not populated yet (still refreshing, or the auto-refresh hasn't run at all for
             // some reason) -- fall back to the plain local listing so the page at least shows real
             // names/mod counts immediately, never a totally empty grid while waiting.
-            const collections = cache.collections || local;
+            // The two card flags come from each collection's record on every load, never from the cache.
+            const collections = cache.collections ? runner.withFreshCardFlags(cache.collections) : local;
             res.json({
                 collections, configured: true, refreshing: cache.refreshing,
                 checkedAt: cache.checkedAt, source: cache.source, error: cache.error,
@@ -53,7 +59,7 @@ function createUpdateCollectionV2Router(config) {
 
     // The manual "Refresh" button (renamed from "Check for Updates" to match the new mental model --
     // see TECHNICAL.md) -- resolves each collection's real Nexus slug + installed revision
-    // (helper-first, state.v2 fallback, see the runner's own comment) and compares against the
+    // (bridge-first, state.v2 fallback, see the runner's own comment) and compares against the
     // newest published revision. Now goes through refreshCollectionsCache so this writes into the
     // SAME cache the startup auto-refresh populates, rather than being a second, separate mechanism
     // -- GET /collections immediately reflects whatever this call just found. A real 409
@@ -90,6 +96,14 @@ function createUpdateCollectionV2Router(config) {
         if (!reviewSession.get()) return res.status(404).end();
         const afterSeq = Number(req.headers['last-event-id'] || 0);
         reviewSession.subscribe(res, { afterSeq });
+    });
+
+    // The person left Update Collection (back to the list, away from the page): forget the kept review.
+    router.post('/review/release', (req, res) => {
+        const { collectionModId } = req.body || {};
+        if (!collectionModId || typeof collectionModId !== 'string') return res.status(400).json({ error: 'No collection given.' });
+        runner.releaseReview(collectionModId);
+        res.json({ ok: true });
     });
 
     router.post('/review', async (req, res) => {
@@ -134,11 +148,11 @@ function createUpdateCollectionV2Router(config) {
                 return;
             }
             // reviewUpdateCore's own new hard block (2026-08-30, director's own call -- see that
-            // function's header comment) -- same 'helper-unavailable' code every real-write route in
-            // this file already uses, so ucv2HandleError's existing showHelperUnavailableModal handler
+            // function's header comment) -- same 'bridge-unavailable' code every real-write route in
+            // this file already uses, so ucv2HandleError's existing showBridgeUnavailableModal handler
             // picks this up unchanged rather than falling through to a generic error banner.
-            if (e.code === 'HELPER_UNAVAILABLE') {
-                emitIfCurrent({ type: 'error', message: e.message, done: true, error: true, code: 'helper-unavailable' });
+            if (e.code === 'BRIDGE_UNAVAILABLE') {
+                emitIfCurrent({ type: 'error', message: e.message, done: true, error: true, code: 'bridge-unavailable' });
                 return;
             }
             emitIfCurrent({ type: 'error', message: e.message, done: true, error: true });
@@ -152,8 +166,8 @@ function createUpdateCollectionV2Router(config) {
 
     // Phase 2/3's real Apply -- Updated mods get re-extracted+metadata-refreshed+redeployed, Removed
     // mods get either fully uninstalled or kept per-mod (keepRemovedModIds -- checked-by-default on
-    // the review screen means "keep"), Added mods get installed for real. Requires the helper
-    // extension reachable -- see the runner's own HELPER_UNAVAILABLE
+    // the review screen means "keep"), Added mods get installed for real. Requires the Vortex Bridge
+    // extension reachable -- see the runner's own BRIDGE_UNAVAILABLE
     // handling; there is no state.v2 fallback for this route, unlike every read route in this file,
     // since deploy/remove/metadata-refresh are real Vortex actions with no database-row equivalent
     // this project could otherwise write directly.
@@ -182,7 +196,7 @@ function createUpdateCollectionV2Router(config) {
 
     router.post('/apply', async (req, res) => {
         if (!staging || !downloads) return res.status(400).json({ error: 'Set up the staging and downloads folders under Settings first.' });
-        const { collectionModId, keepRemovedModIds, ignoreDependencyBreaks, keepInstalledModIds, deleteArchives, fomodPicks, ignoreFomodValidationModIds, targetRevisionNumber, prerequisiteChoices } = req.body || {};
+        const { collectionModId, keepRemovedModIds, ignoreDependencyBreaks, ignoredDependencyBreakKeys, keepInstalledModIds, deleteArchives, fomodPicks, ignoreFomodValidationModIds, targetRevisionNumber, confirmed, includeOlderInstalled } = req.body || {};
         if (!collectionModId || typeof collectionModId !== 'string') {
             return res.status(400).json({ error: 'No collection given to apply.' });
         }
@@ -213,7 +227,7 @@ function createUpdateCollectionV2Router(config) {
         // happening (confirmed live: 165+ seconds on this exact route, still climbing). The single-
         // apply-at-a-time guard above still runs first and stays a synchronous 400/409, same as before
         // -- only the parts that can take real time move onto the stream. A gate refusal
-        // (DEPENDENCY_BREAKS_FOUND/FOMOD_CHOICES_NEEDED/HELPER_UNAVAILABLE) now arrives as its own
+        // (DEPENDENCY_BREAKS_FOUND/FOMOD_CHOICES_NEEDED/BRIDGE_UNAVAILABLE) now arrives as its own
         // 'error' frame instead of a synchronous 409 -- see ucv2HandleApplyEvent's own header comment
         // (update-collection-v2-app.js) for how the frontend routes each code to the right modal.
         const mySession = applySession.start({ id: `apply-${Date.now()}` });
@@ -225,12 +239,17 @@ function createUpdateCollectionV2Router(config) {
         let prepared;
         try {
             prepared = await runner.prepareApply({
-                collectionModId, staging, downloads, state, ignoreDependencyBreaks, keepInstalledModIds, fomodPicks,
-                ignoreFomodValidationModIds, targetRevisionNumber: parsedTargetForApply, prerequisiteChoices, onProgress: emitIfCurrent,
+                collectionModId, staging, downloads, state, ignoreDependencyBreaks, ignoredDependencyBreakKeys, keepInstalledModIds, fomodPicks,
+                ignoreFomodValidationModIds, targetRevisionNumber: parsedTargetForApply, confirmed, includeOlderInstalled: includeOlderInstalled === true, onProgress: emitIfCurrent,
             });
         } catch (e) {
-            if (e.code === 'HELPER_UNAVAILABLE') {
-                emitIfCurrent({ type: 'error', message: e.message, done: true, error: true, code: 'helper-unavailable' });
+            if (e.code === 'BRIDGE_UNAVAILABLE') {
+                emitIfCurrent({ type: 'error', message: e.message, done: true, error: true, code: 'bridge-unavailable' });
+                return;
+            }
+            // Vortex differs from what the person confirmed: nothing was written; the page offers "Review again".
+            if (e.code === 'REVIEW_CHANGED') {
+                emitIfCurrent({ type: 'error', message: e.message, done: true, error: true, code: 'review-changed' });
                 return;
             }
             // No real write happened yet -- refused before the backup step, matching Vortex's own
@@ -242,17 +261,6 @@ function createUpdateCollectionV2Router(config) {
                 emitIfCurrent({
                     type: 'error', message: e.message, done: true, error: true,
                     code: 'dependency-breaks-found', dependencyBreaks: e.dependencyBreaks,
-                });
-                return;
-            }
-            // Same pattern -- refused before any real write (2026-08-31, diagnostics/2026-08-30-
-            // added-mod-prerequisite-check-scoping.md). The frontend renders a per-mod modal (each
-            // missing prerequisite named) and re-calls this SAME route with prerequisiteChoices:
-            // {[addedModKey]: 'skip'|'install'} once the director has made real choices.
-            if (e.code === 'MISSING_PREREQUISITES_FOUND') {
-                emitIfCurrent({
-                    type: 'error', message: e.message, done: true, error: true,
-                    code: 'missing-prerequisites-found', missingPrerequisites: e.missingPrerequisites,
                 });
                 return;
             }
@@ -322,7 +330,7 @@ function createUpdateCollectionV2Router(config) {
         // confirmed live, a real 3-optional-mod submit sat with zero visible progress for 6+ minutes
         // (CPU-time-sampling confirmed it was genuinely working the whole time, not hung). The
         // single-apply-at-a-time guard above still runs first and stays a synchronous 409, same as
-        // /apply. A gate refusal (HELPER_UNAVAILABLE/FOMOD_CHOICES_NEEDED, or any other prepare
+        // /apply. A gate refusal (BRIDGE_UNAVAILABLE/FOMOD_CHOICES_NEEDED, or any other prepare
         // failure) now arrives as its own 'error' frame instead of a synchronous 409/500 -- same
         // ucv2HandleApplyEvent routing /apply's own gate frames already use.
         const mySession = applySession.start({ id: `apply-optional-${Date.now()}` });
@@ -342,8 +350,8 @@ function createUpdateCollectionV2Router(config) {
             // below already carries, now load-bearing: ucv2HandleApplyEvent's own 'error' branch reads
             // it to retry via ucv2StartOptionalApply (not the main flow's ucv2ConfirmApply) and return
             // to the Optional Installs screen, not ucv2Screen2 -- see that handler's own comment.
-            if (e.code === 'HELPER_UNAVAILABLE') {
-                emitIfCurrent({ type: 'error', message: e.message, done: true, error: true, code: 'helper-unavailable', optional: true });
+            if (e.code === 'BRIDGE_UNAVAILABLE') {
+                emitIfCurrent({ type: 'error', message: e.message, done: true, error: true, code: 'bridge-unavailable', optional: true });
                 return;
             }
             if (e.code === 'FOMOD_CHOICES_NEEDED') {
@@ -388,6 +396,18 @@ function createUpdateCollectionV2Router(config) {
         }
         return false;
     };
+
+    // The result screen asks, before it draws a problem, whether the problem is still true (read only; see runner.recheckApplyProblems).
+    router.post('/apply/recheck-problems', async (req, res) => {
+        const { collectionModId, items } = req.body || {};
+        if (!collectionModId || typeof collectionModId !== 'string') return res.status(400).json({ error: 'No collection given.' });
+        if (!Array.isArray(items)) return res.status(400).json({ error: 'No problems given.' });
+        try {
+            res.json(await runner.recheckApplyProblems({ collectionModId, items }));
+        } catch (e) {
+            res.json({ checked: false, results: {} });
+        }
+    });
 
     router.post('/apply/retry-mod-rules', async (req, res) => {
         if (retryBusyGuard(req, res)) return;
@@ -441,19 +461,33 @@ function createUpdateCollectionV2Router(config) {
         }
     });
 
+    // Continue Update's first step (2026-10-23): saves the dependency warnings a busy Vortex made the apply
+    // miss, and finishes the update when nothing else is left. See runner.finishPendingDependencyAcks.
+    router.post('/apply/finish-pending-rules', async (req, res) => {
+        if (retryBusyGuard(req, res)) return;
+        if (!staging) return res.status(400).json({ error: 'Set up the staging folder under Settings first.' });
+        const { collectionModId } = req.body || {};
+        if (!collectionModId || typeof collectionModId !== 'string') return res.status(400).json({ error: 'No collection given.' });
+        try {
+            res.json(await runner.finishPendingDependencyAcks(collectionModId, staging, downloads));
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // Retry #4 -- a single Updated/Added mod's own extraction failure. Real Vortex writes, same as
-    // /apply itself, so it needs staging/downloads configured and the same HELPER_UNAVAILABLE/
+    // /apply itself, so it needs staging/downloads configured and the same BRIDGE_UNAVAILABLE/
     // VORTEX_RUNNING handling every other real-write route in this file already has.
     router.post('/apply/retry-mod', async (req, res) => {
         if (retryBusyGuard(req, res)) return;
         if (!staging || !downloads) return res.status(400).json({ error: 'Set up the staging and downloads folders under Settings first.' });
-        const { collectionModId, modId } = req.body || {};
+        const { collectionModId, modId, fomodPicks, ignoreFomodValidationModIds } = req.body || {};
         if (!collectionModId || typeof collectionModId !== 'string') return res.status(400).json({ error: 'No collection given.' });
         if (!modId || typeof modId !== 'string') return res.status(400).json({ error: 'No mod given to retry.' });
         try {
-            res.json(await runner.retryModExtraction({ collectionModId, staging, downloads, state, modId }));
+            res.json(await runner.retryModExtraction({ collectionModId, staging, downloads, state, modId, fomodPicks, ignoreFomodValidationModIds }));
         } catch (e) {
-            if (e.code === 'HELPER_UNAVAILABLE') return res.status(409).json({ error: 'helper-unavailable', message: e.message });
+            if (e.code === 'BRIDGE_UNAVAILABLE') return res.status(409).json({ error: 'bridge-unavailable', message: e.message });
             if (e.code === 'VORTEX_RUNNING') return res.status(409).json({ error: 'vortex-running', message: e.message });
             res.status(500).json({ error: e.message });
         }
@@ -468,6 +502,93 @@ function createUpdateCollectionV2Router(config) {
     // registration (the real 2026-08-27 batchDispatch bug) gets caught and fixed automatically
     // instead of requiring N individual per-mod Retry clicks. Read+write only (never touches Data/
     // or staging), so it doesn't need the staging/downloads guard retry-mod above needs.
+    // "Finish saving details" -- re-saves the details of mods whose new file is already installed. Writes
+    // through set-attributes only (see runner.finishSavingDetails).
+    router.post('/finish-details', async (req, res) => {
+        if (retryBusyGuard(req, res)) return;
+        if (!staging) return res.status(400).json({ error: 'Set up the staging folder under Settings first.' });
+        const { collectionModId, vortexModIds } = req.body || {};
+        if (!collectionModId || typeof collectionModId !== 'string') return res.status(400).json({ error: 'No collection given.' });
+        if (!Array.isArray(vortexModIds) || vortexModIds.some((x) => typeof x !== 'string')) return res.status(400).json({ error: 'No mods given.' });
+        try {
+            res.json(await runner.finishSavingDetails({ collectionModId, staging, state, downloads, vortexModIds }));
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // "Link its new download" -- marks a mod's own stray, unlinked archive installed (set-installed only; see
+    // runner.linkStrayArchives).
+    // "Remove its old download": deletes the record and file of old archives that Vortex re-listed. Takes only
+    // download ids; the runner re-checks each against a fresh read.
+    // "Clear the update arrow": writes newestFileId / newestVersion only, for mods the collection pins.
+    // Continue Update, light and live: the list the last apply left unfinished plus the groups, checked against
+    // Vortex as it is now. { legacy: true } = an older record with no list: the page runs the full review once.
+    router.post('/continue-check', async (req, res) => {
+        if (!staging) return res.status(400).json({ error: 'Set up the staging folder under Settings first.' });
+        const { collectionModId, settle } = req.body || {};
+        if (!collectionModId || typeof collectionModId !== 'string') return res.status(400).json({ error: 'No collection given.' });
+        try {
+            // settle: true (the Continue Update press) lets it save the rule and record items itself; the check on
+            // coming back to the page only reads.
+            res.json(await runner.continueCheckRun({ collectionModId, staging, settle: settle === true }));
+        } catch (e) {
+            if (e.code === 'BRIDGE_UNAVAILABLE') return res.status(409).json({ error: 'bridge-unavailable', message: e.message });
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // "They already have the new options": saves the new install picks as the mods' installerChoices, nothing else.
+    router.post('/confirm-new-options', async (req, res) => {
+        if (retryBusyGuard(req, res)) return;
+        if (!staging) return res.status(400).json({ error: 'Set up the staging folder under Settings first.' });
+        const { collectionModId, vortexModIds } = req.body || {};
+        if (!collectionModId || typeof collectionModId !== 'string') return res.status(400).json({ error: 'No collection given.' });
+        if (!Array.isArray(vortexModIds) || vortexModIds.some((x) => typeof x !== 'string')) return res.status(400).json({ error: 'No mods given.' });
+        try {
+            res.json(await runner.confirmNewOptions({ collectionModId, staging, state, downloads, vortexModIds }));
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    router.post('/clear-update-arrow', async (req, res) => {
+        if (retryBusyGuard(req, res)) return;
+        if (!staging) return res.status(400).json({ error: 'Set up the staging folder under Settings first.' });
+        const { collectionModId, vortexModIds } = req.body || {};
+        if (!collectionModId || typeof collectionModId !== 'string') return res.status(400).json({ error: 'No collection given.' });
+        if (!Array.isArray(vortexModIds) || vortexModIds.some((x) => typeof x !== 'string')) return res.status(400).json({ error: 'No mods given.' });
+        try {
+            res.json(await runner.clearUpdateArrows({ collectionModId, staging, state, downloads, vortexModIds }));
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    router.post('/remove-old-downloads', async (req, res) => {
+        if (retryBusyGuard(req, res)) return;
+        const { downloadIds } = req.body || {};
+        if (!Array.isArray(downloadIds) || downloadIds.length === 0 || downloadIds.some((x) => typeof x !== 'string')) return res.status(400).json({ error: 'No downloads given.' });
+        try {
+            res.json(await runner.removeOldDownloadsRepair({ downloads, downloadIds }));
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    router.post('/link-downloads', async (req, res) => {
+        if (retryBusyGuard(req, res)) return;
+        if (!staging) return res.status(400).json({ error: 'Set up the staging folder under Settings first.' });
+        const { collectionModId, vortexModIds } = req.body || {};
+        if (!collectionModId || typeof collectionModId !== 'string') return res.status(400).json({ error: 'No collection given.' });
+        if (!Array.isArray(vortexModIds) || vortexModIds.some((x) => typeof x !== 'string')) return res.status(400).json({ error: 'No mods given.' });
+        try {
+            res.json(await runner.linkStrayArchives({ collectionModId, staging, state, downloads, vortexModIds }));
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     router.post('/fix-collection-gaps', async (req, res) => {
         if (retryBusyGuard(req, res)) return;
         if (!staging) return res.status(400).json({ error: 'Set up the staging folder under Settings first.' });
@@ -498,7 +619,20 @@ function createUpdateCollectionV2Router(config) {
         const { collectionModId } = req.body || {};
         if (!collectionModId || typeof collectionModId !== 'string') return res.status(400).json({ error: 'No collection given.' });
         try {
-            res.json(await runner.quickVerifyAndFinalize(collectionModId, staging, downloads));
+            // Called only after a deploy finished without an error, and a deploy covers every collection.
+            const outcome = await runner.quickVerifyAndFinalize(collectionModId, staging, downloads, { deployed: true });
+            runner.clearAllDeployPending(staging);
+            res.json(outcome);
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // The list page's own Deploy (one deploy for every updated collection) finished without an error.
+    router.post('/deploy-done', (req, res) => {
+        if (!staging) return res.status(400).json({ error: 'Set up the staging folder under Settings first.' });
+        try {
+            res.json({ cleared: runner.clearAllDeployPending(staging) });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }

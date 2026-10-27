@@ -1,23 +1,23 @@
 'use strict';
 // Bulk Collection Editor -- thin Express handlers. Real logic lives in
 // lib/add-mods-to-collections.js. No staging/downloads config needed -- every read and both writes
-// (add/remove) this tool does go entirely through the Vortex Collection Helper's live state, so the
-// only gate here is "is the Helper reachable."
+// (add/remove) this tool does go entirely through the Vortex Bridge's live state, so the
+// only gate here is "is the Vortex Bridge reachable."
 
 const express = require('express');
 const amc = require('../lib/add-mods-to-collections');
-const helperClient = require('../lib/vortex-helper-client');
+const bridgeClient = require('../lib/vortex-bridge-client');
 const syncLib = require('../lib/vortex-sync/lib');
 
 function createAddModsToCollectionsRouter() {
     const router = express.Router();
 
-    async function requireHelper(res) {
-        const available = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+    async function requireBridge(res) {
+        const available = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
         if (!available) {
             res.status(409).json({
-                error: 'helper-unavailable',
-                message: 'The Vortex Collection Helper extension must be reachable (Vortex genuinely open) for this tool -- both the live mod/collection list and the real write only exist through it.',
+                error: 'bridge-unavailable',
+                message: 'The Vortex Bridge extension must be reachable (Vortex genuinely open) for this tool -- both the live mod/collection list and the real write only exist through it.',
             });
             return false;
         }
@@ -29,7 +29,7 @@ function createAddModsToCollectionsRouter() {
     // alongside the query so `alreadyIn` can be computed in the same call, rather than encoding an
     // array into a query string. Body: { q, collections?: [{modId, name}, ...] }.
     router.post('/search', async (req, res) => {
-        if (!(await requireHelper(res))) return;
+        if (!(await requireBridge(res))) return;
         const { q, collections } = req.body || {};
         try {
             const results = await amc.searchMods(q, collections);
@@ -42,7 +42,7 @@ function createAddModsToCollectionsRouter() {
     });
 
     router.get('/collections', async (req, res) => {
-        if (!(await requireHelper(res))) return;
+        if (!(await requireBridge(res))) return;
         try {
             const results = await amc.getEditableCollections();
             if (results === null) return res.status(502).json({ error: "Couldn't read your collections from Vortex just now. Try again." });
@@ -57,7 +57,7 @@ function createAddModsToCollectionsRouter() {
     // { collections } -- the SAME shape /add and /remove already accept, so the client's own picked
     // list can be forwarded verbatim.
     router.post('/mods-in-collections', async (req, res) => {
-        if (!(await requireHelper(res))) return;
+        if (!(await requireBridge(res))) return;
         const { collections } = req.body || {};
         if (!Array.isArray(collections) || collections.length === 0) {
             return res.status(400).json({ error: 'No collections chosen.' });
@@ -78,7 +78,7 @@ function createAddModsToCollectionsRouter() {
     // collection's real rules fresh server-side (see addModsToCollections), never trusts this name for
     // anything but display.
     router.post('/add', async (req, res) => {
-        if (!(await requireHelper(res))) return;
+        if (!(await requireBridge(res))) return;
         const { modIds, collections } = req.body || {};
         if (!Array.isArray(modIds) || modIds.length === 0) {
             return res.status(400).json({ error: 'No mods to add.' });
@@ -99,7 +99,7 @@ function createAddModsToCollectionsRouter() {
     // removeModsFromCollections's own header comment for why this one uses a single getAllMods()
     // snapshot instead of N per-collection reads).
     router.post('/remove', async (req, res) => {
-        if (!(await requireHelper(res))) return;
+        if (!(await requireBridge(res))) return;
         const { modIds, collections } = req.body || {};
         if (!Array.isArray(modIds) || modIds.length === 0) {
             return res.status(400).json({ error: 'No mods to remove.' });

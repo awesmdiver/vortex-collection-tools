@@ -33,14 +33,14 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const { openFolderInExplorer, revealInExplorer } = require('../lib/open-in-explorer');
 const express = require('express');
 const appConfig = require('../lib/app-config');
 const syncLib = require('../lib/vortex-sync/lib');
 const { listPickableCollections } = require('../lib/missing-files-scan');
-const helperClient = require('../lib/vortex-helper-client');
+const bridgeClient = require('../lib/vortex-bridge-client');
 const missingMastersScan = require('../lib/missing-masters-scan');
-const { scanCollectionPlugins, scanEslifierOutputPlugins, computeMasterDependents, buildHelperModNameIndex, attributeWithHelperNames } = require('../lib/merge-plugin-scan');
+const { scanCollectionPlugins, scanEslifierOutputPlugins, computeMasterDependents, buildBridgeModNameIndex, attributeWithBridgeNames } = require('../lib/merge-plugin-scan');
 const { buildModFromLiveData, readModFromOpenDb } = require('../lib/build-mod-from-vortex-state');
 const { checkLoadList } = require('../lib/merge-preflight');
 const mergeRunnerV2 = require('../lib/merge-v2-runner');
@@ -86,12 +86,12 @@ function computeMergeOutputPaths(outputDir, outputName) {
 // load-order file), not the LevelDB -- see lib/missing-masters-scan.js's disablePluginsInPluginsTxt
 // for the full read-modify-write reasoning.
 //
-// Helper-first, Plugins.txt-fallback (2026-08-24) -- see the 'disable' branch below for the real
+// Bridge-first, Plugins.txt-fallback (2026-08-24) -- see the 'disable' branch below for the real
 // split. Only the FALLBACK path still re-checks isVortexRunning() immediately before writing (not
 // just trusting the route's own request-start gate -- moot anyway now, since /merge itself no longer
 // gates on Vortex at all) -- the same live-write caution lib/vortex-sync/lib.js's own withLiveStateDb
 // applies to every LevelDB write applies here too, since this is still, on that path, a direct edit
-// to a load-order file the game itself reads. The Helper path is a live in-memory flag flip through
+// to a load-order file the game itself reads. The Vortex Bridge path is a live in-memory flag flip through
 // Vortex's own process, not a direct file write, so that caution doesn't transfer to it the same way.
 // Returns { lines, backupPaths } -- backupPaths (2026-08-24, merge-restore-report-data) is
 // fileName -> the absolute path this run actually copied that plugin to, populated ONLY for
@@ -104,7 +104,7 @@ function computeMergeOutputPaths(outputDir, outputName) {
 // drifting apart if this logic ever changes.
 // Shared by BOTH branches below (2026-08-24, merge-remove-also-disables) -- 'disable' is where this
 // was first written; 'remove'/'backup-remove' need the exact same Vortex-side write, not a
-// second copy of it. Helper-first, Plugins.txt-fallback -- when the Helper is reachable,
+// second copy of it. Bridge-first, Plugins.txt-fallback -- when the Vortex Bridge is reachable,
 // setPluginEnabled flips each source plugin's own live flag directly -- the SAME precisely-scoped
 // endpoint Missing Masters' own Enable button already uses, self-verified against Vortex's own
 // before/after readback, so its true/false is the truth, not an assumption. Only an in-memory flag:
@@ -112,22 +112,22 @@ function computeMergeOutputPaths(outputDir, outputName) {
 // not by this call -- said explicitly in the result line so it doesn't read as "already done" when
 // a deploy is still the step that finishes it.
 //
-// Falls through to a direct Plugins.txt write, gate and all, when the Helper isn't available --
+// Falls through to a direct Plugins.txt write, gate and all, when the Vortex Bridge isn't available --
 // that direct-file path takes effect immediately (no deploy needed) and still requires Vortex
 // closed, exactly as it always has. Only THIS fallback path re-checks isVortexRunning() immediately
 // before writing (not just trusting the route's own request-start gate) -- the same live-write
 // caution lib/vortex-sync/lib.js's own withLiveStateDb applies to every LevelDB write applies here
 // too, since this is still, on that path, a direct edit to a load-order file the game itself reads.
-// The Helper path is a live in-memory flag flip through Vortex's own process, not a direct file
+// The Vortex Bridge path is a live in-memory flag flip through Vortex's own process, not a direct file
 // write, so that caution doesn't transfer to it the same way.
 async function disableSourcePluginsInVortex(items, pluginsTxtPath) {
     const lines = [];
-    const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-    if (helperAvailable) {
+    const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+    if (bridgeAvailable) {
         const disabled = [];
         const failed = [];
         for (const item of items) {
-            const ok = await helperClient.setPluginEnabled(item.fileName, false);
+            const ok = await bridgeClient.setPluginEnabled(item.fileName, false);
             (ok ? disabled : failed).push(item.fileName);
         }
         if (disabled.length) lines.push(`Disabled ${disabled.length} plugin${disabled.length === 1 ? '' : 's'} in Vortex: ${disabled.join(', ')}. Deploy mods in Vortex to apply these changes to your game.`);
@@ -205,7 +205,7 @@ async function runPostMergeCleanup({ items, action, outputDir, pluginsTxtPath })
 // mergeJson.plugins entries are matched to `items` by `filename` (writeArtifacts' own field name,
 // from its `i.fileName`) against the request's own items (client-sourced `fileName` -- same value,
 // two different object shapes). stagingFolderName uses the same relative-to-staging
-// first-path-segment technique lib/merge-plugin-scan.js's own attributeWithHelperNames already uses
+// first-path-segment technique lib/merge-plugin-scan.js's own attributeWithBridgeNames already uses
 // to recover a staging folder name from a fullPath. backupPath is added only for
 // action === 'backup-remove', and only when runPostMergeCleanup's own backupPaths actually has an
 // entry for that plugin (a copy that never happened, e.g. a failed backup-remove for that one file,
@@ -224,9 +224,9 @@ function enrichMergeJsonForRestore({ mergeFolder, mergeName, action, items, back
             stagingFolderName: item ? path.relative(staging, item.fullPath).split(path.sep)[0] : null,
             // version/fileId/fileMD5 (2026-08-25, Merge Update Report) -- the OWNING MOD's own live
             // attrs at build time (resolved by the /merge route above, before this ever runs -- see
-            // its own comment for the Helper/state.v2 resolution), not the .esp file's own -- a
+            // its own comment for the Vortex Bridge/state.v2 resolution), not the .esp file's own -- a
             // plugin has no version of its own; the mod it comes from does. null when the lookup
-            // couldn't resolve this item's mod (Helper+state.v2 both unavailable, or a genuine
+            // couldn't resolve this item's mod (Vortex Bridge+state.v2 both unavailable, or a genuine
             // MOD_NOT_FOUND) -- the report's own "Can't check" treatment covers that per-plugin, not
             // just for whole merges built before this field existed.
             version: item?.version ?? null,
@@ -291,11 +291,11 @@ function createMergeRouter(config) {
     // applied here, server-side, rather than shipping every plugin down and filtering client-side,
     // since a large multi-collection pick can easily be thousands of files.
     //
-    // Helper-first modName (2026-08-24) -- scanCollectionPlugins itself is UNCHANGED, still the one
-    // real filesystem walk; when the Helper is reachable, its live mod names are applied on top via
-    // lib/merge-plugin-scan.js's attributeWithHelperNames, a real accuracy improvement (Vortex's own
+    // Bridge-first modName (2026-08-24) -- scanCollectionPlugins itself is UNCHANGED, still the one
+    // real filesystem walk; when the Vortex Bridge is reachable, its live mod names are applied on top via
+    // lib/merge-plugin-scan.js's attributeWithBridgeNames, a real accuracy improvement (Vortex's own
     // truth beats a name guessed from the staging folder), independent of the gate removal above.
-    // Best-effort: a Helper probe/fetch failure here just means every item keeps its file-derived
+    // Best-effort: a Vortex Bridge probe/fetch failure here just means every item keeps its file-derived
     // name (modNameSource: 'staging'), exactly as before this existed -- never a reason to fail the
     // whole plugin listing.
     // Same isInside shape as missing-masters-routes.js's/rebuild-missing-routes.js's own copies --
@@ -342,15 +342,15 @@ function createMergeRouter(config) {
             // exactly one real ESLifier-replaced mod, before this fix.
             const chosenFileNamesLower = new Set(allPlugins.map((p) => p.fileName.toLowerCase()));
             allPlugins = allPlugins.concat(scanEslifierOutputPlugins(eslifierOutputDirAbs, chosenFileNamesLower));
-            let helperModNameIndex = null;
+            let bridgeModNameIndex = null;
             try {
-                const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-                if (helperAvailable) {
-                    const liveData = await helperClient.getAllMods();
-                    if (liveData) helperModNameIndex = buildHelperModNameIndex(liveData.mods);
+                const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+                if (bridgeAvailable) {
+                    const liveData = await bridgeClient.getAllMods();
+                    if (liveData) bridgeModNameIndex = buildBridgeModNameIndex(liveData.mods);
                 }
             } catch { /* best-effort -- see comment above */ }
-            allPlugins = attributeWithHelperNames(allPlugins, staging, helperModNameIndex);
+            allPlugins = attributeWithBridgeNames(allPlugins, staging, bridgeModNameIndex);
             const results = allPlugins.filter((p) => {
                 if (extensions.length && !extensions.includes(p.extension)) return false;
                 if (!q) return true;
@@ -535,7 +535,7 @@ function createMergeRouter(config) {
         if (!outputDir) return res.status(400).json({ error: 'Choose an output folder first.' });
 
         // Merge Update Report schema (2026-08-25) -- resolves each item's OWNING MOD's live
-        // version/fileId/fileMD5 (Helper-first, state.v2 fallback -- same established pattern as
+        // version/fileId/fileMD5 (Bridge-first, state.v2 fallback -- same established pattern as
         // lib/rebuild-single-mod.js's own liveMods/buildModFromLiveData/buildModFromVortexState
         // split) so lib/merge-v2-worker.js's writeArtifacts can record them at build time -- there
         // is nothing for a future Merge Update Report check to compare against otherwise. Keyed by
@@ -543,12 +543,12 @@ function createMergeRouter(config) {
         // this field already IS the Vortex staging folder name, not a display name), resolved ONCE
         // per unique mod even when several selected plugins share one owning mod (a real case --
         // see lib/merge-plugin-scan.js's own Diziet's-mod precedent). Best-effort only: a lookup
-        // failure for any one mod, or the whole Helper+state.v2 path being unavailable (Vortex open,
-        // no Helper extension reachable), never blocks the merge -- that plugin just isn't checkable
+        // failure for any one mod, or the whole Vortex Bridge+state.v2 path being unavailable (Vortex open,
+        // no Vortex Bridge reachable), never blocks the merge -- that plugin just isn't checkable
         // by the report later, matching its own "Can't check -- rebuild to enable" treatment for
         // exactly this case rather than a hard failure here.
-        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID).catch(() => false);
-        const liveModsData = helperAvailable ? await helperClient.getAllMods().catch(() => null) : null;
+        const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID).catch(() => false);
+        const liveModsData = bridgeAvailable ? await bridgeClient.getAllMods().catch(() => null) : null;
         const modAttrsByName = new Map();
         const uniqueModNames = [...new Set(items.map((it) => it.modName).filter(Boolean))];
         const toAttrs = (modInfo) => ({
@@ -803,7 +803,7 @@ function createMergeRouter(config) {
     router.post('/open-output-folder', (req, res) => {
         const { folderPath } = req.body || {};
         if (!folderPath || typeof folderPath !== 'string') return res.status(400).json({ error: 'folderPath is required.' });
-        spawn(`explorer.exe "${path.resolve(folderPath)}"`, { shell: true, detached: true, stdio: 'ignore' }).unref();
+        try { openFolderInExplorer(folderPath); } catch (e) { return res.status(400).json({ error: e.message }); }
         res.json({ ok: true });
     });
 

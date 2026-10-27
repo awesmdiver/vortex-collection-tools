@@ -43,7 +43,7 @@ const { loadCollection } = require('../lib/collection-parser');
 const nexusCollectionDownload = require('../lib/nexus-collection-download');
 const runner = require('../lib/collection-runner');
 const syncLib = require('../lib/vortex-sync/lib');
-const helperClient = require('../lib/vortex-helper-client');
+const bridgeClient = require('../lib/vortex-bridge-client');
 const workshopReportFetchState = require('../lib/workshop-report-fetch-state');
 const { createSseSession } = require('./sse-session');
 
@@ -100,13 +100,13 @@ function createWorkshopReportRouter(config) {
 
     router.post('/check', async (req, res) => {
         if (!requireConfigured(res)) return;
-        // Helper-first (2026-08-24), same treatment as rebuild-missing-routes.js's own
-        // POST /load-vortex-data -- skip the Vortex-closed gate entirely once the Helper covers the
-        // read below (loadSyncStateBatchViaHelper). Untouched (same message, same shape) for the
-        // no-Helper fallback -- this only ever skips the gate when the Helper genuinely reads the
+        // Bridge-first (2026-08-24), same treatment as rebuild-missing-routes.js's own
+        // POST /load-vortex-data -- skip the Vortex-closed gate entirely once the Vortex Bridge covers the
+        // read below (loadSyncStateBatchViaBridge). Untouched (same message, same shape) for the
+        // no-Bridge fallback -- this only ever skips the gate when the Vortex Bridge genuinely reads the
         // same data the direct state.v2 open would have.
-        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-        if (!helperAvailable && syncLib.isVortexRunning()) {
+        const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+        if (!bridgeAvailable && syncLib.isVortexRunning()) {
             return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
         }
         if (checkSession.isActive()) return res.status(409).json({ error: 'A check is already in progress.' });
@@ -138,12 +138,12 @@ function createWorkshopReportRouter(config) {
 
                 // ONE shared Vortex-DB open for every local collection's slug AND the not-yet-
                 // downloaded ones, rather than a per-collection read (see loadSyncStateBatch's own
-                // header for why this matters on a large Workshop list). Helper-first (2026-08-24):
-                // loadSyncStateBatchViaHelper is the exact same shape/return, just sourced from the
-                // Helper's live getAllMods() instead of opening state.v2 directly -- see the gate
-                // above for why this route can skip Vortex-closed once the Helper covers this read.
-                const { results, workshopOnlyCollections } = helperAvailable
-                    ? await runner.loadSyncStateBatchViaHelper({ helperClient, syncLib, entries, stagingDir: staging })
+                // header for why this matters on a large Workshop list). Bridge-first (2026-08-24):
+                // loadSyncStateBatchViaBridge is the exact same shape/return, just sourced from the
+                // Vortex Bridge's live getAllMods() instead of opening state.v2 directly -- see the gate
+                // above for why this route can skip Vortex-closed once the Vortex Bridge covers this read.
+                const { results, workshopOnlyCollections } = bridgeAvailable
+                    ? await runner.loadSyncStateBatchViaBridge({ bridgeClient, syncLib, entries, stagingDir: staging })
                     : await runner.loadSyncStateBatch({ state, entries, stagingDir: staging });
 
                 // Same dedup rebuild-missing-routes.js's own POST /load-vortex-data already applies -- a collection with a

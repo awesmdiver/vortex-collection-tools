@@ -60,8 +60,8 @@
     {
       "repo": "Nexus-Mods/Vortex",
       "path": "src/renderer/src/extensions/mod_management/InstallManager.ts",
-      "lastVerifiedCommit": "a643b45b269dabc0ad35c4017c0e1dbaad1ed5e6",
-      "lastVerifiedDate": "2026-09-08T13:57:35Z",
+      "lastVerifiedCommit": "17b21d75512ff4ce20dc913952a03c7b12fe7752",
+      "lastVerifiedDate": "2026-10-21T07:27:53Z",
       "derivedInto": "lib/vortex-file-order.js (context/confirmation)",
       "whatWeDerived": "confirms buildFileList(basePath) (~line 254, called from the real install path at ~line 1131) is what actually calls walk.ts's own walk() to build the 'modFiles' list ModFormatManager.cs's GetRequirements()/ScriptMatch iterate over -- `fileList.push(relPath)` (or `relPath + path.sep` for a directory) happens directly inside walk()'s own per-entry callback, confirming the callback's list-push really is synchronous within each directory's own readdir pass (not deferred), which is the load-bearing assumption behind lib/vortex-file-order.js's own 'batch siblings before recursion' ordering model."
     },
@@ -116,18 +116,18 @@
     {
       "repo": "Nexus-Mods/Vortex",
       "path": "src/renderer/src/extensions/mod_management/types/IMod.ts",
-      "lastVerifiedCommit": "7305f8b6fbf38245c4c429ba54ac5a8bb1587b98",
-      "lastVerifiedDate": "2026-06-16T14:29:45Z",
+      "lastVerifiedCommit": "50cd8fa8fea322cb8a341695340ad83414db9ee0",
+      "lastVerifiedDate": "2026-08-27T12:50:41Z",
       "derivedInto": "lib/state-query-worker.js (buildModVersionIndex)",
       "whatWeDerived": "ICommonModAttributes confirms version and modVersion are two genuinely separate, independently-settable fields (not a typo/duplicate) -- explains why they can diverge after a manual version switch. isPrimary is listed under 'Special mod types and flags', not the version/update section -- consistent with it being a Nexus 'main file' designation, not a local Vortex install-state concept, which is why we don't use it to determine what Vortex would deploy."
     },
     {
       "repo": "Nexus-Mods/Vortex",
-      "path": "src/renderer/src/extensions/collections/index.ts",
-      "lastVerifiedCommit": "ad8f02ae0b6d34b6fdab293186f76a194fea5f5c",
-      "lastVerifiedDate": "2026-07-29T17:54:11Z",
+      "path": "src/renderer/src/extensions/collections/util/collectionsByMod.ts",
+      "lastVerifiedCommit": "372481dcdca91cc4c4af5ea4597f3ec766170080",
+      "lastVerifiedDate": "2026-10-12T08:57:10Z",
       "derivedInto": "lib/state-query-worker.js (scanAllCollections)",
-      "whatWeDerived": "generateCollectionMap(): the real algorithm behind Vortex's own '+N collections' badge on the Mods page. Prefers rule.reference.id (a direct live-modKey link), falls back to findModByRef content-identity matching for a rule with no such id. CONFIRMED LIVE this session that rule.reference.id is NEVER populated for real collection-sourced rules -- only the fallback path is actually exercised for this project's data, which is why scanAllCollections mirrors findModByRef/testModReference below, not this file's primary path."
+      "whatWeDerived": "generateCollectionMap(): the real algorithm behind Vortex's own '+N collections' badge on the Mods page. Prefers rule.reference.id (a direct live-modKey link), falls back to findModByRef content-identity matching for a rule with no such id. CONFIRMED LIVE this session that rule.reference.id is NEVER populated for real collection-sourced rules -- only the fallback path is actually exercised for this project's data, which is why scanAllCollections mirrors findModByRef/testModReference below, not this file's primary path. [Re-verified 2026-10-23: generateCollectionMap moved out of collections/index.ts into collections/util/collectionsByMod.ts; same rule (rule.reference.id first, else findModByRef), so this entry now points at the new file.]"
     },
     {
       "repo": "Nexus-Mods/Vortex",
@@ -140,10 +140,10 @@
     {
       "repo": "Nexus-Mods/Vortex",
       "path": "src/renderer/src/extensions/mod_management/util/testModReference.ts",
-      "lastVerifiedCommit": "3f018ff9c86e2745310c33441ec06b6036f40b38",
-      "lastVerifiedDate": "2026-07-02T06:59:29Z",
+      "lastVerifiedCommit": "8c086acda3cdfbe797497da5feaf8b014742e402",
+      "lastVerifiedDate": "2026-10-19T04:41:18Z",
       "derivedInto": "lib/state-query-worker.js (scanAllCollections / ruleIdentityKeys)",
-      "whatWeDerived": "testRef()'s real matching precedence: a tag MISMATCH is not immediately fatal if a stricter identifying marker (fileMD5, then repo.modId+repo.fileId) is present -- it falls through instead of refusing. Directly explains a real, confirmed-live finding: the identical file had a DIFFERENT rule.reference.tag value in each of 3 collections referencing it (tag is a deterministic-but-PER-COLLECTION value, not a stable cross-collection identity key -- see deterministicReferenceTag.ts, not separately pinned here). ruleIdentityKeys() deliberately matches by fileMD5 then repo.modId+fileId only, never tag, mirroring this real precedence rather than the naive assumption that a matching tag would be reliable."
+      "whatWeDerived": "testRef()'s real matching precedence: a tag MISMATCH is not immediately fatal if a stricter identifying marker (fileMD5, then repo.modId+repo.fileId) is present -- it falls through instead of refusing. Directly explains a real, confirmed-live finding: the identical file had a DIFFERENT rule.reference.tag value in each of 3 collections referencing it (tag is a deterministic-but-PER-COLLECTION value, not a stable cross-collection identity key -- see deterministicReferenceTag.ts, not separately pinned here). ruleIdentityKeys() deliberately matches by fileMD5 then repo.modId+fileId only, never tag, mirroring this real precedence rather than the naive assumption that a matching tag would be reliable. [Re-verified 2026-10-23: upstream only added a perf index (referenceIndex/rulesByReference); testRef() precedence unchanged. Vortex now also matches a tag against mod.referenceTags (several tags per mod); we never match on tag, so no change.]"
     },
     {
       "repo": "Nexus-Mods/Vortex",
@@ -171,19 +171,19 @@
     },
     {
       "repo": "Nexus-Mods/Vortex",
-      "path": "extensions/gamebryo-plugin-management/src/statics.ts",
-      "lastVerifiedCommit": "6c1ce01da65dbd7af238095a1ea6ca864323494b",
-      "lastVerifiedDate": "2026-02-02T10:30:52Z",
+      "path": "src/renderer/src/extensions/gamebryo_plugin_management/statics.ts",
+      "lastVerifiedCommit": "d173fd15122e23669a666bdb3048d7e339af3ca8",
+      "lastVerifiedDate": "2026-09-07T08:16:28Z",
       "derivedInto": "lib/ghost-files.js",
-      "whatWeDerived": "confirms GHOST_EXT = '.ghost' is a real, Vortex-defined constant (gamebryo-plugin-management extension) -- the mechanism is specifically plugin (ESP/ESM/ESL) ghosting, not a generic deployment feature for arbitrary file types. Added AFTER the fix already shipped (the original fix was based on real observed on-disk behavior, not a source read) -- backfilled per this project's own standing practice of verifying against real Vortex source before/after implementing logic that mirrors it."
+      "whatWeDerived": "confirms GHOST_EXT = '.ghost' is a real, Vortex-defined constant (gamebryo-plugin-management extension) -- the mechanism is specifically plugin (ESP/ESM/ESL) ghosting, not a generic deployment feature for arbitrary file types. Added AFTER the fix already shipped (the original fix was based on real observed on-disk behavior, not a source read) -- backfilled per this project's own standing practice of verifying against real Vortex source before/after implementing logic that mirrors it. [Re-verified 2026-10-23: file only moved into the renderer (gamebryo_plugin_management/statics.ts); GHOST_EXT is still \".ghost\".]"
     },
     {
       "repo": "Nexus-Mods/Vortex",
-      "path": "extensions/gamebryo-plugin-management/src/util/toPluginId.ts",
-      "lastVerifiedCommit": "193bf67f0e183f2674978af1c8fa8b0c5b25d0cd",
-      "lastVerifiedDate": "2026-05-06T09:38:21Z",
+      "path": "src/renderer/src/extensions/gamebryo_plugin_management/util/toPluginId.ts",
+      "lastVerifiedCommit": "88b13ab5c37833882a533b54616d093e9a0c8987",
+      "lastVerifiedDate": "2026-09-23T10:36:50Z",
       "derivedInto": "lib/ghost-files.js",
-      "whatWeDerived": "toPluginId(fileName) = path.basename(fileName.toLowerCase(), GHOST_EXT) -- Vortex's own real logic for recovering a ghosted file's base identity: lowercase, then strip the literal '.ghost' suffix. Confirms stripGhostPairs()'s case-insensitive suffix-matching approach (match a '.ghost'-suffixed name in current staging against its stripped counterpart in the fresh archive extraction) is the same normalization Vortex itself uses, not an invented convention."
+      "whatWeDerived": "toPluginId(fileName) = path.basename(fileName.toLowerCase(), GHOST_EXT) -- Vortex's own real logic for recovering a ghosted file's base identity: lowercase, then strip the literal '.ghost' suffix. Confirms stripGhostPairs()'s case-insensitive suffix-matching approach (match a '.ghost'-suffixed name in current staging against its stripped counterpart in the fresh archive extraction) is the same normalization Vortex itself uses, not an invented convention. [Re-verified 2026-10-23: file moved into the renderer; it is now path.basename(unghost(fileName)).toLowerCase() with unghost() in util/ghost.ts stripping a \".ghost\" extension compared case-insensitively. Same result as before for our purposes: our case-insensitive suffix strip in stripGhostPairs() matches it.]"
     },
     {
       "repo": "Nexus-Mods/Vortex",
@@ -196,26 +196,26 @@
     {
       "repo": "Nexus-Mods/Vortex",
       "path": "src/renderer/src/extensions/health_check/utils/modRequirements/onDownloadRequirement.ts",
-      "lastVerifiedCommit": "5e04c86f557c9128c36d5ff031ca52846a16cbe5",
-      "lastVerifiedDate": "2026-08-11T15:13:34Z",
+      "lastVerifiedCommit": "b3eb160de964a17f0ae2582ec8b3169a2f963c69",
+      "lastVerifiedDate": "2026-09-30T08:32:14Z",
       "derivedInto": "lib/nexus-mod-download.js",
-      "whatWeDerived": "Vortex's own real 'download this exact modId+fileId from Nexus' trigger: build an nxm://<domain>/mods/<modId>/files/<fileId> URL and emit a 'start-download' event. Confirms the modId+fileId (not a search/guess) is the correct identity to resolve a specific file against, matching what this project's downloadModArchive() does via the direct REST call instead of the nxm:// protocol indirection (this project has no OS-level protocol handler to route through -- it calls the same underlying API endpoint directly)."
+      "whatWeDerived": "Vortex's own real 'download this exact modId+fileId from Nexus' trigger: build an nxm://<domain>/mods/<modId>/files/<fileId> URL and emit a 'start-download' event. Confirms the modId+fileId (not a search/guess) is the correct identity to resolve a specific file against, matching what this project's downloadModArchive() does via the direct REST call instead of the nxm:// protocol indirection (this project has no OS-level protocol handler to route through -- it calls the same underlying API endpoint directly). [Re-verified 2026-10-23: upstream change was only the event payload (mod_uid replaces mod_id/mod_name); the nxm://<domain>/mods/<modId>/files/<fileId> URL and start-download emit are unchanged.]"
     },
     {
       "repo": "Nexus-Mods/Vortex",
       "path": "src/renderer/src/extensions/nexus_integration/eventHandlers.ts",
-      "lastVerifiedCommit": "d8505c32200d1c36101c49b60c8777f50235d322",
-      "lastVerifiedDate": "2026-08-11T14:23:25Z",
+      "lastVerifiedCommit": "1ca04654ea70281cc138a42305f977b034f991c4",
+      "lastVerifiedDate": "2026-09-22T12:58:48Z",
       "derivedInto": "lib/nexus-mod-download.js",
-      "whatWeDerived": "downloadFile()'s own explicit Premium-only gate for direct/automated downloads: 'nexusmods can't let users download files directly from client, without showing ads' -- a non-Premium account is refused client-side, by design, to protect Nexus's ad-supported revenue model for free users. This project's checkPremiumStatus() + upfront Premium check before any download attempt mirrors this exact policy rather than working around it -- a non-Premium account gets the same refusal Vortex's own client would give, with no attempt to route around Nexus's ad model."
+      "whatWeDerived": "downloadFile()'s own explicit Premium-only gate for direct/automated downloads: 'nexusmods can't let users download files directly from client, without showing ads' -- a non-Premium account is refused client-side, by design, to protect Nexus's ad-supported revenue model for free users. This project's checkPremiumStatus() + upfront Premium check before any download attempt mirrors this exact policy rather than working around it -- a non-Premium account gets the same refusal Vortex's own client would give, with no attempt to route around Nexus's ad model. [Re-verified 2026-10-23: the Premium gate is unchanged, except it now first refreshes the cached membership before refusing (a plan bought on the website is picked up). Upstream also added rate-limit (429) handling in nexus_integration/rateLimit.ts.]"
     },
     {
       "repo": "Nexus-Mods/node-nexus-api",
       "path": "src/Nexus.ts",
-      "lastVerifiedCommit": "ba61e6f7dfd58720e6013650bd13c0d342dbde47",
-      "lastVerifiedDate": "2026-08-18T11:43:38Z",
+      "lastVerifiedCommit": "ba5d648c781a43d0aea4717a667a8792401a717d",
+      "lastVerifiedDate": "2026-10-07T09:40:20Z",
       "derivedInto": "lib/nexus-mod-download.js",
-      "whatWeDerived": "getDownloadURLs()'s real endpoint shape: GET /v1/games/{gameId}/mods/{modId}/files/{fileId}/download_link.json, no key/expires needed for Premium accounts (those are only for the free-user nxm-link-click flow this project does not implement). Response is an array of {URI,...} (or a single object) -- resolveDownloadLink() handles both shapes, matching this library's own res.download_links ?? [res.download_link] fallback."
+      "whatWeDerived": "getDownloadURLs()'s real endpoint shape: GET /v1/games/{gameId}/mods/{modId}/files/{fileId}/download_link.json, no key/expires needed for Premium accounts (those are only for the free-user nxm-link-click flow this project does not implement). Response is an array of {URI,...} (or a single object) -- resolveDownloadLink() handles both shapes, matching this library's own res.download_links ?? [res.download_link] fallback. [Re-verified 2026-10-23: upstream changes were per-request header copies and rate-limit reading; the download_link.json endpoint shape is unchanged.]"
     },
     {
       "repo": "Nexus-Mods/fomod-installer",

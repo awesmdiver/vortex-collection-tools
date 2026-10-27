@@ -190,9 +190,9 @@ function wrRenderRows(rows) {
   $g('wrEmpty').classList.toggle('hidden', !nothingToShow);
   if (nothingToShow) {
     // Stray fix, found incidentally (2026-08-24) -- this claimed Vortex had to be closed
-    // unconditionally, stale since the Helper-first fix (workshop-report-helper-and-refetch) made
-    // that only a fallback requirement, not a real one whenever the Helper's reachable. Dropped
-    // rather than reworded to describe the Helper/fallback split -- that detail doesn't change what
+    // unconditionally, stale since the Bridge-first fix (workshop-report-bridge-and-refetch) made
+    // that only a fallback requirement, not a real one whenever the Vortex Bridge's reachable. Dropped
+    // rather than reworded to describe the Vortex Bridge/fallback split -- that detail doesn't change what
     // the user does next (click the button either way).
     $g('wrEmpty').textContent = 'No Workshop collections found yet. Click "Check Nexus for updates" to look.';
   }

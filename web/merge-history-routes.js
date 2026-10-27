@@ -30,7 +30,7 @@
 //   - remove / backup-remove -> plain delete again (no new backup -- a backup-remove's own original
 //     backup, made at merge time, is what Restore uses; Revert never creates a second one).
 // Restore (brings every original back regardless of current state):
-//   - disable  -> enable them again. Helper-only, no Plugins.txt fallback -- matching Missing
+//   - disable  -> enable them again. Vortex Bridge-only, no Plugins.txt fallback -- matching Missing
 //     Masters' own established /set-plugin-enabled precedent (web/missing-masters-routes.js) exactly.
 //   - remove / backup-remove -> copy from the plugin's own recorded backupPath if it still exists;
 //     otherwise re-extract the plugin's owning mod from its archive via lib/rebuild-single-mod.js's
@@ -57,7 +57,7 @@ const path = require('path');
 const express = require('express');
 const appConfig = require('../lib/app-config');
 const syncLib = require('../lib/vortex-sync/lib');
-const helperClient = require('../lib/vortex-helper-client');
+const bridgeClient = require('../lib/vortex-bridge-client');
 const missingMastersScan = require('../lib/missing-masters-scan');
 const { rebuildSingleMod } = require('../lib/rebuild-single-mod');
 // Reused directly, not reimplemented -- runPostMergeCleanup is exported alongside createMergeRouter
@@ -279,20 +279,20 @@ function createMergeHistoryRouter(config) {
         try {
             const lines = [];
             if (json.action === 'disable') {
-                // Helper-only, no Plugins.txt fallback -- same real asymmetry Missing Masters' own
+                // Vortex Bridge-only, no Plugins.txt fallback -- same real asymmetry Missing Masters' own
                 // /set-plugin-enabled already established (that route has no fallback branch at all,
                 // unlike disable's own Plugins.txt path in runPostMergeCleanup above): a Plugins.txt
                 // '*' can be removed offline, but adding one back correctly (matching Vortex's own
                 // load-order placement rules) needs Vortex's live cooperation, not a blind file edit.
-                const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-                if (!helperAvailable) {
+                const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+                if (!bridgeAvailable) {
                     return res.status(409).json({
-                        error: 'helper-unavailable',
-                        message: 'The Vortex Collection Helper extension must be reachable (Vortex genuinely open) to turn these plugins back on.',
+                        error: 'bridge-unavailable',
+                        message: 'The Vortex Bridge extension must be reachable (Vortex genuinely open) to turn these plugins back on.',
                     });
                 }
                 for (const p of json.plugins || []) {
-                    const ok = await helperClient.setPluginEnabled(p.filename, true);
+                    const ok = await bridgeClient.setPluginEnabled(p.filename, true);
                     lines.push(ok
                         ? `Re-enabled ${p.filename} in Vortex. Deploy mods in Vortex to apply changes to your game.`
                         : `Could not enable ${p.filename} (it may not be in the current load order).`);
@@ -323,8 +323,8 @@ function createMergeHistoryRouter(config) {
                     needsArchive.get(p.stagingFolderName).push(p.filename);
                 }
                 if (needsArchive.size) {
-                    const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-                    const liveData = helperAvailable ? await helperClient.getAllMods() : null;
+                    const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+                    const liveData = bridgeAvailable ? await bridgeClient.getAllMods() : null;
                     const { downloadMissingArchives } = appConfig.loadConfig();
                     for (const [stagingFolderName, fileNames] of needsArchive) {
                         try {

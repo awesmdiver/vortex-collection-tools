@@ -5,7 +5,7 @@
 // index.html; this only toggles which one is visible. app.js and sync-app.js each own their own
 // internal view-state exactly as before -- this file knows nothing about either.
 
-const TOOL_AREAS = ['home', 'rebuild', 'sync', 'settings', 'reports', 'rules-generator', 'utilities', 'merge', 'book', 'update-collection-v2', 'remove-collection', 'pgpatcher', 'save-cleaner'];
+const TOOL_AREAS = ['home', 'rebuild', 'sync', 'settings', 'reports', 'rules-generator', 'utilities', 'merge', 'book', 'update-collection-v2', 'remove-collection', 'removed-from-main', 'pgpatcher', 'save-cleaner'];
 let currentArea = null;
 
 // "What page am I on" was genuinely hard to tell across several of this app's pages -- confirmed
@@ -38,21 +38,82 @@ window.refreshPageTitle = () => setPageLabel(lastPageLabel);
 // page's own api() helper already turns into an Error with .status set before it ever reaches a
 // caller. Each page checks this itself (own api() helper, own try/catch shape) rather than this file
 // wrapping fetch for them -- same "each area owns its own state" convention as everything else here.
+//
+// A TypeError is ALSO what every ordinary page bug looks like ("Cannot read properties of undefined"), so
+// the window below is only shown after a ping proves the server really is unreachable (2026-10-23: it
+// kept appearing on a healthy server). The error is remembered here so showServerUnreachableError, which
+// callers invoke right after this check without passing the error, can log and judge it.
+const pageLoadedAt = Date.now();
+let lastCandidateError = null;
 function isServerUnreachableError(e) {
-  return e instanceof TypeError;
+  if (!(e instanceof TypeError)) return false;
+  lastCandidateError = e;
+  return true;
 }
 window.isServerUnreachableError = isServerUnreachableError;
+
+// What really threw: to the browser console and (one short masked line) to the app log.
+function reportClientError(e) {
+  try {
+    const rec = {
+      name: e && e.name, message: e && e.message,
+      stack: String((e && e.stack) || '').split('\n').slice(0, 3),
+      url: (e && e.vctUrl) || '', page: location.pathname,
+      seconds: Math.round((Date.now() - pageLoadedAt) / 1000),
+    };
+    console.error('[client-error]', rec);
+    fetch('/api/client-error', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rec), vctNoRetry: true,
+    }).catch(() => {});
+  } catch { /* reporting must never throw */ }
+}
+window.reportClientError = reportClientError;
+
+// Does the local server answer at all? Any HTTP answer counts; only "no answer in 3 s" does not.
+async function pingServer() {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 3000);
+  try {
+    await fetch('/api/settings', { signal: ctl.signal, vctNoRetry: true });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+window.pingServer = pingServer;
 
 // retryFn: what "Try Again" should re-run -- same pattern as app.js's own pendingVortexRetry, just
 // one level up so every page can share it instead of each reimplementing this exact modal.
 let pendingServerUnreachableRetry = null;
-function showServerUnreachableError(retryFn) {
+async function showServerUnreachableError(retryFn) {
   pendingServerUnreachableRetry = retryFn || null;
+  const err = lastCandidateError;
+  lastCandidateError = null;
+  if (err) reportClientError(err);
+  let up = await pingServer();
+  if (!up) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    up = await pingServer();
+  }
+  if (up) {
+    // The server is fine, so this was a bug in the page: say that, never "restart the server".
+    document.getElementById('pageErrorModal').classList.remove('hidden');
+    return;
+  }
   document.getElementById('serverUnreachableModal').classList.remove('hidden');
 }
 window.showServerUnreachableError = showServerUnreachableError;
 document.getElementById('serverUnreachableCloseBtn').addEventListener('click', () => {
   document.getElementById('serverUnreachableModal').classList.add('hidden');
+});
+document.getElementById('pageErrorCloseBtn').addEventListener('click', () => {
+  document.getElementById('pageErrorModal').classList.add('hidden');
+});
+document.getElementById('pageErrorRetryBtn').addEventListener('click', () => {
+  document.getElementById('pageErrorModal').classList.add('hidden');
+  if (pendingServerUnreachableRetry) pendingServerUnreachableRetry();
 });
 document.getElementById('serverUnreachableRetryBtn').addEventListener('click', () => {
   document.getElementById('serverUnreachableModal').classList.add('hidden');
@@ -70,8 +131,8 @@ let pendingVortexRunningRetry = null;
 // Default title/body -- the genuine "we need a real write, Vortex must be fully closed" case (every
 // existing caller of this function, unchanged). override (2026-08-30, director-caught real false
 // alarm) lets a caller show a DIFFERENT, more accurate pair for the read-only-fallback case: Vortex
-// IS running, but the reason the Helper didn't answer is usually that Vortex is busy on its own main
-// thread (mid-deploy, still starting up -- see vortex-helper-client.js's own header comment), not
+// IS running, but the reason the Vortex Bridge didn't answer is usually that Vortex is busy on its own main
+// thread (mid-deploy, still starting up -- see vortex-bridge-client.js's own header comment), not
 // that anything needs closing. Optional and additive -- every caller that doesn't pass it keeps
 // showing exactly the same text as before this change.
 const VORTEX_RUNNING_DEFAULT_TITLE = '⚠️ Vortex is currently running';
@@ -130,29 +191,29 @@ function showConfirmModal(message) {
 }
 window.showConfirmModal = showConfirmModal;
 
-// A real, distinct case from Update Collection's own upfront Helper check above (which silently
-// routes to Classic before v2 ever opens) -- this is for the Helper genuinely dying PARTWAY through
+// A real, distinct case from Update Collection's own upfront Vortex Bridge check above (which silently
+// routes to Classic before v2 ever opens) -- this is for the Vortex Bridge genuinely dying PARTWAY through
 // an already-open v2 flow (Vortex closed, or the extension crashed). Same shared-modal shape as
 // showVortexRunningModal, plus one more action: "Switch to Classic instead" always navigates
-// straight there, since Classic needs no Helper at all and someone hitting this mid-v2 shouldn't be
+// straight there, since Classic needs no Vortex Bridge at all and someone hitting this mid-v2 shouldn't be
 // stuck with only "try again" as an option.
-let pendingHelperUnavailableRetry = null;
-function showHelperUnavailableModal(retryFn) {
-  pendingHelperUnavailableRetry = retryFn || null;
-  document.getElementById('helperUnavailableModal').classList.remove('hidden');
+let pendingBridgeUnavailableRetry = null;
+function showBridgeUnavailableModal(retryFn) {
+  pendingBridgeUnavailableRetry = retryFn || null;
+  document.getElementById('bridgeUnavailableModal').classList.remove('hidden');
 }
-function hideHelperUnavailableModal() {
-  document.getElementById('helperUnavailableModal').classList.add('hidden');
+function hideBridgeUnavailableModal() {
+  document.getElementById('bridgeUnavailableModal').classList.add('hidden');
 }
-window.showHelperUnavailableModal = showHelperUnavailableModal;
-window.hideHelperUnavailableModal = hideHelperUnavailableModal;
-document.getElementById('helperUnavailableCloseBtn').addEventListener('click', hideHelperUnavailableModal);
-document.getElementById('helperUnavailableRetryBtn').addEventListener('click', () => {
-  hideHelperUnavailableModal();
-  if (pendingHelperUnavailableRetry) pendingHelperUnavailableRetry();
+window.showBridgeUnavailableModal = showBridgeUnavailableModal;
+window.hideBridgeUnavailableModal = hideBridgeUnavailableModal;
+document.getElementById('bridgeUnavailableCloseBtn').addEventListener('click', hideBridgeUnavailableModal);
+document.getElementById('bridgeUnavailableRetryBtn').addEventListener('click', () => {
+  hideBridgeUnavailableModal();
+  if (pendingBridgeUnavailableRetry) pendingBridgeUnavailableRetry();
 });
-document.getElementById('helperUnavailableClassicBtn').addEventListener('click', () => {
-  hideHelperUnavailableModal();
+document.getElementById('bridgeUnavailableClassicBtn').addEventListener('click', () => {
+  hideBridgeUnavailableModal();
   navigateToArea('sync');
 });
 
@@ -195,7 +256,7 @@ fetch('/api/settings')
 // "reports"/"utilities" are section GROUPS, not a real stable tool id (no themes/*.json entry for
 // them), so they stay a plain literal here even under a themed brand -- see DESIGN.md, group-level
 // naming is a known gap, not yet part of the schema.
-const AREA_LABELS = { home: 'Home', rebuild: 'Rebuild Collection', sync: 'Update Collection (Classic)', settings: 'Settings', reports: 'Reports', 'rules-generator': 'Rules Generator', utilities: 'Utilities', merge: 'Merge Plugins', book: 'Get Started', 'update-collection-v2': 'Update Collection', 'remove-collection': 'Safe Collection Removal', 'save-cleaner': 'Save Cleaner' };
+const AREA_LABELS = { home: 'Home', rebuild: 'Rebuild Collection', sync: 'Update Collection (Classic)', settings: 'Settings', reports: 'Reports', 'rules-generator': 'Rules Generator', utilities: 'Utilities', merge: 'Merge Plugins', book: 'Get Started', 'update-collection-v2': 'Update Collection', 'remove-collection': 'Safe Collection Removal', 'removed-from-main': 'Removed From Main', 'save-cleaner': 'Save Cleaner' };
 
 function showToolArea(id) {
   currentArea = id;
@@ -266,14 +327,14 @@ function markBookOpened() {
 // was last shown.
 // One "Update Collection" entry point, not two (2026-08-18) -- collapses the old separate "Update
 // Collection (Classic)"/"Update Collection (Preview)" home cards into a single button. Checked LIVE
-// on every click (never cached from page load -- Vortex/the Helper extension's own running state can
-// genuinely change between visits), same real checkHelperAvailable() every *-routes.js file already
-// uses internally, now exposed directly via GET /api/helper-status. Defaults to Classic (false) on
-// ANY failure to reach that route -- Classic needs no Helper at all, so degrading toward the option
+// on every click (never cached from page load -- Vortex/the Vortex Bridge's own running state can
+// genuinely change between visits), same real checkBridgeAvailable() every *-routes.js file already
+// uses internally, now exposed directly via GET /api/bridge-status. Defaults to Classic (false) on
+// ANY failure to reach that route -- Classic needs no Vortex Bridge at all, so degrading toward the option
 // that always works is the safe direction, never toward the one that might dead-end.
-async function checkHelperAvailableLive() {
+async function checkBridgeAvailableLive() {
   try {
-    const res = await fetch('/api/helper-status');
+    const res = await fetch('/api/bridge-status');
     if (!res.ok) return false;
     const data = await res.json();
     return !!(data && data.available);
@@ -281,7 +342,7 @@ async function checkHelperAvailableLive() {
     return false;
   }
 }
-window.checkHelperAvailableLive = checkHelperAvailableLive;
+window.checkBridgeAvailableLive = checkBridgeAvailableLive;
 
 async function navigateToArea(id, subTab) {
   if (currentArea === 'settings' && id !== 'settings' && window.settingsIsDirty && window.settingsIsDirty()) {
@@ -292,11 +353,13 @@ async function navigateToArea(id, subTab) {
     }
   }
   // The single "Update Collection" home card routes through here -- resolve to the real area (v2 if
-  // the Helper's reachable right now, Classic otherwise) and recurse once with that real id. The
+  // the Vortex Bridge's reachable right now, Classic otherwise) and recurse once with that real id. The
   // user never sees or picks between the two.
+  // 2026-10-24: no Vortex check BEFORE the click does anything. The tile goes to the Update Collection page at once; that
+  // page shows "Checking Vortex…", waits patiently for a slow Vortex, and switches to Classic itself only when Vortex is
+  // closed or the Bridge is not there (ucv2EnterAfterVortexCheck).
   if (id === 'update-collection') {
-    const available = await checkHelperAvailableLive();
-    return navigateToArea(available ? 'update-collection-v2' : 'sync', subTab);
+    return navigateToArea('update-collection-v2', subTab);
   }
   // Captured BEFORE showToolArea reassigns currentArea -- lets a per-area hook below tell "did I
   // just arrive here from somewhere ELSE" apart from "was I already here" (2026-08-24,
@@ -372,6 +435,8 @@ async function navigateToArea(id, subTab) {
   // the old line-316 rcLoadCollections-only call, now with full review state reset included. Fires
   // only when arriving from a DIFFERENT area.
   if (id === 'remove-collection' && previousArea !== 'remove-collection' && window.rcResetOnEntry) window.rcResetOnEntry();
+  // Removed From Main starts clean on each arrival from a different area, and reloads its two pickers.
+  if (id === 'removed-from-main' && previousArea !== 'removed-from-main' && window.rfmResetOnEntry) window.rfmResetOnEntry();
   // Save Cleaner's own reset to Step 1 (2026-08-27, merge-entry-reset) -- replaces the old line-339
   // scLoadSaves-only call, now with full step state reset included. Fires only when arriving from a
   // DIFFERENT area.
@@ -467,7 +532,7 @@ function setStarVisual(star, on) {
 // put. Reused for both directions (into Pinned, back into a section) since a section's own order is
 // already just a sub-sequence of this same list.
 const HOME_CANONICAL_ORDER = [
-  'merge', 'rebuild', 'sync', 'rules-generator', 'removecollection',
+  'merge', 'rebuild', 'sync', 'rules-generator', 'removecollection', 'removedfrommain',
   'missingmasters', 'scrub', 'archivefinder', 'fileretriever', 'missingfiles', 'cyclehelper', 'clearflags', 'duplicateversions', 'addmodstocollections', 'pgpatcher',
   'stats', 'workthrough', 'updatecompare', 'rulesgen', 'workshopreport', 'mergehistory', 'modexceptions',
 ];
@@ -621,6 +686,8 @@ if (reportsSubTab) {
     // Same reasoning as the cases above -- a direct "?area=remove-collection" link/refresh needs
     // this too.
     if (jumpArea === 'remove-collection') window.rcLoadCollections?.();
+    // Same reasoning -- a direct "?area=removed-from-main" link/refresh needs its pickers loaded too.
+    if (jumpArea === 'removed-from-main') window.rfmLoadPickers?.();
     // Same reasoning as the cases above -- a direct "?area=save-cleaner" link/refresh needs this too.
     if (jumpArea === 'save-cleaner') window.scLoadSaves?.();
     // ?area=book&chapter=<toolId> jumps straight to one chapter instead of the table of contents --
@@ -642,10 +709,10 @@ if (reportsSubTab) {
         if (premiumBanner) premiumBanner.classList.remove('hidden');
         const bookBanner = document.getElementById('settingsFirstRunBookBanner');
         if (bookBanner && !localStorage.getItem('vct-book-opened')) bookBanner.classList.remove('hidden');
-        // The Helper hand-off (2026-08-23) -- first-run is only HALF its condition, so this hands
+        // The Vortex Bridge hand-off (2026-08-23) -- first-run is only HALF its condition, so this hands
         // off to settings-app.js rather than unhiding the banner directly. Whether "Optional: add
-        // the Helper" is genuinely right to show also depends on a real /helper-info check that
-        // lives over there: someone can perfectly well install the Helper into Vortex BEFORE ever
+        // the Vortex Bridge" is genuinely right to show also depends on a real /bridge-info check that
+        // lives over there: someone can perfectly well install the Vortex Bridge into Vortex BEFORE ever
         // opening this app, and telling them to add something they already have reads as broken.
         // That same check also decides whether the separate "out of date" warning shows instead.
         window.markSettingsFirstRun?.();

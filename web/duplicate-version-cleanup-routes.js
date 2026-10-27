@@ -12,7 +12,8 @@
 
 const express = require('express');
 const dvc = require('../lib/duplicate-version-cleanup');
-const helperClient = require('../lib/vortex-helper-client');
+const bridgeClient = require('../lib/vortex-bridge-client');
+const { withHealthCheckPaused } = require('../lib/health-check-pause');
 const syncLib = require('../lib/vortex-sync/lib');
 const { listPickableCollections } = require('../lib/missing-files-scan');
 const { createSseSession } = require('./sse-session');
@@ -22,7 +23,7 @@ const cleanSession = createSseSession();
 // clearCancelled already established (web/clear-update-flags-routes.js's own /clear/cancel) --
 // sse-session.js itself has no cancel machinery of its own, this is the established per-tool
 // pattern to reuse. A cancelled clean is a real, honest partial result, never an error: whatever
-// groups already finished before this landed genuinely stayed cleaned up (their Helper writes
+// groups already finished before this landed genuinely stayed cleaned up (their Vortex Bridge writes
 // already happened and can't be un-sent) -- only groups that hadn't STARTED yet are skipped. The
 // group actively mid-flight when Cancel is clicked always finishes its own remove/redownload/
 // reinstall/reassign sequence first, same reasoning Update Collection v2's own Cancel (confirm-modal-
@@ -41,12 +42,12 @@ function createDuplicateVersionCleanupRouter(config) {
         return false;
     }
 
-    async function requireHelper(res) {
-        const available = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+    async function requireBridge(res) {
+        const available = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
         if (!available) {
             res.status(409).json({
-                error: 'helper-unavailable',
-                message: 'The Vortex Collection Helper extension must be reachable (Vortex genuinely open) for this tool -- there is no offline equivalent for the real remove/reinstall work it does.',
+                error: 'bridge-unavailable',
+                message: 'The Vortex Bridge extension must be reachable (Vortex genuinely open) for this tool -- there is no offline equivalent for the real remove/reinstall work it does.',
             });
             return false;
         }
@@ -76,10 +77,10 @@ function createDuplicateVersionCleanupRouter(config) {
     // scanForDuplicates) -- zero/omitted scans the whole install, the deliberate default.
     router.post('/scan', async (req, res) => {
         if (!requireConfigured(res)) return;
-        if (!(await requireHelper(res))) return;
+        if (!(await requireBridge(res))) return;
         const collectionModIds = Array.isArray(req.body?.collectionModIds) ? req.body.collectionModIds : [];
         try {
-            const { groups } = await dvc.scanForDuplicates({ collectionModIds });
+            const { groups } = await dvc.scanForDuplicates({ collectionModIds, downloadsDir: downloads, stagingDir: staging });
             res.json({ groups });
         } catch (e) {
             if (e.code === 'COLLECTION_NOT_FOUND') return res.status(404).json({ error: e.message });
@@ -111,7 +112,7 @@ function createDuplicateVersionCleanupRouter(config) {
     // stale" principle every other real write in this app follows).
     router.post('/clean', async (req, res) => {
         if (!requireConfigured(res)) return;
-        if (!(await requireHelper(res))) return;
+        if (!(await requireBridge(res))) return;
         const selections = Array.isArray(req.body?.selections) ? req.body.selections : [];
         if (selections.length === 0) return res.status(400).json({ error: 'Nothing selected to clean up.' });
         if (cleanSession.isActive()) return res.status(409).json({ error: 'A cleanup is already in progress.' });
@@ -123,7 +124,7 @@ function createDuplicateVersionCleanupRouter(config) {
             if (cleanSession.get() === mySession) cleanSession.emit(event);
         };
 
-        (async () => {
+        (async () => withHealthCheckPaused(async () => {
             try {
                 console.log(`[duplicate-version-cleanup-routes] CLEAN START: ${selections.length} group(s) selected.`);
                 // Fresh, full re-scan right before any write -- never trust the client's own
@@ -132,7 +133,7 @@ function createDuplicateVersionCleanupRouter(config) {
                 // selected, is actually touched -- anything that changed since the original scan
                 // (another tool removed it, a 'legit' reference appeared/disappeared) is honestly
                 // reported, not silently forced through.
-                const { groups: freshGroups } = await dvc.scanForDuplicates({});
+                const { groups: freshGroups } = await dvc.scanForDuplicates({ downloadsDir: downloads, stagingDir: staging });
                 // Nothing to cancel during the re-scan above (already finished by now) -- this is the
                 // real moment a cancel becomes meaningful, same as clear-update-flags' own
                 // onSpawn-fired 'cancellable' event.
@@ -160,13 +161,19 @@ function createDuplicateVersionCleanupRouter(config) {
                         emitIfCurrent({ type: 'group-complete', index: i + 1, total: selections.length, name: group.mod, ok: true, skipped: true, error: msg });
                         continue;
                     }
-                    const result = await dvc.cleanupGroup({
+                    // Light repair by default for a stray new archive of the installed copy's own file; the person can pick
+                    // the full cleanup instead. The scan decided which one fits, just now, not the page.
+                    const useLight = group.action === 'light' && sel.action !== 'recipe';
+                    const result = useLight ? await dvc.lightRepairGroup({
+                        modId: group.modId, installedVortexModId: group.installedVortexModId, downloadsDir: downloads,
+                        onPhase: (phase) => emitIfCurrent({ type: 'group-phase', index: i + 1, total: selections.length, name: group.mod, phase }),
+                    }) : await dvc.cleanupGroup({
                         modId: group.modId, installedVortexModId: group.installedVortexModId,
                         orphanDownloadIds, downloadsDir: downloads, stagingDir: staging,
                         onPhase: (phase) => emitIfCurrent({ type: 'group-phase', index: i + 1, total: selections.length, name: group.mod, phase }),
                     });
                     results.push(result);
-                    emitIfCurrent({ type: 'group-complete', index: i + 1, total: selections.length, name: result.name, ok: result.ok, error: result.error, refusedOrphans: result.refusedOrphans });
+                    emitIfCurrent({ type: 'group-complete', index: i + 1, total: selections.length, name: result.name, ok: result.ok, error: result.error, refusedOrphans: result.refusedOrphans, oneEntry: result.oneEntry, reason: result.reason, light: result.light });
                 }
                 const okCount = results.filter((r) => r.ok).length;
                 console.log(`[duplicate-version-cleanup-routes] CLEAN END: ${okCount}/${results.length} group(s) ok${cleanCancelled ? ` (cancelled -- ${selections.length - results.length} group(s) never attempted)` : ''}.`);
@@ -175,7 +182,7 @@ function createDuplicateVersionCleanupRouter(config) {
                 console.error(`[duplicate-version-cleanup-routes] clean FAILED: ${e.message}`);
                 emitIfCurrent({ type: 'clean-error', done: true, error: true, message: e.message });
             }
-        })();
+        }, { onPaused: (line) => console.log(`[duplicate-version-cleanup-routes] ${line}`), onRestoreFailed: (line) => console.warn(`[duplicate-version-cleanup-routes] ${line}`) }))();
     });
 
     // Same real fire-and-poll deploy pattern Update Collection v2's own /deploy-all already
@@ -183,11 +190,11 @@ function createDuplicateVersionCleanupRouter(config) {
     // done inline (matching that same file's own "no per-mod deploy in this loop" architecture call);
     // one real, full deploy at the end covers every mod this cleanup just reinstalled.
     router.post('/deploy-all', async (req, res) => {
-        if (!(await requireHelper(res))) return;
+        if (!(await requireBridge(res))) return;
         res.json({ ok: true });
         (async () => {
             try {
-                await helperClient.deployAllMods();
+                await bridgeClient.deployAllMods();
             } catch (e) {
                 console.error(`[duplicate-version-cleanup-routes] /deploy-all failed: ${e.message}`);
             }
@@ -195,7 +202,7 @@ function createDuplicateVersionCleanupRouter(config) {
     });
 
     router.get('/deploy-all/progress', async (req, res) => {
-        const progress = await helperClient.getDeployAllProgress();
+        const progress = await bridgeClient.getDeployAllProgress();
         if (!progress) return res.json({ active: false, done: false, unknown: true });
         res.json(progress);
     });

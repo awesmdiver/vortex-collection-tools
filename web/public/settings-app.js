@@ -323,107 +323,107 @@ for (const cat of pinnedCategories) applyCategoryPinState(cat, true);
 const savedCategory = localStorage.getItem(SETTINGS_LAST_CATEGORY_KEY);
 showSettingsCategory(SETTINGS_CATEGORY_ORDER.includes(savedCategory) ? savedCategory : SETTINGS_CATEGORY_ORDER[0]);
 
-// Helper version (2026-08-23) -- fired separately from loadSettings, not awaited inline, so a real
-// network round-trip to the Helper extension (needs Vortex genuinely open, up to a real timeout) never
+// Vortex Bridge version (2026-08-23) -- fired separately from loadSettings, not awaited inline, so a real
+// network round-trip to the Vortex Bridge (needs Vortex genuinely open, up to a real timeout) never
 // delays the rest of the Settings page from populating. Deliberately silent on failure -- "checking..."
-// simply gets replaced by "not connected", same as any other real Helper-unavailable case elsewhere in
+// simply gets replaced by "not connected", same as any other real Bridge-unavailable case elsewhere in
 // this project; no error modal for something this non-essential.
-// Both Helper banners are driven from this ONE /helper-info result (2026-08-23), rather than either
+// Both Vortex Bridge banners are driven from this ONE /bridge-info result (2026-08-23), rather than either
 // of them making its own call -- they answer the same question and would otherwise be able to
 // disagree with each other and with the version line right above them.
 //
 // 'pending' until the first real response lands. That tri-state matters: shell.js's first-run branch
-// can fire before OR after this resolves, and rendering "Optional: add the Helper" on a not-yet-known
-// answer would flash a banner at someone who already has the Helper working, then yank it away. A
+// can fire before OR after this resolves, and rendering "Optional: add the Vortex Bridge" on a not-yet-known
+// answer would flash a banner at someone who already has the Vortex Bridge working, then yank it away. A
 // failed fetch is NOT pending -- it resolves to null, which reads as not-connected, which is the
-// honest interpretation of "we couldn't reach the Helper."
-let helperInfoState = 'pending';
-let helperInfo = null;
+// honest interpretation of "we couldn't reach the Vortex Bridge."
+let bridgeInfoState = 'pending';
+let bridgeInfo = null;
 let settingsFirstRunActive = false;
 
-// Fills a banner's own .helper-install-methods slot from #helperInstallMethodsTpl. Idempotent -- both
+// Fills a banner's own .bridge-install-methods slot from #bridgeInstallMethodsTpl. Idempotent -- both
 // banners can be rendered any number of times, and a slot that's already filled is left alone.
-function fillHelperInstallMethods(banner) {
-  const slot = banner.querySelector('.helper-install-methods');
+function fillBridgeInstallMethods(banner) {
+  const slot = banner.querySelector('.bridge-install-methods');
   if (!slot || slot.childElementCount > 0) return;
-  slot.appendChild($g('helperInstallMethodsTpl').content.cloneNode(true));
+  slot.appendChild($g('bridgeInstallMethodsTpl').content.cloneNode(true));
 }
 
-// Every mount point for the outdated-Helper warning (2026-08-23). Settings alone wasn't enough --
+// Every mount point for the outdated-Bridge warning (2026-08-23). Settings alone wasn't enough --
 // someone can open the app, land on Home and start using tools without ever going near Settings, and
-// this warning says results can be silently wrong. Both are filled from the SAME #helperOutdatedBodyTpl
-// and the same helperInfo below, so they can't show different versions or disagree about whether
+// this warning says results can be silently wrong. Both are filled from the SAME #bridgeOutdatedBodyTpl
+// and the same bridgeInfo below, so they can't show different versions or disagree about whether
 // there's a problem at all.
-const HELPER_OUTDATED_BANNER_IDS = ['settingsHelperOutdatedBanner', 'homeHelperOutdatedBanner'];
+const BRIDGE_OUTDATED_BANNER_IDS = ['settingsBridgeOutdatedBanner', 'homeBridgeOutdatedBanner'];
 
 // Fills one outdated-warning mount point from the shared template and stamps in the live versions.
-// The clone is idempotent; the version text is re-set every time, so a later /helper-info answer is
+// The clone is idempotent; the version text is re-set every time, so a later /bridge-info answer is
 // always reflected rather than leaving a stale number on screen.
 function renderOutdatedBanner(banner, info) {
   if (banner.childElementCount === 0) {
-    banner.appendChild($g('helperOutdatedBodyTpl').content.cloneNode(true));
-    fillHelperInstallMethods(banner);
+    banner.appendChild($g('bridgeOutdatedBodyTpl').content.cloneNode(true));
+    fillBridgeInstallMethods(banner);
   }
-  banner.querySelector('.helper-outdated-current').textContent = info.version || '?';
-  banner.querySelector('.helper-outdated-min').textContent = info.minVersion || '?';
+  banner.querySelector('.bridge-outdated-current').textContent = info.version || '?';
+  banner.querySelector('.bridge-outdated-min').textContent = info.minVersion || '?';
 }
 
-// The real decision table for every Helper banner. Safe to call repeatedly, from either entry point.
-//   not connected      -> "add the Helper" (first-run only, Settings only -- it's genuinely a setup step)
+// The real decision table for every Vortex Bridge banner. Safe to call repeatedly, from either entry point.
+//   not connected      -> "add the Vortex Bridge" (first-run only, Settings only -- it's genuinely a setup step)
 //   connected, too old -> "out of date" (always, on Home AND Settings, however the app was reached)
 //   connected, current -> nothing; there is nothing to tell the user
-function renderHelperBanners() {
-  const addBanner = $g('settingsFirstRunHelperBanner');
-  const outdatedBanners = HELPER_OUTDATED_BANNER_IDS.map($g).filter(Boolean);
+function renderBridgeBanners() {
+  const addBanner = $g('settingsFirstRunBridgeBanner');
+  const outdatedBanners = BRIDGE_OUTDATED_BANNER_IDS.map($g).filter(Boolean);
   if (!addBanner || outdatedBanners.length === 0) return;
 
-  if (helperInfoState === 'pending') {
+  if (bridgeInfoState === 'pending') {
     addBanner.classList.add('hidden');
     for (const b of outdatedBanners) b.classList.add('hidden');
     return;
   }
 
-  const connected = !!(helperInfo && helperInfo.connected);
-  const outdated = connected && !!helperInfo.outdated;
+  const connected = !!(bridgeInfo && bridgeInfo.connected);
+  const outdated = connected && !!bridgeInfo.outdated;
 
   for (const banner of outdatedBanners) {
-    if (outdated) renderOutdatedBanner(banner, helperInfo);
+    if (outdated) renderOutdatedBanner(banner, bridgeInfo);
     banner.classList.toggle('hidden', !outdated);
   }
 
   // Only ever the "never installed" case, and only during first-run -- someone who already has the
-  // Helper (current OR outdated) must never be told to install it.
+  // Vortex Bridge (current OR outdated) must never be told to install it.
   const showAdd = settingsFirstRunActive && !connected;
-  if (showAdd) fillHelperInstallMethods(addBanner);
+  if (showAdd) fillBridgeInstallMethods(addBanner);
   addBanner.classList.toggle('hidden', !showAdd);
 }
 
-// shell.js's own first-run branch calls this instead of unhiding the "add the Helper" banner
-// directly -- whether that banner is genuinely right to show depends on the Helper check above, which
+// shell.js's own first-run branch calls this instead of unhiding the "add the Vortex Bridge" banner
+// directly -- whether that banner is genuinely right to show depends on the Vortex Bridge check above, which
 // shell.js has no view of.
 window.markSettingsFirstRun = () => {
   settingsFirstRunActive = true;
-  renderHelperBanners();
+  renderBridgeBanners();
 };
 
-async function loadHelperVersionInfo() {
-  const el = $g('settingsHelperVersion');
+async function loadBridgeVersionInfo() {
+  const el = $g('settingsBridgeVersion');
   try {
-    helperInfo = await settingsApi('GET', '/api/settings/helper-info');
-    el.textContent = helperInfo.connected ? `v${helperInfo.version || '?'} connected` : 'not connected';
+    bridgeInfo = await settingsApi('GET', '/api/settings/bridge-info');
+    el.textContent = bridgeInfo.connected ? `v${bridgeInfo.version || '?'} connected` : 'not connected';
   } catch {
-    helperInfo = null;
+    bridgeInfo = null;
     el.textContent = 'not connected';
   }
-  helperInfoState = 'ready';
-  renderHelperBanners();
+  bridgeInfoState = 'ready';
+  renderBridgeBanners();
 }
 
 // ---------- Load current settings ----------
 async function loadSettings() {
   const cfg = await settingsApi('GET', '/api/settings');
   $g('settingsToolVersion').textContent = cfg.toolVersion ? `v${cfg.toolVersion}` : '';
-  loadHelperVersionInfo();
+  loadBridgeVersionInfo();
   $g('settingsStagingInput').value = cfg.staging || '';
   $g('settingsDownloadsInput').value = cfg.downloads || '';
   $g('settingsBackupRootInput').value = cfg.backupRoot || '';
@@ -472,6 +472,7 @@ async function loadSettings() {
   $g('settingsDownloadMissingInput').checked = cfg.downloadMissingArchives === true;
   $g('settingsForceExtractMismatchInput').checked = cfg.forceExtractOffSiteMismatches === true;
   $g('settingsHideVortexVersionWarningInput').checked = cfg.hideVortexVersionWarning === true;
+  $g('settingsPauseHealthCheckInput').checked = cfg.pauseVortexHealthCheck !== false;
   $g('settingsAppLogInput').checked = cfg.appLogEnabled === true;
   $g('settingsNexusKeyStatus').textContent = cfg.hasNexusApiKey
     ? 'A key is already stored -- leave blank to keep it, or type a new one to replace it.'
@@ -681,6 +682,7 @@ async function saveSettings() {
       downloadMissingArchives: $g('settingsDownloadMissingInput').checked,
       forceExtractOffSiteMismatches: $g('settingsForceExtractMismatchInput').checked,
       hideVortexVersionWarning: $g('settingsHideVortexVersionWarningInput').checked,
+      pauseVortexHealthCheck: $g('settingsPauseHealthCheckInput').checked,
       appLogEnabled: $g('settingsAppLogInput').checked,
     };
     const keyInput = $g('settingsNexusKeyInput').value;

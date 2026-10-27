@@ -92,6 +92,12 @@
       "whatItDoes": "Scans a collection prior to uninstallation, highlighting any mods shared with other active collections so you don't inadvertently delete them."
     },
     {
+      "toolId": "removed-from-main",
+      "banner": "theme-assets/starfield/book/book-banner-starfield-stage-jettison.png",
+      "lore": "A deep-space vessel relies on heavy auxiliary fuel pods to break orbit, but once the ship achieves escape velocity, those empty shells become a dangerous liability. Clinging to spent architecture only drains structural integrity and complicates jump calculations. Initiating a controlled detachment sequence severs the dead weight, ensuring the main chassis flies lean, fast, and unencumbered into the black.",
+      "whatItDoes": "Finds your own upgraded mods that were left behind when the main collection dropped the originals. It lists them, lets you uncheck any you want to keep, then backs up your collection and jettisons the rest from Vortex when you press the button."
+    },
+    {
       "toolId": "report-stats",
       "banner": "theme-assets/starfield/book/book-banner-starfield-starborn-telemetry.png",
       "lore": "Across dozens of jumps through the Unity, a Starborn monitors the subtle fluctuations in energy signatures and quantum degradation across every cycle. Sifting through miles of raw atmospheric sensor logs and reactor diagnostics by eye is a fool's errand when traversing the Settled Systems. Telemetry instruments process that raw data stream into actionable metrics, highlighting sub-optimal reactor outputs and strained grav drives before they fail. You immediately see where performance holds strong and which systems demand maintenance across your journey. It provides omniscient clarity across your ship's history without drowning you in raw technical logs.",

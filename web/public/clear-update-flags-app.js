@@ -1,7 +1,7 @@
 'use strict';
 // Clear Update Flags (Utilities area) -- Vortex's own "Update available" badge can stay lit for a
 // collection member mod even when the collection deliberately pins that exact version. This tool
-// clears the stale flag directly through the Helper's own real live-state write -- never touches an
+// clears the stale flag directly through the Vortex Bridge's own real live-state write -- never touches an
 // installed file. Real logic lives in lib/vortex-update-flags.js; see that file's own header comment
 // for the full design writeup. Own tiny helpers, same "self-contained area" convention already used
 // by cleanup-app.js/reports-rulesgen-app.js.
@@ -56,14 +56,14 @@ function cufHandleError(e) {
     cufG('cufNotConfigured').classList.remove('hidden');
     return;
   }
-  if (e.status === 409 && e.body?.error === 'helper-unavailable') {
+  if (e.status === 409 && e.body?.error === 'bridge-unavailable') {
     const box = cufG('cufCriticalError');
     box.innerHTML = '';
     box.appendChild(cufEl('div', { class: 'callout__title' }, '🛑 Vortex Connection Required'));
-    box.appendChild(cufEl('p', {}, 'This tool requires a live connection to the Vortex Collection Helper extension to run.'));
+    box.appendChild(cufEl('p', {}, 'This tool requires a live connection to the Vortex Bridge extension to run.'));
     box.appendChild(cufEl('ul', {}, [
       cufEl('li', {}, [cufEl('strong', {}, 'If you already have the extension installed:'), ' Make sure Vortex is actively running.']),
-      cufEl('li', {}, [cufEl('strong', {}, "If you haven't installed it yet:"), ' Install the Vortex Collection Helper extension into Vortex, restart Vortex, and then launch this tool again.']),
+      cufEl('li', {}, [cufEl('strong', {}, "If you haven't installed it yet:"), ' Install the Vortex Bridge extension into Vortex, restart Vortex, and then launch this tool again.']),
     ]));
     const retryBtn = cufEl('button', { class: 'btn btn--ghost btn--small' }, 'Retry');
     retryBtn.addEventListener('click', () => runClearUpdateFlagsList());
@@ -184,7 +184,7 @@ function cufRenderPicker(data) {
 // (used only by that post-completion refresh, and restore's own identical refresh-then-render-result
 // sequence below) logs a refresh failure to the console instead of surfacing a competing critical-
 // error box -- the operation's own real result is already known and about to render regardless of
-// whether the picker itself managed to refresh. Every other caller (the helper-unavailable Retry
+// whether the picker itself managed to refresh. Every other caller (the bridge-unavailable Retry
 // button, the initial page load) keeps today's default: a refresh failure IS the whole story there,
 // so it still shows plainly.
 async function runClearUpdateFlagsList({ silent = false } = {}) {
@@ -242,11 +242,11 @@ cufG('cufClearSelectionBtn').addEventListener('click', () => {
   cufSyncSelectAllCheckbox();
 });
 
-// Refresh -- re-runs the exact same real live-Helper read the page already does on load. There is no
+// Refresh -- re-runs the exact same real live-Bridge read the page already does on load. There is no
 // cache to invalidate here (GET /api/clear-update-flags/list always makes a genuine live
-// helperClient.getAllMods() call, never a stored snapshot), so this button's real job is letting you
+// bridgeClient.getAllMods() call, never a stored snapshot), so this button's real job is letting you
 // re-check the numbers after changing something in Vortex itself, without having to leave the page
-// and come back. Deliberately NOT silent: a refusal here (Vortex closed, Helper gone) IS the whole
+// and come back. Deliberately NOT silent: a refusal here (Vortex closed, Vortex Bridge gone) IS the whole
 // story of an explicitly-clicked refresh, so it surfaces plainly like the initial load does.
 cufG('cufRefreshBtn').addEventListener('click', () => runClearUpdateFlagsList());
 
@@ -264,7 +264,7 @@ function cufRenderResult(data) {
   const restoreRow = cufG('cufRestoreRow');
   if (data.cancelled) {
     // A cancelled run is a real, honest partial success, not a failure -- whatever mods were already
-    // cleared genuinely stayed cleared (their Helper writes already happened), so this deliberately
+    // cleared genuinely stayed cleared (their Vortex Bridge writes already happened), so this deliberately
     // does NOT use the warning styling/copy below. New copy (2026-08-23), not a reuse of the
     // full-success/partial-failure wording -- flagged in the handoff for a look before shipping.
     // Untouched by this task's own copy/backup-line changes below (out of scope, see handoff).

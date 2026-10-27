@@ -13,6 +13,7 @@
   "downloadMissingArchives": false,
   "forceExtractOffSiteMismatches": false,
   "hideVortexVersionWarning": false,
+  "pauseVortexHealthCheck": true,
   "appLogEnabled": false,
   "serverPort": 4321,
   "serverHost": "127.0.0.1",

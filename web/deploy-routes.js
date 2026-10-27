@@ -1,7 +1,7 @@
 'use strict';
 // Shared "Deploy your mods to Vortex" endpoint (2026-09-14, "Rebuild Collection, Rebuild Missing
 // Files, and Update Collection: the same Deploy step on every Done screen"). The real fire-and-poll
-// deployAllMods()/getDeployAllProgress() pair (lib/vortex-helper-client.js) used to be copy-pasted
+// deployAllMods()/getDeployAllProgress() pair (lib/vortex-bridge-client.js) used to be copy-pasted
 // per tool -- update-collection-v2-routes.js and rebuild-missing-routes.js both had their own
 // identical /deploy-all + /deploy-all/progress; Rebuild Collection had none at all. Mounted once at
 // /api/deploy and shared by all three now. missing-masters-routes.js, duplicate-version-cleanup-
@@ -15,7 +15,7 @@
 // copies each had their OWN flag, meaning two different tools' Deploy buttons could fire
 // deployAllMods() at once; that's fixed by construction here, not by an added check.
 const express = require('express');
-const helperClient = require('../lib/vortex-helper-client');
+const bridgeClient = require('../lib/vortex-bridge-client');
 const syncLib = require('../lib/vortex-sync/lib');
 
 // Generic, tool-agnostic version of what used to be Update Collection v2's own
@@ -37,18 +37,18 @@ function createDeployRouter() {
         if (deployAllInProgress) {
             return res.status(409).json({ error: 'A deploy is already in progress.' });
         }
-        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-        if (!helperAvailable) {
+        const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+        if (!bridgeAvailable) {
             return res.status(409).json({
-                error: 'helper-unavailable',
-                message: 'The Vortex Collection Helper extension must be reachable (Vortex genuinely open) to deploy from here.',
+                error: 'bridge-unavailable',
+                message: 'The Vortex Bridge extension must be reachable (Vortex genuinely open) to deploy from here.',
             });
         }
         deployAllInProgress = true;
         res.status(202).json({});
         (async () => {
             try {
-                await helperClient.deployAllMods();
+                await bridgeClient.deployAllMods();
             } catch {
                 // deployAllMods never throws by contract; the progress endpoint below is what
                 // actually reports a real failure, so there is nothing useful to do here.
@@ -57,13 +57,13 @@ function createDeployRouter() {
     });
 
     router.get('/all/progress', async (req, res) => {
-        const progress = await helperClient.getDeployAllProgress();
+        const progress = await bridgeClient.getDeployAllProgress();
         // A null here means "no fresh update right now", NOT that the deploy failed -- the same
         // event-loop congestion that makes a deploy slow can also time out this poll. Falls back to
         // this route's own in-flight flag rather than reporting a false "not active".
         const result = progress || { active: deployAllInProgress, done: !deployAllInProgress };
-        // deployBlockedByCycles (Helper v0.18.0+, a real boolean fact read off Vortex's own live
-        // notification state, not guessed): the Helper's own deployAllMods() call can return/resolve
+        // deployBlockedByCycles (Vortex Bridge v0.18.0+, a real boolean fact read off Vortex's own live
+        // notification state, not guessed): the Vortex Bridge's own deployAllMods() call can return/resolve
         // normally even when Vortex actually aborted the deploy because of a rule cycle, so
         // result.error staying empty is NOT proof the deploy succeeded. Only overrides a genuinely
         // empty error, never a real one this route already reported another way.

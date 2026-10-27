@@ -9,12 +9,12 @@ const syncLib = require('../lib/vortex-sync/lib');
 const chRunner = require('../lib/cycle-helper-runner');
 const chSnapshot = require('../lib/cycle-helper-snapshot');
 const chHistory = require('../lib/cycle-helper-history');
-const helperClient = require('../lib/vortex-helper-client');
+const bridgeClient = require('../lib/vortex-bridge-client');
 const { createSseSession } = require('./sse-session');
 
 // Real SSE-streamed progress for Scan for cycles (2026-08-25, closes docs/UI-PATTERN-MAP.md's
-// "Cycle Helper — Scan for cycles" finding: static spinner, no SSE). chRunner.scan(ViaHelper) is a
-// single opaque helperClient/isolated-worker call with no internal per-item hook to report through
+// "Cycle Helper — Scan for cycles" finding: static spinner, no SSE). chRunner.scan(ViaBridge) is a
+// single opaque bridgeClient/isolated-worker call with no internal per-item hook to report through
 // -- same shape as Rules Generator's Analyze/Apply (web/rules-generator-routes.js), which this
 // mirrors exactly: a real phase tick every second (with real elapsed seconds) while the call is in
 // flight, proving the connection is alive rather than a frozen spinner.
@@ -34,7 +34,7 @@ function createCycleHelperRouter(config) {
 
     function vortexRunningGate(res) {
         if (syncLib.isVortexRunning()) {
-            // "Currently busy", not "close it" -- this gate only ever trips once the Helper (which
+            // "Currently busy", not "close it" -- this gate only ever trips once the Vortex Bridge (which
             // every caller here always tries first) has already been checked and didn't answer while
             // Vortex is running -- there's no genuine "must be closed" case reachable here (Vortex
             // actually closed would make isVortexRunning() false and fall through to the real
@@ -49,21 +49,21 @@ function createCycleHelperRouter(config) {
     // Step 0 -- lightweight, on-demand snapshot of every enabled mod's current rules. NOT a full
     // state.v2 backup (that's Apply's own job, taken automatically right before it writes anything).
     //
-    // Opportunistic helper-extension path (2026-08-18, director's own ask): when the Vortex
-    // Collection Helper extension is reachable, this reads live via `chRunner.snapshotViaHelper`
+    // Opportunistic bridge-extension path (2026-08-18, director's own ask): when the Vortex
+    // Vortex Bridge extension is reachable, this reads live via `chRunner.snapshotViaBridge`
     // INSTEAD of gating on Vortex being closed at all -- the whole point is letting this work with
     // Vortex still open. Checked BEFORE `vortexRunningGate`, which would otherwise refuse the
     // request outright the instant Vortex is running. Falls through to the exact original
-    // state.v2 path, untouched, whenever the helper isn't reachable OR its own read fails for any
+    // state.v2 path, untouched, whenever the Vortex Bridge isn't reachable OR its own read fails for any
     // reason even after /health answered.
     router.post('/snapshot', async (req, res) => {
         try {
-            const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-            if (helperAvailable) {
-                const liveRulesByModKey = await chRunner.snapshotViaHelper();
+            const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+            if (bridgeAvailable) {
+                const liveRulesByModKey = await chRunner.snapshotViaBridge();
                 if (liveRulesByModKey) {
                     const saved = chSnapshot.saveSnapshot(liveRulesByModKey);
-                    return res.json({ createdAt: saved.createdAt, source: 'helper-extension' });
+                    return res.json({ createdAt: saved.createdAt, source: 'bridge-extension' });
                 }
             }
             if (vortexRunningGate(res)) return;
@@ -85,8 +85,8 @@ function createCycleHelperRouter(config) {
     // likely each is the actual cause. Reuses the prior snapshot (if any) as the strongest ranking
     // signal -- see lib/cycle-detector.js's analyzeCycles for the full ranking rationale.
     //
-    // Same opportunistic helper-extension path as /snapshot above -- checked before
-    // vortexRunningGate so a real Scan can run with Vortex still open when the helper answers,
+    // Same opportunistic bridge-extension path as /snapshot above -- checked before
+    // vortexRunningGate so a real Scan can run with Vortex still open when the Vortex Bridge answers,
     // falling through to the exact original state.v2 path, untouched, otherwise.
     const scanSession = createSseSession();
 
@@ -101,7 +101,7 @@ function createCycleHelperRouter(config) {
             return res.status(409).json({ error: 'A scan is already in progress.' });
         }
         // vortexRunningGate only applies to the state.v2 fallback path, and that path is only known
-        // once the (fast) helper-availability check below resolves -- checked inside the background
+        // once the (fast) bridge-availability check below resolves -- checked inside the background
         // task, same as rules-generator-routes.js's own /analyze.
         const mySession = scanSession.start({ id: `ch-scan-${Date.now()}` });
         res.status(202).json({});
@@ -113,17 +113,17 @@ function createCycleHelperRouter(config) {
             const stopTicking = tickingPhase(emitIfCurrent, 'scanning', "Scanning Vortex's rules for cycles…");
             try {
                 const { rulesByModKey: snapshotRulesByModKey } = chSnapshot.loadSnapshot();
-                const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-                let liveResult = helperAvailable ? await chRunner.scanViaHelper(snapshotRulesByModKey) : null;
+                const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+                let liveResult = bridgeAvailable ? await chRunner.scanViaBridge(snapshotRulesByModKey) : null;
                 if (liveResult) {
                     stopTicking();
-                    emitIfCurrent({ type: 'done', done: true, ...liveResult, source: 'helper-extension' });
+                    emitIfCurrent({ type: 'done', done: true, ...liveResult, source: 'bridge-extension' });
                     return;
                 }
                 if (syncLib.isVortexRunning()) {
                     stopTicking();
                     // Same "busy, not close it" fix as vortexRunningGate above -- this branch only
-                    // ever reaches here after the helper-based scanViaHelper attempt above already
+                    // ever reaches here after the bridge-based scanViaBridge attempt above already
                     // failed to answer while Vortex is running.
                     emitIfCurrent({
                         type: 'error', done: true, error: true, errorCode: 'vortex-running',
@@ -167,13 +167,13 @@ function createCycleHelperRouter(config) {
     // same file. This route is the one that actually writes the log entry -- the worker (chRunner/
     // cycle-helper-worker.js) never touches project-local files, same separation of concerns
     // 'snapshot' already keeps.
-    // Opportunistic helper-extension write path (2026-08-18, direct follow-up to Snapshot/Scan
+    // Opportunistic bridge-extension write path (2026-08-18, direct follow-up to Snapshot/Scan
     // above, now that the extension has a confirmed-working write endpoint): checked BEFORE
-    // vortexRunningGate, same pattern as Snapshot/Scan. When the helper answers, this writes through
+    // vortexRunningGate, same pattern as Snapshot/Scan. When the Vortex Bridge answers, this writes through
     // its real Redux dispatch (POST /rules/apply) instead of state.v2 -- see lib/cycle-helper-
-    // runner.js's applyFixViaHelper and TECHNICAL.md's "Safety model" write-up for why that's safe
-    // WITHOUT the usual backupLiveState step. `result` stays null only when the helper's own /mods
-    // read fails (the "helper unavailable" signal) -- a genuine failure from the write itself
+    // runner.js's applyFixViaBridge and TECHNICAL.md's "Safety model" write-up for why that's safe
+    // WITHOUT the usual backupLiveState step. `result` stays null only when the Vortex Bridge's own /mods
+    // read fails (the "Vortex Bridge unavailable" signal) -- a genuine failure from the write itself
     // (applyCandidateFix rejecting a stale/missing rule) throws and is surfaced as a real error
     // below, never silently retried through state.v2.
     router.post('/apply-fix', async (req, res) => {
@@ -185,11 +185,11 @@ function createCycleHelperRouter(config) {
             return res.status(400).json({ error: 'action must be "remove" or "flip".' });
         }
         try {
-            const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-            let result = helperAvailable
-                ? await chRunner.applyFixViaHelper(ownerModKey, ruleType, targetModKey, action)
+            const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+            let result = bridgeAvailable
+                ? await chRunner.applyFixViaBridge(ownerModKey, ruleType, targetModKey, action)
                 : null;
-            let source = 'helper-extension';
+            let source = 'bridge-extension';
             if (!result) {
                 source = 'state.v2';
                 if (vortexRunningGate(res)) return;
@@ -236,10 +236,10 @@ function createCycleHelperRouter(config) {
     // difference in handling either way. Opens Vortex's LIVE state.v2 ONCE for the whole batch (see
     // cycle-helper-worker.js's own 'revert-fixes' mode) -- a stale row (see cd.revertFix's own
     // guard) is reported per-row in `failed`, never aborts the rest of the batch.
-    // Same opportunistic helper-extension path as apply-fix above -- checked before
+    // Same opportunistic bridge-extension path as apply-fix above -- checked before
     // vortexRunningGate. Per-fix staleness failures are already caught INSIDE
-    // chRunner.revertFixesViaHelper (reported in `failed`, same as the state.v2 path), so `result`
-    // only stays null here when the helper's own /mods read fails outright, in which case this falls
+    // chRunner.revertFixesViaBridge (reported in `failed`, same as the state.v2 path), so `result`
+    // only stays null here when the Vortex Bridge's own /mods read fails outright, in which case this falls
     // through to the exact original gated/backed-up path, untouched.
     router.post('/history/revert', async (req, res) => {
         const { fixes } = req.body || {};
@@ -247,9 +247,9 @@ function createCycleHelperRouter(config) {
             return res.status(400).json({ error: 'No fixes to revert were provided.' });
         }
         try {
-            const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-            let result = helperAvailable ? await chRunner.revertFixesViaHelper(fixes) : null;
-            let source = 'helper-extension';
+            const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+            let result = bridgeAvailable ? await chRunner.revertFixesViaBridge(fixes) : null;
+            let source = 'bridge-extension';
             if (!result) {
                 source = 'state.v2';
                 if (vortexRunningGate(res)) return;

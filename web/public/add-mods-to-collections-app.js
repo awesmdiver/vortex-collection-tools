@@ -31,16 +31,16 @@ async function amcApi(method, path, body) {
 }
 
 // Same shared-modal error handling every other Vortex-gated tool in this app already uses
-// (isServerUnreachableError/showServerUnreachableError/showHelperUnavailableModal -- defined in
-// shell.js, loaded before this file). This tool is Helper-only (no state.v2 fallback -- see
-// lib/add-mods-to-collections.js's own header comment), so helper-unavailable is the one real gate.
+// (isServerUnreachableError/showServerUnreachableError/showBridgeUnavailableModal -- defined in
+// shell.js, loaded before this file). This tool is Vortex Bridge-only (no state.v2 fallback -- see
+// lib/add-mods-to-collections.js's own header comment), so bridge-unavailable is the one real gate.
 function amcHandleError(e, retryFn) {
   if (window.isServerUnreachableError && window.isServerUnreachableError(e)) {
     window.showServerUnreachableError(retryFn || (() => {}));
     return;
   }
-  if (e.status === 409 && e.body?.error === 'helper-unavailable') {
-    window.showHelperUnavailableModal(retryFn || (() => {}));
+  if (e.status === 409 && e.body?.error === 'bridge-unavailable') {
+    window.showBridgeUnavailableModal(retryFn || (() => {}));
     return;
   }
   const box = $amc('amcCriticalError');

@@ -207,7 +207,7 @@ async function scLoadSaves() {
     // loaded successfully (a 200, not a thrown error) -- this only means some saves' own profile
     // NAME didn't resolve because Vortex was genuinely busy a moment ago (see
     // save-cleaner-routes.js's own attachProfileNames for the real 3-way distinction: this flag
-    // only ever fires for that one transient case, never for a permanently-missing Helper or a
+    // only ever fires for that one transient case, never for a permanently-missing Vortex Bridge or a
     // genuinely-unknown profile). Offer the same shared busy modal with a real retry; if the user
     // cancels instead, the list stays exactly as already rendered above ("Unknown profile" showing
     // for whatever didn't resolve) -- that's the director's own explicitly stated fallback, not a bug.

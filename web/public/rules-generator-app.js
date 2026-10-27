@@ -45,7 +45,7 @@ function rgHandleError(e, retryFn) {
     return;
   }
   if (e.status === 409 && e.body?.error === 'vortex-running') {
-    // Every Rules Generator vortex-running gate is the helper-unreachable-while-running case, never
+    // Every Rules Generator vortex-running gate is the bridge-unreachable-while-running case, never
     // a genuine "must be closed" one -- see rules-generator-routes.js's own gate comments. Same
     // busy-detection pattern already established elsewhere (2026-09-02/04).
     const isBusy = /currently busy/i.test(e.body?.message || '');
@@ -503,7 +503,7 @@ function rgOpenOldRulesWindow(oldModKey) {
 // a Ready to copy card (added 2026-07-26, so "Expand all" has real state to act on here too).
 function rgRenderAnomalyItem(item) {
   const name = escHtmlRg(rgLastResult.nameByKey[item.modKey] || item.modKey);
-  const groupName = `rg-anomaly-${item.modKey}`;
+  const groupName = escHtmlRg(`rg-anomaly-${item.modKey}`);
   const isExpanded = rgExpandedAnomalies.has(item.modKey);
   // Defaults to "???" (no pick made), NOT the first candidate -- confirmed with the user
   // 2026-07-26: unlike Ready to copy (which has a good computed default you can override), an
@@ -585,7 +585,7 @@ const RG_RELATIONSHIP_BIG_THRESHOLD = 1000;
 // rgRenderInferredItem below, not here; see its own header comment for why.)
 function rgRenderRelationshipItem(item) {
   const name = escHtmlRg(item.name);
-  const groupName = `rg-relationship-${item.modKey}`;
+  const groupName = escHtmlRg(`rg-relationship-${item.modKey}`);
   const isExpanded = rgExpandedRelationships.has(item.modKey);
   const isIncomplete = item.kind === 'incomplete';
   const isAmbiguous = item.kind === 'ambiguous';
@@ -884,7 +884,7 @@ function rgRenderExceptionChipDetails(bodyId, count, chipsHtml, noun) {
 function rgRenderExceptionCard(m) {
   const isExpanded = rgExpandedExceptions.has(m.modKey);
   const pick = Object.prototype.hasOwnProperty.call(rgExceptionPicks, m.modKey) ? rgExceptionPicks[m.modKey] : 'keep';
-  const groupName = `rg-exc-${m.modKey}`;
+  const groupName = escHtmlRg(`rg-exc-${m.modKey}`);
   const targetsSummary = m.skips.map((s) => s.targetName).join(', ');
 
   let bodyHtml = '';
@@ -920,10 +920,9 @@ function rgRenderExceptionsStep(exceptions) {
   rgExpandedExceptions.clear();
 
   const needsDecisionCount = exceptions.skippedAlreadySet.reduce((sum, m) => sum + m.skips.length, 0);
-  const oldVersionCount = exceptions.leftoverOldInstalls.length;
   const disabledCount = exceptions.skippedDisabled.reduce((sum, m) => sum + m.skips.length, 0);
   const noConflictCount = exceptions.skippedNoConflict.reduce((sum, m) => sum + m.skips.length, 0);
-  const totalCount = needsDecisionCount + oldVersionCount + disabledCount + noConflictCount;
+  const totalCount = needsDecisionCount + disabledCount + noConflictCount;
 
   $rg('rgExcCalloutTitle').textContent = `⚠️ ${needsDecisionCount} rule${needsDecisionCount === 1 ? "" : "s"} didn't carry over cleanly`;
   // Mutually exclusive with rgExcSaveDoneInfo, same "top banner reflects THIS render's own real
@@ -934,25 +933,12 @@ function rgRenderExceptionsStep(exceptions) {
   $rg('rgExcWarningBanner').classList.toggle('hidden', needsDecisionCount === 0);
 
   $rg('rgExcStatRow').innerHTML = `
-    <div class="rg-rel-stat rg-rel-stat--warn"><div class="rg-rel-stat__num">${needsDecisionCount}</div><div class="rg-rel-stat__lbl">Need a decision</div></div>
-    <div class="rg-rel-stat"><div class="rg-rel-stat__num">${oldVersionCount}</div><div class="rg-rel-stat__lbl">Old version still installed &mdash; no action needed</div></div>`;
+    <div class="rg-rel-stat rg-rel-stat--warn"><div class="rg-rel-stat__num">${needsDecisionCount}</div><div class="rg-rel-stat__lbl">Need a decision</div></div>`;
 
   $rg('rgExcDecisionLabel').classList.toggle('hidden', exceptions.skippedAlreadySet.length === 0);
   $rg('rgExcDecisionList').innerHTML = exceptions.skippedAlreadySet.length
     ? exceptions.skippedAlreadySet.map(rgRenderExceptionCard).join('')
     : '<p class="muted">Nothing here &mdash; everything carried over cleanly.</p>';
-
-  // Old version still installed -- same wording reports-rulesgen-app.js's own leftoverOldInstalls
-  // row already uses.
-  $rg('rgExcOldVersionSection').classList.toggle('hidden', oldVersionCount === 0);
-  rgRenderExceptionChipDetails(
-    'rgExcOldVersionBody',
-    oldVersionCount,
-    exceptions.leftoverOldInstalls
-      .map((l) => `<span class="chip" title="the older version (${escHtmlRg(l.oldModName)}) is still installed">${escHtmlRg(l.newCounterpartName)} &mdash; the older version (${escHtmlRg(l.oldModName)}) is still installed</span>`)
-      .join(''),
-    'mod',
-  );
 
   // Disabled mods -- same wording reports-rulesgen-app.js's own skippedDisabled row already uses.
   $rg('rgExcDisabledSection').classList.toggle('hidden', disabledCount === 0);
@@ -1011,6 +997,7 @@ function rgRenderSummaryBadges() {
 
 function rgRender(result) {
   rgLastResult = result;
+  rgShowLinksCount(result.linksSaved);
   // Flat name lookup by modKey across everything the analysis touched, so every render helper
   // above can just look a name up instead of threading full entries around.
   const nameByKey = {};
@@ -1074,7 +1061,7 @@ function rgRender(result) {
 // returns as soon as it's genuinely running server-side; GET /analyze/events streams a live tick
 // every second while it's in flight (rules-generator-routes.js's own tickingPhase) plus the final
 // 'done' event carrying the exact same result shape this function used to get back directly. No real
-// per-item count exists here (a single opaque helperClient/isolated-worker call, see that file's own
+// per-item count exists here (a single opaque bridgeClient/isolated-worker call, see that file's own
 // comment), so rgLoading's text ticks with real elapsed time instead of a percentage -- still a real,
 // live signal, not a frozen spinner.
 let rgAnalyzeEventSource = null;
@@ -1494,6 +1481,79 @@ window.rgLoadPickers = rgLoadPickers;
 // "leaving the page" stops it would be actively misleading. It keeps running in the background
 // exactly as it does today; this function only ever resets what's already finished or what the
 // user is currently looking at.
+// ---- Link list: which main mod matches which new mod, saved per pair. The tool saves it by itself
+// after a successful Apply; this button does it for a pair built before that existed. Anything the
+// matching is unsure about is shown for a pick first, never saved as a guess. ----
+
+function rgShowLinksCount(n) {
+  $rg('rgLinksRow').classList.remove('hidden');
+  $rg('rgLinksCount').textContent = `Links saved for this pair: ${n ?? 0}`;
+  $rg('rgLinksStatus').textContent = '';
+}
+
+function rgLinksBody(save, confirmed) {
+  return {
+    oldCollectionKey: $rg('rgOldCollectionSelect').value,
+    newCollectionKey: $rg('rgNewCollectionSelect').value,
+    save,
+    confirmed,
+  };
+}
+
+function rgLinksCandidateLabel(c) {
+  return c.version ? `${c.name} (v${c.version})` : c.name;
+}
+
+let rgLinksPending = [];
+
+async function rgSaveLinks() {
+  rgHideCriticalError();
+  const btn = $rg('rgLinksBtn');
+  const statusEl = $rg('rgLinksStatus');
+  btn.disabled = true;
+  statusEl.textContent = '';
+  try {
+    const scan = await rgApi('POST', '/api/rules-generator/links', rgLinksBody(false));
+    if (scan.needsConfirm.length > 0) {
+      rgLinksPending = scan.needsConfirm;
+      $rg('rgLinksModalList').innerHTML = scan.needsConfirm.map((row, i) => `
+        <div class="field-row">
+          <div>${escHtmlRg(row.new.name)}</div>
+          <select class="select" data-links-row="${i}">
+            <option value="">Skip</option>
+            ${row.candidates.map((c) => `<option value="${escHtmlRg(c.modKey)}">${escHtmlRg(rgLinksCandidateLabel(c))}</option>`).join('')}
+          </select>
+        </div>`).join('');
+      $rg('rgLinksModal').classList.remove('hidden');
+      return;
+    }
+    if (scan.sureCount === 0) {
+      statusEl.textContent = 'No matches found for this pair.';
+      return;
+    }
+    const saved = await rgApi('POST', '/api/rules-generator/links', rgLinksBody(true, []));
+    rgShowLinksCount(saved.linksSaved);
+  } catch (e) {
+    rgHandleError(e, rgSaveLinks);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function rgConfirmSaveLinks() {
+  const confirmed = [];
+  $rg('rgLinksModalList').querySelectorAll('select[data-links-row]').forEach((sel) => {
+    if (sel.value) confirmed.push({ newModKey: rgLinksPending[Number(sel.dataset.linksRow)].new.modKey, mainModKey: sel.value });
+  });
+  $rg('rgLinksModal').classList.add('hidden');
+  try {
+    const saved = await rgApi('POST', '/api/rules-generator/links', rgLinksBody(true, confirmed));
+    rgShowLinksCount(saved.linksSaved);
+  } catch (e) {
+    rgHandleError(e, rgConfirmSaveLinks);
+  }
+}
+
 function rgResetOnEntry() {
   rgFinishAnalyzeStream(); // defensive -- stray EventSource/timer cleanup, same as PGPatcher's own
   rgFinishApplyStream(); // same, for a stray apply EventSource
@@ -1502,6 +1562,7 @@ function rgResetOnEntry() {
   $rg('rgLoading').classList.add('hidden');
   $rg('rgStepper').classList.add('hidden');
   $rg('rgAllClearBanner').classList.add('hidden');
+  $rg('rgLinksRow').classList.add('hidden');
   $rg('rgApplyDoneInfo').classList.add('hidden');
   $rg('rgExcSaveDoneInfo').classList.add('hidden');
   $rg('rgExcWarningBanner').classList.add('hidden');
@@ -1539,6 +1600,9 @@ document.addEventListener('DOMContentLoaded', () => {
   $rg('rgAnalyzeBtn').addEventListener('click', () => rgAnalyze());
   $rg('rgCancelAnalyzeBtn').addEventListener('click', rgCancelAnalyze);
   $rg('rgApplyBtn').addEventListener('click', rgOpenApplyConfirm);
+  $rg('rgLinksBtn').addEventListener('click', rgSaveLinks);
+  $rg('rgLinksModalCancel').addEventListener('click', () => $rg('rgLinksModal').classList.add('hidden'));
+  $rg('rgLinksModalOk').addEventListener('click', rgConfirmSaveLinks);
 
   $rg('rgStepper').addEventListener('click', (e) => {
     const pill = e.target.closest('.merge-step');

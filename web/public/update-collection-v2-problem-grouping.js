@@ -15,12 +15,16 @@ const UCV2_GROUPED_PROBLEM_LABELS = ['Update', 'Remove', 'Add', 'Keep disabled',
 // Plain-language heading per grouped category -- drafted here, flagged for a real Gemini pass before
 // being treated as final (queue: apply-problems-grouped-headings-gemini-pass), same as any other
 // substantial user-facing warning/status copy in this project.
+// A mod waiting for a FOMOD choice is its own group (2026-10-24): its button is Choose, which opens the picker, not Retry.
+const FOMOD_CHOICE_NEEDED_MESSAGE = 'Needs a FOMOD choice.';
+const FOMOD_GROUP_HEADING = 'These mods need a FOMOD choice. Press Choose on each one.';
+
 const UCV2_PROBLEM_GROUP_HEADINGS = {
     Update: "These mods couldn't be updated. Retry them below.",
     Remove: "These mods couldn't be removed. Remove them manually in Vortex.",
     Add: "These mods couldn't be added. Retry them below.",
     'Keep disabled': "These mods couldn't be set back to Disabled. Disable them manually in Vortex.",
-    'Dependency warning': "These dependency warnings couldn't be recorded.",
+    'Dependency warning': 'These dependency warnings are still waiting to be saved. Continue Update will try again.',
     'Delete archive': "These archives couldn't be deleted. Delete them manually if you no longer need them.",
 };
 
@@ -52,7 +56,9 @@ const HASH_MISMATCH_GROUP_BODY = "The downloaded archive's hash does not match t
 // Pure -- no DOM, no I/O, safe to call from a plain Node test or the browser alike.
 function ucv2GroupProblems(problems) {
     const hashMismatchItems = problems.filter((p) => p.code === 'HASH_MISMATCH');
-    const rest = problems.filter((p) => p.code !== 'HASH_MISMATCH');
+    const afterHash = problems.filter((p) => p.code !== 'HASH_MISMATCH');
+    const fomodItems = afterHash.filter((p) => p.message === FOMOD_CHOICE_NEEDED_MESSAGE && (p.label === 'Update' || p.label === 'Add'));
+    const rest = afterHash.filter((p) => !fomodItems.includes(p));
 
     const byLabel = new Map();
     const ungrouped = [];
@@ -66,7 +72,29 @@ function ucv2GroupProblems(problems) {
     }
     const groups = UCV2_GROUPED_PROBLEM_LABELS
         .filter((label) => byLabel.has(label))
-        .map((label) => ({ label, heading: UCV2_PROBLEM_GROUP_HEADINGS[label], items: byLabel.get(label) }));
+        .map((label) => {
+            const items = byLabel.get(label);
+            const group = { label, heading: UCV2_PROBLEM_GROUP_HEADINGS[label], items };
+            // Dependency warnings (2026-10-23): one counted line, the "A -> B" list folded away.
+            if (label === 'Dependency warning') {
+                // 2026-10-23: only a warning that still could not be saved after the retries gets here, and it is
+                // not the person's to fix -- Continue Update saves it.
+                group.heading = items.length === 1
+                    ? '1 dependency warning is still waiting to be saved. Continue Update will try again.'
+                    : `${items.length} dependency warnings are still waiting to be saved. Continue Update will try again.`;
+                group.collapsible = true;
+            }
+            // The same reason on every line is said once, under the heading, not on each line.
+            const first = items[0] && items[0].message;
+            if (items.length > 1 && first && items.every((p) => p.message === first)) {
+                group.body = first;
+                group.suppressMessage = true;
+            }
+            return group;
+        });
+    if (fomodItems.length > 0) {
+        groups.unshift({ label: 'FOMOD choice', heading: FOMOD_GROUP_HEADING, items: fomodItems });
+    }
     if (hashMismatchItems.length > 0) {
         groups.unshift({
             label: 'Hash mismatch', heading: HASH_MISMATCH_GROUP_TITLE, body: HASH_MISMATCH_GROUP_BODY,
@@ -82,6 +110,6 @@ function ucv2GroupProblems(problems) {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         ucv2GroupProblems, UCV2_GROUPED_PROBLEM_LABELS, UCV2_PROBLEM_GROUP_HEADINGS,
-        HASH_MISMATCH_GROUP_TITLE, HASH_MISMATCH_GROUP_BODY,
+        HASH_MISMATCH_GROUP_TITLE, HASH_MISMATCH_GROUP_BODY, FOMOD_CHOICE_NEEDED_MESSAGE, FOMOD_GROUP_HEADING,
     };
 }

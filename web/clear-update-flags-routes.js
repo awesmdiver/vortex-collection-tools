@@ -2,16 +2,16 @@
 // Thin Express handlers for "Clear Update Flags" -- all real logic lives in
 // lib/vortex-update-flags.js. See that file's own header comment for the full design writeup.
 //
-// REQUIRES the Helper extension reachable, no state.v2 fallback -- unlike this project's other
-// Helper-optional reads, there is no safe raw-DB-write equivalent for a live mutation like this
+// REQUIRES the Vortex Bridge reachable, no state.v2 fallback -- unlike this project's other
+// Bridge-optional reads, there is no safe raw-DB-write equivalent for a live mutation like this
 // (same reasoning lib/update-collection-v2-runner.js's own prepareApply already documents for its
-// own HELPER_UNAVAILABLE gate).
+// own BRIDGE_UNAVAILABLE gate).
 
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const syncLib = require('../lib/vortex-sync/lib');
-const helperClient = require('../lib/vortex-helper-client');
+const bridgeClient = require('../lib/vortex-bridge-client');
 const { createSseSession } = require('./sse-session');
 const {
     buildUpdateFlagPicker, resolveModIdsToClear, backupUpdateFlags, clearUpdateFlags, restoreUpdateFlagsBackup,
@@ -39,7 +39,7 @@ function createClearUpdateFlagsRouter(config) {
 
     // Same real semantics as /build/cancel: a cancelled clear is a real partial result, never an
     // error -- whatever mods were already cleared before this landed genuinely stayed cleared (their
-    // Helper writes already happened and can't be un-sent), and the backup written before the run
+    // Vortex Bridge writes already happened and can't be un-sent), and the backup written before the run
     // started already covers every one of them.
     router.post('/clear/cancel', (req, res) => {
         if (!clearSession.isActive()) {
@@ -49,12 +49,12 @@ function createClearUpdateFlagsRouter(config) {
         res.json({ ok: true });
     });
 
-    async function requireHelper(res) {
-        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-        if (!helperAvailable) {
+    async function requireBridge(res) {
+        const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+        if (!bridgeAvailable) {
             res.status(409).json({
-                error: 'helper-unavailable',
-                message: 'The Vortex Collection Helper extension must be reachable (Vortex genuinely open) to use this tool.',
+                error: 'bridge-unavailable',
+                message: 'The Vortex Bridge extension must be reachable (Vortex genuinely open) to use this tool.',
             });
             return false;
         }
@@ -67,8 +67,8 @@ function createClearUpdateFlagsRouter(config) {
     router.get('/list', async (req, res) => {
         if (!staging) return res.status(400).json({ error: 'not-configured', message: 'Set up the staging folder under Settings first.' });
         try {
-            if (!(await requireHelper(res))) return;
-            const data = await helperClient.getAllMods();
+            if (!(await requireBridge(res))) return;
+            const data = await bridgeClient.getAllMods();
             if (!data) return res.status(500).json({ error: "Couldn't read Vortex's live mod list -- try again." });
             res.json(buildUpdateFlagPicker(staging, data.mods, data.enabledModKeys));
         } catch (e) {
@@ -97,8 +97,8 @@ function createClearUpdateFlagsRouter(config) {
             return res.status(409).json({ error: 'A clear is already in progress.' });
         }
         try {
-            if (!(await requireHelper(res))) return;
-            const data = await helperClient.getAllMods();
+            if (!(await requireBridge(res))) return;
+            const data = await bridgeClient.getAllMods();
             if (!data) return res.status(500).json({ error: "Couldn't read Vortex's live mod list -- try again." });
 
             const modIds = resolveModIdsToClear(staging, data.mods, { collectionModIds, includeStandalone }, data.enabledModKeys);
@@ -169,7 +169,7 @@ function createClearUpdateFlagsRouter(config) {
     // client already has its own `backupPath` from that clear's own 'done' event/response). No
     // browse-for-any-backup picker (director explicitly considered and declined that for now -- see
     // TODO.md's vortex-collection-tools "ideas" section for the deferred version). Gated behind the
-    // same requireHelper check every other route here uses -- a restore is a live Helper write, same
+    // same requireBridge check every other route here uses -- a restore is a live Vortex Bridge write, same
     // as a clear. NEVER trusts a raw client-supplied filesystem path outright: backupPath must resolve
     // to a real file whose immediate parent is exactly the configured update-flags backup subfolder
     // (same path.dirname(...) !== knownDir check web/rebuild-routes.js's own /logs/:filename routes
@@ -191,7 +191,7 @@ function createClearUpdateFlagsRouter(config) {
             return res.status(404).json({ error: 'backup-not-found', message: "That backup file doesn't exist anymore." });
         }
         try {
-            if (!(await requireHelper(res))) return;
+            if (!(await requireBridge(res))) return;
             const results = await restoreUpdateFlagsBackup({ backupPath: resolved });
             res.json({ results });
         } catch (e) {

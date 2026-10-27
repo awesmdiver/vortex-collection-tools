@@ -38,6 +38,7 @@ const { createModExceptionsRouter } = require('./mod-exceptions-routes');
 const { createCycleHelperRouter } = require('./cycle-helper-routes');
 const { createUpdateCollectionV2Router } = require('./update-collection-v2-routes');
 const { createRemoveCollectionRouter } = require('./remove-collection-routes');
+const { createRemovedFromMainRouter } = require('./removed-from-main-routes');
 const { createPgpatcherRouter } = require('./pgpatcher-routes');
 const { createClearUpdateFlagsRouter } = require('./clear-update-flags-routes');
 const { createSaveCleanerRouter } = require('./save-cleaner-routes');
@@ -45,9 +46,11 @@ const { createFileRetrieverRouter } = require('./file-retriever-routes');
 const { createDuplicateVersionCleanupRouter } = require('./duplicate-version-cleanup-routes');
 const { createAddModsToCollectionsRouter } = require('./add-mods-to-collections-routes');
 const { createDeployRouter } = require('./deploy-routes');
-const { loadSyncLib } = require('../lib/collection-runner');
+const { createRequestGuard } = require('./request-guard');
+const { createClientErrorRouter } = require('./client-error-route');
+const { loadSyncLib } =require('../lib/collection-runner');
 const appConfig = require('../lib/app-config');
-const helperClient = require('../lib/vortex-helper-client');
+const bridgeClient = require('../lib/vortex-bridge-client');
 const syncLib = require('../lib/vortex-sync/lib');
 const fomodPickerData = require('../lib/fomod-picker-data');
 
@@ -102,6 +105,8 @@ function main() {
     if (fileConfig.appLogEnabled) {
         appLogPath = require('../lib/app-logger').initAppLogger();
         console.log(`[startup] Application log enabled -- writing to ${appLogPath}`);
+    } else {
+        require('../lib/app-logger').initConsoleStamp(); // the time in front of every console line, log file or not
     }
 
     // App Data one-time migration (2026-09-14, "split Logs from App Data") -- a no-op until
@@ -158,6 +163,11 @@ function main() {
     };
 
     const app = express();
+    // Must stay first: refuses other websites' requests (Host/Origin/X-VCT checks) before static
+    // files, routing and body parsing. See web/request-guard.js.
+    app.use(createRequestGuard({ host: config.host, port: config.port }));
+    // Before the app-wide json parser on purpose: this route has its own 2 KB body cap.
+    app.use('/api/client-error', createClientErrorRouter());
     // Default 100kb is too small for "extract everything" on a big collection -- Rebuild Missing
     // Files' /extract sends a {source, destination} pair per missing file, and a collection with
     // hundreds of missing files across many mods can clear 100kb easily (confirmed live: 413 on
@@ -182,6 +192,7 @@ function main() {
     app.use('/api/cycle-helper', createCycleHelperRouter(config));
     app.use('/api/update-collection-v2', createUpdateCollectionV2Router(config));
     app.use('/api/remove-collection', createRemoveCollectionRouter(config));
+    app.use('/api/removed-from-main', createRemovedFromMainRouter(config));
     app.use('/api/pgpatcher', createPgpatcherRouter(config));
     app.use('/api/clear-update-flags', createClearUpdateFlagsRouter(config));
     app.use('/api/save-cleaner', createSaveCleanerRouter(config));
@@ -230,13 +241,25 @@ function main() {
 
     // Shared, whole-app route (not scoped to any one tool area) -- shell.js's Home "Update
     // Collection" card uses this to decide LIVE, on every click, whether to open Update Collection
-    // v2 (Helper reachable) or Classic (Helper not reachable) -- the user never sees or picks
+    // v2 (Vortex Bridge reachable) or Classic (Vortex Bridge not reachable) -- the user never sees or picks
     // between the two, one button routes automatically. Checked fresh every time, not cached at
-    // page load, since the Helper/Vortex's own running state can change between visits. Same real
-    // checkHelperAvailable() every *-routes.js file already calls internally for its own
+    // page load, since the Vortex Bridge/Vortex's own running state can change between visits. Same real
+    // checkBridgeAvailable() every *-routes.js file already calls internally for its own
     // opportunistic fallback -- this is just the first place it's exposed directly to the frontend.
-    app.get('/api/helper-status', async (req, res) => {
-        const available = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+    // One patient health try (10 s) for Update Collection's first check -- the page keeps asking until Vortex answers or about
+    // 45 seconds pass, and reports "final" so the give-up is logged. See probeBridge in lib/vortex-bridge-client.js.
+    app.get('/api/update-collection-v2-bridge-probe', async (req, res) => {
+        const answer = await bridgeClient.probeBridge({ gameId: syncLib.GAME_ID });
+        res.json(answer);
+    });
+    app.post('/api/update-collection-v2-bridge-probe/gave-up', (req, res) => {
+        const waited = Math.round(Number(req.body && req.body.waitedMs) || 0);
+        console.warn('[vortex-bridge] Update Collection gave up waiting for Vortex after ' + waited + ' ms (' + (Number(req.body && req.body.attempts) || 0) + ' tries): Vortex did not answer /health in time.');
+        res.json({ ok: true });
+    });
+
+    app.get('/api/bridge-status', async (req, res) => {
+        const available = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
         res.json({ available });
     });
 
@@ -298,6 +321,9 @@ function main() {
         const isLoopback = config.host === '127.0.0.1' || config.host === 'localhost';
         const browseUrl = `http://${isLoopback ? config.host : '127.0.0.1'}:${config.port}`;
         console.log(`Vortex Collection Tools running at ${browseUrl}`);
+        // A Health Check pause that a crash or a failed restore left behind is put back now (only while the
+        // switches still read as off); if Vortex is not up yet it is tried again at the start of the next job.
+        require('../lib/health-check-pause').recoverPendingSnapshot().catch(() => {});
         // Real PID + how this process was started -- both come up directly in real debugging
         // (GitHub issue #4's own investigation had to guess at exactly this). VCT_STARTED_BY is set
         // by launcher/src-tauri/src/main.rs's own spawn_node() right before it spawns node.exe --

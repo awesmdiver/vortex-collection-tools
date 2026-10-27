@@ -5,6 +5,11 @@
 // other *-app.js files. See design/vortex-rebuild-missing-files-mockup.html for the approved
 // visual/interaction reference this page's markup and behavior were built from.
 
+// Mod names and server error text come from outside (a mod author, a file name): escape before any innerHTML.
+function escHtmlRmf(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 const rmfState = {
   configured: true,
   picked: new Set(), // collectionModId
@@ -86,7 +91,7 @@ async function rmfApi(method, urlPath, body) {
 // every site below has a real action available).
 function rmfHandleError(e, box, retryFn) {
   if (e.status === 409 && e.body?.error === 'vortex-running') {
-    // Every RMF vortex-running gate is the Helper-unreachable-while-running case, never a genuine
+    // Every RMF vortex-running gate is the Bridge-unreachable-while-running case, never a genuine
     // "must be closed" one -- see rebuild-missing-routes.js's own gate comments. Same busy-detection
     // pattern update-collection-v2-app.js's ucv2HandleError already established (2026-08-30).
     const isBusy = /currently busy/i.test(e.body?.message || '');
@@ -98,6 +103,18 @@ function rmfHandleError(e, box, retryFn) {
   }
   if (window.isServerUnreachableError && window.isServerUnreachableError(e)) {
     window.showServerUnreachableError();
+    return;
+  }
+  // 2026-09-17, director's own repro: a batch too big even after chunking (see
+  // rebuild-missing-extract-chunking.js's own rmfSplitOversizedItems, meant to close exactly this
+  // gap -- if it's still reachable, something in that split logic itself needs another look, not
+  // just this message). rmfApi's own generic fallback has nothing better to show here: a 413 is
+  // Express's own body-parser rejecting the request before it ever reaches a route handler, so
+  // there's no JSON body/`data.message` to read at all -- e.message would otherwise be the bare
+  // "Request failed (413)" the director actually saw.
+  if (e.status === 413) {
+    box.textContent = "This batch is too large to extract all at once, and no files were extracted. Try selecting fewer mods, or extract the largest one on its own.";
+    box.classList.remove('hidden');
     return;
   }
   box.textContent = e.message;
@@ -624,6 +641,7 @@ function rmfRenderReport(collectionResults, stats, refreshFailures) {
   $g('rmfStatColls').textContent = stats.collectionsChecked;
   $g('rmfStatMods').textContent = stats.modsWithMissing;
   $g('rmfStatFiles').textContent = stats.filesMissing;
+  $g('rmfOptionalSkippedNote').classList.toggle('hidden', !(stats.optionalSkipped > 0));
 
   // Real gap fixed 2026-08-25: the table/selection controls/action-help used to hide only when
   // rmfState.rows was LITERALLY empty -- but rows also includes the 'excepted' kind, which is
@@ -906,8 +924,14 @@ function rmfRenderRows() {
     checkbox.checked = rmfState.selected.has(idx);
     // archive-missing is checkable too (2026-09-02 v5 addendum, reversing the same-day Issues-panel
     // detour) -- selecting it and clicking the batch action downloads its archive from Nexus then
-    // extracts, same chain the per-row Download Archive button already runs on its own.
-    checkbox.disabled = row.kind !== 'missing' && row.kind !== 'archive-missing';
+    // extracts, same chain the per-row Download Archive button already runs on its own. ONLY when it
+    // has a real Nexus modId, though (2026-09-17, "stop bulk-selecting mods that can never auto-
+    // extract") -- a non-Nexus archive-missing row (row.modId == null) has no archive this tool can
+    // fetch on its own; batching it in used to send {modId:null, fileId:null} to /extract, which
+    // reached resolveAndDownloadArchive's own required-fields check and surfaced the raw
+    // "collectionModId, modId, and fileId are required." text in the results banner. Matches
+    // Rebuild Collection's own equivalent gate (web/rebuild-routes.js's canRetryDownload).
+    checkbox.disabled = row.kind !== 'missing' && !(row.kind === 'archive-missing' && row.modId != null);
     checkbox.addEventListener('change', () => {
       if (checkbox.checked) rmfState.selected.add(idx);
       else rmfState.selected.delete(idx);
@@ -934,7 +958,7 @@ function rmfRenderRows() {
     }
     tr.appendChild(modCell);
 
-    tr.appendChild(el('td', { class: 'muted' }, row.version || '—'));
+    tr.appendChild(el('td', {}, rmfBuildVersionCell(row)));
 
     tr.appendChild(el('td', { class: 'coll-tag muted' }, row.collectionName));
 
@@ -945,6 +969,23 @@ function rmfRenderRows() {
     tbody.appendChild(tr);
   });
   rmfRefreshSelectionUI();
+}
+
+// Version column (2026-09-22, "flag when the installed version is newer than the collection's
+// pinned version") -- installedVersionNewer is precomputed server-side (lib/missing-files-scan.js's
+// own scanOneMod), so this only ever renders a flag, never decides one. Reuses Duplicate Version
+// Cleanup's own existing status-pill--version/--version-flagged pattern (styles.css, DESIGN.md
+// ~line 686) rather than inventing new CSS -- same amber Warning-severity treatment, ⚠ prefix, and
+// title tooltip, just applied to a single-value cell instead of a list of sub-item pills. The
+// unflagged case is left exactly as it looked before this change (plain muted text, no pill) --
+// this only ever adds a pill, never changes the normal row's appearance.
+//
+function rmfBuildVersionCell(row) {
+  if (!row.installedVersionNewer) {
+    return el('span', { class: 'muted' }, row.version || '—');
+  }
+  const tooltip = `You have a newer version installed (v${row.installedVersion}) than this collection uses (v${row.version}). Extracting or downloading will replace it with the older version.`;
+  return el('span', { class: 'status-pill status-pill--version-flagged', title: tooltip }, `⚠ v${row.version}`);
 }
 
 // One file per line (not a comma-joined run-on), collapsed to the first 4 with the same "+N more /
@@ -1036,7 +1077,13 @@ function rmfBuildActionsCell(row, idx) {
     actions.appendChild(dlBtn);
     actions.appendChild(rmfBuildExceptionBtn(row));
   } else {
-    actions.appendChild(el('span', { class: 'muted', style: 'font-size:12px' }, 'Not on Nexus — download manually'));
+    // Non-Nexus archive-missing row (2026-09-17, "let a non-Nexus mod's archive be imported") --
+    // ports Rebuild Collection's own already-shipped off-site Import flow (lib/offsite-import-map.js,
+    // classifyMod's overrideArchivePath) instead of leaving this a dead end. Label per the director's
+    // own framing: find the file, import it, extraction proceeds from there.
+    const browseBtn = el('button', { class: 'btn btn--small' }, 'Browse…');
+    browseBtn.addEventListener('click', () => rmfImportOffsite(row, idx, browseBtn));
+    actions.appendChild(browseBtn);
     actions.appendChild(rmfBuildExceptionBtn(row));
   }
   return actions;
@@ -1088,9 +1135,11 @@ $g('rmfRows').addEventListener('click', (e) => {
 
 // ---------- Selection bar ----------
 
-// row.kind === 'missing' || 'archive-missing' -- the two selectable kinds (2026-09-02 v5 addendum).
-// A small helper since this same pair check now recurs across every selection action below.
-function rmfIsSelectable(row) { return row.kind === 'missing' || row.kind === 'archive-missing'; }
+// row.kind === 'missing' || ('archive-missing' with a real Nexus modId) -- the selectable kinds
+// (2026-09-02 v5 addendum; narrowed 2026-09-17, see the checkbox's own disabled-check comment above
+// for why a non-Nexus archive-missing row is excluded). A small helper since this same check now
+// recurs across every selection action below.
+function rmfIsSelectable(row) { return row.kind === 'missing' || (row.kind === 'archive-missing' && row.modId != null); }
 
 function rmfRefreshSelectionUI() {
   const selectableCount = rmfState.rows.filter(rmfIsSelectable).length;
@@ -1171,11 +1220,20 @@ function rmfSetExtractingUI(active) {
     // Restores whatever was showing before extraction started. On a successful extraction this runs
     // a moment before rmfApplyExtractResults' OWN call to the same function (using rows it hasn't
     // updated yet) -- both calls are synchronous, so nothing paints in between; the visible result is
-    // always the final, post-mutation one. On an ERROR path (rmfDoExtract's catch, or
-    // rmfHandleExtractEvent's 'extract-error' branch) this is the ONLY restore that runs at all, since
-    // neither of those falls through to rmfApplyExtractResults -- without it, an extraction that fails
-    // outright would leave the whole reviewing UI hidden with no way back except a fresh scan.
+    // always the final, post-mutation one. On an ERROR path (rmfDoExtract's catch, or an
+    // 'extract-error' SSE frame) this is the ONLY restore that runs at all, since neither of those
+    // falls through to rmfApplyExtractResults -- without it, an extraction that fails outright would
+    // leave the whole reviewing UI hidden with no way back except a fresh scan.
     rmfRefreshResultsVisibility();
+    // Real bug (2026-09-16, director's own screenshot): on that same error path, the per-mod
+    // progress table built by rmfBuildExtractProgressTable -- still showing every row as "Waiting",
+    // since the request never even got a chance to update any of them -- stayed on screen ABOVE the
+    // just-restored missing-files table. rmfApplyExtractResults already hides both of these on the
+    // SUCCESS path (its own comment: "hidden right here, at the exact point that flow takes over");
+    // this is the matching hide for every path that does NOT reach that function, done once here
+    // rather than at each error call site so no future caller can reintroduce the same gap.
+    $g('rmfExtractProgressBarWrap').classList.add('hidden');
+    $g('rmfExtractTableWrap').classList.add('hidden');
   }
 }
 
@@ -1187,6 +1245,17 @@ function rmfSetExtractingUI(active) {
 let rmfExtractRowEls = [];
 let rmfExtractProgressTotal = 0;
 let rmfExtractProgressDone = 0;
+
+// A single mod's own missing-file list can be split across several requests
+// (rmfSplitOversizedItems, rebuild-missing-extract-chunking.js) -- these track, per ROW (0-based
+// position in `indices`, same indexing as rmfExtractRowEls), how many of that row's own sub-items
+// haven't reported back yet and what their live results add up to SO FAR, so the row only shows a
+// final Restored/Failed pill -- and only counts toward "X of Y mods done" -- once every one of its
+// own sub-items has resolved, not after the first. All three reset at the start of every
+// rmfDoExtract run (rmfRowUnitCounts[i] is always 1 for a row that was never split).
+let rmfRowUnitCounts = [];
+let rmfRowSubItemsRemaining = [];
+let rmfRowLiveAccum = [];
 
 function rmfBuildExtractProgressTable(indices) {
   const tbody = $g('rmfExtractTableBody');
@@ -1235,10 +1304,20 @@ function rmfUpdateExtractRow(index1Based, key, label, detail) {
   }
 }
 
-// Named (not just an inline listener body) so a Vortex-running retry -- from either the initial
-// POST failing or the SSE stream itself later reporting extract-error -- can re-run the exact same
-// extraction for the same `indices`, rather than leaving Try Again a no-op (queue: rebuild-missing-
-// vortex-retry-noop).
+// rmfChunkExtractItems / rmfSplitOversizedItems / RMF_EXTRACT_MAX_CHUNK_BYTES:
+// rebuild-missing-extract-chunking.js (loaded just before this file -- see index.html) -- own file,
+// not defined here, so scripts/test-rmf-extract-chunking.js can require the real chunking logic
+// headlessly instead of re-implementing it in the test (this file itself can't be require()'d: it
+// runs DOM-touching code at load time, same reason update-collection-v2-apply-pills.js already
+// lives in its own file).
+
+// Named (not just an inline listener body) so a Vortex-running retry -- from either a batch's own
+// POST failing or its SSE stream reporting extract-error -- can re-run the exact same extraction for
+// the same `indices`, rather than leaving Try Again a no-op (queue: rebuild-missing-vortex-retry-
+// noop). A full re-run is safe even after a partial success (some earlier chunk(s) already
+// extracted for real): extractOneMod re-verifies which files are STILL actually missing right
+// before touching anything (existsPlainOrGhosted), so a mod chunking already fixed just comes back
+// "Already fixed -- nothing was actually missing anymore" instead of being double-extracted.
 async function rmfDoExtract(indices) {
   const items = indices.map((i) => {
     const row = rmfState.rows[i];
@@ -1254,19 +1333,50 @@ async function rmfDoExtract(indices) {
   });
   $g('rmfExtractResultsCallout').classList.add('hidden');
   rmfSetExtractingUI(true);
+  // Built ONCE for the full `indices` list, before chunking -- every batch below just fills in
+  // further rows of this same table/bar, so a multi-batch run still reads as one continuous
+  // extraction, not several separate ones.
   rmfBuildExtractProgressTable(indices);
   $g('rmfExtractLoadingText').textContent = `0 of ${indices.length} mods done`;
-  try {
-    await rmfApi('POST', '/api/rebuild-missing/extract', { items });
-  } catch (e) {
-    rmfSetExtractingUI(false);
-    rmfHandleError(e, $g('rmfScanError'), () => rmfDoExtract(indices));
-    return;
+
+  // "Extract can still 413 on a single oversized mod" (2026-09-17) -- a single item's own `files`
+  // list can already exceed the server's cap before rmfChunkExtractItems ever gets a chance to
+  // split BETWEEN items. rmfSplitOversizedItems runs first and expands any such item into several
+  // smaller ones, returning a same-length `itemRowIndices` naming which ORIGINAL row (0-based
+  // position in `indices`, matching rmfExtractRowEls) each resulting item came from -- ordinary,
+  // unsplit rows just get one entry each, same as before.
+  const { items: splitItems, rowIndices: itemRowIndices } = rmfSplitOversizedItems(items);
+  const batches = rmfChunkExtractItems(splitItems);
+
+  // Per-row bookkeeping for the (rare) case a row was actually split -- see these globals' own
+  // header comment above rmfExtractRowEls.
+  rmfRowUnitCounts = indices.map(() => 0);
+  itemRowIndices.forEach((rowIndex) => { rmfRowUnitCounts[rowIndex] += 1; });
+  rmfRowSubItemsRemaining = rmfRowUnitCounts.slice();
+  rmfRowLiveAccum = indices.map(() => ({ extractedCount: 0, ok: true, error: undefined, note: undefined }));
+  // One results array per ROW (not per item/sub-item) -- a split row's several partial results
+  // land here as they come back, batch by batch, and get merged into one final outcome below.
+  const rowResultsBySubItem = indices.map(() => []);
+
+  let cursor = 0;
+  for (const batch of batches) {
+    // rmfChunkExtractItems preserves order and never drops/reorders items, so slicing
+    // itemRowIndices by the same lengths keeps it aligned with this exact batch.
+    const batchRowIndices = itemRowIndices.slice(cursor, cursor + batch.length);
+    cursor += batch.length;
+    let batchResults;
+    try {
+      batchResults = await rmfRunExtractBatch(batch, batchRowIndices);
+    } catch (e) {
+      rmfSetExtractingUI(false);
+      rmfHandleError(e, $g('rmfScanError'), () => rmfDoExtract(indices));
+      return;
+    }
+    batchResults.forEach((result, k) => { rowResultsBySubItem[batchRowIndices[k]].push(result); });
   }
-  if (rmfState.extractEventSource) rmfState.extractEventSource.close();
-  const es = new EventSource('/api/rebuild-missing/extract/events');
-  rmfState.extractEventSource = es;
-  es.onmessage = (msg) => rmfHandleExtractEvent(JSON.parse(msg.data), indices);
+  rmfSetExtractingUI(false);
+  const results = rowResultsBySubItem.map(rmfMergeSubItemResults);
+  rmfApplyExtractResults(indices, results);
 }
 
 $g('rmfExtractConfirmOkBtn').addEventListener('click', () => {
@@ -1274,36 +1384,87 @@ $g('rmfExtractConfirmOkBtn').addEventListener('click', () => {
   rmfDoExtract(rmfPendingExtractIndices);
 });
 
-function rmfHandleExtractEvent(frame, indices) {
+// Runs ONE /extract POST + its own SSE stream to completion and resolves with that batch's own
+// `results` array (one entry per item in `batchItems`, same order). `batchRowIndices[k]` names
+// which progress-table ROW `batchItems[k]` (and therefore `results[k]`) belongs to -- a direct
+// per-position lookup rather than the old single `offset` arithmetic, since a batch can now mix
+// ordinary one-item rows with several sub-items of the SAME split row in any order.
+function rmfRunExtractBatch(batchItems, batchRowIndices) {
+  return rmfApi('POST', '/api/rebuild-missing/extract', { items: batchItems }).then(() => new Promise((resolve, reject) => {
+    if (rmfState.extractEventSource) rmfState.extractEventSource.close();
+    const es = new EventSource('/api/rebuild-missing/extract/events');
+    rmfState.extractEventSource = es;
+    es.onmessage = (msg) => {
+      const frame = JSON.parse(msg.data);
+      if (frame.type === 'extract-complete') {
+        es.close();
+        rmfState.extractEventSource = null;
+        resolve(frame.results);
+      } else if (frame.type === 'extract-error') {
+        es.close();
+        rmfState.extractEventSource = null;
+        reject(new Error(frame.message || 'The extraction failed.'));
+      } else {
+        rmfHandleExtractProgressFrame(frame, batchRowIndices);
+      }
+    };
+  }));
+}
+
+function rmfHandleExtractProgressFrame(frame, batchRowIndices) {
+  const rowIndex = batchRowIndices[frame.index - 1];
+  if (rowIndex === undefined) return;
   if (frame.type === 'mod-started') {
-    rmfUpdateExtractRow(frame.index, frame.phase === 'downloading' ? 'downloading' : 'extracting',
+    rmfUpdateExtractRow(rowIndex + 1, frame.phase === 'downloading' ? 'downloading' : 'extracting',
       frame.phase === 'downloading' ? 'Downloading…' : 'Extracting…');
   } else if (frame.type === 'mod-phase') {
     // Only ever fires for an archive-missing row moving from its own download to its own extraction
     // (see downloadThenExtract's onPhase in rebuild-missing-routes.js) -- 'extracting' is the only
     // phase it's ever called with today.
-    rmfUpdateExtractRow(frame.index, 'extracting', 'Extracting…');
+    rmfUpdateExtractRow(rowIndex + 1, 'extracting', 'Extracting…');
   } else if (frame.type === 'mod-extracted') {
+    // A live 'mod-extracted' frame only ever carries a COUNT (`frame.extracted`), never the real
+    // destination arrays -- those only exist in extract-complete's own `results` (see
+    // rmfDoExtract's own rowResultsBySubItem/rmfMergeSubItemResults, which is what
+    // rmfApplyExtractResults actually reads). This accumulator is a live-only APPROXIMATION for
+    // the progress table's own pill, safe because that table is fully replaced by the real report
+    // the moment rmfApplyExtractResults runs -- it never has to be the source of truth.
+    const accum = rmfRowLiveAccum[rowIndex];
+    accum.extractedCount += frame.extracted || 0;
+    if (!frame.ok) { accum.ok = false; accum.error = frame.error || accum.error; }
+    if (frame.note) accum.note = frame.note;
+    rmfRowSubItemsRemaining[rowIndex] -= 1;
+    if (rmfRowSubItemsRemaining[rowIndex] > 0) {
+      // More sub-items for this SAME row still coming (a single oversized mod split across several
+      // requests) -- keep it showing live progress, but don't report a final pill or advance the
+      // "X of Y mods done" count yet. Doing either here would flash a premature Restored/Failed
+      // pill (and over-count mods done) for a mod that isn't actually finished.
+      const done = rmfRowUnitCounts[rowIndex] - rmfRowSubItemsRemaining[rowIndex];
+      rmfUpdateExtractRow(rowIndex + 1, 'extracting', 'Extracting…', `${done} of ${rmfRowUnitCounts[rowIndex]} part(s) done`);
+      return;
+    }
+    // Last sub-item for this row just resolved (the common case: EVERY row that was never split
+    // reaches here immediately, on its own one and only frame -- identical timing to before this
+    // fix). rmfExtractProgressTotal/Done count ROWS, not raw items, so a mod split into a dozen
+    // requests still only ever advances this bar by one.
     rmfExtractProgressDone += 1;
-    const pct = frame.total > 0 ? Math.round((rmfExtractProgressDone / frame.total) * 100) : 0;
+    const pct = rmfExtractProgressTotal > 0 ? Math.round((rmfExtractProgressDone / rmfExtractProgressTotal) * 100) : 0;
     $g('rmfExtractProgressBar').style.width = `${pct}%`;
-    $g('rmfExtractLoadingText').textContent = `${rmfExtractProgressDone} of ${frame.total} mods done`;
+    $g('rmfExtractLoadingText').textContent = `${rmfExtractProgressDone} of ${rmfExtractProgressTotal} mods done`;
     let detail;
-    if (!frame.ok) detail = frame.error || 'Something went wrong.';
-    else if (frame.note) detail = frame.note;
-    else if (frame.extracted > 0) detail = `${frame.extracted} file(s) restored`;
+    if (!accum.ok) detail = accum.error || 'Something went wrong.';
+    // Only surfaced when NOTHING was extracted overall -- a split row where one slice was already
+    // fixed but another genuinely needed extracting is a real restore, not an "already fixed" no-op.
+    else if (accum.extractedCount === 0 && accum.note) detail = accum.note;
+    else if (accum.extractedCount > 0) detail = `${accum.extractedCount} file(s) restored`;
     else detail = 'Archive downloaded';
-    rmfUpdateExtractRow(frame.index, frame.ok ? 'enabled' : 'failed', frame.ok ? 'Restored' : 'Failed', detail);
-  } else if (frame.type === 'extract-complete') {
-    rmfSetExtractingUI(false);
-    if (rmfState.extractEventSource) { rmfState.extractEventSource.close(); rmfState.extractEventSource = null; }
-    rmfApplyExtractResults(indices, frame.results);
-  } else if (frame.type === 'extract-error') {
-    rmfSetExtractingUI(false);
-    if (rmfState.extractEventSource) { rmfState.extractEventSource.close(); rmfState.extractEventSource = null; }
-    rmfHandleError(new Error(frame.message || 'The extraction failed.'), $g('rmfScanError'), () => rmfDoExtract(indices));
+    rmfUpdateExtractRow(rowIndex + 1, accum.ok ? 'enabled' : 'failed', accum.ok ? 'Restored' : 'Failed', detail);
   }
 }
+
+// rmfMergeSubItemResults: rebuild-missing-extract-chunking.js (loaded just before this file -- see
+// index.html) -- own file, not defined here, alongside rmfChunkExtractItems/rmfSplitOversizedItems,
+// so scripts/test-rmf-extract-chunking.js can require the real merge logic headlessly too.
 
 function rmfApplyExtractResults(indices, results) {
   // The per-mod progress table stays visible with its final Restored/Failed pills through the whole
@@ -1313,16 +1474,29 @@ function rmfApplyExtractResults(indices, results) {
   $g('rmfExtractProgressBarWrap').classList.add('hidden');
   let restoredFiles = 0;
   let restoredMods = 0;
+  // A 'missing' row resolved with ZERO newly-extracted files (2026-09-16, "a row that's actually
+  // already fixed stays stuck showing N missing forever") -- extractOneMod's own "already fixed --
+  // nothing was actually missing anymore" outcome, tracked separately so the banner below can say
+  // what actually happened instead of "Successfully restored 0 files," which is technically true
+  // but reads like nothing happened when the mod is, in fact, fully resolved.
+  let alreadyFixedMods = 0;
   const failures = [];
   indices.forEach((idx, i) => {
     const result = results[i];
     const row = rmfState.rows[idx];
     if (!result) return;
     if (result.ok) {
-      restoredFiles += (result.extracted || []).length;
+      const extractedCount = (result.extracted || []).length;
+      restoredFiles += extractedCount;
       restoredMods += 1;
       if (row.kind === 'missing') {
-        row.missing = row.missing.filter((f) => !(result.extracted || []).includes(f.destination));
+        if (extractedCount === 0) alreadyFixedMods += 1;
+        // The server's OWN authoritative answer for "which of this row's destinations are still
+        // actually missing right now" -- not inferred from `extracted` (wrong the moment `extracted`
+        // is empty for a reason other than "extraction failed", which is exactly what the
+        // "already fixed" outcome always returns, by design, since nothing needed copying). See
+        // extractOneMod's own header comment (rebuild-missing-routes.js) for the full reasoning.
+        row.missing = row.missing.filter((f) => (result.stillMissing || []).includes(f.destination));
       } else {
         // archive-missing, resolved via the shared download-then-extract chain -- nothing left to
         // track on this row (2026-09-02 v5 addendum).
@@ -1330,7 +1504,7 @@ function rmfApplyExtractResults(indices, results) {
       }
       rmfState.selected.delete(idx);
     } else {
-      failures.push(`${row.name}: ${result.error}`);
+      failures.push(`${escHtmlRmf(row.name)}: ${escHtmlRmf(result.error)}`);
     }
   });
   // Rows with nothing left missing (or a resolved archive-missing row) drop out of the report
@@ -1359,12 +1533,26 @@ function rmfApplyExtractResults(indices, results) {
   const hasSelectable = rmfHasSelectableRows();
   if (failures.length === 0) {
     callout.className = 'callout callout--success';
+    // allAlreadyFixed/summarySentence (2026-09-16, same fix as alreadyFixedMods above) -- "Successfully
+    // restored 0 files across 1 mod" is technically true but reads like nothing happened, when the mod
+    // is actually fully resolved. Say what really happened instead: nothing needed copying, or (mixed
+    // batch) some mods got real files while others turned out to already be fine.
+    const newlyFixedMods = restoredMods - alreadyFixedMods;
+    const allAlreadyFixed = restoredMods > 0 && alreadyFixedMods === restoredMods;
+    let summarySentence;
+    if (allAlreadyFixed) {
+      summarySentence = `${restoredMods} mod${restoredMods === 1 ? '' : 's'} already had all ${restoredMods === 1 ? 'its' : 'their'} files -- nothing needed restoring.`;
+    } else if (alreadyFixedMods > 0) {
+      summarySentence = `Restored ${restoredFiles.toLocaleString()} file${restoredFiles === 1 ? '' : 's'} across ${newlyFixedMods} mod${newlyFixedMods === 1 ? '' : 's'} (${alreadyFixedMods} more already had all ${alreadyFixedMods === 1 ? 'its' : 'their'} files).`;
+    } else {
+      summarySentence = `Restored ${restoredFiles.toLocaleString()} file${restoredFiles === 1 ? '' : 's'} across ${restoredMods} mod${restoredMods === 1 ? '' : 's'}.`;
+    }
     // Exact copy per director's own spec, 2026-09-02 (revised from the 2026-09-01 wording) -- this
     // tool has its own real Deploy button right below (#rmfDeployPending), so the copy points at that
     // instead of Vortex's own Deploy Mods.
     callout.innerHTML = !hasSelectable
-      ? `<div class="callout__title">🎉 Restoration Complete!</div><p>Successfully restored ${restoredFiles.toLocaleString()} file${restoredFiles === 1 ? '' : 's'} across ${restoredMods} mod${restoredMods === 1 ? '' : 's'}. Click <strong>Deploy</strong> to finish, or select another collection to restore more mods.</p>`
-      : `Restored ${restoredFiles.toLocaleString()} file${restoredFiles === 1 ? '' : 's'} across ${restoredMods} mod${restoredMods === 1 ? '' : 's'}. Open Vortex and click Deploy Mods to finish.`;
+      ? `<div class="callout__title">🎉 ${allAlreadyFixed ? 'Already Fixed!' : 'Restoration Complete!'}</div><p>${summarySentence} Click <strong>Deploy</strong> to finish, or select another collection to restore more mods.</p>`
+      : `${summarySentence} Open Vortex and click Deploy Mods to finish.`;
   } else {
     callout.className = 'callout callout--warning';
     callout.innerHTML = `<div class="callout__title">⚠️ Restored some files with problems</div><p>Restored ${restoredFiles} file${restoredFiles === 1 ? '' : 's'} across ${restoredMods} mod${restoredMods === 1 ? '' : 's'}, but ${failures.length} mod${failures.length === 1 ? '' : 's'} had a problem: ${failures.join('; ')}</p>`;
@@ -1430,6 +1618,64 @@ async function rmfDownloadArchive(row, idx, btn) {
     btn.disabled = false;
     btn.textContent = original;
     rmfHandleError(e, $g('rmfScanError'), () => rmfDownloadArchive(row, idx, btn));
+  }
+}
+
+// ---------- Import (non-Nexus archive-missing rows, 2026-09-17) ----------
+// Ports Rebuild Collection's own already-shipped off-site Import flow (lib/collection-runner.js's
+// importOffSiteArchive/extractImportedOffSiteMod, backed by lib/offsite-import-map.js +
+// classifyMod's overrideArchivePath) rather than building a second one -- see
+// web/public/work-through-app.js's own importOffSite() for the closest existing analog (a live
+// report table, resolve-in-place), which this mirrors more closely than the Plan page's own
+// pre-run version (web/rebuild-routes.js's /import-offsite-archive, which can't extract anything
+// yet since there's no report row to update at that point).
+async function rmfImportOffsite(row, idx, btn) {
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Importing…';
+  let response;
+  try {
+    response = await rmfApi('POST', '/api/rebuild-missing/import-offsite', {
+      collectionModId: row.collectionModId, name: row.name,
+    });
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = original;
+    rmfHandleError(e, $g('rmfScanError'), () => rmfImportOffsite(row, idx, btn));
+    return;
+  }
+  if (response.cancelled) {
+    // The user closed the file picker without choosing anything -- the server never even called
+    // importOffSiteArchive in this case, so the row just reverts, no half-state to clean up.
+    btn.disabled = false;
+    btn.textContent = original;
+    return;
+  }
+  if (response.outcome.kind === 'REBUILD') {
+    // Fully resolved -- drops out of the report entirely, same convention as a fully-fixed row
+    // elsewhere in this file (rmfApplyExtractResults, rmfInstallFomod's own onDone).
+    rmfState.rows = rmfState.rows.filter((_, i) => i !== idx);
+    rmfAnyRestoreThisRun = true; // gates the Deploy prompt -- see its own header comment
+    rmfRenderRows();
+    // Same "reached the end of the review" fallback rmfDownloadArchive's own success path uses.
+    const { hasSelectable, hasAttention } = rmfRefreshResultsVisibility();
+    if (!hasSelectable && !hasAttention) {
+      const summary = $g('rmfSummaryCallout');
+      summary.className = 'callout callout--success';
+      summary.innerHTML = '<div class="callout__title">🎉 No Missing Files Detected</div>'
+        + '<p>All mods are complete. No repairs are needed in your staging folder. Click <strong>Deploy</strong> below if you haven\'t deployed since your last change.</p>';
+      summary.classList.remove('hidden');
+    }
+  } else {
+    // A genuine non-REBUILD outcome (most likely Rebuild Collection's own "resolve mismatch" case --
+    // the freshly-imported archive's content doesn't cleanly match what's already in staging, which
+    // this tool has no resolve-mismatch picker for). The row stays exactly as it was -- still
+    // archive-missing, Browse still offered for another attempt with a different file -- and the
+    // reason surfaces in the shared error banner, same treatment rmfDownloadArchive gives a real
+    // thrown error.
+    btn.disabled = false;
+    btn.textContent = original;
+    rmfHandleError(new Error(response.outcome.detail || 'Import did not fully resolve this mod.'), $g('rmfScanError'), () => rmfImportOffsite(row, idx, btn));
   }
 }
 

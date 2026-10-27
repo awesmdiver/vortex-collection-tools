@@ -101,6 +101,26 @@
       "heroBody": "When a guild or garrison packs up camp, a careless hand might strip the armory bare and leave the rest of the hold defenseless. The Quartermaster inspects every crate before it leaves the gates, checking which provisions are still sworn to your other banners. You decide piece by piece what gets cast aside and what stays behind in the stores, keeping your remaining strongholds completely intact.",
       "cardDesc": "Inspects every crate before it leaves &mdash; nothing sworn to your other banners goes with it."
     },
+    "removed-from-main": {
+      "name": "The Unbinding",
+      "emoji": "🍂",
+      "function": "Removed From Main",
+      "heroTitle": "The Unbinding",
+      "heroBody": "When a main collection drops a mod, your upgraded version of it gets left behind, cluttering your load order. This spots those orphaned mods and clears them out, keeping your work perfectly in step with the original.",
+      "cardDesc": "Clears out your matching mods when the main collection drops the originals.",
+      "tagline": "When the anchor lifts, the tether fades.",
+      "howTo": [
+        "Select the main collection and your custom collection.",
+        "Press Compare to reveal which of your matched mods were left behind.",
+        "Untick any you want to keep, then delete the rest."
+      ],
+      "lead": "The following mods have been dropped from the main collection.",
+      "colGone": "Gone from main",
+      "colMine": "Your unbound mod",
+      "confirm": "You are about to permanently delete these mods from Vortex and remove them from your new collection. A backup of your collection is made before deletion begins.",
+      "empty": "Nothing to unbind. Your new collection matches the main.",
+      "noLinks": "{rg} has not saved the matches for this pair yet. Run {rg} first to log your links."
+    },
     "report-stats": {
       "name": "The Ledger",
       "emoji": "📊",

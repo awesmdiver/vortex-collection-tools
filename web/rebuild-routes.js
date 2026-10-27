@@ -7,10 +7,11 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const { openFolderInExplorer, revealInExplorer } = require('../lib/open-in-explorer');
 
 const runner = require('../lib/collection-runner');
-const helperClient = require('../lib/vortex-helper-client');
+const bridgeClient = require('../lib/vortex-bridge-client');
+const { withHealthCheckPaused } = require('../lib/health-check-pause');
 const { createPauseController } = require('../lib/pause-controller');
 const { findSevenZip } = require('../lib/sevenzip');
 const nexusDownload = require('../lib/nexus-collection-download');
@@ -26,6 +27,10 @@ const { savePicksToVortex } = require('../lib/vortex-live-fomod-choices');
 
 const planSession = createSseSession();
 const vortexDataSession = createSseSession();
+// The log-view page's own bulk Extract all/Keep modified progress stream (queue: rebuild-
+// collection-log-bulk-progress) -- one shared session across every log page, same as the two
+// above; only one bulk resolve is ever expected to run at a time in this single-user app.
+const resolveMismatchBatchSession = createSseSession();
 
 function createRouter(config) {
     const router = express.Router();
@@ -48,30 +53,30 @@ function createRouter(config) {
         return appConfig.resolveDataDir('mod-exceptions', modExceptionListDir);
     }
 
-    // Helper-first, state.v2-fallback (2026-08-21) -- same treatment Cycle Helper/Rules Generator
+    // Bridge-first, state.v2-fallback (2026-08-21) -- same treatment Cycle Helper/Rules Generator
     // already have, per the approved design/mockup-rebuild-collection-helper-support.html (no UI
-    // change at all -- purely which backend path runs). When the Vortex Collection Helper extension
+    // change at all -- purely which backend path runs). When the Vortex Bridge extension
     // is reachable, Vortex can stay open the whole time; when it isn't, behavior is byte-for-byte
     // identical to before, "Vortex must be closed" gate included.
     async function loadSyncStateAnyPath({ collectionModId, collection, stagingDir, onProgress }) {
-        if (await helperClient.checkHelperAvailable(syncLib.GAME_ID)) {
-            return runner.loadSyncStateViaHelper({ helperClient, syncLib, collectionModId, collection, stagingDir });
+        if (await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID)) {
+            return runner.loadSyncStateViaBridge({ bridgeClient, syncLib, collectionModId, collection, stagingDir });
         }
         return runner.loadSyncState({ state, collectionModId, collection, stagingDir, onProgress });
     }
     async function loadSyncStateBatchAnyPath({ entries, stagingDir, onProgress }) {
-        if (await helperClient.checkHelperAvailable(syncLib.GAME_ID)) {
-            return runner.loadSyncStateBatchViaHelper({ helperClient, syncLib, entries, stagingDir });
+        if (await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID)) {
+            return runner.loadSyncStateBatchViaBridge({ bridgeClient, syncLib, entries, stagingDir });
         }
         return runner.loadSyncStateBatch({ state, entries, stagingDir, onProgress });
     }
     // `gate` here mirrors this project's own blockUntilOutputModConfirmed-style shape (web/pgpatcher-
     // routes.js): writes the response itself and returns true if it did, so a caller just does
-    // `if (await blockIfVortexRunningAndNoHelper(res)) return;`. Skips the "Vortex must be closed"
-    // check ENTIRELY once the Helper covers the read -- that's the one thing this whole feature
-    // actually changes; the check's own wording is untouched for the no-Helper case.
-    async function blockIfVortexRunningAndNoHelper(res) {
-        if (await helperClient.checkHelperAvailable(syncLib.GAME_ID)) return false;
+    // `if (await blockIfVortexRunningAndNoBridge(res)) return;`. Skips the "Vortex must be closed"
+    // check ENTIRELY once the Vortex Bridge covers the read -- that's the one thing this whole feature
+    // actually changes; the check's own wording is untouched for the no-Bridge case.
+    async function blockIfVortexRunningAndNoBridge(res) {
+        if (await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID)) return false;
         if (syncLib.isVortexRunning()) {
             res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently running. Close it completely and try again.' });
             return true;
@@ -88,14 +93,14 @@ function createRouter(config) {
     }
 
     // Cache of loadSyncState results, keyed by collectionModId -- populated by
-    // POST /api/rebuild/vortex-data/refresh (one shared DB open, or one shared Helper read, across
+    // POST /api/rebuild/vortex-data/refresh (one shared DB open, or one shared Vortex Bridge read, across
     // every installed collection, instead of one risky read per collection viewed). Without the
-    // Helper, Vortex's state cannot change while it's closed (and this tool requires it closed for
+    // Vortex Bridge, Vortex's state cannot change while it's closed (and this tool requires it closed for
     // that path anyway), so this cache stays valid for as long as the user doesn't reopen Vortex --
-    // exactly the real workflow (working through several collections in one sitting). With the Helper
+    // exactly the real workflow (working through several collections in one sitting). With the Vortex Bridge
     // reachable, Vortex genuinely CAN change underneath this cache (nothing stops the user from
     // toggling a mod in Vortex mid-session) -- same tradeoff Cycle Helper/Rules Generator's own
-    // Helper-backed caches already accept, not a new risk this feature introduces. null value =
+    // Bridge-backed caches already accept, not a new risk this feature introduces. null value =
     // attempted but that specific collection failed (surfaced to the caller, not silently dropped);
     // absent key = never attempted at all.
     const syncStateCache = new Map();
@@ -374,15 +379,15 @@ function createRouter(config) {
     });
 
     // One shared read across EVERY installed collection, instead of one risky read per collection
-    // viewed -- see syncStateCache's own comment above for the rationale. Without the Helper, Vortex's
-    // state can't change while it's closed (and this path requires it closed); with the Helper, no
-    // closing needed at all -- see loadSyncStateBatchAnyPath/blockIfVortexRunningAndNoHelper's own
+    // viewed -- see syncStateCache's own comment above for the rationale. Without the Vortex Bridge, Vortex's
+    // state can't change while it's closed (and this path requires it closed); with the Vortex Bridge, no
+    // closing needed at all -- see loadSyncStateBatchAnyPath/blockIfVortexRunningAndNoBridge's own
     // comments.
     router.post('/vortex-data/refresh', async (req, res) => {
         if (!staging) {
             return res.status(400).json({ error: 'not-configured', message: 'Staging folder is not configured yet -- open Settings to set it up.' });
         }
-        if (await blockIfVortexRunningAndNoHelper(res)) return;
+        if (await blockIfVortexRunningAndNoBridge(res)) return;
         let collections;
         try {
             collections = syncLib.scanStagingCollections(staging);
@@ -449,17 +454,17 @@ function createRouter(config) {
         // toggle read via loadConfig() in this router. See lib/mod-exception-store.js's own header
         // for why this is checked here (classifyMod, via buildPlan) rather than bolted on after.
         const exceptionMatcher = modExceptionStore.makeExceptionMatcher(resolveModExceptionListDir());
-        // "Open FOMOD mods get an Install button" (2026-09-17) -- a real, live Helper check (cheap,
-        // same one loadSyncStateAnyPath's own Helper-first branch just did above for this exact
+        // "Open FOMOD mods get an Install button" (2026-09-17) -- a real, live Vortex Bridge check (cheap,
+        // same one loadSyncStateAnyPath's own Bridge-first branch just did above for this exact
         // call), so buildPlan can use Vortex's own recorded live installerChoices before ever
         // reaching classifyMod's own archive-based SKIP_OPEN_FOMOD check.
-        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+        const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
         const { modEntries, rebuildQueue } = await runner.buildPlan({
             collectionModId, removedMods, keptMods, knownVortexModIds, resumed, otherVersionsByModId, sharedWithCollectionsByKey,
             downloadsDir: downloads, stagingDir: staging, sevenZipExe, logsDir, onModClassified,
             downloadMissingArchivesEnabled: downloadMissingArchives,
             forceExtractOffSiteMismatchesEnabled: forceExtractOffSiteMismatches,
-            exceptionMatcher, helperAvailable,
+            exceptionMatcher, bridgeAvailable,
         });
         return { collectionInfo, ignored, keptMods, knownVortexModIds, modEntries, rebuildQueue, otherVersionsByModId, sharedWithCollectionsByKey };
     }
@@ -495,7 +500,7 @@ function createRouter(config) {
         if (!staging || !downloads) {
             return res.status(400).json({ error: 'not-configured', message: 'Staging/downloads folders are not configured yet -- open Settings to set them up.' });
         }
-        if (await blockIfVortexRunningAndNoHelper(res)) return;
+        if (await blockIfVortexRunningAndNoBridge(res)) return;
 
         const mySession = planSession.start({ id: `${collectionModId}-${Date.now()}` });
         res.status(202).json({});
@@ -610,7 +615,7 @@ function createRouter(config) {
         if (!staging || !downloads) {
             return res.status(400).json({ error: 'not-configured', message: 'Staging/downloads folders are not configured yet -- open Settings to set them up.' });
         }
-        if (await blockIfVortexRunningAndNoHelper(res)) return;
+        if (await blockIfVortexRunningAndNoBridge(res)) return;
 
         const runId = `${collectionModId}-${Date.now()}`;
         let run;
@@ -633,7 +638,7 @@ function createRouter(config) {
         // "Reading Vortex..." label that describes the wrong phase was both slow AND misleading (a
         // real 1,955-mod collection sat there with zero progress shown). Falls back to a full fresh
         // computePlan(), WITH live classify-progress this time, whenever reuse isn't safe.
-        (async () => {
+        (async () => withHealthCheckPaused(async () => {
             const startedAt = new Date().toISOString();
             const runTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
             let logPath;
@@ -875,7 +880,7 @@ function createRouter(config) {
                 clearCachedPlan(collectionModId);
                 currentPauseController = null;
             }
-        })();
+        }, { onPaused: (line) => console.log(`[rebuild-routes] ${line}`), onRestoreFailed: (line) => console.warn(`[rebuild-routes] ${line}`) }))();
     });
 
     // ---- Pause/cancel/confirm -- lib/pause-controller.js's state machine, driving the
@@ -1157,9 +1162,34 @@ function createRouter(config) {
             // 7z-scratch copy step, not anything wrong with the archive itself. Simple retry of the
             // exact same classify+extract flow is the right recovery action, distinct from Retry
             // Download/Import (which only make sense when the archive itself was the problem).
-            const canRetryExtraction = (m.status === 'FAILED_EXTRACTION_NOT_TOUCHED' || m.status === 'FAILED_EXTRACTION_NO_PRIOR_DATA'
-                    || m.status === 'FAILED_FOLDER_LOCKED_NOT_TOUCHED')
+            //
+            // SPLIT (queue: rebuild-collection-log-fomod-installer, real director report: three
+            // "Open FOMOD" rows stuck failing Retry Extraction with the exact same message every
+            // time) -- classifyMod() only re-checks for a FOMOD wizard when mod.choices is ABSENT;
+            // once collection.json has SOME (even wrong) recorded choices, it skips straight to
+            // REBUILD and never revisits them, so a stale/wrong FOMOD choice landing on zero files
+            // could never be fixed by a plain retry, only by actually re-picking. FAILED_FOLDER_
+            // LOCKED_NOT_TOUCHED (a real Windows file-lock, never FOMOD-related) keeps the plain,
+            // unchanged retry-extraction-btn below; the two FAILED_EXTRACTION_* statuses move to the
+            // smart button (canSmartFomodRetry, further down) which tries the FOMOD picker first and
+            // falls back to this same plain retry only if the mod genuinely isn't FOMOD-related.
+            const canRetryExtraction = m.status === 'FAILED_FOLDER_LOCKED_NOT_TOUCHED'
                 && !archiveMissingStatus && m.targetFolderName && (m.modId != null && m.fileId != null || m.name);
+            // The smart button's own eligibility -- same identity/targetFolderName requirement as
+            // canRetryExtraction above (its own fallback IS that same plain retry-extraction call,
+            // which needs targetFolderName itself), but /fomod-picker-data and /install-fomod below
+            // never actually read targetFolderName at all (installOpenFomodMod always re-derives it
+            // fresh via classifyMod's own archiveBaseName fallback, same as a real first-time
+            // extraction) -- kept here anyway so a row that WOULD fail the plain-retry fallback with
+            // "too old a log format" never even shows a button promising it can help.
+            const canSmartFomodRetry = (m.status === 'FAILED_EXTRACTION_NOT_TOUCHED' || m.status === 'FAILED_EXTRACTION_NO_PRIOR_DATA')
+                && !archiveMissingStatus && m.targetFolderName && (m.modId != null && m.fileId != null || m.name);
+            // SKIP_OPEN_FOMOD got NO button at all before this fix -- a genuine Open FOMOD (no
+            // recorded choices anywhere) needs the exact same picker, just with nothing to fall back
+            // to (there was never a previous extraction attempt to retry). A legacy C# Script
+            // installer (m.legacyInstaller) has no picker this tool can drive at all -- same carve-
+            // out app.js's own buildOpenFomodRow already makes for this exact flag.
+            const canOpenFomod = m.status === 'SKIP_OPEN_FOMOD' && !m.legacyInstaller && (m.modId != null && m.fileId != null || m.name);
             // CRITICAL_MANUAL_RESTORE_NEEDED gets its own "Restore & Retry" button instead -- unlike
             // canRetryExtraction's statuses, the original folder here is NOT guaranteed to still be
             // in place, so this needs the restore step first (see restoreAndRetryExtraction()).
@@ -1184,6 +1214,14 @@ function createRouter(config) {
                     + `<div class="file-list">This mod is located off-site. You'll need to obtain it manually and install it via Vortex.`
                     + (m.sourceUrl ? `<br><a class="archive-link" href="${esc(m.sourceUrl)}" target="_blank" rel="noopener noreferrer">${esc(m.sourceUrl)}</a>` : '')
                     + `</div>`
+                // Same button, same label ("Retry Extraction" still reads right -- a real previous
+                // extraction attempt genuinely IS being retried, it's just smart enough now to open a
+                // picker when that's what's actually needed) -- see fomod-smart-btn's own click
+                // handler below for the try-picker-first/fall-back-to-plain-retry behavior.
+                : canSmartFomodRetry
+                ? `<div class="extraction-actions">`
+                    + `<button class="btn btn--primary btn--small fomod-smart-btn" data-modid="${esc(m.modId ?? '')}" data-fileid="${esc(m.fileId ?? '')}" data-name="${esc(m.name)}">Retry Extraction</button>`
+                    + `</div>`
                 : canRetryExtraction
                 ? `<div class="extraction-actions">`
                     + `<button class="btn btn--primary btn--small retry-extraction-btn" data-modid="${esc(m.modId ?? '')}" data-fileid="${esc(m.fileId ?? '')}" data-name="${esc(m.name)}">Retry Extraction</button>`
@@ -1192,10 +1230,28 @@ function createRouter(config) {
                 ? `<div class="extraction-actions">`
                     + `<button class="btn btn--primary btn--small restore-and-retry-extraction-btn" data-modid="${esc(m.modId ?? '')}" data-fileid="${esc(m.fileId ?? '')}" data-name="${esc(m.name)}">Restore & Retry</button>`
                     + `</div>`
+                // Same "Install" label app.js's own buildOpenFomodRow already uses for this exact
+                // case elsewhere in the app -- reused, not invented, since this is the same action.
+                : canOpenFomod
+                ? `<div class="extraction-actions">`
+                    + `<button class="btn btn--primary btn--small fomod-smart-btn" data-modid="${esc(m.modId ?? '')}" data-fileid="${esc(m.fileId ?? '')}" data-name="${esc(m.name)}">Install</button>`
+                    + `</div>`
                 : isAmbiguous
                 ? `<div class="ambiguous-candidates">${ambiguousCandidateRows(m)}</div>`
                 : '';
-            return `<tr data-status="${esc(m.status)}"><td>${modNameCell(m.name, m.modId)}</td><td><span class="status-pill status-pill--${m.status.toLowerCase()}">${esc(statusLabel(m.status))}</span></td><td class="detail-cell">${detail}</td><td class="extraction-cell">${extractionCell}</td></tr>`;
+            // Checkbox column (queue: rebuild-collection-log-bulk-select, extended by rebuild-
+            // collection-log-fomod-installer) -- a canResolve row gets a checkbox for the mismatch
+            // bulk actions (data-kind="mismatch"); a canSmartFomodRetry/canOpenFomod row gets one for
+            // the FOMOD bulk walkthrough instead (data-kind="fomod"); every other row kind gets an
+            // empty cell so the column still lines up. The kind lets the selection bar tell a mixed
+            // selection apart from a same-kind one (see rcbRefreshSelectionUI below) -- none of the
+            // three bulk actions is safely defined across a mix of the two row kinds.
+            const checkboxCell = canResolve
+                ? `<td class="col-check"><input type="checkbox" class="row-check" data-kind="mismatch" data-modid="${esc(m.modId ?? '')}" data-fileid="${esc(m.fileId ?? '')}" data-name="${esc(m.name)}"></td>`
+                : (canSmartFomodRetry || canOpenFomod)
+                ? `<td class="col-check"><input type="checkbox" class="row-check" data-kind="fomod" data-modid="${esc(m.modId ?? '')}" data-fileid="${esc(m.fileId ?? '')}" data-name="${esc(m.name)}"></td>`
+                : `<td class="col-check"></td>`;
+            return `<tr data-status="${esc(m.status)}">${checkboxCell}<td>${modNameCell(m.name, m.modId)}</td><td><span class="status-pill status-pill--${m.status.toLowerCase()}">${esc(statusLabel(m.status))}</span></td><td class="detail-cell">${detail}</td><td class="extraction-cell">${extractionCell}</td></tr>`;
         };
         // Ignored/optional-not-installed mods carry no action at all -- same reasoning as the live
         // plan table: put them last so the mods that actually matter aren't buried.
@@ -1204,6 +1260,15 @@ function createRouter(config) {
         const actionableMods = allMods.filter((m) => !NON_ACTIONABLE.has(m.status));
         const ignoredMods = allMods.filter((m) => NON_ACTIONABLE.has(m.status));
         const rows = [...actionableMods, ...ignoredMods].map(modRow).join('');
+        // Same canResolve/canSmartFomodRetry/canOpenFomod conditions as inside modRow -- duplicated
+        // here (not hoisted out of the closure) only to decide whether the selection bar renders at
+        // all; kept in sync by eye since these are one-line conditions, not worth threading a shared
+        // helper through the closure for.
+        const anyResolvableRows = allMods.some((m) => m.status === 'FAILED_MISMATCH_NOT_TOUCHED' && m.targetFolderName && (m.modId != null && m.fileId != null || m.name));
+        const anyFomodEligibleRows = allMods.some((m) => (
+            ((m.status === 'FAILED_EXTRACTION_NOT_TOUCHED' || m.status === 'FAILED_EXTRACTION_NO_PRIOR_DATA') && !m.archiveNotFound && m.targetFolderName)
+            || (m.status === 'SKIP_OPEN_FOMOD' && !m.legacyInstaller)
+        ) && (m.modId != null && m.fileId != null || m.name));
         res.send(`<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Vortex Collection Tools — ${esc(breadcrumb)}</title>
 <link rel="stylesheet" href="/styles.css"></head>
@@ -1229,8 +1294,50 @@ ${backButtonHtml}
 </div>
 <div class="summary-badges" id="statusBadges">${badges}</div>
 ${downloadSummary}
-<div class="plan-table-wrap"><table class="plan-table">
-<thead><tr><th>Mod</th><th>Status</th><th>Detail</th><th>Extraction</th></tr></thead>
+<!-- Bulk-select for the per-row Extract all/Keep modified buttons (queue: rebuild-collection-log-
+     bulk-select) -- same .af-selection-bar/.col-check shape RMF's own selectable list already uses
+     (DESIGN.md's "Selectable lists" section), copy-adapted into this page's own inline script per
+     this page's established convention of no shared JS with app.js/rebuild-missing-app.js. Hidden
+     server-side when this log has no resolvable/FOMOD-eligible row at all, same as everything else
+     here that's conditional on the log's actual content.
+
+     Third bulk button (queue: rebuild-collection-log-fomod-installer) -- a distinct operation from
+     Extract all/Keep modified (walks the selected Open-FOMOD/needs-a-fresh-pick rows one at a time
+     through the real picker), so it's a separate, co-equal button, not folded into the existing
+     pair. Mixed selections (both a mismatch-kind and a fomod-kind row checked at once) disable ALL
+     THREE bulk buttons -- see rcbRefreshSelectionUI below -- since none of the three is safely
+     defined across a mix of row kinds. -->
+<div class="af-selection-bar${(anyResolvableRows || anyFomodEligibleRows) ? '' : ' hidden'}" id="rcbSelectionBar">
+  <div class="af-selection-bar__left">
+    <button class="btn btn--ghost btn--small" id="rcbSelectAllBtn">Select all</button>
+    <button class="btn btn--ghost btn--small" id="rcbInvertBtn">Invert selection</button>
+    <button class="btn btn--ghost btn--small" id="rcbClearBtn">Clear selection</button>
+    <span id="rcbSelCount" class="muted"></span>
+  </div>
+  <div class="af-selection-bar__right">
+    <button class="btn btn--primary btn--small" id="rcbExtractAllBtn" disabled>Extract all</button>
+    <button class="btn btn--primary btn--small" id="rcbKeepModifiedBtn" disabled>Keep modified</button>
+    <button class="btn btn--primary btn--small" id="rcbFomodBtn" disabled>Set up selected FOMODs</button>
+  </div>
+</div>
+<!-- Real per-mod progress during a bulk Extract all/Keep modified run (queue: rebuild-collection-
+     log-bulk-progress) -- same shape RMF's own Extract table uses (rmfBuildExtractProgressTable/
+     rmfUpdateExtractRow/rmfSetExtractingUI, rebuild-missing-app.js:1197-1299): a loading line + a
+     real percentage bar, then one <tr> per selected mod rendered through the SAME shared pill
+     vocabulary (ucv2ApplyPillHtml) Update Collection v2's Apply Progress and RMF's own Extract
+     table already use, per DESIGN.md's "one shared vocabulary" rule. Starts hidden; shown (and the
+     selection bar + normal table hidden) only while a bulk run is actually in progress -- a genuine
+     screen swap, not layered on top, same as RMF's own rmfSetExtractingUI. -->
+<div class="loading-row hidden" id="rcbBulkLoading"><span class="spinner"></span> <span id="rcbBulkLoadingText"></span></div>
+<div class="progress-bar-wrap hidden" id="rcbBulkProgressBarWrap"><div id="rcbBulkProgressBar" class="progress-bar"></div></div>
+<div class="plan-table-wrap plan-table-wrap--scrollable hidden" id="rcbBulkProgressTableWrap">
+  <table class="plan-table">
+    <thead><tr><th>Mod</th><th>Status</th><th>Detail</th></tr></thead>
+    <tbody id="rcbBulkProgressTableBody"></tbody>
+  </table>
+</div>
+<div class="plan-table-wrap" id="rcbLogTableWrap"><table class="plan-table">
+<thead><tr><th class="col-check"></th><th>Mod</th><th>Status</th><th>Detail</th><th>Extraction</th></tr></thead>
 <tbody id="logTableBody" data-filename="${esc(filename)}">${rows}</tbody>
 </table></div>
 <!-- Same in-page modal convention as the main app (replaces native confirm()/alert(), which are
@@ -1254,6 +1361,61 @@ ${downloadSummary}
     </div>
   </div>
 </div>
+<!-- The shared FOMOD choice picker (queue: rebuild-collection-log-fomod-installer) -- the MARKUP is
+     copied verbatim from index.html (~line 5804-5843, both this modal AND the click-to-zoom overlay
+     right below it -- fomod-picker.js references BOTH directly via getElementById at script-load
+     time, so omitting either one would throw immediately the moment its own <script> tag runs).
+     Keeps the historical "ucv2Fomod*"/".ucv2-fomod-*" ids/classes verbatim, matching that file's own
+     documented convention. The JS DRIVER itself (fomod-picker.js, below) is genuinely SHARED, not
+     copy-adapted -- same exception this page's own /update-collection-v2-apply-pills.js include
+     already established: a component built to be a real, reusable API (showFomodPicker(needs,
+     {onDone, onCancel, ...})) with zero opinion on the caller's own page, unlike app.js's own
+     tool-specific rendering code this page has never shared. This is this page's FOURTH caller of
+     the picker, alongside Update Collection v2, Rebuild Missing Files, and Rebuild Collection's own
+     post-run summary screen (app.js). -->
+<div class="ucv2-modal-backdrop" id="ucv2FomodPickerModal">
+  <div class="ucv2-modal ucv2-modal--fomod">
+    <div class="ucv2-fomod-modal__head">
+      <button class="ucv2-modal__close ucv2-fomod-modal__close" id="ucv2FomodPickerClose">&times;</button>
+      <div class="ucv2-fomod-modal__title" id="ucv2FomodPickerTitle">FOMOD install options</div>
+      <p class="ucv2-fomod-modal__step" id="ucv2FomodPickerStepName"></p>
+      <p class="ucv2-fomod-modal__intro" id="ucv2FomodPickerIntro"></p>
+      <p class="ucv2-fomod-modal__reinstall-note hidden" id="ucv2FomodPickerReinstallNote"></p>
+      <p class="ucv2-fomod-modal__intro hidden" id="ucv2FomodPickerNoDataNote"></p>
+      <p class="ucv2-fomod-modal__intro hidden" id="ucv2FomodPickerValidationBypassNote"></p>
+      <p class="muted" id="ucv2FomodPickerCounter" style="margin:6px 0 0;font-size:12px"></p>
+    </div>
+    <div class="ucv2-fomod-modal__body">
+      <div class="ucv2-fomod-options" id="ucv2FomodPickerOptions"></div>
+      <div class="ucv2-fomod-preview" id="ucv2FomodPickerPreview">
+        <div class="ucv2-fomod-preview__empty">Hover over an option to see its image and description.</div>
+      </div>
+    </div>
+    <p id="ucv2FomodPickerError" class="callout callout--warning hidden" style="margin:0 24px 12px"></p>
+    <div class="ucv2-fomod-modal__foot">
+      <button class="btn btn--ghost" id="ucv2FomodPickerCancel">Cancel</button>
+      <button class="btn btn--ghost" id="ucv2FomodPickerBack">Back</button>
+      <div class="ucv2-fomod-progress"><div class="ucv2-fomod-progress__fill" id="ucv2FomodPickerProgressFill"></div></div>
+      <button class="btn btn--primary" id="ucv2FomodPickerNext">Next</button>
+    </div>
+  </div>
+</div>
+<div class="ucv2-fomod-zoom-overlay" id="ucv2FomodZoomOverlay">
+  <img id="ucv2FomodZoomImage" src="" alt="">
+</div>
+<!-- ucv2ApplyPillHtml -- the ONE shared status-pill vocabulary every per-mod progress table in this
+     app renders through (Update Collection v2's Apply Progress, RMF's own Extract table, and now
+     this page's own bulk-resolve progress table). Absolute path (not the relative form
+     index.html uses) -- this page's own URL has extra path segments
+     (/api/rebuild/logs/view/<filename>), so a relative src would resolve wrongly; /styles.css just
+     above already uses the same absolute convention for the same reason. -->
+<!-- Same absolute-path reasoning as /update-collection-v2-apply-pills.js just above -- this page's
+     own URL has extra path segments a relative src would resolve wrongly against. Must load BEFORE
+     this page's own inline <script> below only in the sense that the markup above must already
+     exist in the DOM when it runs (it wires real event listeners via getElementById at load time) --
+     not because anything here is CALLED before this page's own script finishes parsing. -->
+<script src="/fomod-picker.js"></script>
+<script src="/update-collection-v2-apply-pills.js"></script>
 <script>
 function showConfirmModal(message) {
   const overlay = document.getElementById('confirmModal');
@@ -1326,6 +1488,343 @@ document.getElementById('logTableBody').addEventListener('click', async (e) => {
     btn.textContent = resolveMode === 'all' ? 'Extract all' : 'Keep modified';
   }
 });
+// Bulk-select for the Extract all/Keep modified pair (queue: rebuild-collection-log-bulk-select) --
+// copy-adapted from RMF's own selection pattern (rebuild-missing-app.js's rmfIsSelectable/
+// rmfRefreshSelectionUI/select-all-invert-clear, lines ~1136-1160), not shared/imported, per this
+// page's own established convention of keeping its own inline script.
+//
+// A plain querySelectorAll of every '.row-check' -- NOT filtered by whatever status filter is
+// currently active -- is the selectable set, same choice RMF's own rmfState.rows.filter(rmfIsSelectable)
+// makes (it operates over every row regardless of rmfKindFilter). A row hidden by the Ignored/
+// Excepted/Rebuilt/Mismatch/Show all filter badges (applyStatusFilter, below) only ever sets
+// style.display -- the checkbox and its checked state stay in the DOM the whole time, so a selected
+// row that gets filtered out of view stays selected (least surprising: the filter is just a view,
+// not a selection reset -- matches how a page reload restores the active filter instead of resetting
+// it, same reasoning already applied there).
+function rcbCheckboxes() { return [...document.querySelectorAll('#logTableBody .row-check')]; }
+// Kind-aware (queue: rebuild-collection-log-fomod-installer) -- a checkbox now carries data-kind
+// ("mismatch" or "fomod"), and none of the three bulk actions (Extract all/Keep modified/Set up
+// selected FOMODs) is safely defined across a selection that mixes both kinds at once (recommended
+// default from that task's own judgment call #5). Selecting only one kind enables that kind's own
+// bulk button(s) and leaves the other kind's disabled; selecting both, or nothing, disables all
+// three. Select all/Invert/Clear themselves are NOT kind-filtered -- they still operate on every
+// checkbox regardless of kind (same as before, and same as RMF's own precedent of ignoring its
+// unrelated kind-FILTER when selecting), so a deliberate "select everything" click still lands on
+// this same mixed-selection disable rather than silently guessing which kind was meant.
+function rcbRefreshSelectionUI() {
+  const boxes = rcbCheckboxes();
+  const selected = boxes.filter((cb) => cb.checked);
+  const total = boxes.length;
+  const n = selected.length;
+  document.getElementById('rcbSelCount').textContent = n + ' of ' + total + ' selected';
+  const kinds = new Set(selected.map((cb) => cb.dataset.kind));
+  const isMismatchOnly = n > 0 && kinds.size === 1 && kinds.has('mismatch');
+  const isFomodOnly = n > 0 && kinds.size === 1 && kinds.has('fomod');
+  document.getElementById('rcbExtractAllBtn').disabled = !isMismatchOnly;
+  document.getElementById('rcbKeepModifiedBtn').disabled = !isMismatchOnly;
+  document.getElementById('rcbFomodBtn').disabled = !isFomodOnly;
+}
+document.getElementById('logTableBody').addEventListener('change', (e) => {
+  const cb = e.target.closest('.row-check');
+  if (!cb) return;
+  cb.closest('tr').classList.toggle('selected', cb.checked);
+  rcbRefreshSelectionUI();
+});
+document.getElementById('rcbSelectAllBtn').addEventListener('click', () => {
+  rcbCheckboxes().forEach((cb) => { cb.checked = true; cb.closest('tr').classList.add('selected'); });
+  rcbRefreshSelectionUI();
+});
+document.getElementById('rcbClearBtn').addEventListener('click', () => {
+  rcbCheckboxes().forEach((cb) => { cb.checked = false; cb.closest('tr').classList.remove('selected'); });
+  rcbRefreshSelectionUI();
+});
+document.getElementById('rcbInvertBtn').addEventListener('click', () => {
+  rcbCheckboxes().forEach((cb) => {
+    cb.checked = !cb.checked;
+    cb.closest('tr').classList.toggle('selected', cb.checked);
+  });
+  rcbRefreshSelectionUI();
+});
+// Real per-mod progress during a bulk run (queue: rebuild-collection-log-bulk-progress, director's
+// own live feedback after using the just-shipped bulk-select feature: "there is nothing else
+// telling me what is going on or what mod is being extracted... show each mod, top to bottom as
+// being 'worked' on"). Copy-adapted from RMF's own rmfBuildExtractProgressTable/rmfUpdateExtractRow/
+// rmfSetExtractingUI (rebuild-missing-app.js:1197-1299) -- same shared ucv2ApplyPillHtml vocabulary,
+// same bounded-scrollable-table shape, same screen hand-off (hide the normal reviewing UI, show the
+// progress table in its place, never layered on top). Deliberately WITHOUT RMF's own oversized-
+// payload chunking (rmfSplitOversizedItems/rmfChunkExtractItems) -- this batch only ever sends small
+// {modId, fileId, name} identifiers, never archive/file payloads, so there's no real oversized-
+// request concern here to build a chunker for.
+let rcbProgressRowEls = [];
+let rcbProgressTotal = 0;
+let rcbProgressDone = 0;
+
+function rcbBuildProgressTable(items) {
+  const tbody = document.getElementById('rcbBulkProgressTableBody');
+  tbody.innerHTML = '';
+  rcbProgressRowEls = items.map((item) => {
+    const tr = document.createElement('tr');
+    const nameTd = document.createElement('td');
+    nameTd.textContent = item.name;
+    const statusTd = document.createElement('td');
+    statusTd.innerHTML = ucv2ApplyPillHtml('pending', 'Waiting');
+    const detailTd = document.createElement('td');
+    detailTd.className = 'detail-cell';
+    tr.appendChild(nameTd);
+    tr.appendChild(statusTd);
+    tr.appendChild(detailTd);
+    tbody.appendChild(tr);
+    return tr;
+  });
+  rcbProgressTotal = items.length;
+  rcbProgressDone = 0;
+  document.getElementById('rcbBulkProgressBar').style.width = '0%';
+  document.getElementById('rcbBulkLoadingText').textContent = '0 of ' + rcbProgressTotal + ' mods done';
+}
+
+// Same bounded-wrap scroll math as RMF's own rmfUpdateExtractRow -- row.scrollIntoView() walks
+// every scrollable ancestor including the window itself (confirmed real, that file's own comment);
+// this only ever scrolls this table's own bounded wrap.
+function rcbUpdateProgressRow(index1Based, key, label, detail) {
+  const tr = rcbProgressRowEls[index1Based - 1];
+  if (!tr) return;
+  tr.children[1].innerHTML = ucv2ApplyPillHtml(key, label);
+  tr.children[2].textContent = detail || '';
+  const wrap = document.getElementById('rcbBulkProgressTableWrap');
+  const rowRect = tr.getBoundingClientRect();
+  const wrapRect = wrap.getBoundingClientRect();
+  const offsetWithinWrap = (rowRect.top - wrapRect.top) + wrap.scrollTop;
+  const target = offsetWithinWrap - (wrap.clientHeight / 2) + (tr.clientHeight / 2);
+  wrap.scrollTo({ top: target, behavior: 'smooth' });
+}
+
+function rcbAdvanceProgressBar() {
+  rcbProgressDone += 1;
+  const pct = rcbProgressTotal > 0 ? Math.round((rcbProgressDone / rcbProgressTotal) * 100) : 0;
+  document.getElementById('rcbBulkProgressBar').style.width = pct + '%';
+  document.getElementById('rcbBulkLoadingText').textContent = rcbProgressDone + ' of ' + rcbProgressTotal + ' mods done';
+}
+
+// The screen hand-off requirement #2 above (director's own explicit second ask: "the individual
+// buttons for each mod, should be removed when you're doing a bulk activity") falls out of this for
+// free -- #rcbLogTableWrap contains EVERY per-row Extract all/Keep modified button on the page, not
+// just the selected rows', so hiding that one wrap during a run hides all of them, with nothing
+// left clickable underneath.
+function rcbSetBulkRunningUI(active) {
+  document.getElementById('rcbSelectionBar').classList.toggle('hidden', active);
+  document.getElementById('rcbLogTableWrap').classList.toggle('hidden', active);
+  document.getElementById('rcbBulkLoading').classList.toggle('hidden', !active);
+  document.getElementById('rcbBulkProgressBarWrap').classList.toggle('hidden', !active);
+  document.getElementById('rcbBulkProgressTableWrap').classList.toggle('hidden', !active);
+}
+
+function rcbHandleProgressFrame(frame) {
+  if (frame.type === 'mod-started') {
+    rcbUpdateProgressRow(frame.index, 'extracting', 'Resolving…');
+  } else if (frame.type === 'mod-resolved') {
+    rcbAdvanceProgressBar();
+    rcbUpdateProgressRow(frame.index, frame.ok ? 'enabled' : 'failed', frame.ok ? 'Rebuilt' : 'Failed', frame.ok ? '' : (frame.error || 'Something went wrong.'));
+  }
+}
+
+// Opens the matching SSE stream for a just-started batch and resolves with its terminal frame's own
+// {results, summary} -- same POST-returns-202-immediately/GET-.../events-subscribes shape as RMF's
+// own rmfRunExtractBatch (rebuild-missing-app.js:1386-1406).
+function rcbSubscribeBatchEvents(filename) {
+  return new Promise((resolve, reject) => {
+    const es = new EventSource('/api/rebuild/logs/' + encodeURIComponent(filename) + '/resolve-mismatch-batch/events');
+    es.onmessage = (msg) => {
+      const frame = JSON.parse(msg.data);
+      if (frame.type === 'batch-complete') {
+        es.close();
+        resolve({ results: frame.results, summary: frame.summary });
+      } else if (frame.type === 'batch-error') {
+        es.close();
+        reject(new Error(frame.message || 'The bulk resolve failed.'));
+      } else {
+        rcbHandleProgressFrame(frame);
+      }
+    };
+    es.onerror = () => {
+      es.close();
+      reject(new Error('Lost connection to the server while the bulk resolve was running.'));
+    };
+  });
+}
+
+async function rcbRunBatch(resolveMode) {
+  const selected = rcbCheckboxes().filter((cb) => cb.checked);
+  if (selected.length === 0) return;
+  const items = selected.map((cb) => ({
+    modId: cb.dataset.modid ? Number(cb.dataset.modid) : null,
+    fileId: cb.dataset.fileid ? Number(cb.dataset.fileid) : null,
+    name: cb.dataset.name,
+  }));
+  const n = items.length;
+  const plural = n === 1 ? '' : 's';
+  const message = resolveMode === 'all'
+    ? 'Warning: this will fully replace the staging folder for ' + n + ' mod' + plural + '. Continue?'
+    : 'Warning: this keeps your modified files as they are for ' + n + ' mod' + plural + ', replaces everything else, and restores any missing files. Continue?';
+  if (!await showConfirmModal(message)) return;
+  const filename = document.getElementById('logTableBody').dataset.filename;
+  rcbBuildProgressTable(items);
+  rcbSetBulkRunningUI(true);
+  try {
+    const res = await fetch('/api/rebuild/logs/' + encodeURIComponent(filename) + '/resolve-mismatch-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items, resolveMode }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    // The POST above only ever confirms the batch STARTED (202) -- the real per-item progress and
+    // final results/summary arrive over the SSE stream this subscribes to.
+    const { results, summary } = await rcbSubscribeBatchEvents(filename);
+    const failed = (results || []).filter((r) => !r.ok);
+    if (failed.length > 0) {
+      // Partial failure -- the log file has already been rewritten with whichever items DID
+      // succeed (the batch route writes once at the end regardless), but reloading right now would
+      // instantly hide this modal behind the fresh page. Show exactly what failed and why, and leave
+      // reloading to the user (a manual refresh, or clicking the still-present per-row button for
+      // just the failed one(s)) rather than racing a modal against a page load.
+      rcbSetBulkRunningUI(false);
+      const failedPlural = results.length === 1 ? '' : 's';
+      const failedLines = failed.map((f) => '- ' + f.name + ': ' + f.error).join('\\n');
+      showErrorModal(failed.length + ' of ' + results.length + ' mod' + failedPlural + " couldn't be resolved:\\n" + failedLines);
+      rcbRefreshSelectionUI();
+      return;
+    }
+    location.reload();
+  } catch (err) {
+    rcbSetBulkRunningUI(false);
+    showErrorModal('Failed: ' + err.message);
+    rcbRefreshSelectionUI();
+  }
+}
+document.getElementById('rcbExtractAllBtn').addEventListener('click', () => rcbRunBatch('all'));
+document.getElementById('rcbKeepModifiedBtn').addEventListener('click', () => rcbRunBatch('keep-existing'));
+
+// Bulk "Set up selected FOMODs" (queue: rebuild-collection-log-fomod-installer, director's own
+// explicit ask, confirmed directly: "Retry Extraction or Bulk Extraction should bring up the FOMOD
+// installer for open FOMODs" and it should walk selected mods one at a time, not silently batch
+// them). showFomodPicker() (web/public/fomod-picker.js) ALREADY implements exactly this as a
+// built-in feature of its own public API -- pass it the WHOLE array of every selected mod's own
+// "need" in one call, and it steps through each mod's own wizard in turn inside the SAME open
+// session, only calling onDone() once every one of them is finished. So this does NOT hand-roll its
+// own "open picker, on finish open the next one" loop -- it fetches every selected row's own
+// /fomod-picker-data up front, then makes ONE showFomodPicker() call with the combined array.
+//
+// Cancelling mid-sequence (director's own explicit instruction: "stop the sequence there... leave
+// the remaining selected rows selected/untouched") falls out of the picker's own real behavior for
+// free, with zero extra code needed: onDone (the only place /install-fomod is ever called from)
+// only ever fires once EVERY mod in the array has been finished -- cancelling at mod 3 of 5 never
+// calls onDone at all, so NOTHING gets installed for any of the 5, including the two already
+// finished earlier in this same session. That satisfies "leave the rest untouched" -- and, as an
+// honest side effect, also means the already-completed ones aren't silently installed behind the
+// user's back either, which reads as the more conservative, expected interpretation of "the user
+// backed out."
+async function rcbFetchFomodNeed(filename, item, ignoreFomodValidation) {
+  const res = await fetch('/api/rebuild/logs/' + encodeURIComponent(filename) + '/fomod-picker-data', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ modId: item.modId, fileId: item.fileId, name: item.name, ignoreFomodValidation: !!ignoreFomodValidation }),
+  });
+  const data = await res.json();
+  return { status: res.status, ok: res.ok, data };
+}
+
+async function rcbRunFomodBulk() {
+  const selected = rcbCheckboxes().filter((cb) => cb.checked && cb.dataset.kind === 'fomod');
+  if (selected.length === 0) return;
+  const filename = document.getElementById('logTableBody').dataset.filename;
+  const items = selected.map((cb) => ({
+    modId: cb.dataset.modid ? Number(cb.dataset.modid) : null,
+    fileId: cb.dataset.fileid ? Number(cb.dataset.fileid) : null,
+    name: cb.dataset.name,
+  }));
+  const bulkBtn = document.getElementById('rcbFomodBtn');
+  const barButtons = document.querySelectorAll('#rcbSelectionBar button');
+  barButtons.forEach((b) => { b.disabled = true; });
+  const originalText = bulkBtn.textContent;
+  bulkBtn.textContent = 'Loading…';
+
+  const needs = [];
+  const skipped = [];
+  const needToItem = new Map(); // need.modId -> the original {modId, fileId, name} item, for /install-fomod
+  for (const item of items) {
+    try {
+      const { status, ok, data } = await rcbFetchFomodNeed(filename, item, false);
+      if (status === 409 && data.error === 'not-a-fomod') {
+        skipped.push({ name: item.name, error: data.message || "This mod no longer looks like an unresolved FOMOD." });
+        continue;
+      }
+      if (!ok) { skipped.push({ name: item.name, error: data.error || ('HTTP ' + status) }); continue; }
+      const need = data.needs[0];
+      needs.push(need);
+      needToItem.set(need.modId, item);
+    } catch (err) {
+      skipped.push({ name: item.name, error: err.message });
+    }
+  }
+  if (needs.length === 0) {
+    barButtons.forEach((b) => { b.disabled = false; });
+    bulkBtn.textContent = originalText;
+    rcbRefreshSelectionUI();
+    const lines = skipped.map((s) => '- ' + s.name + ': ' + s.error).join('\\n');
+    showErrorModal("None of the selected mods could be set up:\\n" + lines);
+    return;
+  }
+  bulkBtn.textContent = originalText;
+  // Buttons stay disabled (not restored to their real selection-driven state) for the whole picker
+  // session -- rcbRefreshSelectionUI() only runs again once the session actually ends (onDone or the
+  // error path below), same as the mismatch bulk actions already do for the duration of their own run.
+  showFomodPicker(needs, {
+    reinstallWarning: true,
+    onIgnoreValidation: async (need) => {
+      const item = needToItem.get(need.modId);
+      const { data } = await rcbFetchFomodNeed(filename, item, true);
+      return data.needs && data.needs[0];
+    },
+    onCancel: () => {
+      barButtons.forEach((b) => { b.disabled = false; });
+      rcbRefreshSelectionUI();
+    },
+    onDone: async (picksByModId) => {
+      const failed = [];
+      for (const need of needs) {
+        const item = needToItem.get(need.modId);
+        try {
+          const res = await fetch('/api/rebuild/logs/' + encodeURIComponent(filename) + '/install-fomod', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ modId: item.modId, fileId: item.fileId, name: item.name, picks: picksByModId[need.modId] || {} }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+        } catch (err) {
+          failed.push({ name: item.name, error: err.message });
+        }
+      }
+      const problems = [...skipped, ...failed];
+      if (problems.length > 0) {
+        // Same "don't race a modal against a page load" reasoning as the mismatch bulk actions'
+        // own partial-failure handling above -- the log file has already been rewritten for
+        // whichever mods DID succeed, but reloading right now would hide this modal before it's
+        // read. Leave reloading to the user.
+        barButtons.forEach((b) => { b.disabled = false; });
+        rcbRefreshSelectionUI();
+        const n = problems.length;
+        const lines = problems.map((p) => '- ' + p.name + ': ' + p.error).join('\\n');
+        showErrorModal(n + ' of ' + items.length + " mod(s) couldn't be set up:\\n" + lines);
+        return;
+      }
+      location.reload();
+    },
+  });
+}
+document.getElementById('rcbFomodBtn').addEventListener('click', () => rcbRunFomodBulk());
+
+rcbRefreshSelectionUI();
 document.getElementById('logTableBody').addEventListener('click', async (e) => {
   const btn = e.target.closest('.retry-download-btn');
   if (!btn) return;
@@ -1402,15 +1901,15 @@ document.getElementById('logTableBody').addEventListener('click', async (e) => {
     btn.textContent = originalText;
   }
 });
-document.getElementById('logTableBody').addEventListener('click', async (e) => {
-  const btn = e.target.closest('.retry-extraction-btn');
-  if (!btn) return;
-  const row = btn.closest('tr');
-  const filename = document.getElementById('logTableBody').dataset.filename;
-  const modId = btn.dataset.modid ? Number(btn.dataset.modid) : null;
-  const fileId = btn.dataset.fileid ? Number(btn.dataset.fileid) : null;
-  const name = btn.dataset.name;
-  const originalText = btn.textContent;
+// The retry itself can run fine but land on the EXACT same failure it started with -- reloading
+// would just show the identical row again, looking like nothing happened (confirmed real,
+// 2026-09-14: three FOMOD mods hit a real resolver bug that failed the same way on every single
+// retry -- see the fomod-smart-btn handler below for the actual fix for that class of failure). Say
+// so plainly instead of silently reloading; a genuinely different outcome (including success)
+// still reloads as before. Shared by both the plain .retry-extraction-btn (FAILED_FOLDER_LOCKED_
+// NOT_TOUCHED, unchanged) and the smart button's own fall-back-when-not-a-fomod path below --
+// identical behavior either way, so this is the one place it's implemented.
+async function rcbPlainRetryExtraction({ filename, modId, fileId, name, row, btn, originalText }) {
   btn.disabled = true;
   btn.textContent = 'Retrying…';
   try {
@@ -1421,11 +1920,6 @@ document.getElementById('logTableBody').addEventListener('click', async (e) => {
     });
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
-    // The retry itself ran fine, but landed on the EXACT same failure it started with -- reloading
-    // would just show the identical row again, looking like nothing happened (confirmed real,
-    // 2026-09-14: three FOMOD mods hit a real resolver bug that failed the same way on every single
-    // retry). Say so plainly instead of silently reloading; a genuinely different outcome (including
-    // success) still reloads as before.
     if (data.entry.status === row.dataset.status) {
       row.children[2].textContent = 'Tried again, but ran into the same issue: ' + (data.entry.detail || data.entry.status);
       btn.disabled = false;
@@ -1435,8 +1929,94 @@ document.getElementById('logTableBody').addEventListener('click', async (e) => {
     location.reload();
   } catch (err) {
     showErrorModal('Failed: ' + err.message);
-    row.querySelectorAll('.retry-extraction-btn').forEach((b) => { b.disabled = false; b.textContent = 'Retry Extraction'; });
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
+}
+document.getElementById('logTableBody').addEventListener('click', (e) => {
+  const btn = e.target.closest('.retry-extraction-btn');
+  if (!btn) return;
+  const row = btn.closest('tr');
+  const filename = document.getElementById('logTableBody').dataset.filename;
+  const modId = btn.dataset.modid ? Number(btn.dataset.modid) : null;
+  const fileId = btn.dataset.fileid ? Number(btn.dataset.fileid) : null;
+  const name = btn.dataset.name;
+  const originalText = btn.textContent;
+  rcbPlainRetryExtraction({ filename, modId, fileId, name, row, btn, originalText });
+});
+// The smart single-row button (queue: rebuild-collection-log-fomod-installer) -- covers BOTH
+// SKIP_OPEN_FOMOD rows (label "Install", same as app.js's own buildOpenFomodRow elsewhere in this
+// app -- there was never a previous extraction attempt to retry) and the two FAILED_EXTRACTION_*
+// statuses that used to render the plain .retry-extraction-btn (label stays "Retry Extraction" --
+// a real previous attempt genuinely is being retried, it's just smart enough now to open the picker
+// when that's what fixes it). Tries /fomod-picker-data first; a real FOMOD need opens the shared
+// picker (same showFomodPicker() the bulk walkthrough above and app.js's own Install button drive).
+// A 409 not-a-fomod response (this mod's own extraction failure was never FOMOD-related to begin
+// with -- a real transient issue, e.g. a file lock) falls back to the exact same plain retry-
+// extraction behavior the old .retry-extraction-btn always had for these two statuses, unchanged.
+document.getElementById('logTableBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.fomod-smart-btn');
+  if (!btn) return;
+  const row = btn.closest('tr');
+  const filename = document.getElementById('logTableBody').dataset.filename;
+  const modId = btn.dataset.modid ? Number(btn.dataset.modid) : null;
+  const fileId = btn.dataset.fileid ? Number(btn.dataset.fileid) : null;
+  const name = btn.dataset.name;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+  let pickerData;
+  try {
+    const res = await fetch('/api/rebuild/logs/' + encodeURIComponent(filename) + '/fomod-picker-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modId, fileId, name }),
+    });
+    pickerData = await res.json();
+    if (res.status === 409 && pickerData.error === 'not-a-fomod') {
+      await rcbPlainRetryExtraction({ filename, modId, fileId, name, row, btn, originalText });
+      return;
+    }
+    if (!res.ok) throw new Error(pickerData.error || pickerData.message || ('HTTP ' + res.status));
+  } catch (err) {
+    showErrorModal('Failed: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = originalText;
+    return;
+  }
+  btn.disabled = false;
+  btn.textContent = originalText;
+  const need = pickerData.needs[0];
+  showFomodPicker(pickerData.needs, {
+    reinstallWarning: true,
+    onIgnoreValidation: async () => {
+      const r = await fetch('/api/rebuild/logs/' + encodeURIComponent(filename) + '/fomod-picker-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modId, fileId, name, ignoreFomodValidation: true }),
+      });
+      const d = await r.json();
+      return d.needs && d.needs[0];
+    },
+    onDone: async (picksByModId) => {
+      btn.disabled = true;
+      btn.textContent = 'Installing…';
+      try {
+        const res = await fetch('/api/rebuild/logs/' + encodeURIComponent(filename) + '/install-fomod', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ modId, fileId, name, picks: picksByModId[need.modId] || {} }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+        location.reload();
+      } catch (err) {
+        showErrorModal('Install failed: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    },
+  });
 });
 document.getElementById('logTableBody').addEventListener('click', async (e) => {
   const btn = e.target.closest('.restore-and-retry-extraction-btn');
@@ -1608,6 +2188,137 @@ applyStatusFilter(new Set(initialStatusParam ? initialStatusParam.split(',') : [
         }
     });
 
+    // Bulk version of the route directly above (queue: rebuild-collection-log-bulk-select) -- the
+    // log view's own Select all/Invert/Clear selection bar sends every checked row's
+    // {modId, fileId, name} here in one request instead of firing one /resolve-mismatch request per
+    // row (a real screenshot showed 39 mismatched rows in one log -- 39 sequential round trips would
+    // be slow and clunky). Loops runner.resolveMismatchedMod() per item -- same call the single-item
+    // route above makes -- but reads/writes/re-summarizes the log file exactly ONCE for the whole
+    // batch, not once per item, both because that's cheaper and because N sequential read-modify-
+    // write passes against the same file would otherwise race each other.
+    //
+    // Best-effort, not all-or-nothing: one item genuinely failing (e.g. a locked file, or a real
+    // extraction error inside rebuildMod) does not stop or discard the rest of the batch. Every
+    // item's own outcome is reported individually in `results`; the log file is written once at the
+    // end with whichever items succeeded actually updated, and failed ones left exactly as they
+    // were (still FAILED_MISMATCH_NOT_TOUCHED, still resolvable individually or via another batch).
+    //
+    // Streamed, not one-shot (2026-09-25, queue: rebuild-collection-log-bulk-progress -- director's
+    // own live feedback: "there is nothing else telling me what is going on or what mod is being
+    // extracted"). Same POST-returns-202-immediately/GET-.../events-subscribes shape as
+    // web/rebuild-missing-routes.js's own /extract + /extract/events -- see this file's own
+    // planSession/vortexDataSession above for the identical pattern already proven in THIS file.
+    // Frame names deliberately diverge from RMF's own extract-mod-started/mod-extracted naming in
+    // one place: RMF's flow is a two-phase download-then-extract (needing its own mod-phase frame
+    // for that transition); this one is a single atomic resolveMismatchedMod() call per item, so
+    // there's no equivalent phase to report -- mod-started/mod-resolved is the whole shape needed.
+    router.get('/logs/:filename/resolve-mismatch-batch/events', (req, res) => {
+        if (!resolveMismatchBatchSession.get()) return res.status(404).end();
+        const afterSeq = Number(req.headers['last-event-id'] || 0);
+        resolveMismatchBatchSession.subscribe(res, { afterSeq });
+    });
+    router.post('/logs/:filename/resolve-mismatch-batch', async (req, res) => {
+        const { filename } = req.params;
+        if (!/^rebuild-.+\.json$/.test(filename)) return res.status(400).json({ error: 'Invalid log filename.' });
+        const full = path.join(logsDir, filename);
+        if (path.dirname(full) !== logsDir) return res.status(400).json({ error: 'Invalid log filename.' });
+        const { items, resolveMode } = req.body || {};
+        if (!['all', 'keep-existing'].includes(resolveMode)) {
+            return res.status(400).json({ error: 'resolveMode must be "all" or "keep-existing".' });
+        }
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ error: 'items must be a non-empty array.' });
+        }
+        for (const item of items) {
+            // Same identity rule as the single-item route immediately above: off-site mods carry no
+            // modId/fileId at all, so name is the only identifier for those.
+            if ((item?.modId == null || item?.fileId == null) && !item?.name) {
+                return res.status(400).json({ error: 'Each item needs modId+fileId, or name.' });
+            }
+        }
+        // Same "one bulk action at a time" guard RMF's own /extract already has -- the client
+        // already disables/hides every trigger for the duration, this is defense-in-depth against a
+        // second request landing anyway (e.g. a double-fire), which would otherwise race a second
+        // read-modify-write pass against the same log file against this one.
+        if (resolveMismatchBatchSession.isActive()) {
+            return res.status(409).json({ error: 'A bulk resolve is already in progress.' });
+        }
+        let log;
+        try {
+            log = JSON.parse(fs.readFileSync(full, 'utf8'));
+        } catch {
+            return res.status(404).json({ error: 'Log file not found.' });
+        }
+
+        const mySession = resolveMismatchBatchSession.start({ id: `resolve-mismatch-batch-${Date.now()}` });
+        res.status(202).json({});
+        // Same race guard every other session in this file already uses (see planSession/
+        // vortexDataSession above) -- an overlapping request must not have its late events land in a
+        // newer/different session.
+        const emitIfCurrent = (event) => {
+            if (resolveMismatchBatchSession.get() === mySession) resolveMismatchBatchSession.emit(event);
+        };
+
+        (async () => {
+            try {
+                const results = [];
+                const total = items.length;
+                for (let index = 0; index < items.length; index += 1) {
+                    const item = items[index];
+                    const { modId, fileId, name } = item;
+                    const displayName = name ?? `modId=${modId} fileId=${fileId}`;
+                    // Emitted BEFORE this item's own work starts, so the row shows what's actually
+                    // happening right now instead of the PREVIOUS item's finished state for the
+                    // entire duration of a real extraction (same reasoning as RMF's own
+                    // "real per-mod status pills during Extract").
+                    emitIfCurrent({ type: 'mod-started', index: index + 1, total, name: displayName });
+
+                    // Identical matching logic to the single-item route above -- same key
+                    // (modId+fileId, or an exact off-site name match), so a selection made
+                    // client-side resolves to the exact same log entry either route would have found.
+                    const entryIndex = (log.mods || []).findIndex((m) => (
+                        modId != null && fileId != null ? (m.modId === modId && m.fileId === fileId) : (m.name === name && m.modId == null && m.fileId == null)
+                    ));
+                    let result;
+                    if (entryIndex === -1) {
+                        result = { name: displayName, ok: false, error: 'Mod not found in this log.' };
+                    } else {
+                        const entry = log.mods[entryIndex];
+                        if (entry.status !== 'FAILED_MISMATCH_NOT_TOUCHED') {
+                            result = { name: entry.name, ok: false, error: `This mod's status is "${entry.status}", not FAILED_MISMATCH_NOT_TOUCHED -- refusing to touch it.` };
+                        } else if (!entry.targetFolderName) {
+                            result = { name: entry.name, ok: false, error: 'This log entry has no recorded targetFolderName -- too old a log format to resolve this way.' };
+                        } else {
+                            try {
+                                const { result: rebuildResult, archiveName } = await runner.resolveMismatchedMod({
+                                    collectionModId: log.collectionModId, stagingDir: staging, downloadsDir: downloads,
+                                    modId, fileId, name: entry.name, targetFolderName: entry.targetFolderName, resolveMode,
+                                });
+                                // Same "built fresh, not merged" reasoning as the single-item route above.
+                                const updatedEntry = {
+                                    name: entry.name, modId: entry.modId, fileId: entry.fileId,
+                                    targetFolderName: entry.targetFolderName, archiveName: archiveName || entry.archiveName,
+                                    ...rebuildResult,
+                                };
+                                log.mods[entryIndex] = updatedEntry;
+                                result = { name: entry.name, ok: true, entry: updatedEntry };
+                            } catch (e) {
+                                result = { name: entry.name, ok: false, error: e.message };
+                            }
+                        }
+                    }
+                    results.push(result);
+                    emitIfCurrent({ type: 'mod-resolved', index: index + 1, total, name: result.name, ok: result.ok, error: result.ok ? undefined : result.error });
+                }
+                log.summary = runner.summarize(log.mods);
+                runner.writeLog(full, log);
+                emitIfCurrent({ type: 'batch-complete', done: true, ok: true, results, summary: log.summary });
+            } catch (e) {
+                emitIfCurrent({ type: 'batch-error', done: true, error: true, message: e.message });
+            }
+        })();
+    });
+
     // "Retry Extraction" -- a FAILED_EXTRACTION_NOT_TOUCHED/NO_PRIOR_DATA mod whose failure wasn't
     // archive-not-found (that gets Retry Download/Import instead -- see isArchiveMissingStatus()
     // above), OR a FAILED_FOLDER_LOCKED_NOT_TOUCHED mod (the swap itself couldn't get past a
@@ -1757,7 +2468,16 @@ applyStatusFilter(new Set(initialStatusParam ? initialStatusParam.split(',') : [
         ));
         if (entryIndex === -1) return res.status(404).json({ error: 'Mod not found in this log.' });
         const entry = log.mods[entryIndex];
-        if (entry.status !== 'SKIP_OPEN_FOMOD') {
+        // Widened (queue: rebuild-collection-log-fomod-installer) beyond just SKIP_OPEN_FOMOD -- a
+        // FAILED_EXTRACTION_NOT_TOUCHED/NO_PRIOR_DATA row can ALSO genuinely need a fresh FOMOD pick
+        // (classifyMod() only re-checks for a FOMOD wizard when mod.choices is absent; once
+        // collection.json has some recorded-but-wrong choices, a plain retry can never fix it, only
+        // a real re-pick can). detectFomodChoiceNeed() doesn't care which of these statuses got it
+        // here -- it just re-derives from the archive fresh either way -- so this widening is safe:
+        // a row that turns out not to be FOMOD-related after all still gets the honest 409
+        // not-a-fomod refusal below, same as it always has for a genuine SKIP_OPEN_FOMOD row whose
+        // archive changed.
+        if (entry.status !== 'SKIP_OPEN_FOMOD' && entry.status !== 'FAILED_EXTRACTION_NOT_TOUCHED' && entry.status !== 'FAILED_EXTRACTION_NO_PRIOR_DATA') {
             return res.status(400).json({ error: `This mod's status is "${entry.status}" -- not an Open FOMOD.` });
         }
         try {
@@ -1807,7 +2527,11 @@ applyStatusFilter(new Set(initialStatusParam ? initialStatusParam.split(',') : [
         ));
         if (entryIndex === -1) return res.status(404).json({ error: 'Mod not found in this log.' });
         const entry = log.mods[entryIndex];
-        if (entry.status !== 'SKIP_OPEN_FOMOD') {
+        // Same widening as /fomod-picker-data above, same reasoning -- installOpenFomodMod() itself
+        // re-derives everything fresh from the archive and already throws NOT_A_FOMOD -> 409 (see
+        // the catch below) for a row that turns out not to be FOMOD-related, so no separate pre-
+        // check is needed beyond accepting these two additional statuses here.
+        if (entry.status !== 'SKIP_OPEN_FOMOD' && entry.status !== 'FAILED_EXTRACTION_NOT_TOUCHED' && entry.status !== 'FAILED_EXTRACTION_NO_PRIOR_DATA') {
             return res.status(400).json({ error: `This mod's status is "${entry.status}" -- refusing to touch it.` });
         }
         try {
@@ -1837,8 +2561,8 @@ applyStatusFilter(new Set(initialStatusParam ? initialStatusParam.split(',') : [
             if (outcomeKind === 'REBUILD') {
                 (async () => {
                     try {
-                        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-                        const saveResult = await savePicksToVortex(installedMod, installedChoices, { helperAvailable });
+                        const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+                        const saveResult = await savePicksToVortex(installedMod, installedChoices, { bridgeAvailable });
                         if (saveResult.saved) {
                             console.log(`[rebuild-routes] Saved fresh FOMOD picks to Vortex's own live state for "${entry.name}" (vortexModId ${saveResult.vortexModId}).`);
                         } else {
@@ -2084,17 +2808,12 @@ applyStatusFilter(new Set(initialStatusParam ? initialStatusParam.split(',') : [
     });
 
     // Trusted-localhost-only convenience (never exposed off loopback) -- reveals a path in
-    // Explorer from the summary view. explorer.exe has a well-known, non-standard command-line
-    // parser: spawning it with an array arg (`['/select,' + path]`) lets Node's own Windows argv
-    // quoting wrap the ENTIRE "/select,<path>" token in quotes whenever the path has a space --
-    // which explorer.exe's parser then fails to recognize as the /select switch at all, silently
-    // falling back to its default starting folder. Confirmed live: it opened the user's OneDrive
-    // Documents folder instead of the real target every time. The documented, confirmed-working
-    // fix is a raw shell command string with quotes ONLY around the path (not the /select, prefix).
+    // Explorer from the summary view. No shell: lib/open-in-explorer.js passes the path as an
+    // argument and refuses a path holding a quote or line break (see its header).
     router.post('/reveal', (req, res) => {
         const { targetPath } = req.body || {};
         if (!targetPath || typeof targetPath !== 'string') return res.status(400).json({ error: 'targetPath is required.' });
-        spawn(`explorer.exe /select,"${targetPath}"`, { shell: true, detached: true, stdio: 'ignore' }).unref();
+        try { revealInExplorer(targetPath); } catch (e) { return res.status(400).json({ error: e.message }); }
         res.json({ ok: true });
     });
 

@@ -47,7 +47,7 @@ function chHandleError(e, retryFn) {
     return;
   }
   if (e.status === 409 && e.body?.error === 'vortex-running') {
-    // Every Cycle Helper vortex-running gate is the helper-unreachable-while-running case, never a
+    // Every Cycle Helper vortex-running gate is the bridge-unreachable-while-running case, never a
     // genuine "must be closed" one -- see cycle-helper-routes.js's own gate comments. Same
     // busy-detection pattern rmfHandleError/ucv2HandleError already established (2026-09-02).
     const isBusy = /currently busy/i.test(e.body?.message || '');
@@ -285,7 +285,7 @@ async function chCheckScanFreshnessAsync() {
 // as soon as it's genuinely running server-side; GET /scan/events streams a live tick every second
 // while it's in flight (cycle-helper-routes.js's own tickingPhase) plus the final 'done' event
 // carrying the exact same result shape this function used to get back directly. No real per-item
-// count exists here (a single opaque helperClient/isolated-worker call), so chLoading's text ticks
+// count exists here (a single opaque bridgeClient/isolated-worker call), so chLoading's text ticks
 // with real elapsed time instead of a percentage -- same shape as Rules Generator's own Analyze
 // (rules-generator-app.js's rgAnalyze/rgHandleAnalyzeEvent), reused here rather than reinvented.
 let chScanEventSource = null;

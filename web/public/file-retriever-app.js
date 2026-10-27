@@ -262,7 +262,7 @@ function frFileRowHtml(f) {
   const checked = frState.selected.has(f.fileId);
   const name = escHtmlFr(f.name);
   return `<tr class="${checked ? 'selected' : ''}">
-    <td class="col-check"><input type="checkbox" data-file-id="${f.fileId}" ${checked ? 'checked' : ''}></td>
+    <td class="col-check"><input type="checkbox" data-file-id="${escHtmlFr(f.fileId)}" ${checked ? 'checked' : ''}></td>
     <td class="file-row__name" title="${name}">${name}</td>
     <td class="file-row__date">${escHtmlFr(frFormatDate(f.uploadedTime))}</td>
     <td class="file-row__size">${escHtmlFr(frFormatSize(f.sizeKb))}</td>

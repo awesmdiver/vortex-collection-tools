@@ -41,6 +41,7 @@ A collection of focused utilities rounds out the workspace — clearing leftover
 
 * **Rebuild Collection**: Rebuilding massive collections inside Vortex takes hours and can chew through your system RAM. This tool extracts the same files — including your FOMOD choices — outside of Vortex at top speed. Turn on parallel extraction in Settings to unpack up to 8 mods at once and cut rebuild times by 2–3x. You can pause and resume whenever you want without re-extracting completed mods, and Nexus Premium users can download missing archives automatically. If a mod's FOMOD choices were never saved, click **Install** to pick them right here instead of reinstalling it in Vortex. It also leaves `.ghost` files (Vortex's markers for disabled files) intact so your custom file tweaks survive.
 * **Update Collection**: Updating a collection in Vortex normally wipes your Ignored and Disabled mod choices, forcing you to hunt down and re-disable dozens of mods by hand. This tool snapshots your choices before the update and restores them automatically once it's done. A step-by-step wizard previews every single change before applying it.
+* **Removed From Main**: When a main collection drops a mod, the upgraded mod you matched to it gets left behind, cluttering your load order. This tool lists the mods main dropped next to your matching mods, lets you untick any you want to keep, and deletes the rest from Vortex and from your collection. It makes a backup of your collection first, and nothing is deleted until you press the button.
 * **Rules Generator**: Collection updates often break custom "load after" rules when mods get renamed or replaced. This tool matches your old rules to their updated equivalents — even matching rules that point to older version numbers — so you don't have to rebuild your rule list from scratch.
 * **Merge Plugins**: Skyrim's plugin limit fills up fast. This tool bundles new-content plugins from your collections into a single merged file, ESL-flagging the result whenever possible (costing 0 load-order slots) while leaving your original files safe to disable. You can review all contents before merging.
 * **Safe Collection Removal**: Uninstalling a collection in Vortex can easily wipe out mods that your other collections still rely on. This tool scans your setup first, flags every shared mod, and lets you choose what to keep and what to delete — so you can clean up old collections without breaking anything else.
@@ -86,6 +87,7 @@ Every tool above sticks to its plain, functional name across this README — her
 | :--- | :--- | :--- | :--- |
 | ⚡ Rebuild Collection | ✨ Restoration | 💧 Project Purity | 🚀 Grav Drive Jump |
 | 🔄 Update Collection | 📯 The Herald | 🧠 Memory Den | 📡 Memory Fragment |
+| 🍂 Removed From Main | 🍂 The Unbinding | 🧹 RobCo Redundancy Purge | 🛰️ Stage Jettison |
 | 🔗 Rules Generator | ✒️ The Scribe | 📡 Relay Tower Network | 🌌 Quantum Entanglement |
 | 🧬 Merge Plugins | 🔨 The Forge | ⚙️ Institute Sub-Assembly | 🛰️ Staryard Assembly Line |
 | 📦 Safe Collection Removal | 📦 The Quartermaster | 📦 Overseer's Inventory Quarantine | 📦 Neon Red-Tape Audit |
@@ -124,26 +126,26 @@ When finished, stop the server by running `stop.bat`, pressing `Ctrl+C` in the c
 
 ---
 
-## 🧩 Install the Helper (Optional, Recommended)
+## 🧩 Install the Vortex Bridge (Optional, Recommended)
 
-If you prefer to close Vortex when prompted, you can skip this step — all core features work without it. Installing the Helper allows several tools to run with Vortex left open instead (see the table under **Important Notes** for the full breakdown).
+If you prefer to close Vortex when prompted, you can skip this step — all core features work without it. Installing the Vortex Bridge allows several tools to run with Vortex left open instead (see the table under **Important Notes** for the full breakdown).
 
 **Method 1: Through Vortex (Easiest)**
 
 1. In Vortex, go to **Settings** > **Extensions**.
-2. Click **Install from File** and choose `vortex-collection-helper.zip` from the release package.
+2. Click **Install from File** and choose `vortex-bridge.zip` from the release package.
 3. Restart Vortex.
 
 **Method 2: Manual Installation**
 
-1. Extract `vortex-collection-helper.zip` from the release package into its own folder.
-2. Copy the `vortex-collection-helper` folder into `%APPDATA%\Vortex\plugins\`.
+1. Extract `vortex-bridge.zip` from the release package into its own folder.
+2. Copy the `vortex-bridge` folder into `%APPDATA%\Vortex\plugins\`.
 3. Restart Vortex.
 
-Once installed, supported tools detect the Helper automatically — no app restart needed.
+Once installed, supported tools detect the Vortex Bridge automatically — no app restart needed.
 
 > [!NOTE]
-> The Helper only reads active Vortex data and applies rule changes through Vortex's native actions — exactly like making manual edits in Vortex's Conflict Editor.
+> The Vortex Bridge only reads active Vortex data and applies rule changes through Vortex's native actions — exactly like making manual edits in Vortex's Conflict Editor.
 
 ---
 
@@ -152,12 +154,12 @@ Once installed, supported tools detect the Helper automatically — no app resta
 > [!WARNING]
 > **Does this need Vortex closed?** The app checks and prompts you right away if it does — you don't need to memorize this table, but here is the reference:
 >
-> | Tool / step | Without the Helper | With the Helper installed |
+> | Tool / step | Without the Vortex Bridge | With the Vortex Bridge installed |
 > | :--- | :--- | :--- |
 > | Reports, Missing Masters' scan, Mod Scrub's exclude list, Archive Finder | Works with Vortex open | Works with Vortex open |
 > | Rebuild Collection, Merge Plugins | **Vortex must be closed** | **Vortex must be closed** |
 > | Mod Scrub's scan, Missing Masters' **Rebuild This Mod**, Rebuild Missing Files, Cycle Helper, Rules Generator, Update Collection's review steps | **Vortex must be closed** | Works with Vortex open |
-> | Clear Update Flags, PGPatcher Load Order Editor, Safe Collection Removal, Update Collection's **Apply** step | **Requires the Helper — no offline path** | Works with Vortex open |
+> | Clear Update Flags, PGPatcher Load Order Editor, Safe Collection Removal, Update Collection's **Apply** step | **Requires the Vortex Bridge — no offline path** | Works with Vortex open |
 
 > [!NOTE]
 > After rebuilding a collection, Vortex may show an **"External Changes"** prompt when you re-open it. This is expected — choose **"Use newer file"** or **"Save all changes"**.

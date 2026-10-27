@@ -21,7 +21,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const express = require('express');
 const { createSseSession } = require('./sse-session');
-const helperClient = require('../lib/vortex-helper-client');
+const bridgeClient = require('../lib/vortex-bridge-client');
 const syncLib = require('../lib/vortex-sync/lib');
 const { pickOpenFileAsync } = require('../lib/vortex-sync/win-dialog');
 
@@ -29,18 +29,14 @@ const { pickOpenFileAsync } = require('../lib/vortex-sync/win-dialog');
 // own "Bundle pgtools.exe" step stages it at tools/pgtools/pgtools.exe alongside its real runtime
 // DLLs/resource folders, so a downloaded release always runs against the exact pgtools build it was
 // tested with, with no PGPatcher GUI install required -- see requirePgtoolsInstalled's own comment
-// for what that install check actually means now). The old hardcoded sibling-repo dev-build path
-// (skyrim-modding/pgpatcher-fork's own build/bin/) is kept as a local-dev-only fallback, checked
-// AFTER the bundled path -- this project's own tools/ folder already holds a couple of other
-// gitignored, manually-placed dev tools (bsa-browser-cli/, oxipng/) on exactly this pattern, so
-// nothing about keeping it is new. Without it, every dev session actively working on THIS project
-// would need to manually populate tools/pgtools/ first before PGPatcher features work locally at
-// all; keeping it costs nothing when the file isn't there (existsSync just returns false and moves
-// on to the next candidate).
+// for what that install check actually means now). A developer's own build can be used
+// through the VCT_PGTOOLS_EXE environment variable (checked after the bundled path, never set on a
+// player's PC); no folder on the maintainer's machine is baked into the code.
 const PGTOOLS_EXE_CANDIDATES = [
     path.join(__dirname, '..', 'tools', 'pgtools', 'pgtools.exe'),
-    'F:\\Claude Workspace\\skyrim-modding\\pgpatcher-fork\\build\\bin\\pgtools.exe',
-];
+    // Developer override (never set on a player's PC): VCT_PGTOOLS_EXE points at a local dev build.
+    process.env.VCT_PGTOOLS_EXE,
+].filter(Boolean);
 function resolvePgtoolsExe() {
     for (const p of PGTOOLS_EXE_CANDIDATES) {
         if (fs.existsSync(p)) return p;
@@ -286,13 +282,13 @@ function requirePgtoolsInstalled(res) {
 //   different problem. "Go install PGPatcher" would be actively wrong advice here; the fix is
 //   re-saving from PGPatcher's own Settings dialog, so this gets its own distinct message and no
 //   download links.
-// Gate 1 for every route that genuinely needs a live Helper (queue: pgpatcher-helper-gate-on-start).
+// Gate 1 for every route that genuinely needs a live Vortex Bridge (queue: pgpatcher-bridge-gate-on-start).
 // Same write-the-response-and-return-falsy shape as requireConfigured/requirePgtoolsInstalled above,
-// so a caller reads `if (!(await requireHelperAvailable(res))) return;` and nothing else.
+// so a caller reads `if (!(await requireBridgeAvailable(res))) return;` and nothing else.
 //
 // WHY THIS HAS TO COME FIRST, and why it is a SEPARATE gate rather than better wording on the ones
 // below it. /load and /build both open with a DynDoLOD-active gate whose disable goes through the
-// Helper. With Vortex closed that disable simply fails, and the route answered with
+// Vortex Bridge. With Vortex closed that disable simply fails, and the route answered with
 // DYNDOLOD_AUTO_DISABLE_FAILED_MESSAGE -- "DynDoLOD.esp is active and couldn't be disabled
 // automatically, disable it yourself in Vortex first." Every word of that is true, and it is the
 // right message for a real disable failure. It was just the ONLY thing said when the actual problem
@@ -300,18 +296,18 @@ function requirePgtoolsInstalled(res) {
 // standing in for the other. Confirmed live.
 //
 // With this in front, those messages are untouched and now only ever describe what they actually
-// mean: by the time either gate runs, the Helper is known to be reachable, so a failure there is a
+// mean: by the time either gate runs, the Vortex Bridge is known to be reachable, so a failure there is a
 // real disable failure and nothing else.
 //
-// 409 + 'helper-unavailable' is the standardized shape (DESIGN.md, "Helper-unavailable messaging"),
-// the same one clear-update-flags-routes.js's own requireHelper and this file's /deploy-all return,
-// and the frontend's pgpShowHelperUnavailable renders it.
-async function requireHelperAvailable(res) {
-    const available = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
+// 409 + 'bridge-unavailable' is the standardized shape (DESIGN.md, "Bridge-unavailable messaging"),
+// the same one clear-update-flags-routes.js's own requireBridge and this file's /deploy-all return,
+// and the frontend's pgpShowBridgeUnavailable renders it.
+async function requireBridgeAvailable(res) {
+    const available = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
     if (!available) {
         res.status(409).json({
-            error: 'helper-unavailable',
-            message: 'The Vortex Collection Helper extension must be reachable (Vortex genuinely open) to use this tool.',
+            error: 'bridge-unavailable',
+            message: 'The Vortex Bridge extension must be reachable (Vortex genuinely open) to use this tool.',
         });
         return false;
     }
@@ -391,8 +387,8 @@ function isDynDoLODActive(skyrimDataDir) {
 // offline too, not just the one plugin.
 //
 // This version targets the PLUGIN directly -- Vortex's own `state.loadOrder['dyndolod.esp'].enabled`
-// flag, via the Vortex Collection Helper's `POST /plugins/:pluginName/set-enabled`
-// (lib/vortex-helper-client.js's setPluginEnabled). Live-verified round-trip against the director's
+// flag, via the Vortex Bridge's `POST /plugins/:pluginName/set-enabled`
+// (lib/vortex-bridge-client.js's setPluginEnabled). Live-verified round-trip against the director's
 // own real Vortex (2026-08-21): the dispatch flips the flag instantly and precisely, visible
 // immediately in Vortex's own Plugins tab, with zero effect on any mod's other files -- no mod
 // resolution needed at all, so the whole unreliable "which mod currently owns this" problem is gone
@@ -441,13 +437,13 @@ const DYNDOLOD_REENABLE_FAILED_NOTE = " DynDoLOD.esp could not be re-enabled aut
 async function runFullDeployWithProgress(emitIfCurrent, phaseLabel) {
     emitIfCurrent({ type: 'phase', message: phaseLabel });
     const pollInterval = setInterval(async () => {
-        const progress = await helperClient.getDeployAllProgress();
+        const progress = await bridgeClient.getDeployAllProgress();
         if (progress && typeof progress.percent === 'number') {
             emitIfCurrent({ type: 'progress', message: phaseLabel, current: Math.round(progress.percent), total: 100 });
         }
     }, 1000);
     try {
-        return await helperClient.deployAllMods();
+        return await bridgeClient.deployAllMods();
     } finally {
         clearInterval(pollInterval);
     }
@@ -464,9 +460,9 @@ async function runFullDeployWithProgress(emitIfCurrent, phaseLabel) {
 // fact -- both Vortex's own live Redux state and plugins.txt on disk correctly showed the new value),
 // but the write hadn't landed within the old 3s ceiling because Vortex was busy with its own
 // background work at that moment ("Checking archives", director's own live report) -- everything
-// running on Vortex's single main thread, this project's own HTTP calls to the Helper included, can
+// running on Vortex's single main thread, this project's own HTTP calls to the Vortex Bridge included, can
 // genuinely stall while Vortex is doing something else. Same class of problem as the already-
-// documented ~83s deploy-mods block (vortex-helper-client.js's own header comment) -- this poll is a
+// documented ~83s deploy-mods block (vortex-bridge-client.js's own header comment) -- this poll is a
 // much cheaper write than a full deploy, but the same "Vortex's main thread can be busy" risk applies.
 // 15s costs nothing in the normal case (the poll still resolves in ~200ms whenever Vortex isn't busy)
 // but gives real headroom for exactly this scenario before falling back to
@@ -488,7 +484,7 @@ async function waitForDyndolodPluginsTxtState(skyrimDataDir, expectedActive, tim
 async function reenableDyndolod(cfg, disabledThisRequest, emitIfCurrent) {
     if (!disabledThisRequest) return true;
     try {
-        const enabledOk = await helperClient.setPluginEnabled(DYNDOLOD_PLUGIN_NAME, true);
+        const enabledOk = await bridgeClient.setPluginEnabled(DYNDOLOD_PLUGIN_NAME, true);
         if (!enabledOk) return false;
         return await waitForDyndolodPluginsTxtState(cfg.source, true);
     } catch (e) {
@@ -534,7 +530,7 @@ function isPgpatcherOutputDeployed(skyrimDataDir) {
 // calling this again. Same customFileName/modName/name fallback chain already established across
 // this codebase for "Vortex's own display name for a mod" (e.g. save-cleaner-routes.js).
 async function buildVortexCommonNameMap() {
-    const allMods = await helperClient.getAllMods();
+    const allMods = await bridgeClient.getAllMods();
     if (!allMods || !allMods.mods) return {};
     const vortexSuffixRe = /-[0-9]+-.*/;
     const names = {};
@@ -551,7 +547,7 @@ async function buildVortexCommonNameMap() {
 
 async function resolveOutputMod(outputDir) {
     const folderName = path.basename(outputDir);
-    const allMods = await helperClient.getAllMods();
+    const allMods = await bridgeClient.getAllMods();
     if (!allMods || !allMods.mods) return null;
     const enabledSet = new Set(allMods.enabledModKeys || []);
     for (const [modId, mod] of Object.entries(allMods.mods)) {
@@ -572,7 +568,7 @@ async function resolveOutputMod(outputDir) {
 //
 // Same create-then-enable shape missing-masters-routes.js's own restore flow already uses for exactly
 // this situation (registering a locally-generated/rebuilt folder as a real Vortex mod) -- confirmed
-// against that route rather than inventing a new shape: `helperClient.createMod(folderName, {id,
+// against that route rather than inventing a new shape: `bridgeClient.createMod(folderName, {id,
 // state: 'installed', type: '', installationPath: folderName, attributes: {name, installTime}})`,
 // then `setModEnabled(folderName, true)`. Director's own call there applies here too: enabled by
 // default, since real output nobody can see isn't really finished. Called ONLY after a build has
@@ -585,7 +581,7 @@ async function ensureOutputModRegisteredAndEnabled(outputDir) {
         const resolved = await resolveOutputMod(outputDir);
         if (resolved) {
             if (resolved.enabled) return { modId: resolved.modId, justRegistered: false, enabled: true };
-            const enabledOk = await helperClient.setModEnabled(resolved.modId, true);
+            const enabledOk = await bridgeClient.setModEnabled(resolved.modId, true);
             return {
                 modId: resolved.modId, justRegistered: false, enabled: enabledOk,
                 error: enabledOk ? null : "Vortex didn't confirm the mod is enabled -- check the Mods table.",
@@ -595,11 +591,11 @@ async function ensureOutputModRegisteredAndEnabled(outputDir) {
             id: folderName, state: 'installed', type: '', installationPath: folderName,
             attributes: { name: folderName, installTime: new Date().toISOString() },
         };
-        const created = await helperClient.createMod(folderName, vortexMod);
+        const created = await bridgeClient.createMod(folderName, vortexMod);
         if (!created) {
             return { modId: folderName, justRegistered: false, enabled: false, error: "Vortex couldn't register the output as a new mod -- check Vortex's own log." };
         }
-        const enabledOk = await helperClient.setModEnabled(folderName, true);
+        const enabledOk = await bridgeClient.setModEnabled(folderName, true);
         return {
             modId: folderName, justRegistered: true, enabled: enabledOk,
             error: enabledOk ? null : "The output was registered, but Vortex didn't confirm it's enabled -- check the Mods table.",
@@ -639,7 +635,7 @@ function blockUntilOutputModConfirmed(gate, req, res) {
 // true on success, false on ANY failure.
 async function disableOutputModForRequest(modId, emitIfCurrent) {
     emitIfCurrent({ type: 'phase', message: "Disabling PGPatcher's previous output…" });
-    const disabledOk = await helperClient.setModEnabled(modId, false);
+    const disabledOk = await bridgeClient.setModEnabled(modId, false);
     if (!disabledOk) return false;
     return runFullDeployWithProgress(emitIfCurrent, "Deploying to disable PGPatcher's previous output…");
 }
@@ -784,9 +780,9 @@ function createPgpatcherRouter(config) {
         // Ranked empty (real bug found live, 2026-09-05: Save then failed with "No ranked order was
         // provided"). Checked BEFORE the real scan runs, since the scan itself never writes this file.
         const modrulesExisted = fs.existsSync(path.join(cfg.cfgDir, 'modrules.json'));
-        // Gate 1 -- before the DynDoLOD and output-mod gates below, both of which drive real Helper
-        // writes and can say nothing useful without one. See requireHelperAvailable's own comment.
-        if (!(await requireHelperAvailable(res))) return;
+        // Gate 1 -- before the DynDoLOD and output-mod gates below, both of which drive real Vortex Bridge
+        // writes and can say nothing useful without one. See requireBridgeAvailable's own comment.
+        if (!(await requireBridgeAvailable(res))) return;
 
         // Real interactive disable -> re-enable flow (2026-08-21 v3 -- see this file's own "Real
         // DynDoLOD.esp disable" section header for the full rebuild writeup: targets the plugin
@@ -803,7 +799,7 @@ function createPgpatcherRouter(config) {
             if (!(req.body && req.body.confirmDisableDyndolod)) {
                 return res.status(409).json({ error: 'dyndolod-active', message: DYNDOLOD_CONFIRM_MESSAGE, confirmDisableDyndolod: true });
             }
-            const disabledOk = await helperClient.setPluginEnabled(DYNDOLOD_PLUGIN_NAME, false);
+            const disabledOk = await bridgeClient.setPluginEnabled(DYNDOLOD_PLUGIN_NAME, false);
             const settled = disabledOk && await waitForDyndolodPluginsTxtState(cfg.source, false);
             if (!settled) {
                 return res.status(400).json({ error: 'dyndolod-disable-failed', message: DYNDOLOD_AUTO_DISABLE_FAILED_MESSAGE });
@@ -933,7 +929,7 @@ function createPgpatcherRouter(config) {
                 // is never touched; `friendlyName` is only ever an ADDITIONAL field the frontend may
                 // choose to show instead, falling back to `name` itself whenever this lookup has
                 // nothing better or isn't reachable at all. Best-effort: /load already required the
-                // Helper to be available (Gate 1 above), so this should almost always succeed here, but
+                // Vortex Bridge to be available (Gate 1 above), so this should almost always succeed here, but
                 // a failure must never fail the whole load over what's purely a cosmetic overlay.
                 try {
                     const commonNames = await buildVortexCommonNameMap();
@@ -1094,13 +1090,13 @@ function createPgpatcherRouter(config) {
         // panels deliberately never show (that's the whole point of this tool) but the SAVED FILE
         // still has to carry, to be a byte-for-byte match to what real PGPatcher would produce.
         //
-        // THIRD pass, sourced from `allModNames` instead of a live Vortex Helper call -- confirmed by
+        // THIRD pass, sourced from `allModNames` instead of a live Vortex Bridge call -- confirmed by
         // reading PGTools' own conflicts subcommand (main.cpp): it already serializes pgmm.getModsBy
         // Priority(), which is EVERY mod populateModFileMapVortex found, meshless ones included --
         // `hasMeshes`/`shaders` are just extra fields on each entry, not a pre-filter. So the frontend
         // already had this exact list in `pgpModsByName` from THIS load, no separate live call (and
         // its own "is Vortex still open" failure mode, and its own scope-matching regex) needed at
-        // all. The one prior attempt that DID call the Helper first pulled from every mod Vortex has
+        // all. The one prior attempt that DID call the Vortex Bridge first pulled from every mod Vortex has
         // ever tracked regardless of deployment state (4364 entries vs. a real 1934), then a second
         // pass filtered to `enabledModKeys` -- both problems disappear by construction using pgtools'
         // own already-correctly-scoped list instead.
@@ -1210,11 +1206,11 @@ function createPgpatcherRouter(config) {
             });
         }
 
-        // Gate 1, the twin of /load's own -- see requireHelperAvailable. Sits AFTER the no-output-dir
+        // Gate 1, the twin of /load's own -- see requireBridgeAvailable. Sits AFTER the no-output-dir
         // check just above deliberately: that one is a configuration problem this app can diagnose
         // and the user can fix with Vortex closed, so it stays the first thing reported, exactly as
         // it is today.
-        if (!(await requireHelperAvailable(res))) return;
+        if (!(await requireBridgeAvailable(res))) return;
 
         // Real interactive disable -> build -> re-enable flow (2026-08-21 v3 -- see this file's own
         // "Real DynDoLOD.esp disable" section header for the full rebuild writeup). EACH GATE NOW ACTS
@@ -1228,7 +1224,7 @@ function createPgpatcherRouter(config) {
             if (!(req.body && req.body.confirmDisableDyndolod)) {
                 return res.status(409).json({ error: 'dyndolod-active', message: DYNDOLOD_CONFIRM_MESSAGE, confirmDisableDyndolod: true });
             }
-            const disabledOk = await helperClient.setPluginEnabled(DYNDOLOD_PLUGIN_NAME, false);
+            const disabledOk = await bridgeClient.setPluginEnabled(DYNDOLOD_PLUGIN_NAME, false);
             const settled = disabledOk && await waitForDyndolodPluginsTxtState(cfg.source, false);
             if (!settled) {
                 return res.status(400).json({ error: 'dyndolod-disable-failed', message: DYNDOLOD_AUTO_DISABLE_FAILED_MESSAGE });
@@ -1511,23 +1507,23 @@ function createPgpatcherRouter(config) {
         if (deployAllInProgress) {
             return res.status(409).json({ error: 'A deploy is already in progress.' });
         }
-        // Was an inline copy of exactly this check; folded into the shared requireHelperAvailable
+        // Was an inline copy of exactly this check; folded into the shared requireBridgeAvailable
         // once /load and /build needed the same gate, so the three cannot drift into three slightly
         // different 409s. Behaviour is unchanged -- same status, same body.
-        if (!(await requireHelperAvailable(res))) return;
+        if (!(await requireBridgeAvailable(res))) return;
         deployAllInProgress = true;
         res.status(202).json({});
         (async () => {
             if (outputModPendingReenableModId) {
-                await helperClient.setModEnabled(outputModPendingReenableModId, true);
+                await bridgeClient.setModEnabled(outputModPendingReenableModId, true);
                 outputModPendingReenableModId = null;
             }
-            await helperClient.deployAllMods();
+            await bridgeClient.deployAllMods();
         })().finally(() => { deployAllInProgress = false; });
     });
 
     router.get('/deploy-all/progress', async (req, res) => {
-        const progress = await helperClient.getDeployAllProgress();
+        const progress = await bridgeClient.getDeployAllProgress();
         // getDeployAllProgress() can legitimately return null mid-deploy (a transient poll failure,
         // not evidence the deploy itself failed) -- fall back to this route's own `deployAllInProgress`
         // flag rather than reporting a false "not active".
@@ -1542,7 +1538,7 @@ function createPgpatcherRouter(config) {
     router.post('/enable-dyndolod', async (req, res) => {
         const cfg = requireConfigured(config, res);
         if (!cfg) return;
-        const enabledOk = await helperClient.setPluginEnabled(DYNDOLOD_PLUGIN_NAME, true);
+        const enabledOk = await bridgeClient.setPluginEnabled(DYNDOLOD_PLUGIN_NAME, true);
         const settled = enabledOk && await waitForDyndolodPluginsTxtState(cfg.source, true);
         if (!settled) {
             return res.status(400).json({ error: 'dyndolod-enable-failed', message: DYNDOLOD_REENABLE_FAILED_NOTE.trim() });

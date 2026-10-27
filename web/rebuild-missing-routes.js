@@ -12,9 +12,9 @@
 //
 // The scan's own file-by-file diff needs no gate at all -- it only ever reads collection.json files,
 // archive listings, and the staging folder (same reasoning as Missing Masters' own /scan). /scan DOES
-// also read Vortex's live state per collection now (Helper-first, state.v2 disk-fallback -- see that
+// also read Vortex's live state per collection now (Bridge-first, state.v2 disk-fallback -- see that
 // route's own comment, "never scan without knowing which mods are Ignored", 2026-09-14), which is why
-// /scan carries the same "Helper busy / Vortex running" 409 gate every other live-state read in this
+// /scan carries the same "Vortex Bridge busy / Vortex running" 409 gate every other live-state read in this
 // router already has (see /nexus-slug's own comment below for why that read needs the same gate).
 // /extract is one write in this router (staging folder files), gated exactly like every other
 // staging-folder write in this app. /refresh-from-nexus is the other (collection.json itself) -- see
@@ -22,7 +22,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const { openFolderInExplorer, revealInExplorer } = require('../lib/open-in-explorer');
 const express = require('express');
 
 const { listPickableCollections, scanCollections, scanOneMod, loadIgnoredAndKnownIds } = require('../lib/missing-files-scan');
@@ -35,8 +35,10 @@ const modExceptionStore = require('../lib/mod-exception-store');
 const nexusModDownload = require('../lib/nexus-mod-download');
 const nexusCollectionDownload = require('../lib/nexus-collection-download');
 const runner = require('../lib/collection-runner');
+const { pickOpenFileAsync } = require('../lib/vortex-sync/win-dialog');
 const syncLib = require('../lib/vortex-sync/lib');
-const helperClient = require('../lib/vortex-helper-client');
+const bridgeClient = require('../lib/vortex-bridge-client');
+const { withHealthCheckPaused } = require('../lib/health-check-pause');
 const appConfig = require('../lib/app-config');
 const { detectFomodChoiceNeed, buildFomodChoicesFromPicks } = require('../lib/fomod-picker-data');
 const { buildLiveIdentityIndex, resolveLiveModId, loadLiveModsData, savePicksToVortex } = require('../lib/vortex-live-fomod-choices');
@@ -122,12 +124,12 @@ function createRebuildMissingRouter(config) {
     // original two-try/catch version of this route used, not flattened into one status for every
     // failure.
     //
-    // Helper-first, state.v2-fallback (2026-08-21) -- same treatment Rebuild Collection just got
+    // Bridge-first, state.v2-fallback (2026-08-21) -- same treatment Rebuild Collection just got
     // (rebuild-collection-vortex-helper-support, same session), reusing its own brand-new
-    // `runner.loadSyncStateViaHelper` directly rather than introducing a second, parallel mechanism:
+    // `runner.loadSyncStateViaBridge` directly rather than introducing a second, parallel mechanism:
     // that function already reconstructs `loadSyncState`'s identical output shape (collectionSlug
-    // included) from one live `helperClient.getAllMods()` call, with zero state.v2 access. Judgment
-    // call: the task's own reference was `update-collection-v2-runner.js`'s `resolveNexusInfoViaHelper`
+    // included) from one live `bridgeClient.getAllMods()` call, with zero state.v2 access. Judgment
+    // call: the task's own reference was `update-collection-v2-runner.js`'s `resolveNexusInfoViaBridge`
     // (a different, unexported, multi-modId-shaped helper for a different caller's own needs) -- since
     // this route already consumes `loadSyncState`'s exact result shape via `syncState.collectionSlug`,
     // reusing collection-runner.js's own sibling function is the smaller, more consistent change: no
@@ -141,10 +143,10 @@ function createRebuildMissingRouter(config) {
             e.kind = 'bad-collection';
             throw e;
         }
-        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-        const syncState = helperAvailable
-            ? await runner.loadSyncStateViaHelper({
-                helperClient, syncLib, collectionModId, collection: collectionInfo.collection, stagingDir: staging,
+        const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+        const syncState = bridgeAvailable
+            ? await runner.loadSyncStateViaBridge({
+                bridgeClient, syncLib, collectionModId, collection: collectionInfo.collection, stagingDir: staging,
             })
             : await runner.loadSyncState({
                 state, collectionModId, collection: collectionInfo.collection, stagingDir: staging,
@@ -175,11 +177,11 @@ function createRebuildMissingRouter(config) {
         // bolt it on piecemeal") since this task ALSO adds a second, bigger Vortex-DB read below --
         // same gate, same message shape as rebuild-routes.js's own /plan and /vortex-data/refresh.
         //
-        // Helper-first (2026-08-21): skip this gate entirely once the Helper covers the read --
-        // resolveSlugForCollection's own Helper-vs-state.v2 branch makes the gate genuinely
-        // unnecessary in that case. Untouched (same message, same shape) for the no-Helper fallback.
-        if (!(await helperClient.checkHelperAvailable(syncLib.GAME_ID)) && syncLib.isVortexRunning()) {
-            // "Currently busy", not "close it" -- this gate only ever trips when the Helper (which
+        // Bridge-first (2026-08-21): skip this gate entirely once the Vortex Bridge covers the read --
+        // resolveSlugForCollection's own Bridge-vs-state.v2 branch makes the gate genuinely
+        // unnecessary in that case. Untouched (same message, same shape) for the no-Bridge fallback.
+        if (!(await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID)) && syncLib.isVortexRunning()) {
+            // "Currently busy", not "close it" -- this gate only ever trips when the Vortex Bridge (which
             // this router always prefers) didn't answer while Vortex is running; there's no genuine
             // "must be closed" path here. Same wording/reasoning update-collection-v2-runner.js's own
             // checkForUpdates/reviewUpdate fallback already established for the identical condition
@@ -228,12 +230,12 @@ function createRebuildMissingRouter(config) {
     // per-collection batch.
     router.post('/load-vortex-data', async (req, res) => {
         if (!requireConfigured(res)) return;
-        // Helper-first (2026-08-21, same treatment as /nexus-slug's own gate above): skip this check
-        // entirely once the Helper covers the read. Untouched (same message, same shape) for the
-        // no-Helper fallback.
-        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-        if (!helperAvailable && syncLib.isVortexRunning()) {
-            // "Currently busy", not "close it" -- this gate only ever trips when the Helper (which
+        // Bridge-first (2026-08-21, same treatment as /nexus-slug's own gate above): skip this check
+        // entirely once the Vortex Bridge covers the read. Untouched (same message, same shape) for the
+        // no-Bridge fallback.
+        const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+        if (!bridgeAvailable && syncLib.isVortexRunning()) {
+            // "Currently busy", not "close it" -- this gate only ever trips when the Vortex Bridge (which
             // this router always prefers) didn't answer while Vortex is running; there's no genuine
             // "must be closed" path here. Same wording/reasoning update-collection-v2-runner.js's own
             // checkForUpdates/reviewUpdate fallback already established for the identical condition
@@ -242,8 +244,8 @@ function createRebuildMissingRouter(config) {
             return res.status(409).json({ error: 'vortex-running', message: 'Vortex is currently busy. Please wait for Vortex to finish its current activity, then try again.' });
         }
         try {
-            const { workshopOnlyCollections: found } = helperAvailable
-                ? await runner.loadSyncStateBatchViaHelper({ helperClient, syncLib, entries: [], stagingDir: staging })
+            const { workshopOnlyCollections: found } = bridgeAvailable
+                ? await runner.loadSyncStateBatchViaBridge({ bridgeClient, syncLib, entries: [], stagingDir: staging })
                 : await runner.loadSyncStateBatch({ state, entries: [], stagingDir: staging });
             // Dedupe against collections that already have a local collection.json -- those already
             // show up in the normal "workshop" group above (listPickableCollections' own filesystem
@@ -396,20 +398,20 @@ function createRebuildMissingRouter(config) {
         const refreshFirst = Array.isArray(req.body?.refreshFirst) ? req.body.refreshFirst : [];
         if (collectionModIds.length === 0) return res.status(400).json({ error: 'Pick at least one collection to check.' });
         if (scanSession.isActive()) return res.status(409).json({ error: 'A scan is already in progress.' });
-        // Helper-first (2026-08-21, same treatment as /nexus-slug's own gate above) -- BOTH real
-        // state.v2 dependencies inside this scan are Helper-capable now, not just refreshFirst's own
-        // per-collection slug lookups (resolveSlugForCollection, already Helper-aware): the
-        // ignored/knownVortexModIds loop below also gets a Helper path (runner.loadSyncStateViaHelper),
+        // Bridge-first (2026-08-21, same treatment as /nexus-slug's own gate above) -- BOTH real
+        // state.v2 dependencies inside this scan are Bridge-capable now, not just refreshFirst's own
+        // per-collection slug lookups (resolveSlugForCollection, already Bridge-aware): the
+        // ignored/knownVortexModIds loop below also gets a Vortex Bridge path (runner.loadSyncStateViaBridge),
         // falling back to a real state.v2 disk read (runner.loadSyncState) rather than sync-runner.js's
-        // old listIgnoredMods, which had no Helper equivalent and no knownVortexModIds of its own. A
+        // old listIgnoredMods, which had no Vortex Bridge equivalent and no knownVortexModIds of its own. A
         // read failure there no longer fails open (silently treating every mod as not-Ignored) -- it
         // excludes that one collection from the scan and reports it as its own failure instead (see
         // that loop's own comment, "never scan without knowing which mods are Ignored", 2026-09-14).
-        // This outer 409 gate still matters: without it, the Helper-unavailable branch could try to
+        // This outer 409 gate still matters: without it, the Bridge-unavailable branch could try to
         // open state.v2 while Vortex is concurrently writing it.
-        const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-        if (!helperAvailable && syncLib.isVortexRunning()) {
-            // "Currently busy", not "close it" -- this gate only ever trips when the Helper (which
+        const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+        if (!bridgeAvailable && syncLib.isVortexRunning()) {
+            // "Currently busy", not "close it" -- this gate only ever trips when the Vortex Bridge (which
             // this router always prefers) didn't answer while Vortex is running; there's no genuine
             // "must be closed" path here. Same wording/reasoning update-collection-v2-runner.js's own
             // checkForUpdates/reviewUpdate fallback already established for the identical condition
@@ -453,8 +455,8 @@ function createRebuildMissingRouter(config) {
                 // resolveSlugForCollection above) since the "isolate the collections that failed"
                 // behavior below is genuinely batch/RMF-specific, not something Rebuild Collection's
                 // own single-collection computePlan() needs.
-                const { ignoredMatchers, knownVortexModIdsByCollection, unreadableCollections } =
-                    await loadIgnoredAndKnownIds(collectionModIds, { stagingDir: staging, state, helperAvailable });
+                const { ignoredMatchers, knownVortexModIdsByCollection, otherVersionsByModIdByCollection, unreadableCollections } =
+                    await loadIgnoredAndKnownIds(collectionModIds, { stagingDir: staging, state, bridgeAvailable });
                 for (const [collectionModId, message] of unreadableCollections) {
                     console.error(`[rebuild-missing-routes] /scan: could not read Vortex's mod data for "${collectionModId}" -- excluding it from this scan rather than guessing: ${message}`);
                 }
@@ -481,7 +483,7 @@ function createRebuildMissingRouter(config) {
 
                 const collectionResults = await scanCollections(scannableCollectionIds, {
                     stagingDir: staging, downloadsDir: downloads, sevenZipExe, ignoredMatchers, exceptionMatcher,
-                    knownVortexModIdsByCollection, helperAvailable,
+                    knownVortexModIdsByCollection, otherVersionsByModIdByCollection, bridgeAvailable,
                     onProgress: (p) => emitIfCurrent({ type: 'mod-scanned', ...p }),
                 });
                 // Add the excluded collections back into the report, in the SAME {collectionModId,
@@ -569,9 +571,10 @@ function createRebuildMissingRouter(config) {
                 const statColls = collectionResults.filter((c) => !c.error).length;
                 const statMods = collectionResults.reduce((n, c) => n + (c.modsWithMissing?.length || 0), 0);
                 const statFiles = collectionResults.reduce((n, c) => n + (c.modsWithMissing || []).reduce((m, mod) => m + mod.missing.length, 0), 0);
+                const statOptionalSkipped = collectionResults.reduce((n, c) => n + (c.optionalSkipped || 0), 0);
                 emitIfCurrent({
                     type: 'scan-complete', done: true, collectionResults, refreshFailures, archiveAutoDownload,
-                    stats: { collectionsChecked: statColls, modsWithMissing: statMods, filesMissing: statFiles },
+                    stats: { collectionsChecked: statColls, modsWithMissing: statMods, filesMissing: statFiles, optionalSkipped: statOptionalSkipped },
                 });
             } catch (e) {
                 emitIfCurrent({ type: 'scan-error', done: true, error: true, message: e.message });
@@ -591,6 +594,20 @@ function createRebuildMissingRouter(config) {
     // that Vortex's installer strips on install). lib/extract-resolved-files.js's own
     // extractResolvedFiles needs the real SOURCE path to find the member at all -- the exact same
     // shared scratch-dir-then-copy Rebuild Collection's own extract-mod.js uses for a real rebuild.
+    //
+    // `stillMissing` on the RETURN value (2026-09-16, "a row that's actually already fixed stays
+    // stuck showing N missing forever") is the authoritative answer to "which of `files`' own
+    // destinations are still actually missing, right now, after this call" -- every ok:true branch
+    // below sets it. web/public/rebuild-missing-app.js's rmfApplyExtractResults used to INFER this
+    // from `extracted` instead (row.missing minus whatever this call's own `extracted` list named),
+    // which is wrong the moment `extracted` is empty for a reason other than "nothing was extracted
+    // because extraction failed" -- the "already fixed" branch just below always returns an empty
+    // `extracted` BY DESIGN, since nothing needed copying, so that inference silently left an
+    // already-resolved row's `missing` list untouched forever. Returning the real post-call answer
+    // here, instead of making the client re-derive it, closes the whole class: any future reason a
+    // file could be missing-then-not-missing for a reason other than THIS call's own extraction
+    // (already fixed, fixed by something else, a ghost file appearing) is handled the same correct
+    // way with no further client-side changes.
     async function extractOneMod(item) {
         const { name, targetFolderName, archivePath, files } = item || {};
         if (!targetFolderName || !archivePath || !Array.isArray(files) || files.length === 0) {
@@ -606,7 +623,7 @@ function createRebuildMissingRouter(config) {
         // present ghost, silently un-disabling the user's own Vortex choice.
         const stillMissing = files.filter((f) => !existsPlainOrGhosted(stagingModDir, f.destination));
         if (stillMissing.length === 0) {
-            return { name, ok: true, extracted: [], note: 'Already fixed -- nothing was actually missing anymore.' };
+            return { name, ok: true, extracted: [], stillMissing: [], note: 'Already fixed -- nothing was actually missing anymore.' };
         }
         // Shared scratch-extract-then-copy (2026-09-14, "share one install and extraction engine")
         // -- used to run its own separate copy of this exact sequence, scratching under os.tmpdir()
@@ -621,7 +638,12 @@ function createRebuildMissingRouter(config) {
                 .map((f) => f.destination);
             const reallyThere = stillMissing.filter((f) => !skippedDestinations.includes(f.destination)).map((f) => f.destination);
             return {
-                name, ok: skippedDestinations.length === 0, extracted: reallyThere,
+                // skippedDestinations doubles as `stillMissing` here -- it's exactly "the destinations
+                // this call attempted to fix but couldn't find in the archive," i.e. still missing
+                // right now. Any destination in the ORIGINAL `files` that wasn't in `stillMissing` to
+                // begin with was already present before this call even started, so it's correctly
+                // absent from both `extracted` and this list either way.
+                name, ok: skippedDestinations.length === 0, extracted: reallyThere, stillMissing: skippedDestinations,
                 error: skippedDestinations.length > 0 ? `${skippedDestinations.length} file(s) were not found inside the archive: ${skippedDestinations.join(', ')}` : undefined,
             };
         } catch (e) {
@@ -662,7 +684,7 @@ function createRebuildMissingRouter(config) {
             if (extractSession.get() === mySession) extractSession.emit(event);
         };
 
-        (async () => {
+        (async () => withHealthCheckPaused(async () => {
             try {
                 const results = [];
                 // "Last dealt with" (queue: rebuild-missing-last-fixed) -- collected as a Set so a
@@ -725,7 +747,7 @@ function createRebuildMissingRouter(config) {
             } catch (e) {
                 emitIfCurrent({ type: 'extract-error', done: true, error: true, message: e.message });
             }
-        })();
+        }, { onPaused: (line) => console.log(`[rebuild-missing-routes] ${line}`), onRestoreFailed: (line) => console.warn(`[rebuild-missing-routes] ${line}`) }))();
     });
 
     // Resolves a mod entry from a collection and does the real Nexus download for it (Premium-only,
@@ -976,8 +998,8 @@ function createRebuildMissingRouter(config) {
             // response -- Express throws ERR_HTTP_HEADERS_SENT for exactly that.
             if (outcomeKind === 'REBUILD') {
                 try {
-                    const helperAvailable = await helperClient.checkHelperAvailable(syncLib.GAME_ID);
-                    const saveResult = await savePicksToVortex(installedMod, installedChoices, { helperAvailable });
+                    const bridgeAvailable = await bridgeClient.checkBridgeAvailable(syncLib.GAME_ID);
+                    const saveResult = await savePicksToVortex(installedMod, installedChoices, { bridgeAvailable });
                     if (saveResult.saved) {
                         console.log(`[rebuild-missing-routes] install-fomod: "${installedMod.name}" picks saved to Vortex's own live state (vortexModId=${saveResult.vortexModId}) -- won't show as Open FOMOD again.`);
                     } else {
@@ -1005,6 +1027,46 @@ function createRebuildMissingRouter(config) {
         }
     });
 
+    // A non-Nexus ('archive-missing' with no modId/fileId) row's own "Browse…" action -- ports
+    // Rebuild Collection's already-shipped off-site Import flow (lib/collection-runner.js's
+    // importOffSiteArchive/extractImportedOffSiteMod, backed by lib/offsite-import-map.js +
+    // classifyMod's own overrideArchivePath) rather than a second implementation. Mirrors the
+    // log-view/Work Through Report version of this route (web/rebuild-routes.js's own
+    // POST /logs/:filename/import-offsite) -- import THEN immediately re-attempt in one step, since
+    // that's this tool's own established single-row-resolve convention (rmfDownloadArchive), not the
+    // Plan page's two-step version (which has no report row yet to update).
+    //
+    // Looked up by {collectionModId, name}, never modId/fileId -- an off-site mod has neither; same
+    // identity offsite-import-map.json itself is keyed by.
+    router.post('/import-offsite', async (req, res) => {
+        if (!requireConfigured(res)) return;
+        const { collectionModId, name } = req.body || {};
+        if (!collectionModId || !name) return res.status(400).json({ error: 'collectionModId and name are required.' });
+        let picked;
+        try {
+            picked = await pickOpenFileAsync({
+                title: `Select the archive for "${name}"`,
+                filter: 'Archive files (*.zip;*.7z;*.rar)|*.zip;*.7z;*.rar|All files (*.*)|*.*',
+            });
+        } catch (e) {
+            return res.status(500).json({ error: `File picker failed: ${e.message}` });
+        }
+        if (!picked) return res.json({ ok: false, cancelled: true });
+        try {
+            runner.importOffSiteArchive({ downloadsDir: downloads, collectionModId, name, pickedFilePath: picked });
+            const outcome = await runner.extractImportedOffSiteMod({
+                collectionModId, stagingDir: staging, downloadsDir: downloads, sevenZipExe, name,
+            });
+            // "Last dealt with" (queue: rebuild-missing-last-fixed) -- same real-fix bar every other
+            // successful-restore path in this router already applies (a REBUILD is a genuine write to
+            // the staging folder, same as a real extraction).
+            if (outcome.kind === 'REBUILD') lastFixedState.markFixed(collectionModId);
+            res.json({ ok: true, outcome });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
     // Real Deploy step -- MOVED to the shared web/deploy-routes.js (2026-09-14, "the same Deploy
     // step on every Done screen"), mounted at /api/deploy. The client (rebuild-missing-app.js's
     // rmfStartDeploy) now calls /api/deploy/all + /api/deploy/all/progress instead of this router's
@@ -1024,7 +1086,7 @@ function createRebuildMissingRouter(config) {
         if (!isInside(staging, folderPath)) {
             return res.status(400).json({ error: 'That folder is not inside your configured staging directory.' });
         }
-        spawn(`explorer.exe "${path.resolve(folderPath)}"`, { shell: true, detached: true, stdio: 'ignore' }).unref();
+        try { openFolderInExplorer(folderPath); } catch (e) { return res.status(400).json({ error: e.message }); }
         res.json({ ok: true });
     });
 

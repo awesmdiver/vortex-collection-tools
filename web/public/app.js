@@ -951,6 +951,26 @@ function cancelPlan() {
   // real deploy, same as Update Collection v2's own ucv2ApplyResultBackBtn), but arriving from
   // elsewhere via rebuildResetOnEntry has no such button to gate it, so the check lives here instead.
   if (!$('rebuildDeployProgress').classList.contains('hidden')) return;
+  // Second mid-operation guard (2026-09-17, director's own screenshot: left mid-rebuild for
+  // Settings, came back to a fresh "Choose a collection" picker while his own terminal was still
+  // streaming real extract-mod.js activity for that same run) -- this whole app is ONE page;
+  // leaving to another tool never destroys a running rebuild, it just hides this screen, and the
+  // real run keeps going server-side regardless. `state.eventSource` (the run's own live SSE)
+  // being open is NOT the signal here on its own -- finishProgressView() nulls it the moment the
+  // run completes, which would leave this guard blind to a run that finished a second ago and
+  // whose Done screen the user hasn't acted on yet (a pending Deploy, locked-mod retries, Open
+  // FOMOD picks -- all real, not-yet-actioned state). Same DOM-visibility convention as the Deploy
+  // guard just above: `view-progress` covers the actively-running case, matching this report's own
+  // exact repro.
+  //
+  // `view-summary` (the Done screen) is DELIBERATELY NOT checked here, unlike view-progress --
+  // doing so would strand the user on it permanently: an active run always has another way off
+  // this screen (it finishes on its own via run-complete, or Pause), but the Done screen has NO
+  // other exit except this exact reset (Back to Collections calls this same function). Blocking it
+  // here would make Back to Collections a dead click with no way back to the picker at all. The
+  // Done-screen case is instead guarded narrowly in rebuildResetOnEntry() below, scoped to ONLY the
+  // implicit "arrived from elsewhere" trigger -- see that function's own comment.
+  if (!$('view-progress').classList.contains('hidden')) return;
   if (planEventSource) { planEventSource.close(); planEventSource = null; }
   state.collectionModId = null;
   state.plan = null;
@@ -974,6 +994,14 @@ for (const id of ['cancelPlanBtn', 'cancelPlanBtnTop']) $(id).addEventListener('
 // at 'rebuild' from a DIFFERENT area, never from switching BROWSER tabs or from internal navigation
 // like the Cancel button. Reuses cancelPlan's own real reset logic verbatim.
 function rebuildResetOnEntry() {
+  // A just-finished run's own Done screen (2026-09-17, same director repro as cancelPlan's own
+  // view-progress guard above) -- guarded HERE rather than inside cancelPlan() itself, and only for
+  // this IMPLICIT "arrived from elsewhere" trigger: unlike an active run (which always finishes on
+  // its own, or can be Paused), the Done screen has no other way off it except this exact reset, so
+  // blocking it inside cancelPlan() would also disable the EXPLICIT Back to Collections
+  // button/breadcrumb on this same screen -- a real dead end, not a fix. Simply not resetting when
+  // merely passing back through from another tool leaves that explicit escape hatch fully working.
+  if (!$('view-summary').classList.contains('hidden')) return;
   cancelPlan();
 }
 window.rebuildResetOnEntry = rebuildResetOnEntry;

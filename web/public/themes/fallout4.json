@@ -97,6 +97,26 @@
       "heroBody": "An Overseer never pulls a crate off the shelf just because one requisition slip says it's spare — the manifest gets checked first, because half the Vault might be drawing on that crate without anyone having mentioned it. Removing a collection in Vortex is the same gamble: it can quietly take mods your other collections are still using down with it. This checks the whole inventory first, flags every mod that's shared, and lets you decide one by one what stays and what goes.",
       "cardDesc": "Checks the manifest before anything gets pulled — nothing another collection still needs goes missing."
     },
+    "removed-from-main": {
+      "name": "RobCo Redundancy Purge",
+      "emoji": "🧹",
+      "function": "Removed From Main",
+      "heroTitle": "RobCo Redundancy Purge",
+      "heroBody": "When a main collection updates and drops a mod, your upgraded version of it is left behind taking up space. This protocol scans for those redundant assets and sweeps them away, keeping your loadout perfectly synced.",
+      "cardDesc": "Sweeps away your matching mods when the main collection drops the originals.",
+      "tagline": "Automated housekeeping for orphaned upgrades.",
+      "howTo": [
+        "Select the main collection and your personal collection.",
+        "Initialize Compare to isolate your orphaned mods.",
+        "Untick any assets to keep on active duty, then delete the rest."
+      ],
+      "lead": "The following primary assets were removed from the main collection.",
+      "colGone": "Removed primary",
+      "colMine": "Your redundant asset",
+      "confirm": "Warning: You are about to permanently delete these mods from Vortex and remove them from your active collection. A backup is compiled before execution.",
+      "empty": "No redundant assets found. Your collection aligns with the main.",
+      "noLinks": "{rg} has not saved the connection links for this pair yet. Run {rg} first."
+    },
     "report-stats": {
       "name": "Overseer Performance Log",
       "emoji": "📊",

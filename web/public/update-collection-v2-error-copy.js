@@ -9,7 +9,7 @@
 //
 // Deliberately narrow: only swaps in friendly copy for the handful of raw Node.js network-error
 // strings a dropped/refused/timed-out connection actually produces. Every OTHER error (a real app
-// error, a Nexus GraphQL error, a Helper error, etc.) passes through completely unchanged -- this
+// error, a Nexus GraphQL error, a Vortex Bridge error, etc.) passes through completely unchanged -- this
 // must never mask a genuine, actionable error message behind vague network-hiccup text.
 const UCV2_RAW_NETWORK_ERROR_PATTERN = /ECONNRESET|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|socket hang up/i;
 
