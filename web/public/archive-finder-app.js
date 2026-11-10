@@ -111,7 +111,8 @@ async function afLoadConfig() {
   }
 }
 
-async function afLoadStats() {
+// keepFailedLink: mid-scan refresh -- the link is driven by the scan's own running count instead.
+async function afLoadStats({ keepFailedLink = false } = {}) {
   const stats = await afApi('GET', '/api/archive-finder/stats');
   afState.stats = stats;
   $g('afStatsMeta').innerHTML = '';
@@ -119,14 +120,45 @@ async function afLoadStats() {
   $g('afStatsMeta').appendChild(document.createTextNode(' archives indexed · '));
   $g('afStatsMeta').appendChild(el('span', { class: 'accent-count' }, stats.fileCount.toLocaleString()));
   $g('afStatsMeta').appendChild(document.createTextNode(` files matched · last scan ${afFmtDate(stats.lastScanned)}`));
+  if (keepFailedLink) return;
+  afShowSevenZipMissing(!!stats.sevenZipMissing);
+  afShowFailedLink(stats.errorCount);
+}
+
+function afShowFailedLink(count) {
   const wrap = $g('afFailedLinkWrap');
-  if (stats.errorCount) {
-    $g('afFailedLinkAnchor').textContent = `${stats.errorCount} archive${stats.errorCount === 1 ? '' : 's'} failed to read`;
+  if (count) {
+    $g('afFailedLinkAnchor').textContent = `${count} archive${count === 1 ? '' : 's'} failed to read`;
     wrap.classList.remove('hidden');
   } else {
     wrap.classList.add('hidden');
   }
 }
+
+// ---------- 7-Zip missing ----------
+
+// One message in place of the failed-archives link: 7-Zip itself could not be started, so no archive
+// was actually read (see lib/archive-finder-scanner.js).
+function afShowSevenZipMissing(show) {
+  $g('afSevenZipMissing').classList.toggle('hidden', !show);
+  $g('afLocateSevenZipError').classList.add('hidden');
+  if (show) $g('afFailedLinkWrap').classList.add('hidden');
+}
+
+$g('afLocateSevenZipBtn').addEventListener('click', async () => {
+  const errEl = $g('afLocateSevenZipError');
+  errEl.classList.add('hidden');
+  try {
+    const res = await afApi('POST', '/api/archive-finder/locate-sevenzip');
+    if (res.cancelled) return;
+    afShowSevenZipMissing(false);
+    $g('afScanProgressWrap').classList.remove('hidden');
+    $g('afScanProgressText').textContent = 'Found 7-Zip. Click Save & Rescan to read your archives.';
+  } catch (e) {
+    errEl.textContent = e.message || String(e);
+    errEl.classList.remove('hidden');
+  }
+});
 
 // ---------- Extension tags ----------
 
@@ -174,6 +206,7 @@ $g('afNewExtensionInput').addEventListener('keydown', (e) => {
 // ---------- Scan ----------
 
 let afScanEventSource = null;
+let afLastMidScanStats = 0;
 
 $g('afRescanBtn').addEventListener('click', async () => {
   $g('afRescanBtn').disabled = true;
@@ -182,6 +215,11 @@ $g('afRescanBtn').addEventListener('click', async () => {
   $g('afScanProgressBar').style.width = '0%';
   $g('afScanProgressText').textContent = 'Starting scan…';
   $g('afScanLoading').classList.remove('hidden');
+  afShowFailedLink(0); // a new scan starts with a clean failed count
+  $g('afScanSkippedWarn').classList.add('hidden');
+  $g('afStopScanBtn').disabled = false;
+  $g('afStopScanBtn').classList.remove('hidden');
+  $g('afSkipArchiveBtn').classList.add('hidden');
 
   try {
     await afApi('POST', '/api/archive-finder/scan');
@@ -202,6 +240,15 @@ $g('afRescanBtn').addEventListener('click', async () => {
   es.onmessage = (msg) => afHandleScanEvent(JSON.parse(msg.data));
 });
 
+$g('afSkipArchiveBtn').addEventListener('click', () => {
+  $g('afSkipArchiveBtn').classList.add('hidden');
+  afApi('POST', '/api/archive-finder/scan/skip').catch(afHandleError);
+});
+$g('afStopScanBtn').addEventListener('click', () => {
+  $g('afStopScanBtn').disabled = true;
+  afApi('POST', '/api/archive-finder/scan/stop').catch(afHandleError);
+});
+
 function afHandleScanEvent(frame) {
   if (frame.type === 'progress') {
     if (frame.phase === 'listing') {
@@ -209,19 +256,47 @@ function afHandleScanEvent(frame) {
     } else {
       const pct = frame.total ? Math.round((frame.current / frame.total) * 100) : 100;
       $g('afScanProgressBar').style.width = pct + '%';
-      $g('afScanProgressText').textContent = `${frame.current} / ${frame.total} — ${frame.message}`;
+      // Past 10 s on one archive, show how long and offer Skip for that one archive.
+      const slow = frame.activeSeconds >= 10;
+      $g('afScanProgressText').textContent = `${frame.current} / ${frame.total} — ${slow ? 'reading ' : ''}${frame.message}${slow ? ` (${frame.activeSeconds} s)` : ''}`;
+      $g('afSkipArchiveBtn').classList.toggle('hidden', !slow);
+    }
+    // This scan's failures so far (never more than archives read); the stored stats line follows
+    // every couple of seconds so both stay in step.
+    if (typeof frame.errors === 'number') afShowFailedLink(frame.errors);
+    const now = Date.now();
+    if (now - afLastMidScanStats > 2000) {
+      afLastMidScanStats = now;
+      afLoadStats({ keepFailedLink: true }).catch(() => {});
     }
   } else if (frame.type === 'done') {
     $g('afScanProgressText').textContent =
-      `Done: ${frame.scanned} scanned, ${frame.skipped} unchanged, ${frame.removed} removed` +
-      (frame.errors ? `, ${frame.errors} failed to read` : '');
+      `${frame.stopped ? 'Stopped' : 'Done'}: ${frame.scanned} scanned, ${frame.skipped} unchanged, ${frame.removed} removed` +
+      (frame.errors ? `, ${frame.errors} failed to read` : '') +
+      (frame.stopped ? '. The next scan carries on from here.' : '');
+    $g('afStopScanBtn').classList.add('hidden');
+    $g('afSkipArchiveBtn').classList.add('hidden');
+    if (frame.tookTooLong) {
+      const n = frame.tookTooLong;
+      $g('afScanSkippedWarn').textContent = n === 1
+        ? '⚠️ Done. 1 archive took too long and was skipped; it will be tried again next scan.'
+        : `⚠️ Done. ${n} archives took too long and were skipped; they will be tried again next scan.`;
+      $g('afScanSkippedWarn').classList.remove('hidden');
+    }
     $g('afScanProgressBar').style.width = '100%';
     $g('afRescanBtn').disabled = false;
     $g('afScanLoading').classList.add('hidden');
     if (afScanEventSource) { afScanEventSource.close(); afScanEventSource = null; }
     afLoadStats();
   } else if (frame.type === 'error') {
-    $g('afScanProgressText').textContent = frame.message || 'Scan failed.';
+    $g('afStopScanBtn').classList.add('hidden');
+    $g('afSkipArchiveBtn').classList.add('hidden');
+    if (frame.code === 'sevenzip-unavailable') {
+      $g('afScanProgressWrap').classList.add('hidden');
+      afShowSevenZipMissing(true);
+    } else {
+      $g('afScanProgressText').textContent = frame.message || 'Scan failed.';
+    }
     $g('afRescanBtn').disabled = false;
     $g('afScanLoading').classList.add('hidden');
     if (afScanEventSource) { afScanEventSource.close(); afScanEventSource = null; }
@@ -956,22 +1031,46 @@ $g('afFailedLinkAnchor').addEventListener('click', async (e) => {
   }
 });
 
+// One expandable group per distinct reason, with a count, so a thousand identical failures read as
+// one line ("Corrupt or incomplete: 12") instead of a wall of rows.
 function afRenderFailedList(rows) {
   const list = $g('afFailedList');
   list.innerHTML = '';
   afFailedNames.clear();
+  const groups = new Map();
   for (const row of rows) {
     afFailedNames.set(row.archiveId, row.archiveName);
-    const checkbox = el('input', { type: 'checkbox' });
-    checkbox.addEventListener('change', () => {
-      if (checkbox.checked) afFailedSelected.add(row.archiveId);
-      else afFailedSelected.delete(row.archiveId);
-      afUpdateFailedSelectionCount();
+    if (!groups.has(row.reason)) groups.set(row.reason, []);
+    groups.get(row.reason).push(row);
+  }
+  const ordered = Array.from(groups).sort((a, b) => b[1].length - a[1].length);
+  for (const [reason, groupRows] of ordered) {
+    const rowBoxes = [];
+    const ul = el('ul', { class: 'sync-result-list' });
+    for (const row of groupRows) {
+      const checkbox = el('input', { type: 'checkbox' });
+      rowBoxes.push(checkbox);
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) afFailedSelected.add(row.archiveId);
+        else afFailedSelected.delete(row.archiveId);
+        afUpdateFailedSelectionCount();
+      });
+      ul.appendChild(el('li', {}, [
+        checkbox,
+        el('strong', { style: 'margin-left: 8px;' }, row.archiveName),
+      ]));
+    }
+    const groupBox = el('input', { type: 'checkbox', 'aria-label': `Select all: ${reason}` });
+    groupBox.addEventListener('click', (e) => e.stopPropagation());
+    groupBox.addEventListener('change', () => {
+      for (const cb of rowBoxes) {
+        cb.checked = groupBox.checked;
+        cb.dispatchEvent(new Event('change'));
+      }
     });
-    list.appendChild(el('li', {}, [
-      checkbox,
-      el('strong', { style: 'margin-left: 8px;' }, row.archiveName),
-      el('span', { class: 'muted', style: 'display: block; margin-left: 24px;' }, row.scanError),
+    list.appendChild(el('details', {}, [
+      el('summary', {}, [groupBox, el('span', { style: 'margin-left: 8px;' }, `${reason}: ${groupRows.length}`)]),
+      ul,
     ]));
   }
   afUpdateFailedSelectionCount();
@@ -988,9 +1087,22 @@ $g('afFailedSelectAllInput').addEventListener('change', (e) => {
   });
 });
 
-$g('afFailedCloseBtn').addEventListener('click', () => {
+function afCloseFailedModal() {
   $g('afFailedModal').classList.add('hidden');
   afLoadStats();
+}
+
+// Close three more ways besides the Close button: the corner x, Esc, and a click outside the box.
+$g('afFailedCloseBtn').addEventListener('click', afCloseFailedModal);
+$g('afFailedXBtn').addEventListener('click', afCloseFailedModal);
+$g('afFailedModal').addEventListener('click', (e) => {
+  if (e.target === $g('afFailedModal')) afCloseFailedModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if ($g('afFailedModal').classList.contains('hidden')) return;
+  if (!$g('afDeleteConfirmModal').classList.contains('hidden')) return; // Esc closes the top pop-up only
+  afCloseFailedModal();
 });
 
 $g('afFailedUntrackBtn').addEventListener('click', async () => {
@@ -1013,7 +1125,10 @@ let afPendingFailedDeleteIds = null;
 $g('afFailedDeleteBtn').addEventListener('click', () => {
   if (!afFailedSelected.size) return;
   afPendingFailedDeleteIds = Array.from(afFailedSelected);
-  $g('afDeleteConfirmModalText').textContent = `This permanently deletes ${afPendingFailedDeleteIds.length} file(s) from disk. This cannot be undone.`;
+  const n = afPendingFailedDeleteIds.length;
+  $g('afDeleteConfirmModalText').textContent = n > 50
+    ? `Delete ${n} files from disk? This can't be undone.`
+    : `This permanently deletes ${n} file(s) from disk. This cannot be undone.`;
   $g('afDeleteConfirmModal').classList.remove('hidden');
 });
 $g('afDeleteConfirmCancelBtn').addEventListener('click', () => {

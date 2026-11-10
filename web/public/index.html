@@ -2599,13 +2599,20 @@
         <h2>Your archive index</h2>
         <div class="mm-header-row__right">
           <span id="afScanLoading" class="mm-inline-loading hidden"><span class="spinner"></span> Scanning&hellip;</span>
+          <button id="afStopScanBtn" class="btn btn--ghost btn--small hidden">Stop scan</button>
           <button id="afRescanBtn" class="btn btn--primary btn--small">Save &amp; Rescan</button>
         </div>
       </div>
       <p class="muted" id="afStatsMeta"></p>
       <div id="afScanProgressWrap" class="hidden">
         <div class="progress-bar-wrap"><div id="afScanProgressBar" class="progress-bar"></div></div>
-        <p class="muted" id="afScanProgressText"></p>
+        <p class="muted"><span id="afScanProgressText"></span> <button id="afSkipArchiveBtn" class="btn btn--ghost btn--small hidden">Skip</button></p>
+        <div class="callout callout--warning hidden" id="afScanSkippedWarn"></div>
+      </div>
+      <div class="callout callout--warning hidden" id="afSevenZipMissing">
+        <p>⚠️ 7-Zip couldn't be started, so no archives were read. Locate 7-Zip to continue.</p>
+        <button id="afLocateSevenZipBtn" class="btn btn--primary btn--small">Locate 7-Zip</button>
+        <p class="fail hidden" id="afLocateSevenZipError"></p>
       </div>
       <p class="hidden" id="afFailedLinkWrap">
         <a href="#" id="afFailedLinkAnchor" class="mismatch-note"></a>
@@ -2835,14 +2842,15 @@
   </div>
 
   <div id="afFailedModal" class="modal-overlay hidden">
-    <div class="modal modal--wide modal--critical">
+    <div class="modal modal--wide modal--critical modal--scroll">
+      <button id="afFailedXBtn" class="modal__close" type="button" aria-label="Close">&times;</button>
       <h2>🛑 Archives That Failed To Read</h2>
       <p class="muted">These couldn't be opened by 7-Zip (usually a corrupt or incomplete download). Stop tracking them (keeps the file on disk) or delete the file from disk outright.</p>
       <div class="field-group">
         <label><input type="checkbox" id="afFailedSelectAllInput"> Select all</label>
       </div>
-      <ul id="afFailedList" class="sync-result-list"></ul>
-      <div id="afFailedResults"></div>
+      <div id="afFailedList" class="modal__scroll"></div>
+      <div id="afFailedResults" class="modal__results"></div>
       <div class="modal-actions">
         <button id="afFailedCloseBtn" class="btn btn--ghost">Close</button>
         <button id="afFailedUntrackBtn" class="btn btn--primary">Remove From Index</button>

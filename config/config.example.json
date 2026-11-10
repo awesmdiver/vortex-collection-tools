@@ -42,5 +42,6 @@
   "mergePostMergeAction": "disable",
   "modExceptionListDir": null,
   "fileRetrieverLastDestFolder": null,
+  "sevenZipPath": null,
   "appDataDir": null
 }

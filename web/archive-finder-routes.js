@@ -35,6 +35,7 @@ const appConfig = require('../lib/app-config');
 const { createDb } = require('../lib/archive-finder-db');
 const scanner = require('../lib/archive-finder-scanner');
 const sevenzip = require('../lib/sevenzip');
+const { pickOpenFileAsync } = require('../lib/vortex-sync/win-dialog');
 const { buildTree } = require('../lib/archive-finder-tree');
 const { createSseSession } = require('./sse-session');
 const { createIdleCloseHandle } = require('../lib/idle-close-handle');
@@ -138,9 +139,42 @@ function createArchiveFinderRouter(config) {
         res.json({ extensions });
     });
 
-    router.get('/stats', (req, res) => {
+    // sevenZipMissing: an earlier scan left archives marked as failed only because 7-Zip could not
+    // start, and it still cannot. Checked live so the message goes away the moment 7-Zip is found.
+    router.get('/stats', async (req, res) => {
         if (!requireConfigured(res)) return;
-        res.json(getDb().stats());
+        const stats = getDb().stats();
+        let sevenZipMissing = false;
+        if (stats.toolErrorCount > 0) {
+            try {
+                await sevenzip.probe(sevenzip.findSevenZip());
+            } catch (e) {
+                sevenZipMissing = sevenzip.isSevenZipUnavailable(e);
+            }
+        }
+        res.json({ ...stats, sevenZipMissing });
+    });
+
+    // "Locate 7-Zip": native file picker for 7z.exe. The pick is only saved after a harmless help
+    // call proves it is a runnable 7-Zip; findSevenZip then uses it everywhere (Mod Scrub, File
+    // Retriever, Rebuild, ...).
+    router.post('/locate-sevenzip', async (req, res) => {
+        let picked;
+        try {
+            picked = await pickOpenFileAsync({
+                title: 'Select 7z.exe',
+                filter: '7-Zip (7z.exe)|7z.exe|Programs (*.exe)|*.exe',
+            });
+        } catch (e) {
+            return res.status(500).json({ error: `File picker failed: ${e.message}` });
+        }
+        if (!picked) return res.json({ ok: false, cancelled: true });
+        const check = await sevenzip.verifySevenZip(picked);
+        if (!check.ok) {
+            return res.status(400).json({ error: "That file isn't a working 7-Zip. Pick 7z.exe from your 7-Zip folder." });
+        }
+        appConfig.saveConfig({ sevenZipPath: picked });
+        res.json({ ok: true, path: picked });
     });
 
     router.get('/search', (req, res) => {
@@ -176,6 +210,16 @@ function createArchiveFinderRouter(config) {
         scanSession.subscribe(res, { afterSeq });
     });
 
+    // The running scan, so Skip / Stop can reach it. Only ever acts on children the scan itself started.
+    let currentScan = null;
+    router.post('/scan/skip', (req, res) => {
+        res.json({ ok: !!(currentScan && scanSession.isActive() && currentScan.skipCurrent()) });
+    });
+    router.post('/scan/stop', (req, res) => {
+        if (currentScan && scanSession.isActive()) currentScan.stop();
+        res.json({ ok: true });
+    });
+
     router.post('/scan', (req, res) => {
         if (!requireConfigured(res)) return;
         if (scanSession.isActive()) {
@@ -194,6 +238,7 @@ function createArchiveFinderRouter(config) {
         // handle's own timer from pulling this same instance out from under the scan mid-run -- see
         // lib/idle-close-handle.js's own isBusy comment.
         const emitter = scanner.scan({ scanFolder: downloads, extensions, archiveDb: getDb() });
+        currentScan = emitter;
         const emitIfCurrent = (event) => {
             if (scanSession.get() === mySession) scanSession.emit(event);
         };
@@ -236,6 +281,11 @@ function createArchiveFinderRouter(config) {
         const results = archiveIds.map((id) => {
             const archive = archiveDb.getArchiveById(id);
             if (!archive) return { archiveId: id, ok: false, error: 'Unknown archive id' };
+            // Server-side backstop: a row that only records 7-Zip failing to start says nothing about
+            // the file, so it can never be deleted from here.
+            if (sevenzip.isSevenZipUnavailable(archive.scan_error)) {
+                return { archiveId: id, ok: false, error: "This archive was never read (7-Zip couldn't start), so it won't be deleted." };
+            }
             const resolved = path.resolve(archive.path);
             if (resolved !== downloadsResolved && !resolved.startsWith(downloadsResolved + path.sep)) {
                 return { archiveId: id, ok: false, error: 'Archive path is outside the configured downloads folder; refusing to delete' };

@@ -32,18 +32,13 @@ const { pickOpenFileAsync } = require('../lib/vortex-sync/win-dialog');
 // for what that install check actually means now). A developer's own build can be used
 // through the VCT_PGTOOLS_EXE environment variable (checked after the bundled path, never set on a
 // player's PC); no folder on the maintainer's machine is baked into the code.
-const PGTOOLS_EXE_CANDIDATES = [
-    path.join(__dirname, '..', 'tools', 'pgtools', 'pgtools.exe'),
-    // Developer override (never set on a player's PC): VCT_PGTOOLS_EXE points at a local dev build.
-    process.env.VCT_PGTOOLS_EXE,
-].filter(Boolean);
+// After those, a developer-only fallback: the sibling PGPatcher fork's build output (see
+// lib/pgtools-locate.js). Resolved at call time, so a file restored while the app runs is found
+// without a restart.
+const { pgtoolsCandidates, resolvePgtoolsExe: locatePgtoolsExe } = require('../lib/pgtools-locate');
 function resolvePgtoolsExe() {
-    for (const p of PGTOOLS_EXE_CANDIDATES) {
-        if (fs.existsSync(p)) return p;
-    }
-    return PGTOOLS_EXE_CANDIDATES[0]; // bundled path -- best "expected" location for the not-found message
+    return locatePgtoolsExe(__dirname);
 }
-const PGTOOLS_EXE = resolvePgtoolsExe();
 
 // `opts.onSpawn`, when given, is called with the real child process the instant it's spawned --
 // lets a caller keep a reference to kill it early (/load's own Cancel below). `opts.onLine`, when
@@ -54,7 +49,7 @@ const PGTOOLS_EXE = resolvePgtoolsExe();
 function runPgtools(args, opts = {}) {
     const { onSpawn, onLine } = opts;
     return new Promise((resolve, reject) => {
-        const child = spawn(PGTOOLS_EXE, args, { windowsHide: true });
+        const child = spawn(resolvePgtoolsExe(), args, { windowsHide: true });
         if (onSpawn) onSpawn(child);
         let stdout = '';
         let stderr = '';
@@ -234,8 +229,7 @@ function requireConfigured(config, res) {
     return { source: config.skyrimDataDir, cfgDir: config.pgpatcherCfgDir };
 }
 
-// PGTOOLS_EXE is resolved once at startup from PGTOOLS_EXE_CANDIDATES (see that constant's own
-// comment) -- in a real shipped release this is always the bundled copy, so this check tripping at
+// The pgtools path is resolved on each call (see resolvePgtoolsExe above) -- in a real shipped release this is always the bundled copy, so this check tripping at
 // all should now be rare (only a missing/corrupted bundle). Nothing here confirmed the file actually
 // exists before spawning it, though -- without this, a missing exe surfaces as a raw ENOENT from
 // child_process, not a message telling the user what's actually wrong. Same shape as requireConfigured
@@ -256,8 +250,8 @@ function requireConfigured(config, res) {
 // message's wording is a design-side call (this project's own file-ownership rule), not changed here
 // -- flagged in this task's own handoff.
 function requirePgtoolsInstalled(res) {
-    if (fs.existsSync(PGTOOLS_EXE)) return true;
-    console.error(`pgtools.exe not found at ${PGTOOLS_EXE}`);
+    if (fs.existsSync(resolvePgtoolsExe())) return true;
+    console.error(`pgtools.exe not found. Looked at, in order: ${pgtoolsCandidates(__dirname).join(' | ')}`);
     res.status(400).json({
         error: 'pgtools-not-installed',
         message: "PGPatcher isn't installed yet — you can download PGPatcher below:",

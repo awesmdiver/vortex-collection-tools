@@ -1,6 +1,6 @@
 {
   "name": "vortex-collection-tools",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "private": true,
   "description": "Unified toolkit for Vortex collection management: fast direct-extraction staging rebuilds (Rebuild Collection), and update-preserving ignore/disable state sync (Update Collection), with a shared local web UI.",
   "engines": {
@@ -22,7 +22,7 @@
     "fast-xml-parser": "^5.10.1",
     "ini-api": "^2.0.2",
     "layout-base": "^2.0.1",
-    "minimatch": "^10.2.6",
+    "minimatch": "^11.0.5",
     "pex-parser": "github:matortheeternal/pex-parser",
     "semver": "^7.8.5",
     "xeditlib": "github:WingedGuardian/xeditlib",

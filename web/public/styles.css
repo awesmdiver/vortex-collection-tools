@@ -1587,6 +1587,18 @@ tr.apply-row--leaving { animation: rowLeave .5s ease forwards; }
    History's Rename modal). Any width utility class loses to this once nested inside a modal. */
 .modal .input { display: block; width: 100%; }
 .modal--wide { max-width: 640px; }
+/* A modal whose body can grow without limit (Archive Finder's failed-archives list): capped at
+   about 85% of the window, with .modal__scroll scrolling inside while the title and .modal-actions
+   stay pinned and visible. */
+.modal--scroll { position: relative; display: flex; flex-direction: column; max-height: 85vh; box-sizing: border-box; }
+.modal--scroll > * { flex: none; }
+.modal--scroll > .modal__scroll { flex: 1 1 auto; min-height: 60px; overflow-y: auto; }
+.modal--scroll > .modal__results { max-height: 15vh; overflow-y: auto; }
+.modal__close { position: absolute; top: 10px; right: 14px; background: none; border: none; color: var(--text-muted); font-size: 22px; cursor: pointer; line-height: 1; }
+.modal__close:hover { color: var(--text); }
+.modal--scroll details { border-bottom: 1px solid var(--border); padding: 4px 0; }
+.modal--scroll summary { cursor: pointer; font-weight: 600; font-size: 14px; padding: 4px 0; }
+.modal--scroll details > ul { padding-left: 20px; }
 /* Severity variants for a modal (2026-08-25, standardized across the app -- confirmed real via the
    Merge History delete-confirm modal, which the director explicitly asked to make the standard look).
    Border + title color ONLY, same tokens as the callout severities above (TECHNICAL.md's "Callout
