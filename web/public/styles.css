@@ -231,6 +231,9 @@ code { font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 
 .app-header__title:hover { background: var(--surface-2); }
 .app-header__logo { font-size: 20px; opacity: 0.85; }
 .app-header__right { display: flex; align-items: center; gap: 14px; justify-self: end; }
+.app-header__newversion { color: var(--accent); font-size: 13px; text-decoration: none; white-space: nowrap; }
+.app-header__newversion:hover { color: var(--accent-hover); text-decoration: underline; }
+.app-header__newversion[hidden] { display: none; }
 .app-header__meta { color: var(--text-muted); font-size: 13px; text-align: right; }
 /* Settings lives here instead of the main nav row -- it's a one-and-done config page, not a
    workflow tab you switch between like the others, so it gets a small icon at the header's far

@@ -80,6 +80,7 @@ function renderIgnoredDisabledReport({ collectionModId, profileId, collectionNam
     const backHref = `/?area=sync&collectionModId=${encodeURIComponent(collectionModId)}&profileId=${encodeURIComponent(profileId)}`;
     return `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Vortex Collection Tools — Ignored/Disabled Mods</title>
+<script src="/vct-fetch.js"></script>
 <link rel="stylesheet" href="/styles.css"></head>
 <body>
 <header class="app-header">

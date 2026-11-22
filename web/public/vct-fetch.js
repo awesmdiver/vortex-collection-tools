@@ -36,6 +36,23 @@
     }
     var headers = new Headers((init && init.headers) || (isRequest ? input.headers : undefined));
     headers.set('X-VCT', '1');
-    return nativeFetch(input, Object.assign({}, init, { headers: headers })).catch(function (err) { throw tag(err, input); });
+    return nativeFetch(input, Object.assign({}, init, { headers: headers }))
+      .then(explainRefusal)
+      .catch(function (err) { throw tag(err, input); });
   };
+  // The guard answers a refused request with {error: 'request-refused', message}. Pages show `error`
+  // (for example "Failed: " + data.error), which read as a code. Hand back the same answer with `error`
+  // set to the guard's own message plus a plain next step, so every page says something useful. The
+  // guard's JSON on the wire is unchanged.
+  var REFUSED_HINT = ' This page is out of date. Reload it (Ctrl+F5) and try again.';
+  function explainRefusal(res) {
+    if (res.status !== 403 && res.status !== 415) return res;
+    return res.clone().json().then(function (data) {
+      if (!data || data.error !== 'request-refused') return res;
+      var text = (data.message || 'Request refused.') + REFUSED_HINT;
+      return new Response(JSON.stringify(Object.assign({}, data, { error: text })), {
+        status: res.status, statusText: res.statusText, headers: { 'Content-Type': 'application/json' },
+      });
+    }, function () { return res; });
+  }
 })();

@@ -18,6 +18,7 @@
 </script>
 <!-- Adds the X-VCT header the server requires on every changing request; must load before any page script. -->
 <script src="vct-fetch.js"></script>
+<script src="update-notice.js" defer></script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -39,6 +40,7 @@
          theme declaring "hasBook" (2026-08-20 -- it used to hard-code Skyrim's own book name, "The
          Arcaneum"). book-app.js swaps in the real book's title once its data loads. -->
     <button id="nav-book" class="nav-tab" title="Get Started -- browse every tool" hidden>&#128214;</button>
+    <a id="newVersionLink" class="app-header__newversion" href="#" target="_blank" rel="noopener noreferrer" title="A new version of Vortex Collection Tools is available. See what's new." hidden></a>
     <div id="headerMeta" class="app-header__meta"></div>
     <button id="nav-settings" class="settings-gear-btn nav-tab" title="Settings">&#9881;</button>
   </div>
@@ -1680,6 +1682,7 @@
         </div>
         <div class="settings-version-info">
           <div>Vortex Collection Tools <span id="settingsToolVersion">&mdash;</span></div>
+          <div id="settingsNewVersionRow" hidden><a href="#" target="_blank" rel="noopener noreferrer" title="A new version of Vortex Collection Tools is available. See what's new."></a></div>
           <div id="settingsBridgeVersionRow" class="muted">Vortex Bridge: <span id="settingsBridgeVersion">checking&hellip;</span></div>
         </div>
       </div>

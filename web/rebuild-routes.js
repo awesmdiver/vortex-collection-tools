@@ -1271,6 +1271,7 @@ function createRouter(config) {
         ) && (m.modId != null && m.fileId != null || m.name));
         res.send(`<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Vortex Collection Tools — ${esc(breadcrumb)}</title>
+<script src="/vct-fetch.js"></script>
 <link rel="stylesheet" href="/styles.css"></head>
 <body>
 <header class="app-header">

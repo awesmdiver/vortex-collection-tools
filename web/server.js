@@ -47,6 +47,8 @@ const { createDuplicateVersionCleanupRouter } = require('./duplicate-version-cle
 const { createAddModsToCollectionsRouter } = require('./add-mods-to-collections-routes');
 const { createDeployRouter } = require('./deploy-routes');
 const { createRequestGuard } = require('./request-guard');
+const { createUpdateChecker } = require('../lib/update-check');
+const { version: TOOL_VERSION } = require('../package.json');
 const { createClientErrorRouter } = require('./client-error-route');
 const { loadSyncLib } =require('../lib/collection-runner');
 const appConfig = require('../lib/app-config');
@@ -177,6 +179,12 @@ function main() {
     app.use('/api/rebuild', createRouter(config));
     app.use('/api/sync', createSyncRouter(config));
     app.use('/api/settings', createSettingsRouter());
+    // Newest-release notice for the header: read-only, answers from memory (lib/update-check.js).
+    const updateChecker = createUpdateChecker({ currentVersion: TOOL_VERSION });
+    app.get('/api/update-state', (req, res) => {
+        const s = updateChecker.getState();
+        res.json(s.newer ? { newer: true, version: s.tag, url: s.url } : { newer: false });
+    });
     app.use('/api/stats', createStatsRouter());
     app.use('/api/work-through', createWorkThroughRouter());
     app.use('/api/rules-generator', createRulesGeneratorRouter(config));
@@ -321,6 +329,7 @@ function main() {
         const isLoopback = config.host === '127.0.0.1' || config.host === 'localhost';
         const browseUrl = `http://${isLoopback ? config.host : '127.0.0.1'}:${config.port}`;
         console.log(`Vortex Collection Tools running at ${browseUrl}`);
+        updateChecker.start();
         // A Health Check pause that a crash or a failed restore left behind is put back now (only while the
         // switches still read as off); if Vortex is not up yet it is tried again at the start of the next job.
         require('../lib/health-check-pause').recoverPendingSnapshot().catch(() => {});

@@ -657,6 +657,9 @@ async function ucv2RecheckContinueScreen() {
   const r = ucv2CurrentReview;
   if (!r || !r.continueOnly || ucv2ContinueRecheckBusy) return;
   ucv2ContinueRecheckBusy = true;
+  // The old groups leave at once; nothing is clickable until the new check is back.
+  ucv2ClearScanResults();
+  ucv2ShowReviewActivity(UCV2_LOADING_TEXT_ONE_COLLECTION);
   try {
     const answer = await ucv2Api('POST', '/api/update-collection-v2/continue-check', { collectionModId: r.collectionModId });
     if (!answer || answer.legacy || !ucv2CurrentReview || !ucv2CurrentReview.continueOnly) return;
@@ -665,9 +668,11 @@ async function ucv2RecheckContinueScreen() {
     ucv2CurrentReview = fresh;
     ucv2RenderContinueOnly(fresh);
   } catch (e) {
-    // Best effort: the screen keeps what it has; the next return or button press checks again.
+    // Vortex didn't answer: show the "couldn't check" line with Refresh, never the old lists.
+    if (ucv2CurrentReview === r) ucv2RenderContinueGroups({ collectionModId: r.collectionModId, checksIncomplete: ['recheck'] });
   } finally {
     ucv2ContinueRecheckBusy = false;
+    ucv2HideReviewActivity();
   }
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') ucv2RecheckContinueScreen(); });
@@ -804,6 +809,7 @@ function ucv2DrawContinueGroups() {
   const btn = document.getElementById('ucv2FinishDetailsBtn');
   if (btn) {
     btn.addEventListener('click', async () => {
+      if (ucv2ContinueState !== st) return; // stale list: a click on an older scan does nothing
       btn.disabled = true;
       $ucv2('ucv2FinishDetailsStatus').textContent = 'Saving…';
       try {
@@ -821,12 +827,13 @@ function ucv2DrawContinueGroups() {
   const checkWholeBtn = document.getElementById('ucv2CheckWholeBtn');
   if (checkWholeBtn) {
     // The one place the whole collection is checked from Continue Update: only when the person asks for it.
-    checkWholeBtn.addEventListener('click', () => { ucv2ActiveReviewModId = null; ucv2CurrentReview = null; ucv2StartReview(st.collectionModId); });
+    checkWholeBtn.addEventListener('click', () => { if (ucv2ContinueState !== st) return; ucv2ActiveReviewModId = null; ucv2CurrentReview = null; ucv2StartReview(st.collectionModId); });
   }
   const updateOlderBtn = document.getElementById('ucv2UpdateOlderBtn');
   if (updateOlderBtn) {
     // They join the Updated list below (same rows, same Apply); the server adds the same ones when it re-checks.
     updateOlderBtn.addEventListener('click', () => {
+      if (ucv2ContinueState !== st) return;
       const r = ucv2CurrentReview;
       if (!r || r.continueOnly) return;
       r.updated = [...r.updated, ...st.older.map((o) => o.pair)];
@@ -838,6 +845,7 @@ function ucv2DrawContinueGroups() {
   const confirmPicksBtn = document.getElementById('ucv2ConfirmPicksBtn');
   if (confirmPicksBtn) {
     confirmPicksBtn.addEventListener('click', async () => {
+      if (ucv2ContinueState !== st) return; // stale list: a click on an older scan does nothing
       confirmPicksBtn.disabled = true;
       $ucv2('ucv2ConfirmPicksStatus').textContent = 'Saving…';
       try {
@@ -867,6 +875,7 @@ function ucv2DrawContinueGroups() {
   const clearArrowBtn = document.getElementById('ucv2ClearArrowBtn');
   if (clearArrowBtn) {
     clearArrowBtn.addEventListener('click', async () => {
+      if (ucv2ContinueState !== st) return; // stale list: a click on an older scan does nothing
       clearArrowBtn.disabled = true;
       $ucv2('ucv2ClearArrowStatus').textContent = 'Clearing…';
       try {
@@ -883,6 +892,7 @@ function ucv2DrawContinueGroups() {
   const removeOldBtn = document.getElementById('ucv2RemoveOldBtn');
   if (removeOldBtn) {
     removeOldBtn.addEventListener('click', async () => {
+      if (ucv2ContinueState !== st) return; // stale list: a click on an older scan does nothing
       removeOldBtn.disabled = true;
       $ucv2('ucv2RemoveOldStatus').textContent = 'Removing…';
       try {
@@ -906,6 +916,7 @@ function ucv2DrawContinueGroups() {
   const linkBtn = document.getElementById('ucv2LinkDownloadsBtn');
   if (linkBtn) {
     linkBtn.addEventListener('click', async () => {
+      if (ucv2ContinueState !== st) return; // stale list: a click on an older scan does nothing
       linkBtn.disabled = true;
       $ucv2('ucv2LinkDownloadsStatus').textContent = 'Linking…';
       try {
@@ -1076,6 +1087,7 @@ async function ucv2PickRevision(revisionNumber, screenId) {
   const modId = ucv2ActiveReviewModId;
   ucv2HideCriticalError();
   ucv2ShowReviewActivity(UCV2_LOADING_TEXT_ONE_COLLECTION);
+  ucv2ClearScanResults(); // the earlier scan's groups and buttons go now; a failed pick re-draws below
   // Disabled for the duration of the re-fetch -- otherwise a click here races the in-flight request,
   // acting on the OLD (about-to-be-replaced) ucv2CurrentReview data. Both buttons disabled
   // regardless of which screen is actually visible right now (same "don't need to know/care which
@@ -1152,10 +1164,28 @@ function ucv2ShowReviewLoadingSkeleton(modId) {
   $ucv2('ucv2ReviewNoChangesTip').classList.add('hidden');
   $ucv2('ucv2ReviewEmpty').classList.add('hidden');
   $ucv2('ucv2ReviewFilterBadges').classList.add('hidden');
-  $ucv2('ucv2ReviewTableBody').innerHTML = '';
-  $ucv2('ucv2KeepSelectionBar').classList.add('hidden');
+  ucv2ClearScanResults();
   $ucv2('ucv2ApplyUpdateBtn').disabled = true;
   ucv2GoScreen('ucv2Screen2');
+}
+
+// A scan is starting (or the page is being left): every result of the earlier scan leaves the page at once --
+// the Continue groups and their buttons (state included, so a stale click does nothing), the table, the
+// banners and counts. Nothing is shown as actionable until the new scan has finished.
+function ucv2ClearScanResults() {
+  ucv2ContinueState = null;
+  const groups = $ucv2('ucv2ReviewContinueGroups');
+  if (groups) groups.innerHTML = '';
+  const note = $ucv2('ucv2ReviewRenameNote');
+  if (note) { note.textContent = ''; note.classList.add('hidden'); }
+  const body = $ucv2('ucv2ReviewTableBody');
+  if (body) body.innerHTML = '';
+  const lead = $ucv2('ucv2ReviewLead');
+  if (lead) { lead.innerHTML = ''; lead.classList.add('hidden'); }
+  for (const id of ['ucv2ReviewNoChangesTip', 'ucv2ReviewEmpty', 'ucv2ReviewFilterBadges', 'ucv2KeepSelectionBar']) {
+    const el = $ucv2(id);
+    if (el) el.classList.add('hidden');
+  }
 }
 
 async function ucv2StartReview(modId) {
@@ -1247,6 +1277,7 @@ function ucv2CancelReview() {
   ucv2CurrentReview = null;
   ucv2OptionalFlowActive = false;
   ucv2IgnoredDependencyBreakKeys = new Set();
+  ucv2ClearScanResults();
   ucv2UpdateReviewLockUI();
   // Screen 2's own action row (Apply/Cancel) resets back to its pre-apply state -- the apply-result
   // screen itself is fully repopulated fresh by ucv2RenderApplyResult on the next apply, so there's
